@@ -1,0 +1,60 @@
+appId: com.gestionale.salone
+productName: Gestionale Salone
+copyright: Copyright © 2025
+
+# Directory dell'app compilata da Vite
+directories:
+  output: dist-electron
+  buildResources: electron/assets
+
+# File da includere nel pacchetto
+files:
+  - dist/**/*
+  - electron/main.js
+  - electron/preload.js
+  - package.json
+
+# Punto di ingresso
+extraMetadata:
+  main: electron/main.js
+
+# ── Windows ───────────────────────────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: electron/assets/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerLanguages: [ItalianIT]
+  language: 1040   # codice lingua italiano
+  shortcutName: Gestionale Salone
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: electron/assets/icon.icns
+  category: public.app-category.business
+
+dmg:
+  title: Gestionale Salone
+
+# ── Linux ─────────────────────────────────────────────────────────────────────
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: electron/assets/icon.png
+  category: Office
+
+# ── Auto-update (opzionale, configurare in futuro) ────────────────────────────
+# publish:
+#   provider: github
+#   owner: tuo-username
+#   repo: gestionale-salone

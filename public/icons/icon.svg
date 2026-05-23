@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Sfondo -->
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+
+  <!-- Forbici stilizzate -->
+  <!-- Manico sinistro -->
+  <ellipse cx="170" cy="340" rx="28" ry="20" fill="none" stroke="#38bdf8" stroke-width="18" transform="rotate(-45 170 340)"/>
+  <!-- Manico destro -->
+  <ellipse cx="340" cy="340" rx="28" ry="20" fill="none" stroke="#38bdf8" stroke-width="18" transform="rotate(45 340 340)"/>
+
+  <!-- Lama sinistra -->
+  <line x1="186" y1="324" x2="270" y2="240" stroke="#38bdf8" stroke-width="18" stroke-linecap="round"/>
+  <!-- Lama destra -->
+  <line x1="324" y1="324" x2="270" y2="240" stroke="#38bdf8" stroke-width="18" stroke-linecap="round"/>
+
+  <!-- Vite centrale -->
+  <circle cx="270" cy="240" r="14" fill="#0ea5e9"/>
+
+  <!-- Pettine in basso -->
+  <rect x="160" y="380" width="192" height="14" rx="7" fill="#7dd3fc"/>
+  <rect x="170" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+  <rect x="193" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+  <rect x="216" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+  <rect x="239" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+  <rect x="262" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+  <rect x="285" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+  <rect x="308" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+  <rect x="331" y="394" width="10" height="24" rx="5" fill="#7dd3fc"/>
+
+  <!-- Lettera G stilizzata in alto -->
+  <text x="256" y="180" font-family="Georgia, serif" font-size="100" font-weight="bold" fill="#38bdf8" text-anchor="middle" dominant-baseline="middle">S</text>
+</svg>

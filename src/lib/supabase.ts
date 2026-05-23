@@ -1,0 +1,110 @@
+import { createClient } from '@supabase/supabase-js';
+
+// Allow runtime override of Supabase credentials via localStorage.
+// This lets users switch Supabase projects without a rebuild.
+const LS_URL_KEY = 'sb_custom_url';
+const LS_KEY_KEY = 'sb_custom_anon_key';
+
+const supabaseUrl =
+  localStorage.getItem(LS_URL_KEY) || import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey =
+  localStorage.getItem(LS_KEY_KEY) || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
+
+/** Returns today's date as YYYY-MM-DD using local timezone (not UTC). */
+export function localDateStr(date: Date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export type StatoAppuntamento = 'confermato' | 'in_attesa' | 'completato' | 'cancellato';
+
+export interface Cliente {
+  id: string;
+  nome: string;
+  cognome: string;
+  telefono: string;
+  email: string;
+  data_nascita: string | null;
+  note: string;
+  foto_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrattamentoCatalogo {
+  id: string;
+  nome: string;
+  descrizione: string;
+  durata_minuti: number;
+  prezzo: number;
+  colore: string;
+  attivo: boolean;
+  created_at: string;
+}
+
+export interface Appuntamento {
+  id: string;
+  cliente_id: string | null;
+  parrucchiere_id: string | null;
+  data_ora: string;
+  durata_minuti: number;
+  stato: StatoAppuntamento;
+  note: string;
+  prezzo_totale: number;
+  created_at: string;
+  updated_at: string;
+  clienti?: Cliente;
+  parrucchieri?: Parrucchiere;
+  appuntamento_trattamenti?: AppuntamentoTrattamento[];
+}
+
+export interface AppuntamentoTrattamento {
+  id: string;
+  appuntamento_id: string;
+  trattamento_id: string | null;
+  nome_trattamento: string;
+  prezzo: number;
+  created_at: string;
+  trattamenti_catalogo?: TrattamentoCatalogo;
+}
+
+export interface SchedaColore {
+  id: string;
+  cliente_id: string;
+  data_trattamento: string;
+  formula_colore: string;
+  ossidante: string;
+  tempo_posa: number;
+  note: string;
+  colore_base: string;
+  colore_target: string;
+  tecnica: string;
+  foto_prima_url: string;
+  foto_dopo_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Parrucchiere {
+  id: string;
+  nome: string;
+  colore: string;
+  attivo: boolean;
+  created_at: string;
+}
+
+export interface GiornoParrucchiere {
+  id: string;
+  data_specifica: string;
+  parrucchiere_id: string;
+  ordine: number;
+  created_at: string;
+  parrucchieri?: Parrucchiere;
+}
