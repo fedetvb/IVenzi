@@ -1,0 +1,3 @@
+git add .
+git commit -m "Fix PWA manifest e pulsante installa app"
+git push
