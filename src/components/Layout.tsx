@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import {
   Calendar,
@@ -21,10 +21,16 @@ import {
   LogOut,
   Trash2,
   BookOpen,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 interface LayoutProps {
   currentPage: Page;
@@ -55,6 +61,29 @@ const navItems = [
 export default function Layout({ currentPage, onNavigate, children, user }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { signOut } = useAuth();
+  const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => setIsInstalled(true));
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+    }
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    (installPrompt as BeforeInstallPromptEvent).prompt();
+    const { outcome } = await (installPrompt as BeforeInstallPromptEvent).userChoice;
+    if (outcome === 'accepted') setIsInstalled(true);
+    setInstallPrompt(null);
+  };
 
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '??';
   const userEmail = user?.email ?? '';
@@ -153,7 +182,16 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
               {navItems.find(n => n.id === currentPage)?.label}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {!isInstalled && installPrompt && (
+              <button
+                onClick={handleInstall}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <Download size={15} />
+                <span className="hidden sm:inline">Installa App</span>
+              </button>
+            )}
             <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
               {userInitials}
             </div>
