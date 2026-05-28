@@ -7,12 +7,13 @@ import MultiBookModal from '../components/MultiBookModal';
 const SLOT_DURATION = 15;
 const START_HOUR = 8;
 const END_HOUR = 20;
-const SLOT_HEIGHT_DEFAULT = 48;
-const SLOT_HEIGHT_MIN = 20;
+const SLOT_HEIGHT_DEFAULT = 28;
+const SLOT_HEIGHT_MIN = 16;
 const SLOT_HEIGHT_MAX = 72;
-const FONT_SIZE_DEFAULT = 100; // percentage
+const FONT_SIZE_DEFAULT = 100;
 const FONT_SIZE_MIN = 60;
 const FONT_SIZE_MAX = 160;
+const LONG_PRESS_MS = 500;
 
 function getSlots() {
   const slots: string[] = [];
@@ -38,7 +39,7 @@ function darkenColor(hex: string, amount = 0.38): string {
 interface PositionedApp extends Appuntamento {
   topPx: number;
   heightPx: number;
-  layer: number; // 0 = primary, 1+ = overlapping
+  layer: number;
   totalLayers: number;
 }
 
@@ -47,6 +48,15 @@ interface Assenza {
   data_inizio: string;
   data_fine: string;
   ora_inizio: string | null;
+}
+
+interface DragState {
+  appId: string;
+  parrId: string;
+  offsetY: number; // px from top of appointment where user grabbed
+  currentTop: number; // current ghost top in px relative to grid
+  currentParrId: string;
+  active: boolean;
 }
 
 interface Props {
@@ -59,7 +69,6 @@ const PRESET_COLORS = ['#EC4899', '#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#
 export default function AgendaGiorno({ date, onBack }: Props) {
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
-  // Maps cliente_id -> set of card types: 'premium' | 'sconto_ueg' | 'sconto_normale'
   const [clientiCarte, setClientiCarte] = useState<Map<string, Set<string>>>(new Map());
   const [compleanni, setCompleanni] = useState<{ nome: string; cognome: string; telefono?: string }[]>([]);
   const [messaggioAuguri, setMessaggioAuguri] = useState('Ciao {nome}! Ti auguriamo un felice compleanno! Tanti auguri da tutto il team!');
@@ -68,7 +77,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [savingMsg, setSavingMsg] = useState(false);
   const msgInputRef = useRef<HTMLTextAreaElement>(null);
   const [loading, setLoading] = useState(true);
-  // Maps parrucchiere_id -> ora_inizio (null = tutto il giorno, string "HH:MM" = da quell'ora)
   const [assenzeMap, setAssenzeMap] = useState<Map<string, string | null>>(new Map());
 
   const [appModal, setAppModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
@@ -85,6 +93,15 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     return saved ? Number(saved) : FONT_SIZE_DEFAULT;
   });
 
+  // Drag & drop state
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const pointerStartPos = useRef<{ x: number; y: number } | null>(null);
+  const savingDrag = useRef(false);
+
   useEffect(() => { localStorage.setItem('agenda_slotHeight', String(slotHeight)); }, [slotHeight]);
   useEffect(() => { localStorage.setItem('agenda_fontSize', String(fontSize)); }, [fontSize]);
 
@@ -94,7 +111,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     setLoading(true);
     const startOfDay = new Date(date); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
-
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
     const [{ data: parr }, { data: app }, { data: impost }, { data: sc }, { data: pr }, { data: ass }] = await Promise.all([
@@ -114,7 +130,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     ]);
 
     if (impost?.valore) setMessaggioAuguri(impost.valore);
-
     setParrucchieri((parr || []) as Parrucchiere[]);
     setAppuntamenti((app || []) as Appuntamento[]);
 
@@ -131,19 +146,15 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     }
     setClientiCarte(carteMap);
 
-    // Assenze parrucchieri per questo giorno
     const aMap = new Map<string, string | null>();
     for (const a of (ass || []) as Assenza[]) {
-      // ora_inizio è "HH:MM:SS" dal DB, la normalizziamo a "HH:MM"
       const ora = a.ora_inizio ? a.ora_inizio.substring(0, 5) : null;
-      // Se già c'è una voce senza orario (tutto il giorno), ha precedenza
       if (!aMap.has(a.parrucchiere_id) || aMap.get(a.parrucchiere_id) !== null) {
         aMap.set(a.parrucchiere_id, ora);
       }
     }
     setAssenzeMap(aMap);
 
-    // Compleanni: tutti i clienti che compiono gli anni oggi (stesso giorno e mese)
     const dayMM = String(date.getMonth() + 1).padStart(2, '0');
     const dayDD = String(date.getDate()).padStart(2, '0');
     const { data: tuttiClienti } = await supabase
@@ -156,7 +167,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       if (mm === dayMM && dd === dayDD) uniciBirthday.set(c.id, { nome: c.nome, cognome: c.cognome, telefono: c.telefono || undefined });
     }
     setCompleanni(Array.from(uniciBirthday.values()));
-
     setLoading(false);
   }, [date]);
 
@@ -195,7 +205,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       })
       .sort((a, b) => new Date(a.data_ora).getTime() - new Date(b.data_ora).getTime());
 
-    // Group overlapping appointments into layers
     const groups: PositionedApp[][] = [];
     for (const app of filtered) {
       const { start: aStart, end: aEnd } = appToMinutes(app);
@@ -218,7 +227,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       }
     }
 
-    // Set totalLayers per group
     for (const group of groups) {
       const max = group.length;
       for (const app of group) app.totalLayers = max;
@@ -240,11 +248,138 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     load();
   }
 
-  // Parrucchieri assenti tutto il giorno (ora_inizio === null) vengono nascosti dalla griglia
+  // ── Drag & Drop ──────────────────────────────────────────────────────────
+
+  function getGridTopForPointer(clientY: number): number {
+    if (!gridRef.current) return 0;
+    const rect = gridRef.current.getBoundingClientRect();
+    return clientY - rect.top + gridRef.current.scrollTop;
+  }
+
+  function getParrIndexForPointer(clientX: number): number {
+    if (!gridRef.current) return -1;
+    const rect = gridRef.current.getBoundingClientRect();
+    const x = clientX - rect.left + gridRef.current.scrollLeft - 64; // subtract time column
+    const colWidth = gridRef.current.scrollWidth / (visibleParr.length + 64 / gridRef.current.scrollWidth);
+    // More accurate: measure each column by dividing available width
+    const available = gridRef.current.scrollWidth - 64;
+    const idx = Math.floor(x / (available / visibleParr.length));
+    return Math.max(0, Math.min(visibleParr.length - 1, idx));
+  }
+
+  function snapTopToSlot(topPx: number): number {
+    const slotIndex = Math.round(topPx / slotHeight);
+    return slotIndex * slotHeight;
+  }
+
+  function topPxToTime(topPx: number): Date {
+    const totalMinutes = START_HOUR * 60 + Math.round(topPx / slotHeight) * SLOT_DURATION;
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const d = new Date(date);
+    d.setHours(Math.min(23, Math.max(0, h)), Math.min(59, Math.max(0, m)), 0, 0);
+    return d;
+  }
+
+  function startLongPress(
+    e: React.PointerEvent,
+    app: PositionedApp,
+    parrId: string
+  ) {
+    if (drag) return;
+    pointerStartPos.current = { x: e.clientX, y: e.clientY };
+
+    longPressTimer.current = setTimeout(() => {
+      isDragging.current = true;
+      const gridTop = getGridTopForPointer(e.clientY);
+      const offsetY = gridTop - app.topPx;
+      const state: DragState = {
+        appId: app.id,
+        parrId,
+        offsetY,
+        currentTop: app.topPx,
+        currentParrId: parrId,
+        active: true,
+      };
+      dragRef.current = state;
+      setDrag({ ...state });
+      // vibrate if supported
+      if (navigator.vibrate) navigator.vibrate(60);
+    }, LONG_PRESS_MS);
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    if (!isDragging.current || !dragRef.current) return;
+
+    // Cancel long press if still pending and pointer moved significantly
+    if (longPressTimer.current && pointerStartPos.current) {
+      const dx = Math.abs(e.clientX - pointerStartPos.current.x);
+      const dy = Math.abs(e.clientY - pointerStartPos.current.y);
+      if (dx > 8 || dy > 8) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+    }
+
+    if (!isDragging.current) return;
+
+    const gridTop = getGridTopForPointer(e.clientY);
+    const newTop = Math.max(0, gridTop - dragRef.current.offsetY);
+    const parrIdx = getParrIndexForPointer(e.clientX);
+    const newParrId = visibleParr[parrIdx]?.id ?? dragRef.current.currentParrId;
+
+    dragRef.current = { ...dragRef.current, currentTop: newTop, currentParrId: newParrId };
+    setDrag({ ...dragRef.current });
+  }
+
+  function cancelDrag() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    isDragging.current = false;
+    dragRef.current = null;
+    setDrag(null);
+  }
+
+  async function commitDrag() {
+    if (!dragRef.current || savingDrag.current) { cancelDrag(); return; }
+    savingDrag.current = true;
+
+    const { appId, currentTop, currentParrId } = dragRef.current;
+    const snapped = snapTopToSlot(currentTop);
+    const newTime = topPxToTime(snapped);
+
+    cancelDrag();
+
+    await supabase.from('appuntamenti').update({
+      data_ora: newTime.toISOString(),
+      parrucchiere_id: currentParrId,
+    }).eq('id', appId);
+
+    savingDrag.current = false;
+    load();
+  }
+
+  function onPointerUp() {
+    if (isDragging.current && dragRef.current) {
+      commitDrag();
+    } else {
+      cancelDrag();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   const visibleParr = parrucchieri.filter(p =>
     !hiddenParr.has(p.id) && !(assenzeMap.has(p.id) && assenzeMap.get(p.id) === null)
   );
   const gridHeight = slots.length * slotHeight;
+
+  // Ghost appointment data
+  const dragApp = drag ? appuntamenti.find(a => a.id === drag.appId) : null;
+  const dragParr = drag ? parrucchieri.find(p => p.id === drag.currentParrId) : null;
+  const dragParrIdx = drag && dragParr ? visibleParr.findIndex(p => p.id === drag.currentParrId) : -1;
 
   if (loading) {
     return (
@@ -260,7 +395,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       <div className="px-6 py-4 bg-white border-b border-stone-200 flex-shrink-0">
         {compleanni.length > 0 && (
           <div className="mb-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 space-y-2.5">
-            {/* Title row */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Cake size={15} className="text-rose-500 flex-shrink-0" />
@@ -269,14 +403,12 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               <button
                 onClick={openEditMsg}
                 className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-600 transition-colors"
-                title="Modifica messaggio di auguri"
               >
                 <Pencil size={11} />
                 <span>Modifica messaggio</span>
               </button>
             </div>
 
-            {/* Clients row */}
             <div className="flex flex-wrap gap-2">
               {compleanni.map((c, i) => {
                 const tel = c.telefono?.replace(/\s+/g, '').replace(/^00/, '+').replace(/^0/, '+39');
@@ -292,7 +424,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-semibold transition-colors"
-                        title="Invia auguri su WhatsApp"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
@@ -307,7 +438,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               })}
             </div>
 
-            {/* Inline message editor */}
             {editingMsg && (
               <div className="bg-white border border-rose-200 rounded-xl p-3 space-y-2 mt-1">
                 <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">
@@ -340,6 +470,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
             )}
           </div>
         )}
+
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-stone-100 transition-colors">
@@ -357,7 +488,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                 <button
                   key={p.id}
                   onClick={() => {
-                    if (assenteOggi) return; // non togglabile se assente tutto il giorno
+                    if (assenteOggi) return;
                     setHiddenParr(prev => {
                       const next = new Set(prev);
                       next.has(p.id) ? next.delete(p.id) : next.add(p.id);
@@ -385,12 +516,11 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               className={`p-2 rounded-lg border transition-all ${showSettings ? 'bg-amber-50 border-amber-300 text-amber-600' : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}
               title="Impostazioni visualizzazione"
             >
-              <Settings size={16} className={showSettings ? 'animate-spin-slow' : ''} style={{ transition: 'transform 0.3s' }} />
+              <Settings size={16} />
             </button>
           </div>
         </div>
 
-        {/* Settings panel */}
         {showSettings && (
           <div className="mt-3 bg-stone-50 border border-stone-200 rounded-xl px-4 py-4 space-y-4">
             <div className="flex items-center justify-between mb-1">
@@ -403,7 +533,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               </button>
             </div>
 
-            {/* Zoom agenda */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
@@ -439,7 +568,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               </div>
             </div>
 
-            {/* Font size */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
@@ -479,13 +607,20 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       </div>
 
       {/* Grid */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div
+        ref={gridRef}
+        className="flex-1 overflow-auto bg-white select-none"
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        style={{ cursor: drag ? 'grabbing' : 'default', touchAction: drag ? 'none' : 'auto' }}
+      >
         {visibleParr.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-stone-400">
             <p>Tutti i parrucchieri sono nascosti</p>
           </div>
         ) : (
-          <div style={{ minWidth: `${64 + visibleParr.length * 200}px` }}>
+          <div style={{ minWidth: `${64 + visibleParr.length * 200}px`, position: 'relative' }}>
             {/* Column headers */}
             <div className="sticky top-0 bg-white z-20 border-b border-stone-200 flex">
               <div className="w-16 flex-shrink-0" />
@@ -510,7 +645,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
             </div>
 
             {/* Time + columns */}
-            <div className="flex" style={{ height: gridHeight }}>
+            <div className="flex" style={{ height: gridHeight, position: 'relative' }}>
               {/* Time labels */}
               <div className="w-16 flex-shrink-0 relative border-r border-stone-100">
                 {slots.map((time, i) => {
@@ -523,6 +658,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                       className="absolute w-full flex items-start justify-end pr-2 cursor-pointer hover:bg-amber-50 transition-colors group/timeslot"
                       style={{ top: i * slotHeight, height: slotHeight }}
                       onClick={() => {
+                        if (drag) return;
                         const [h, m] = time.split(':').map(Number);
                         const d = new Date(date);
                         d.setHours(h, m, 0, 0);
@@ -541,7 +677,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     </div>
                   );
                 })}
-                {/* Hour lines on time column */}
                 {slots.map((time, i) => (
                   <div
                     key={`tl-${time}`}
@@ -559,7 +694,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               {visibleParr.map(p => {
                 const apps = positionAppsForParr(p.id);
                 const assenzaOra = assenzeMap.has(p.id) ? assenzeMap.get(p.id) : undefined;
-                // assenzaOra: undefined = presente, null = tutto il giorno (già filtrato), "HH:MM" = parziale
                 const assenzaParziale = assenzaOra !== undefined && assenzaOra !== null ? assenzaOra : null;
                 const absenceTopPx = assenzaParziale ? (() => {
                   const [h, m] = assenzaParziale.split(':').map(Number);
@@ -587,10 +721,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                       />
                     ))}
 
-                    {/* Colored column accent top border */}
                     <div className="absolute top-0 left-0 right-0 h-0.5" style={{ backgroundColor: p.colore }} />
 
-                    {/* Assenza parziale: overlay grigio dall'ora in poi */}
                     {absenceTopPx !== null && (
                       <div
                         className="absolute left-0 right-0 pointer-events-none z-[5]"
@@ -616,6 +748,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                         className="absolute left-0 right-0 group hover:bg-stone-50/80 cursor-pointer transition-colors z-0"
                         style={{ top: i * slotHeight, height: slotHeight }}
                         onClick={() => {
+                          if (drag) return;
                           const [h, m] = time.split(':').map(Number);
                           const d = new Date(date);
                           d.setHours(h, m, 0, 0);
@@ -628,8 +761,25 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                       </div>
                     ))}
 
+                    {/* Drop target highlight when dragging over this column */}
+                    {drag && drag.currentParrId === p.id && (
+                      <div
+                        className="absolute left-0 right-0 pointer-events-none z-[8] rounded"
+                        style={{
+                          top: snapTopToSlot(drag.currentTop),
+                          height: (() => {
+                            const a = appuntamenti.find(x => x.id === drag.appId);
+                            return a ? Math.max((a.durata_minuti / SLOT_DURATION) * slotHeight, slotHeight) : slotHeight;
+                          })(),
+                          border: `2px dashed ${p.colore}`,
+                          backgroundColor: `${p.colore}15`,
+                        }}
+                      />
+                    )}
+
                     {/* Appointment blocks */}
                     {apps.map(app => {
+                      const isDragged = drag?.appId === app.id;
                       const isCancellato = app.stato === 'cancellato';
                       const isOverlap = app.totalLayers > 1;
                       const isSecondary = app.layer > 0;
@@ -646,35 +796,46 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                       return (
                         <div
                           key={app.id}
-                          className="absolute rounded-md overflow-hidden cursor-pointer group/app shadow-sm z-10 border border-white/30"
+                          className="absolute rounded-md overflow-hidden cursor-grab group/app shadow-sm z-10 border border-white/30 transition-opacity"
                           style={{
                             top: app.topPx + 1,
                             height: app.heightPx - 2,
                             left: `calc(${leftPct} + 2px)`,
                             width: `calc(${width} - 4px)`,
                             backgroundColor: baseColor,
-                            opacity: isCancellato ? 0.7 : 1,
+                            opacity: isDragged ? 0.35 : isCancellato ? 0.7 : 1,
+                            touchAction: 'none',
                           }}
-                          onClick={e => { e.stopPropagation(); setAppModal({ open: true, id: app.id }); }}
+                          onPointerDown={e => {
+                            e.stopPropagation();
+                            startLongPress(e, app, p.id);
+                          }}
+                          onPointerUp={e => {
+                            e.stopPropagation();
+                            if (!isDragging.current) {
+                              cancelDrag();
+                              setAppModal({ open: true, id: app.id });
+                            } else {
+                              onPointerUp();
+                            }
+                          }}
                         >
-                          {/* Stripe pattern for cancelled */}
                           {isCancellato && (
                             <div
                               className="absolute inset-0 pointer-events-none opacity-30"
-                              style={{
-                                backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.4) 5px, rgba(0,0,0,0.4) 7px)',
-                              }}
+                              style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.4) 5px, rgba(0,0,0,0.4) 7px)' }}
                             />
                           )}
-
-                          {/* Stripe pattern for overlapping */}
                           {!isCancellato && isSecondary && (
                             <div
                               className="absolute inset-0 pointer-events-none opacity-25"
-                              style={{
-                                backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.5) 4px, rgba(0,0,0,0.5) 6px)',
-                              }}
+                              style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.5) 4px, rgba(0,0,0,0.5) 6px)' }}
                             />
+                          )}
+
+                          {/* Long press indicator ring */}
+                          {!isDragged && (
+                            <div className="absolute inset-0 pointer-events-none opacity-0 group-hover/app:opacity-100 transition-opacity" style={{ boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.5)' }} />
                           )}
 
                           <div className="relative z-10 px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
@@ -686,7 +847,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 {carteTipi && carteTipi.size > 0 && (
                                   <div className="flex items-center gap-0.5 flex-shrink-0 mt-px">
                                     {(carteTipi.has('premium') || carteTipi.has('premium_vuota')) && (
-                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" title={carteTipi.has('premium_vuota') ? 'Carta Premium (da ricaricare)' : 'Carta Premium'} style={{ filter: carteTipi.has('premium') ? 'drop-shadow(0 0 2px rgba(245,158,11,0.7))' : 'drop-shadow(0 0 2px rgba(239,68,68,0.7))' }}>
+                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ filter: carteTipi.has('premium') ? 'drop-shadow(0 0 2px rgba(245,158,11,0.7))' : 'drop-shadow(0 0 2px rgba(239,68,68,0.7))' }}>
                                         <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill={carteTipi.has('premium') ? 'url(#pgold)' : '#EF4444'} stroke={carteTipi.has('premium') ? '#D97706' : '#DC2626'} strokeWidth="0.5"/>
                                         <rect x="0.5" y="3" width="17" height="2.5" fill={carteTipi.has('premium') ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.15)'}/>
                                         <rect x="2" y="7" width="5" height="3" rx="0.8" fill={carteTipi.has('premium') ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.45)'}/>
@@ -694,14 +855,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                       </svg>
                                     )}
                                     {carteTipi.has('sconto_ueg') && (
-                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" title="Carta Sconto Usa e Getta">
+                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#1c1917" stroke="#44403c" strokeWidth="0.5"/>
                                         <rect x="0.5" y="3" width="17" height="2.5" fill="rgba(255,255,255,0.1)"/>
                                         <rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.2)"/>
                                       </svg>
                                     )}
                                     {carteTipi.has('sconto_normale') && (
-                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" title="Carta Sconto">
+                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="white" stroke="rgba(255,255,255,0.8)" strokeWidth="0.5"/>
                                         <rect x="0.5" y="3" width="17" height="2.5" fill="rgba(100,100,100,0.12)"/>
                                         <rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(100,100,100,0.18)"/>
@@ -725,12 +886,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
                           <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover/app:opacity-100 transition-opacity z-20">
                             <button
+                              onPointerDown={e => e.stopPropagation()}
                               onClick={e => { e.stopPropagation(); setAppModal({ open: true, id: app.id }); }}
                               className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
                             >
                               <Edit2 size={9} />
                             </button>
                             <button
+                              onPointerDown={e => e.stopPropagation()}
                               onClick={e => { e.stopPropagation(); deleteAppuntamento(app.id); }}
                               className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
                             >
@@ -743,6 +906,39 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                   </div>
                 );
               })}
+
+              {/* Drag ghost — floats over entire grid */}
+              {drag && dragApp && dragParr && dragParrIdx >= 0 && (() => {
+                const snapped = snapTopToSlot(drag.currentTop);
+                const ghostTime = topPxToTime(snapped);
+                const heightPx = Math.max((dragApp.durata_minuti / SLOT_DURATION) * slotHeight, slotHeight);
+                const colWidth = `calc((100% - 64px) / ${visibleParr.length})`;
+                const colLeft = `calc(64px + ${dragParrIdx} * (100% - 64px) / ${visibleParr.length})`;
+                return (
+                  <div
+                    className="absolute pointer-events-none z-50 rounded-md shadow-2xl border-2 border-white/60"
+                    style={{
+                      top: snapped + 1,
+                      left: colLeft,
+                      width: colWidth,
+                      height: heightPx - 2,
+                      backgroundColor: dragParr.colore,
+                      opacity: 0.92,
+                      transform: 'scale(1.03)',
+                      transition: 'transform 0.1s',
+                    }}
+                  >
+                    <div className="px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
+                      <p className="font-semibold text-white leading-tight truncate" style={{ fontSize: `${0.76 * (fontSize / 100)}rem` }}>
+                        {dragApp.clienti ? `${dragApp.clienti.nome} ${dragApp.clienti.cognome}` : '—'}
+                      </p>
+                      <p className="text-white/80 leading-none font-medium" style={{ fontSize: `${0.68 * (fontSize / 100)}rem` }}>
+                        {ghostTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · {dragApp.durata_minuti}min
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -767,6 +963,11 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           <svg width="20" height="13" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="white" stroke="#d6d3d1" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(100,100,100,0.12)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(100,100,100,0.18)"/></svg>
           <span className="text-xs text-stone-600">Carta Sconto</span>
         </div>
+
+        {/* Drag hint */}
+        <span className="ml-auto text-[10px] text-stone-400 italic hidden sm:block">
+          Tieni premuto un appuntamento per spostarlo
+        </span>
       </div>
 
       {/* Edit parrucchiere modal */}
