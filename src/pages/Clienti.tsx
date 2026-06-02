@@ -244,16 +244,30 @@ export default function Clienti({ onSelectCliente }: Props) {
     setExporting(false);
   }
 
-  function esportaPDF() {
+  async function esportaPDF() {
     setExporting(true);
+    setExportOpen(false);
+
+    const [{ data: schedeColore }, { data: cartePremiumData }, { data: carteScontoData }] = await Promise.all([
+      supabase.from('schede_colore').select('*').is('deleted_at', null).order('data_trattamento', { ascending: false }),
+      supabase.from('carte_premium').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+      supabase.from('carte_sconto').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+    ]);
+
+    const mappaClienti = Object.fromEntries(clienti.map(c => [c.id, c]));
+
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const dateStr = new Date().toLocaleDateString('it-IT');
+    const W = 297;
+
+    // ── Pagina 1: Anagrafiche ──────────────────────────────────────────────────
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Elenco Clienti', 14, 16);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120);
-    doc.text(`Esportato il ${new Date().toLocaleDateString('it-IT')} — ${clienti.length} clienti`, 14, 22);
+    doc.text(`Esportato il ${dateStr} — ${clienti.length} clienti`, 14, 22);
     doc.setTextColor(0);
 
     autoTable(doc, {
@@ -271,9 +285,117 @@ export default function Clienti({ onSelectCliente }: Props) {
       columnStyles: { 6: { cellWidth: 50 } },
     });
 
-    doc.save(`clienti-${new Date().toISOString().slice(0, 10)}.pdf`);
+    // ── Pagina 2: Schede colore ────────────────────────────────────────────────
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Schede Colore', 14, 16);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120);
+    doc.text(`${(schedeColore || []).length} schede — esportato il ${dateStr}`, 14, 22);
+    doc.setTextColor(0);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Cliente', 'Telefono', 'Data', 'Tecnica', 'Colore base', 'Colore target', 'Formula', 'Ossidante', 'Posa', 'Note']],
+      body: (schedeColore || []).map(s => {
+        const c = mappaClienti[s.cliente_id];
+        return [
+          c ? `${c.cognome} ${c.nome}` : '',
+          c?.telefono ?? '',
+          formatDataIT(s.data_trattamento),
+          s.tecnica ?? '',
+          s.colore_base ?? '',
+          s.colore_target ?? '',
+          (s.formula_colore ?? '').slice(0, 40),
+          s.ossidante ?? '',
+          s.tempo_posa ? `${s.tempo_posa}'` : '',
+          (s.note ?? '').slice(0, 50),
+        ];
+      }),
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [124, 58, 237], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250, 250, 249] },
+      columnStyles: { 6: { cellWidth: 40 }, 9: { cellWidth: 40 } },
+    });
+
+    // ── Pagina 3: Carte premium ────────────────────────────────────────────────
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Carte Premium', 14, 16);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120);
+    doc.text(`${(cartePremiumData || []).length} carte — esportato il ${dateStr}`, 14, 22);
+    doc.setTextColor(0);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Cliente', 'Telefono', 'Codice carta', 'Stato', 'Saldo', 'Note', 'Data creazione']],
+      body: (cartePremiumData || []).map(cp => {
+        const c = mappaClienti[cp.cliente_id];
+        return [
+          c ? `${c.cognome} ${c.nome}` : '',
+          c?.telefono ?? '',
+          cp.codice ?? '',
+          cp.attiva ? 'Attiva' : 'Disattiva',
+          `€${Number(cp.saldo ?? 0).toFixed(2).replace('.', ',')}`,
+          (cp.note ?? '').slice(0, 50),
+          formatDataIT(cp.created_at?.slice(0, 10)),
+        ];
+      }),
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [217, 119, 6], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250, 250, 249] },
+      columnStyles: { 4: { halign: 'right' } },
+    });
+
+    // ── Pagina 4: Carte sconto ─────────────────────────────────────────────────
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Carte Sconto', 14, 16);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120);
+    doc.text(`${(carteScontoData || []).length} carte — esportato il ${dateStr}`, 14, 22);
+    doc.setTextColor(0);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Cliente', 'Telefono', 'Codice', 'Descrizione', 'Sconto', 'Stato', 'Nominativa', 'Usa e getta', 'Data creazione']],
+      body: (carteScontoData || []).map(cs => {
+        const c = cs.cliente_id ? mappaClienti[cs.cliente_id] : null;
+        return [
+          c ? `${c.cognome} ${c.nome}` : '(Generica)',
+          c?.telefono ?? '',
+          cs.codice ?? '',
+          (cs.descrizione ?? '').slice(0, 40),
+          cs.tipo_sconto === 'percentuale' ? `${cs.valore_sconto}%` : `€${Number(cs.valore_sconto).toFixed(2).replace('.', ',')}`,
+          cs.attiva ? 'Attiva' : 'Disattiva',
+          cs.nominativa ? 'Si' : 'No',
+          cs.usa_e_getta ? 'Si' : 'No',
+          formatDataIT(cs.created_at?.slice(0, 10)),
+        ];
+      }),
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250, 250, 249] },
+    });
+
+    // Numerazione pagine
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(160);
+      doc.text(`Pagina ${i} di ${totalPages}`, W - 14, 205, { align: 'right' });
+    }
+
+    doc.save(`report-completo-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.pdf`);
     setExporting(false);
-    setExportOpen(false);
   }
 
   const filtered = clienti.filter(c => {
@@ -366,7 +488,7 @@ export default function Clienti({ onSelectCliente }: Props) {
                       className="w-full flex items-center gap-3 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
                     >
                       <FileText size={14} className="text-red-500 flex-shrink-0" />
-                      <span>Anagrafiche PDF</span>
+                      <span>Report completo PDF</span>
                     </button>
 
                     <div className="my-1 border-t border-stone-100" />
