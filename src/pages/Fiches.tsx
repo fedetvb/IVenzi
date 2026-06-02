@@ -1041,10 +1041,14 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   async function handleConvalida() {
     setConvalidando(true);
     setShowConvalidaConfirm(false);
+    // Ricalcola il totale direttamente dalle voci correnti per evitare race condition
+    const totaleCalcolato = Math.max(0,
+      voci.reduce((s, v) => s + v.prezzo, 0) - scontoAmt - creditoPremium
+    );
     const ficheId = await persistFiche({
       convalidata: true,
       convalidata_at: new Date().toISOString(),
-      importo_convalidato: totale,
+      importo_convalidato: totaleCalcolato,
     });
 
     const rawGruppoId = gruppo.clienteId;
