@@ -328,10 +328,13 @@ function FichesTab() {
           user_id: user?.id,
         });
 
-        // Registra voci rivendita
+        // Registra voci rivendita e scala stock catalogo
         const vociRivendita = g.voci.filter(v => v.nome_voce.toLowerCase().includes('rivendita'));
         for (const v of vociRivendita) {
           if (v.parrucchiere_id) {
+            const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+            const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
+
             await supabase.from('rivendita_prodotti').insert({
               fiche_id: ficheId,
               parrucchiere_id: v.parrucchiere_id,
@@ -339,9 +342,23 @@ function FichesTab() {
               quantita: 1,
               prezzo_unitario: v.prezzo,
               data_vendita: selectedDate,
-              note: '',
+              note: catalogoId ? '' : (v.note || ''),
               user_id: user?.id,
             });
+
+            if (catalogoId) {
+              const { data: prod } = await supabase
+                .from('prodotti_rivendita_catalogo')
+                .select('quantita_stock, quantita_venduta')
+                .eq('id', catalogoId)
+                .maybeSingle();
+              if (prod) {
+                await supabase.from('prodotti_rivendita_catalogo').update({
+                  quantita_stock: Math.max(0, (prod.quantita_stock ?? 0) - 1),
+                  quantita_venduta: (prod.quantita_venduta ?? 0) + 1,
+                }).eq('id', catalogoId);
+              }
+            }
           }
         }
 
@@ -914,6 +931,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
   function addProdottoRivendita(p: ProdottoRivenditaCatalogo) {
     const nomevoce = `${p.nome}${p.marca ? ` (${p.marca})` : ''} - rivendita`;
+    // Store catalog ID in note with prefix so convalida can find it and decrement stock
+    const noteConId = `__catalogo_id__:${p.id}`;
     const fakeVoce: VoceExtra = { id: p.id, nome: nomevoce, descrizione: '', prezzo: p.prezzo_vendita, colore: '#F97316', attivo: true };
     setShowRivenditaPicker(false);
     setCercaProdotto('');
@@ -923,7 +942,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
       const parr = parrucchieri[0] ?? null;
       setVoci(prev => [...prev, {
         id: crypto.randomUUID(), tipo: 'extra', nome_voce: nomevoce,
-        parrucchiere_id: parr?.id ?? null, nome_parrucchiere: parr?.nome ?? '', prezzo: p.prezzo_vendita, note: '', ordine: prev.length,
+        parrucchiere_id: parr?.id ?? null, nome_parrucchiere: parr?.nome ?? '', prezzo: p.prezzo_vendita, note: noteConId, ordine: prev.length,
       }]);
     }
   }
@@ -943,9 +962,15 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   function confirmPendingExtra() {
     if (!pendingExtra) return;
     const parr = parrucchieri.find(p => p.id === pendingExtra.parrId) ?? null;
+    // Preserve the note from the pending voce (may contain __catalogo_id__ for rivendita products)
+    const noteToUse = pendingExtra.voce.descrizione?.startsWith('__catalogo_id__')
+      ? pendingExtra.voce.descrizione
+      : pendingExtra.voce.nome.includes('rivendita')
+        ? (pendingExtra.voce.id && /^[0-9a-f-]{36}$/i.test(pendingExtra.voce.id) ? `__catalogo_id__:${pendingExtra.voce.id}` : '')
+        : '';
     setVoci(prev => [...prev, {
       id: crypto.randomUUID(), tipo: 'extra', nome_voce: pendingExtra.voce.nome,
-      parrucchiere_id: parr?.id ?? null, nome_parrucchiere: parr?.nome ?? '', prezzo: pendingExtra.voce.prezzo, note: '', ordine: prev.length,
+      parrucchiere_id: parr?.id ?? null, nome_parrucchiere: parr?.nome ?? '', prezzo: pendingExtra.voce.prezzo, note: noteToUse, ordine: prev.length,
     }]);
     setPendingExtra(null);
   }
@@ -1060,6 +1085,10 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
       const vociRivendita = voci.filter(v => v.nome_voce.toLowerCase().includes('rivendita'));
       for (const v of vociRivendita) {
         if (v.parrucchiere_id) {
+          // Extract catalog product ID from note field if present
+          const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+          const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
+
           await supabase.from('rivendita_prodotti').insert({
             fiche_id: ficheId,
             parrucchiere_id: v.parrucchiere_id,
@@ -1067,9 +1096,24 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             quantita: 1,
             prezzo_unitario: v.prezzo,
             data_vendita: selectedDate,
-            note: v.note || '',
+            note: catalogoId ? '' : (v.note || ''),
             user_id: user?.id,
           });
+
+          // Scale down stock in catalog
+          if (catalogoId) {
+            const { data: prod } = await supabase
+              .from('prodotti_rivendita_catalogo')
+              .select('quantita_stock, quantita_venduta')
+              .eq('id', catalogoId)
+              .maybeSingle();
+            if (prod) {
+              await supabase.from('prodotti_rivendita_catalogo').update({
+                quantita_stock: Math.max(0, (prod.quantita_stock ?? 0) - 1),
+                quantita_venduta: (prod.quantita_venduta ?? 0) + 1,
+              }).eq('id', catalogoId);
+            }
+          }
         }
       }
 
@@ -1164,6 +1208,29 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
           };
         }
         await supabase.from('utilizzi_carta_premium').delete().eq('fiche_id', ficheId);
+      }
+
+      // Ripristina stock catalogo per ogni voce rivendita collegata
+      const { data: vociFiche } = await supabase
+        .from('fiche_voci')
+        .select('nome_voce, note')
+        .eq('fiche_id', ficheId);
+      for (const vf of vociFiche || []) {
+        if (!vf.nome_voce?.toLowerCase().includes('rivendita')) continue;
+        const catalogoMatch = vf.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+        if (!catalogoMatch) continue;
+        const catalogoId = catalogoMatch[1];
+        const { data: prod } = await supabase
+          .from('prodotti_rivendita_catalogo')
+          .select('quantita_stock, quantita_venduta')
+          .eq('id', catalogoId)
+          .maybeSingle();
+        if (prod) {
+          await supabase.from('prodotti_rivendita_catalogo').update({
+            quantita_stock: (prod.quantita_stock ?? 0) + 1,
+            quantita_venduta: Math.max(0, (prod.quantita_venduta ?? 0) - 1),
+          }).eq('id', catalogoId);
+        }
       }
 
       // Rimuovi voci rivendita generate dalla fiche
