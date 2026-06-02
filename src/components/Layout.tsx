@@ -92,7 +92,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
     <div className="flex h-screen bg-stone-50 font-sans">
       {/* Sidebar */}
       <aside
-        className={`flex flex-col bg-stone-900 text-stone-100 transition-all duration-300 ${
+        className={`flex flex-col bg-stone-900 text-stone-100 transition-all duration-300 min-h-0 ${
           collapsed ? 'w-16' : 'w-60'
         } flex-shrink-0`}
       >
@@ -110,7 +110,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
           {navItems.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
