@@ -59,7 +59,7 @@ const navItems = [
 ];
 
 export default function Layout({ currentPage, onNavigate, children, user }: LayoutProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth < 640);
   const { signOut } = useAuth();
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
