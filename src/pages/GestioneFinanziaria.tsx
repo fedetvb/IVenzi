@@ -696,8 +696,18 @@ export default function GestioneFinanziaria() {
   });
   const [fichePerParr, setFichePerParr] = useState<{ parrucchiere_id: string | null; data_riferimento: string; importo_convalidato: number }[]>([]);
   // mese/anno di riferimento per il calcolo giorni lavorativi parrucchieri
-  const [parrMese, setParrMese] = useState(() => new Date().getMonth() + 1);
-  const [parrAnno, setParrAnno] = useState(() => new Date().getFullYear());
+  // inizializzato dal filtro principale se è su un mese specifico
+  const [parrMese, setParrMese] = useState(() => {
+    const def = filtroDefault;
+    if (def.modalita === 'periodo' && def.mesePeriodo) return def.mesePeriodo;
+    return new Date().getMonth() + 1;
+  });
+  const [parrAnno, setParrAnno] = useState(() => {
+    const def = filtroDefault;
+    if (def.modalita === 'periodo' && def.annoPeriodo) return def.annoPeriodo;
+    if (def.modalita === 'anno' && def.annoAnno) return def.annoAnno;
+    return new Date().getFullYear();
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -738,6 +748,14 @@ export default function GestioneFinanziaria() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Sincronizza il mese parrucchieri quando si cambia filtro su un mese specifico
+  useEffect(() => {
+    if (filtroGest.modalita === 'periodo' && filtroGest.mesePeriodo && filtroGest.annoPeriodo) {
+      setParrMese(filtroGest.mesePeriodo);
+      setParrAnno(filtroGest.annoPeriodo);
+    }
+  }, [filtroGest]);
 
   async function salvaSpesa(s: Omit<Spesa, 'id' | 'created_at'>) {
     if (editSpesa?.id) {
