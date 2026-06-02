@@ -3,7 +3,7 @@ import {
   Plus, X, Settings, ArrowDownCircle, ArrowUpCircle,
   PieChart, Receipt, AlertCircle, ChevronDown, ChevronUp,
   ChevronLeft, ChevronRight,
-  Trash2, Pencil, TrendingDown, TrendingUp,
+  Trash2, Pencil, TrendingDown, TrendingUp, Clock, Target, Info,
 } from 'lucide-react';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -680,6 +680,8 @@ export default function GestioneFinanziaria() {
   const [loading, setLoading] = useState(true);
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [tutteVoci, setTutteVoci] = useState<{ data: string; importo: number }[]>([]);
+  const [oreSettimana, setOreSettimana] = useState(40);
+  const [settimaneAnno, setSettimaneAnno] = useState(48);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1199,6 +1201,153 @@ export default function GestioneFinanziaria() {
           </div>
         </div>
       )}
+
+      {/* Calcolatore costo orario */}
+      {(() => {
+        const mesi = filtroMesi(filtroGest) || 12;
+        // Ore lavorate nel periodo selezionato (proporzionale all'anno)
+        const oreAnno = oreSettimana * settimaneAnno;
+        const orePeriodo = oreAnno * (mesi / 12);
+        const orePeriodoMin = Math.max(orePeriodo, 1);
+
+        // Costo orario basato sulle spese del periodo
+        const costoOrarioSpese = totUscite / orePeriodoMin;
+
+        // Incasso orario necessario per pareggio (spese incluse, tasse escluse)
+        const breakEvenLordo = totUscite / orePeriodoMin;
+
+        // Incasso orario necessario per pareggio con tasse
+        // Calcola quante tasse si pagherebbe su ogni euro incassato
+        const fatturatoTest = 1000;
+        const tasseTest = calcolaStimaTasse(fatturatoTest);
+        const aliquotaEffettivaTasse = fatturatoTest > 0 ? tasseTest.totale / fatturatoTest : 0;
+        // Per coprire le spese + tasse, devo incassare: spese / (1 - aliquota_effettiva)
+        const breakEvenConTasse = totUscite > 0
+          ? totUscite / Math.max(1 - aliquotaEffettivaTasse, 0.01) / orePeriodoMin
+          : 0;
+
+        // Incasso orario attuale
+        const incassoOrarioAttuale = fatturatoLordo / orePeriodoMin;
+
+        // Margine netto %
+        const nettoDisponibile = Math.max(fatturatoLordo - totUscite - stimaTasse.totale, 0);
+        const margineNetto = fatturatoLordo > 0 ? (nettoDisponibile / fatturatoLordo) * 100 : 0;
+        const margineLordo = fatturatoLordo > 0 ? ((fatturatoLordo - totUscite) / fatturatoLordo) * 100 : 0;
+
+        const inPari = fatturatoLordo >= totUscite;
+        const superaTasse = fatturatoLordo >= (totUscite + stimaTasse.totale);
+
+        return (
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-stone-100 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-blue-500" />
+                <span className="text-sm font-semibold text-stone-700">Costo orario &amp; punto di pareggio</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-stone-400">
+                <Info size={11} />
+                <span>Basato sulle uscite del periodo selezionato</span>
+              </div>
+            </div>
+
+            {/* Configurazione ore */}
+            <div className="px-5 py-4 border-b border-stone-100 bg-stone-50/60">
+              <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide mb-3">Ore lavorate (configura)</p>
+              <div className="flex flex-wrap gap-6">
+                <div>
+                  <label className="text-xs text-stone-500 mb-1 block">Ore/settimana</label>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setOreSettimana(v => Math.max(1, v - 1))}
+                      className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">−</button>
+                    <span className="w-8 text-center text-sm font-bold text-stone-800">{oreSettimana}</span>
+                    <button onClick={() => setOreSettimana(v => Math.min(80, v + 1))}
+                      className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">+</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-stone-500 mb-1 block">Settimane lavorate/anno</label>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSettimaneAnno(v => Math.max(1, v - 1))}
+                      className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">−</button>
+                    <span className="w-8 text-center text-sm font-bold text-stone-800">{settimaneAnno}</span>
+                    <button onClick={() => setSettimaneAnno(v => Math.min(52, v + 1))}
+                      className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">+</button>
+                  </div>
+                </div>
+                <div className="flex items-end">
+                  <div className="text-xs text-stone-400">
+                    <span className="font-semibold text-stone-600">{Math.round(orePeriodo)} ore</span> nel periodo · <span className="font-semibold text-stone-600">{oreAnno} ore/anno</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI orari */}
+            <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {/* Costo orario spese */}
+              <div className="bg-red-50 rounded-xl p-3.5 border border-red-100">
+                <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wide mb-1">Costo orario (spese)</p>
+                <p className="text-2xl font-bold text-red-600">€{costoOrarioSpese.toFixed(2)}</p>
+                <p className="text-[10px] text-stone-400 mt-0.5">per stare a paro senza tasse</p>
+              </div>
+
+              {/* Break-even con tasse */}
+              <div className="bg-amber-50 rounded-xl p-3.5 border border-amber-100">
+                <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">Break-even con tasse</p>
+                <p className="text-2xl font-bold text-amber-700">€{breakEvenConTasse.toFixed(2)}</p>
+                <p className="text-[10px] text-stone-400 mt-0.5">per coprire spese + fisco</p>
+              </div>
+
+              {/* Incasso orario attuale */}
+              <div className={`rounded-xl p-3.5 border ${incassoOrarioAttuale >= breakEvenConTasse ? 'bg-teal-50 border-teal-100' : incassoOrarioAttuale >= breakEvenLordo ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'}`}>
+                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Incasso orario attuale</p>
+                <p className={`text-2xl font-bold ${incassoOrarioAttuale >= breakEvenConTasse ? 'text-teal-600' : incassoOrarioAttuale >= breakEvenLordo ? 'text-amber-700' : 'text-red-600'}`}>
+                  €{incassoOrarioAttuale.toFixed(2)}
+                </p>
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  {fatturatoLordo > 0 ? (incassoOrarioAttuale >= breakEvenConTasse ? 'in attivo netto' : incassoOrarioAttuale >= breakEvenLordo ? 'copre spese, non tasse' : 'sotto il punto di pareggio') : 'nessun incasso'}
+                </p>
+              </div>
+
+              {/* Margine */}
+              <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-100">
+                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Margine netto</p>
+                <p className={`text-2xl font-bold ${margineNetto > 20 ? 'text-teal-600' : margineNetto > 5 ? 'text-amber-600' : 'text-red-500'}`}>
+                  {margineNetto.toFixed(1)}%
+                </p>
+                <p className="text-[10px] text-stone-400 mt-0.5">lordo: {margineLordo.toFixed(1)}% (senza tasse)</p>
+              </div>
+            </div>
+
+            {/* Semaforo situazione */}
+            <div className="px-5 pb-5">
+              <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${superaTasse ? 'bg-teal-50 border border-teal-100' : inPari ? 'bg-amber-50 border border-amber-100' : 'bg-red-50 border border-red-100'}`}>
+                <Target size={16} className={superaTasse ? 'text-teal-600' : inPari ? 'text-amber-600' : 'text-red-500'} />
+                <div className="flex-1 min-w-0">
+                  {superaTasse ? (
+                    <p className="text-sm font-semibold text-teal-700">
+                      Stai incassando abbastanza — margine netto €{nettoDisponibile.toFixed(2)} dopo spese e tasse stimate
+                    </p>
+                  ) : inPari ? (
+                    <p className="text-sm font-semibold text-amber-700">
+                      Copri le spese ma non le tasse — ti mancano €{(stimaTasse.totale - (fatturatoLordo - totUscite)).toFixed(2)} per il fisco
+                    </p>
+                  ) : (
+                    <p className="text-sm font-semibold text-red-700">
+                      Sotto il punto di pareggio — ti mancano €{(totUscite - fatturatoLordo).toFixed(2)} solo per coprire le spese
+                    </p>
+                  )}
+                  {fatturatoLordo > 0 && (
+                    <p className="text-[11px] text-stone-400 mt-0.5">
+                      Devi incassare almeno <strong>€{breakEvenConTasse.toFixed(2)}/ora</strong> per stare a paro con spese + tasse incluse
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Lista voci per categoria */}
       <div className="space-y-3">
