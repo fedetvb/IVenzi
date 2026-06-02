@@ -118,22 +118,29 @@ export default function Clienti({ onSelectCliente }: Props) {
     return String(Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000)));
   }
 
+  function formatDataIT(iso: string | null) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
   function esportaExcel() {
     setExporting(true);
-    const header = ['Cognome', 'Nome', 'Telefono', 'Email', 'Data nascita', 'Eta', 'Note'];
+    const header = ['Cognome', 'Nome', 'Telefono', 'Email', 'Data di nascita', 'Eta', 'Note'];
     const rows = clienti.map(c => [
       c.cognome, c.nome, c.telefono ?? '', c.email ?? '',
-      c.data_nascita ?? '', calcEta(c.data_nascita ?? null), (c.note ?? '').replace(/\n/g, ' '),
+      formatDataIT(c.data_nascita ?? null), calcEta(c.data_nascita ?? null), (c.note ?? '').replace(/\n/g, ' '),
     ]);
+    // Semicolon separator for Italian Excel locale
     const csvContent = [header, ...rows]
-      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
       .join('\r\n');
     const bom = '\uFEFF';
     const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `clienti-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `clienti-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setExporting(false);
@@ -154,10 +161,10 @@ export default function Clienti({ onSelectCliente }: Props) {
 
     autoTable(doc, {
       startY: 28,
-      head: [['Cognome', 'Nome', 'Telefono', 'Email', 'Data nascita', 'Eta', 'Note']],
+      head: [['Cognome', 'Nome', 'Telefono', 'Email', 'Data di nascita', 'Eta', 'Note']],
       body: clienti.map(c => [
         c.cognome, c.nome, c.telefono ?? '', c.email ?? '',
-        c.data_nascita ? new Date(c.data_nascita).toLocaleDateString('it-IT') : '',
+        formatDataIT(c.data_nascita ?? null),
         calcEta(c.data_nascita ?? null),
         (c.note ?? '').slice(0, 60),
       ]),
