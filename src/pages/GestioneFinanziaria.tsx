@@ -1415,7 +1415,9 @@ export default function GestioneFinanziaria() {
             .filter(f => f.parrucchiere_id === p.id && f.data_riferimento >= gStart && f.data_riferimento <= gEnd)
             .reduce((acc, f) => acc + (f.importo_convalidato ?? 0), 0);
           const stipLordo = parseFloat((stipendiParr[p.id] ?? '').replace(',', '.')) || 0;
-          const oreMese = parseFloat((oreParr[p.id] ?? '').replace(',', '.')) || 0;
+          // oreParr stores giorni/mese; ore = giorni * 8
+          const giorniMese = parseFloat((oreParr[p.id] ?? '').replace(',', '.')) || 0;
+          const oreMese = giorniMese * 8;
           const oreTot = oreMese * mesi;
           const costoOrario = oreTot > 0 && stipLordo > 0 ? (stipLordo * mesi) / oreTot : null;
           const incassoOrario = oreTot > 0 ? fatturato / oreTot : null;
@@ -1423,7 +1425,7 @@ export default function GestioneFinanziaria() {
             ? ((incassoOrario - costoOrario) / costoOrario) * 100
             : null;
           const copertura = stipLordo > 0 ? (fatturato / (stipLordo * mesi)) * 100 : null;
-          return { ...p, fatturato, stipLordo, oreMese, oreTot, costoOrario, incassoOrario, margine, copertura };
+          return { ...p, fatturato, stipLordo, giorniMese, oreMese, oreTot, costoOrario, incassoOrario, margine, copertura };
         });
 
         return (
@@ -1483,9 +1485,9 @@ export default function GestioneFinanziaria() {
                             />
                           </div>
                         </div>
-                        {/* Ore/mese */}
+                        {/* Giorni/mese */}
                         <div>
-                          <label className="text-xs text-stone-500 mb-1 block">Ore lavorate/mese</label>
+                          <label className="text-xs text-stone-500 mb-1 block">Giorni lavorati/mese</label>
                           <div className="flex items-center gap-2">
                             <button onClick={() => setOreParr(prev => {
                               const cur = Math.max(0, parseFloat(prev[p.id] ?? '0') - 1);
@@ -1497,17 +1499,17 @@ export default function GestioneFinanziaria() {
                               {oreParr[p.id] ? parseFloat(oreParr[p.id]) : 0}
                             </span>
                             <button onClick={() => setOreParr(prev => {
-                              const cur = parseFloat(prev[p.id] ?? '0') + 1;
+                              const cur = Math.min(31, parseFloat(prev[p.id] ?? '0') + 1);
                               const next = { ...prev, [p.id]: String(cur) };
                               localStorage.setItem('ore_parrucchieri', JSON.stringify(next));
                               return next;
                             })} className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">+</button>
                           </div>
                         </div>
-                        {p.oreTot > 0 && (
+                        {p.giorniMese > 0 && (
                           <div className="flex items-end">
                             <div className="text-xs text-stone-400">
-                              <span className="font-semibold text-stone-600">{p.oreTot} ore</span> nel periodo · fatturato <span className="font-semibold text-emerald-600">€{p.fatturato.toFixed(2)}</span>
+                              <span className="font-semibold text-stone-600">{p.oreMese} ore/mese</span> · <span className="font-semibold text-stone-600">{p.oreTot} ore</span> nel periodo · fatturato <span className="font-semibold text-emerald-600">€{p.fatturato.toFixed(2)}</span>
                             </div>
                           </div>
                         )}
