@@ -1227,10 +1227,11 @@ export default function GestioneFinanziaria() {
           ? totUscite / Math.max(1 - aliquotaEffettivaTasse, 0.01) / orePeriodoMin
           : 0;
 
-        // Incasso orario attuale lordo e netto
+        // Incasso orario attuale lordo e netto (il netto può essere negativo)
         const incassoOrarioLordo = fatturatoLordo / orePeriodoMin;
-        const nettoDisponibile = Math.max(fatturatoLordo - totUscite - stimaTasse.totale, 0);
-        const incassoOrarioNetto = nettoDisponibile / orePeriodoMin;
+        const nettoRaw = fatturatoLordo - totUscite - stimaTasse.totale;
+        const nettoDisponibile = nettoRaw; // non clampato: mostriamo anche i negativi
+        const incassoOrarioNetto = nettoRaw / orePeriodoMin;
         const incassoOrarioAttuale = mostraOrarioNetto === 'netto' ? incassoOrarioNetto : incassoOrarioLordo;
 
         // Costo orario e break-even
@@ -1239,9 +1240,9 @@ export default function GestioneFinanziaria() {
           : costoOrarioSpese;
         const breakEvenDisplay = mostraOrarioNetto === 'netto' ? breakEvenConTasse : breakEvenLordo;
 
-        // Margine netto %
-        const margineNetto = fatturatoLordo > 0 ? (nettoDisponibile / fatturatoLordo) * 100 : 0;
-        const margineLordo = fatturatoLordo > 0 ? ((fatturatoLordo - totUscite) / fatturatoLordo) * 100 : 0;
+        // Margine % (può essere negativo)
+        const margineNetto = fatturatoLordo > 0 ? (nettoRaw / fatturatoLordo) * 100 : (nettoRaw < 0 ? -100 : 0);
+        const margineLordo = fatturatoLordo > 0 ? ((fatturatoLordo - totUscite) / fatturatoLordo) * 100 : ((fatturatoLordo - totUscite) < 0 ? -100 : 0);
         const margineDisplay = mostraOrarioNetto === 'netto' ? margineNetto : margineLordo;
 
         const inPari = fatturatoLordo >= totUscite;
@@ -1304,38 +1305,40 @@ export default function GestioneFinanziaria() {
 
             {/* KPI orari */}
             <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {/* Costo orario / soglia pareggio */}
+              {/* Costo per ora di lavoro */}
               <div className="bg-red-50 rounded-xl p-3.5 border border-red-100">
                 <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wide mb-1">
-                  {mostraOrarioNetto === 'netto' ? 'Costo orario (tot.)' : 'Costo orario (spese)'}
+                  {mostraOrarioNetto === 'netto' ? 'Costo/ora (spese+tasse)' : 'Costo/ora (spese)'}
                 </p>
                 <p className="text-2xl font-bold text-red-600">€{costoOrarioDisplay.toFixed(2)}</p>
                 <p className="text-[10px] text-stone-400 mt-0.5">
-                  {mostraOrarioNetto === 'netto' ? 'spese + tasse stimate' : 'solo spese, senza tasse'}
+                  {mostraOrarioNetto === 'netto' ? 'quanto ti costa ogni ora lavorata' : 'solo le spese fisse, senza tasse'}
                 </p>
               </div>
 
-              {/* Break-even */}
+              {/* Soglia minima da incassare per ora */}
               <div className="bg-amber-50 rounded-xl p-3.5 border border-amber-100">
                 <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">
-                  {mostraOrarioNetto === 'netto' ? 'Break-even totale' : 'Break-even (solo spese)'}
+                  {mostraOrarioNetto === 'netto' ? 'Minimo/ora (con tasse)' : 'Minimo/ora (senza tasse)'}
                 </p>
                 <p className="text-2xl font-bold text-amber-700">€{breakEvenDisplay.toFixed(2)}</p>
                 <p className="text-[10px] text-stone-400 mt-0.5">
-                  {mostraOrarioNetto === 'netto' ? 'per coprire spese + fisco' : 'per coprire le spese'}
+                  {mostraOrarioNetto === 'netto' ? 'devi incassare almeno questa cifra/ora' : 'devi incassare almeno questa cifra/ora'}
                 </p>
               </div>
 
-              {/* Incasso orario attuale */}
+              {/* Incassi medi per ora */}
               <div className={`rounded-xl p-3.5 border ${incassoOrarioAttuale >= breakEvenDisplay ? 'bg-teal-50 border-teal-100' : 'bg-red-50 border-red-100'}`}>
                 <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">
-                  {mostraOrarioNetto === 'netto' ? 'Netto orario attuale' : 'Lordo orario attuale'}
+                  {mostraOrarioNetto === 'netto' ? 'Guadagno netto/ora' : 'Incassi medi/ora'}
                 </p>
                 <p className={`text-2xl font-bold ${incassoOrarioAttuale >= breakEvenDisplay ? 'text-teal-600' : 'text-red-600'}`}>
-                  €{incassoOrarioAttuale.toFixed(2)}
+                  {incassoOrarioAttuale < 0 ? '−' : ''}€{Math.abs(incassoOrarioAttuale).toFixed(2)}
                 </p>
                 <p className="text-[10px] text-stone-400 mt-0.5">
-                  {fatturatoLordo > 0 ? (incassoOrarioAttuale >= breakEvenDisplay ? 'sopra il pareggio' : 'sotto il pareggio') : 'nessun incasso'}
+                  {mostraOrarioNetto === 'netto'
+                    ? (incassoOrarioAttuale < 0 ? 'in perdita per ogni ora lavorata' : incassoOrarioAttuale >= breakEvenDisplay ? 'in attivo' : 'sotto il minimo')
+                    : (fatturatoLordo > 0 ? (incassoOrarioAttuale >= breakEvenDisplay ? 'sopra il minimo' : 'sotto il minimo') : 'nessun incasso')}
                 </p>
               </div>
 
@@ -1344,11 +1347,13 @@ export default function GestioneFinanziaria() {
                 <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">
                   {mostraOrarioNetto === 'netto' ? 'Margine netto' : 'Margine lordo'}
                 </p>
-                <p className={`text-2xl font-bold ${margineDisplay > 20 ? 'text-teal-600' : margineDisplay > 5 ? 'text-amber-600' : 'text-red-500'}`}>
-                  {margineDisplay.toFixed(1)}%
+                <p className={`text-2xl font-bold ${margineDisplay > 20 ? 'text-teal-600' : margineDisplay > 0 ? 'text-amber-600' : 'text-red-500'}`}>
+                  {margineDisplay >= 0 ? '' : '−'}{Math.abs(margineDisplay).toFixed(1)}%
                 </p>
                 <p className="text-[10px] text-stone-400 mt-0.5">
-                  {mostraOrarioNetto === 'netto' ? `lordo: ${margineLordo.toFixed(1)}%` : `netto: ${margineNetto.toFixed(1)}%`}
+                  {mostraOrarioNetto === 'netto'
+                    ? `lordo: ${margineLordo >= 0 ? '' : '−'}${Math.abs(margineLordo).toFixed(1)}%`
+                    : `netto: ${margineNetto >= 0 ? '' : '−'}${Math.abs(margineNetto).toFixed(1)}%`}
                 </p>
               </div>
             </div>
@@ -1360,7 +1365,7 @@ export default function GestioneFinanziaria() {
                 <div className="flex-1 min-w-0">
                   {superaTasse ? (
                     <p className="text-sm font-semibold text-teal-700">
-                      Stai incassando abbastanza — margine netto €{nettoDisponibile.toFixed(2)} dopo spese e tasse stimate
+                      Stai incassando abbastanza — rimane €{nettoDisponibile.toFixed(2)} dopo spese e tasse stimate
                     </p>
                   ) : inPari ? (
                     <p className="text-sm font-semibold text-amber-700">
