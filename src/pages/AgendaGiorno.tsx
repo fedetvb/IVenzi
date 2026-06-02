@@ -657,7 +657,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     <div
                       key={time}
                       className="absolute w-full flex items-start justify-end pr-2 cursor-pointer hover:bg-amber-50 transition-colors group/timeslot"
-                      style={{ top: i * slotHeight, height: slotHeight, backgroundColor: isHour ? 'rgba(0,0,0,0.03)' : undefined }}
+                      style={{ top: i * slotHeight, height: slotHeight, backgroundColor: isHour ? 'rgba(0,0,0,0.07)' : undefined }}
                       onClick={() => {
                         if (drag) return;
                         const [h, m] = time.split(':').map(Number);
@@ -713,7 +713,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     {slots.map((time, i) => (
                       <div key={`gl-${time}`} className="absolute left-0 right-0 pointer-events-none" style={{ top: i * slotHeight, height: slotHeight }}>
                         {time.endsWith(':00') && (
-                          <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.03)' }} />
+                          <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.07)' }} />
                         )}
                         <div className="absolute left-0 right-0" style={{
                           top: 0,
