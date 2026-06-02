@@ -3,7 +3,7 @@ import {
   Plus, X, Settings, ArrowDownCircle, ArrowUpCircle,
   PieChart, Receipt, AlertCircle, ChevronDown, ChevronUp,
   ChevronLeft, ChevronRight,
-  Trash2, Pencil, TrendingDown, TrendingUp, Clock, Target, Info,
+  Trash2, Pencil, TrendingDown, TrendingUp, Clock, Target, Info, Users,
 } from 'lucide-react';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -120,6 +120,13 @@ function defaultsForForma(f: FormaGiuridica): Partial<ImpostazioneTasse> {
     default: // partita_iva
       return { regime_fiscale: 'forfettario', aliquota_iva: ivaAliq, aliquota_irpef: 23, percentuale_forfettario: 67, imposta_sostitutiva: 15 };
   }
+}
+
+interface ParrucchiereConFatturato {
+  id: string;
+  nome: string;
+  colore: string;
+  fatturatoNelPeriodo: number;
 }
 
 type ModalitaFiltro = 'periodo' | 'anno' | 'sempre';
@@ -683,14 +690,24 @@ export default function GestioneFinanziaria() {
   const [oreSettimana, setOreSettimana] = useState(40);
   const [settimaneAnno, setSettimaneAnno] = useState(48);
   const [mostraOrarioNetto, setMostraOrarioNetto] = useState<'lordo' | 'netto'>('lordo');
+  const [parrucchieri, setParrucchieri] = useState<ParrucchiereConFatturato[]>([]);
+  const [stipendiParr, setStipendiParr] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('stipendi_parrucchieri') || '{}'); } catch { return {}; }
+  });
+  const [oreParr, setOreParr] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('ore_parrucchieri') || '{}'); } catch { return {}; }
+  });
+  const [fichePerParr, setFichePerParr] = useState<{ parrucchiere_id: string | null; data_riferimento: string; importo_convalidato: number }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: sp }, { data: tx }, { data: fiches }, { data: riv }] = await Promise.all([
+    const [{ data: sp }, { data: tx }, { data: fiches }, { data: riv }, { data: parr }, { data: ficheParr }] = await Promise.all([
       supabase.from('spese').select('*').is('deleted_at', null).order('data', { ascending: false }),
       supabase.from('impostazioni_tasse').select('*').limit(1),
       supabase.from('fiches').select('data_riferimento, importo_convalidato').eq('convalidata', true),
       supabase.from('rivendita_prodotti').select('data_vendita, totale'),
+      supabase.from('parrucchieri').select('id, nome, colore').eq('attivo', true).order('nome'),
+      supabase.from('fiches').select('parrucchiere_id, data_riferimento, importo_convalidato').eq('convalidata', true),
     ]);
     setSpese((sp || []) as Spesa[]);
     if (tx && tx.length > 0) setTasse(tx[0] as ImpostazioneTasse);
@@ -701,6 +718,8 @@ export default function GestioneFinanziaria() {
     ].filter(v => v.data && v.importo > 0);
 
     setTutteVoci(vociFinali);
+    setFichePerParr((ficheParr || []) as { parrucchiere_id: string | null; data_riferimento: string; importo_convalidato: number }[]);
+    setParrucchieri((parr || []).map(p => ({ id: p.id, nome: p.nome, colore: p.colore ?? '#10b981', fatturatoNelPeriodo: 0 })));
     setLoading(false);
   }, []);
 
@@ -1383,6 +1402,162 @@ export default function GestioneFinanziaria() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Costo orario per parrucchiere */}
+      {parrucchieri.length > 0 && (() => {
+        const mesi = filtroMesi(filtroGest) || 12;
+        const parrConDati = parrucchieri.map(p => {
+          const fatturato = fichePerParr
+            .filter(f => f.parrucchiere_id === p.id && f.data_riferimento >= gStart && f.data_riferimento <= gEnd)
+            .reduce((acc, f) => acc + (f.importo_convalidato ?? 0), 0);
+          const stipLordo = parseFloat((stipendiParr[p.id] ?? '').replace(',', '.')) || 0;
+          const oreMese = parseFloat((oreParr[p.id] ?? '').replace(',', '.')) || 0;
+          const orePeriodo = oreParr[p.id] ? oreParr[p.id] !== '' ? oreParr[p.id] : null : null;
+          const oreTot = oreParr[p.id] ? parseFloat((oreParr[p.id] ?? '').replace(',', '.')) * mesi : 0;
+          const costoOrario = oreTot > 0 ? stipLordo * mesi / oreTot : null;
+          const incassoOrario = oreTot > 0 ? fatturato / oreTot : null;
+          const copertura = fatturato > 0 && stipLordo > 0 ? ((fatturato / (stipLordo * mesi)) * 100) : null;
+          return { ...p, fatturato, stipLordo, oreParrMese: oreParr[p.id] ? parseFloat(oreParr[p.id]) : 0, oreTot, costoOrario, incassoOrario, copertura };
+        });
+
+        return (
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-stone-100 flex items-center gap-2">
+              <Users size={15} className="text-teal-500" />
+              <span className="text-sm font-semibold text-stone-700">Costo orario per parrucchiere</span>
+              <span className="ml-auto text-[11px] text-stone-400">{filtroLabelAttuale}</span>
+            </div>
+            <div className="px-5 py-3 bg-stone-50/60 border-b border-stone-100">
+              <p className="text-[11px] text-stone-400">Inserisci stipendio lordo mensile e ore lavorate/mese per ogni collaboratore. Il fatturato viene preso dalle fiches convalidate del periodo.</p>
+            </div>
+            <div className="divide-y divide-stone-100">
+              {parrConDati.map(p => {
+                const iniziale = p.nome.charAt(0).toUpperCase();
+                const copOk = p.copertura !== null && p.copertura >= 100;
+                const copWarn = p.copertura !== null && p.copertura >= 70 && p.copertura < 100;
+                return (
+                  <div key={p.id} className="p-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                        style={{ backgroundColor: p.colore || '#10b981' }}>
+                        {iniziale}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-stone-800">{p.nome}</p>
+                        <p className="text-[11px] text-stone-400">
+                          Fatturato periodo: <span className="font-semibold text-emerald-600">€{p.fatturato.toFixed(2)}</span>
+                        </p>
+                      </div>
+                      {p.copertura !== null && (
+                        <div className={`ml-auto px-3 py-1 rounded-full text-xs font-bold ${copOk ? 'bg-teal-50 text-teal-700 border border-teal-200' : copWarn ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                          {p.copertura.toFixed(0)}% coperto
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {/* Input stipendio */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide mb-1 block">Stipendio lordo/mese</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs">€</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            placeholder="0"
+                            value={stipendiParr[p.id] ?? ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setStipendiParr(prev => {
+                                const next = { ...prev, [p.id]: val };
+                                localStorage.setItem('stipendi_parrucchieri', JSON.stringify(next));
+                                return next;
+                              });
+                            }}
+                            className="w-full border border-stone-200 rounded-xl pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Input ore/mese */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide mb-1 block">Ore lavorate/mese</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="0"
+                          value={oreParr[p.id] ?? ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setOreParr(prev => {
+                              const next = { ...prev, [p.id]: val };
+                              localStorage.setItem('ore_parrucchieri', JSON.stringify(next));
+                              return next;
+                            });
+                          }}
+                          className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        />
+                      </div>
+
+                      {/* Costo orario */}
+                      <div className="bg-red-50 rounded-xl p-3 border border-red-100">
+                        <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wide mb-1">Costo/ora</p>
+                        {p.costoOrario !== null ? (
+                          <p className="text-xl font-bold text-red-600">€{p.costoOrario.toFixed(2)}</p>
+                        ) : (
+                          <p className="text-sm text-stone-400 italic">—</p>
+                        )}
+                        <p className="text-[10px] text-stone-400 mt-0.5">stipendio lordo ÷ ore</p>
+                      </div>
+
+                      {/* Incasso orario */}
+                      <div className={`rounded-xl p-3 border ${p.incassoOrario !== null ? (p.costoOrario !== null && p.incassoOrario >= p.costoOrario ? 'bg-teal-50 border-teal-100' : 'bg-amber-50 border-amber-100') : 'bg-stone-50 border-stone-100'}`}>
+                        <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Incasso/ora</p>
+                        {p.incassoOrario !== null ? (
+                          <p className={`text-xl font-bold ${p.costoOrario !== null && p.incassoOrario >= p.costoOrario ? 'text-teal-600' : 'text-amber-600'}`}>
+                            €{p.incassoOrario.toFixed(2)}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-stone-400 italic">—</p>
+                        )}
+                        <p className="text-[10px] text-stone-400 mt-0.5">fatturato ÷ ore</p>
+                      </div>
+                    </div>
+
+                    {/* Barra copertura */}
+                    {p.copertura !== null && p.stipLordo > 0 && (
+                      <div className="mt-3">
+                        <div className="flex justify-between text-[11px] text-stone-400 mb-1">
+                          <span>Copertura stipendio — il fatturato copre il {p.copertura.toFixed(1)}% dello stipendio lordo del periodo</span>
+                          <span className="font-semibold">€{p.fatturato.toFixed(0)} / €{(p.stipLordo * mesi).toFixed(0)}</span>
+                        </div>
+                        <div className="w-full bg-stone-100 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-500 ${copOk ? 'bg-teal-400' : copWarn ? 'bg-amber-400' : 'bg-red-400'}`}
+                            style={{ width: `${Math.min(p.copertura, 100)}%` }}
+                          />
+                        </div>
+                        {!copOk && p.stipLordo > 0 && (
+                          <p className="text-[11px] text-stone-400 mt-1">
+                            Mancano <span className="font-semibold text-red-500">€{Math.max(p.stipLordo * mesi - p.fatturato, 0).toFixed(2)}</span> al pareggio stipendio
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="px-5 py-3 border-t border-stone-100 bg-stone-50/40">
+              <p className="text-[11px] text-stone-400 flex items-center gap-1">
+                <Info size={11} /> I dati di stipendio e ore sono salvati localmente. Il fatturato è calcolato sulle fiches convalidate del periodo selezionato.
+              </p>
             </div>
           </div>
         );
