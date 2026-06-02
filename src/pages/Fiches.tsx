@@ -768,6 +768,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   const [convalidando, setConvalidando] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [showConvalidaConfirm, setShowConvalidaConfirm] = useState(false);
+  const [showEliminaConfirm, setShowEliminaConfirm] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
 
   // Carte
   const [carteSconto, setCarteSconto] = useState<CartaScontoSimple[]>([]);
@@ -1253,6 +1255,78 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
     } else {
       onSaved();
     }
+  }
+
+  async function handleElimina() {
+    setEliminando(true);
+    setShowEliminaConfirm(false);
+
+    for (const ficheId of gruppo.ficheIds) {
+      // Se convalidata, esegui l'iter completo di annullamento prima di eliminare
+      if (gruppo.ficheConvalidata) {
+        // Ripristina utilizzi carta sconto
+        const { data: scUsi } = await supabase
+          .from('utilizzi_carta_sconto')
+          .select('carta_sconto_id')
+          .eq('fiche_id', ficheId);
+        for (const uso of scUsi || []) {
+          const { data: cs } = await supabase.from('carte_sconto').select('usa_e_getta, attiva').eq('id', uso.carta_sconto_id).maybeSingle();
+          if (cs?.usa_e_getta && !cs.attiva) {
+            await supabase.from('carte_sconto').update({ attiva: true }).eq('id', uso.carta_sconto_id);
+          }
+          await supabase.from('utilizzi_carta_sconto').delete().eq('fiche_id', ficheId);
+        }
+
+        // Ripristina utilizzi carta premium
+        const { data: prUsi } = await supabase
+          .from('utilizzi_carta_premium')
+          .select('carta_premium_id, importo_detratto')
+          .eq('fiche_id', ficheId);
+        for (const uso of prUsi || []) {
+          const { data: cp } = await supabase.from('carte_premium').select('id, saldo').eq('id', uso.carta_premium_id).maybeSingle();
+          if (cp) {
+            await supabase.from('carte_premium').update({ saldo: cp.saldo + uso.importo_detratto, attiva: true }).eq('id', cp.id);
+          }
+          await supabase.from('utilizzi_carta_premium').delete().eq('fiche_id', ficheId);
+        }
+
+        // Ripristina stock catalogo per voci rivendita
+        const { data: vociFiche } = await supabase
+          .from('fiche_voci')
+          .select('nome_voce, note')
+          .eq('fiche_id', ficheId);
+        for (const vf of vociFiche || []) {
+          if (!vf.nome_voce?.toLowerCase().includes('rivendita')) continue;
+          const catalogoMatch = vf.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+          if (!catalogoMatch) continue;
+          const catalogoId = catalogoMatch[1];
+          const { data: prod } = await supabase
+            .from('prodotti_rivendita_catalogo')
+            .select('quantita_stock, quantita_venduta')
+            .eq('id', catalogoId)
+            .maybeSingle();
+          if (prod) {
+            await supabase.from('prodotti_rivendita_catalogo').update({
+              quantita_stock: (prod.quantita_stock ?? 0) + 1,
+              quantita_venduta: Math.max(0, (prod.quantita_venduta ?? 0) - 1),
+            }).eq('id', catalogoId);
+          }
+        }
+
+        // Rimuovi voci rivendita e trattamenti generati
+        await supabase.from('rivendita_prodotti').delete().eq('fiche_id', ficheId);
+        await supabase.from('trattamenti_eseguiti').delete().eq('fiche_id', ficheId);
+
+        // Rimuovi incasso giornaliero
+        await supabase.from('incassi_giornalieri').delete().eq('fiche_id', ficheId);
+      }
+
+      // Elimina la fiche (cascade elimina fiche_voci)
+      await supabase.from('fiches').delete().eq('id', ficheId);
+    }
+
+    setEliminando(false);
+    onSaved();
   }
 
   const statoColor: Record<string, string> = {
@@ -1774,45 +1848,84 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-1 flex-wrap">
-            <button onClick={onToggle}
-              className="px-4 py-2 text-sm font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">
-              Chiudi
-            </button>
-            {isConvalidata ? (
-              <button
-                onClick={handleAnnullaConvalida}
-                disabled={convalidando}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-              >
-                <X size={14} />
-                {convalidando ? 'Annullamento…' : 'Annulla convalida'}
-              </button>
-            ) : (
-              <>
-                <button onClick={handleSave} disabled={saving}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-stone-300 text-stone-700 rounded-lg hover:bg-stone-50 transition-colors disabled:opacity-50">
-                  <Check size={14} />
-                  {saving ? 'Salvataggio…' : 'Salva bozza'}
+          {/* Dialogo conferma eliminazione */}
+          {showEliminaConfirm && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Eliminare questa fiche?</p>
+                  <p className="text-xs text-red-700 mt-0.5">
+                    {gruppo.ficheConvalidata
+                      ? 'La fiche è convalidata. L\'incasso verrà rimosso, le carte ripristinate e lo stock aggiornato.'
+                      : 'La fiche verrà eliminata definitivamente.'}
+                    {' '}Questa azione non è reversibile.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setShowEliminaConfirm(false)}
+                  className="px-4 py-1.5 text-xs font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50">
+                  Annulla
                 </button>
-                {!showConvalidaConfirm && !showRicaricaAlert && !showRicaricaModal && !showPasswordGate && (
-                  <button
-                    onClick={() => {
-                      if (saldoInsufficient) {
-                        setShowRicaricaAlert(true);
-                      } else {
-                        setShowConvalidaConfirm(true);
-                      }
-                    }}
-                    disabled={voci.length === 0}
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40"
-                  >
-                    <ShieldCheck size={14} />
-                    Convalida fiche
+                <button onClick={handleElimina} disabled={eliminando}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+                  <Trash2 size={12} />
+                  {eliminando ? 'Eliminazione…' : 'Elimina definitivamente'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between gap-2 pt-1 flex-wrap">
+            <button
+              onClick={() => setShowEliminaConfirm(true)}
+              disabled={eliminando}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              Elimina
+            </button>
+            <div className="flex gap-2 flex-wrap justify-end">
+              <button onClick={onToggle}
+                className="px-4 py-2 text-sm font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">
+                Chiudi
+              </button>
+              {isConvalidata ? (
+                <button
+                  onClick={handleAnnullaConvalida}
+                  disabled={convalidando}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  <X size={14} />
+                  {convalidando ? 'Annullamento…' : 'Annulla convalida'}
+                </button>
+              ) : (
+                <>
+                  <button onClick={handleSave} disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-stone-300 text-stone-700 rounded-lg hover:bg-stone-50 transition-colors disabled:opacity-50">
+                    <Check size={14} />
+                    {saving ? 'Salvataggio…' : 'Salva bozza'}
                   </button>
-                )}
-              </>
-            )}
+                  {!showConvalidaConfirm && !showRicaricaAlert && !showRicaricaModal && !showPasswordGate && (
+                    <button
+                      onClick={() => {
+                        if (saldoInsufficient) {
+                          setShowRicaricaAlert(true);
+                        } else {
+                          setShowConvalidaConfirm(true);
+                        }
+                      }}
+                      disabled={voci.length === 0}
+                      className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                    >
+                      <ShieldCheck size={14} />
+                      Convalida fiche
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
