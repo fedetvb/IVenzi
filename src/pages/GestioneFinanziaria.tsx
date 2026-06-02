@@ -1416,147 +1416,196 @@ export default function GestioneFinanziaria() {
             .reduce((acc, f) => acc + (f.importo_convalidato ?? 0), 0);
           const stipLordo = parseFloat((stipendiParr[p.id] ?? '').replace(',', '.')) || 0;
           const oreMese = parseFloat((oreParr[p.id] ?? '').replace(',', '.')) || 0;
-          const orePeriodo = oreParr[p.id] ? oreParr[p.id] !== '' ? oreParr[p.id] : null : null;
-          const oreTot = oreParr[p.id] ? parseFloat((oreParr[p.id] ?? '').replace(',', '.')) * mesi : 0;
-          const costoOrario = oreTot > 0 ? stipLordo * mesi / oreTot : null;
+          const oreTot = oreMese * mesi;
+          const costoOrario = oreTot > 0 && stipLordo > 0 ? (stipLordo * mesi) / oreTot : null;
           const incassoOrario = oreTot > 0 ? fatturato / oreTot : null;
-          const copertura = fatturato > 0 && stipLordo > 0 ? ((fatturato / (stipLordo * mesi)) * 100) : null;
-          return { ...p, fatturato, stipLordo, oreParrMese: oreParr[p.id] ? parseFloat(oreParr[p.id]) : 0, oreTot, costoOrario, incassoOrario, copertura };
+          const margine = incassoOrario !== null && costoOrario !== null
+            ? ((incassoOrario - costoOrario) / costoOrario) * 100
+            : null;
+          const copertura = stipLordo > 0 ? (fatturato / (stipLordo * mesi)) * 100 : null;
+          return { ...p, fatturato, stipLordo, oreMese, oreTot, costoOrario, incassoOrario, margine, copertura };
         });
 
         return (
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-stone-100 flex items-center gap-2">
-              <Users size={15} className="text-teal-500" />
-              <span className="text-sm font-semibold text-stone-700">Costo orario per parrucchiere</span>
-              <span className="ml-auto text-[11px] text-stone-400">{filtroLabelAttuale}</span>
+            {/* Header */}
+            <div className="px-5 py-3.5 border-b border-stone-100 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Users size={15} className="text-teal-500" />
+                <span className="text-sm font-semibold text-stone-700">Costo orario per parrucchiere</span>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-stone-400">
+                <Info size={11} />
+                <span className="hidden sm:inline">Basato sullo stipendio lordo individuale</span>
+              </div>
             </div>
-            <div className="px-5 py-3 bg-stone-50/60 border-b border-stone-100">
-              <p className="text-[11px] text-stone-400">Inserisci stipendio lordo mensile e ore lavorate/mese per ogni collaboratore. Il fatturato viene preso dalle fiches convalidate del periodo.</p>
-            </div>
+
+            {/* Elenco parrucchieri */}
             <div className="divide-y divide-stone-100">
               {parrConDati.map(p => {
                 const iniziale = p.nome.charAt(0).toUpperCase();
                 const copOk = p.copertura !== null && p.copertura >= 100;
                 const copWarn = p.copertura !== null && p.copertura >= 70 && p.copertura < 100;
+                const incassoOk = p.incassoOrario !== null && p.costoOrario !== null && p.incassoOrario >= p.costoOrario;
+
                 return (
-                  <div key={p.id} className="p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                        style={{ backgroundColor: p.colore || '#10b981' }}>
-                        {iniziale}
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-stone-800">{p.nome}</p>
-                        <p className="text-[11px] text-stone-400">
-                          Fatturato periodo: <span className="font-semibold text-emerald-600">€{p.fatturato.toFixed(2)}</span>
-                        </p>
-                      </div>
-                      {p.copertura !== null && (
-                        <div className={`ml-auto px-3 py-1 rounded-full text-xs font-bold ${copOk ? 'bg-teal-50 text-teal-700 border border-teal-200' : copWarn ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
-                          {p.copertura.toFixed(0)}% coperto
+                  <div key={p.id} className="overflow-hidden">
+                    {/* Band configurazione — stesso stile della sezione negozio */}
+                    <div className="px-5 py-4 border-b border-stone-100 bg-stone-50/60">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                          style={{ backgroundColor: p.colore || '#10b981' }}>
+                          {iniziale}
                         </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {/* Input stipendio */}
-                      <div>
-                        <label className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide mb-1 block">Stipendio lordo/mese</label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs">€</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="50"
-                            placeholder="0"
-                            value={stipendiParr[p.id] ?? ''}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setStipendiParr(prev => {
-                                const next = { ...prev, [p.id]: val };
-                                localStorage.setItem('stipendi_parrucchieri', JSON.stringify(next));
-                                return next;
-                              });
-                            }}
-                            className="w-full border border-stone-200 rounded-xl pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                          />
-                        </div>
+                        <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide">{p.nome} (configura)</p>
                       </div>
-
-                      {/* Input ore/mese */}
-                      <div>
-                        <label className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide mb-1 block">Ore lavorate/mese</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          placeholder="0"
-                          value={oreParr[p.id] ?? ''}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setOreParr(prev => {
-                              const next = { ...prev, [p.id]: val };
+                      <div className="flex flex-wrap gap-6">
+                        {/* Stipendio */}
+                        <div>
+                          <label className="text-xs text-stone-500 mb-1 block">Stipendio lordo/mese</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs font-medium">€</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              placeholder="0"
+                              value={stipendiParr[p.id] ?? ''}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setStipendiParr(prev => {
+                                  const next = { ...prev, [p.id]: val };
+                                  localStorage.setItem('stipendi_parrucchieri', JSON.stringify(next));
+                                  return next;
+                                });
+                              }}
+                              className="w-32 border border-stone-200 rounded-lg pl-7 pr-3 py-1.5 text-sm font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
+                            />
+                          </div>
+                        </div>
+                        {/* Ore/mese */}
+                        <div>
+                          <label className="text-xs text-stone-500 mb-1 block">Ore lavorate/mese</label>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setOreParr(prev => {
+                              const cur = Math.max(0, parseFloat(prev[p.id] ?? '0') - 1);
+                              const next = { ...prev, [p.id]: String(cur) };
                               localStorage.setItem('ore_parrucchieri', JSON.stringify(next));
                               return next;
-                            });
-                          }}
-                          className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                        />
-                      </div>
-
-                      {/* Costo orario */}
-                      <div className="bg-red-50 rounded-xl p-3 border border-red-100">
-                        <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wide mb-1">Costo/ora</p>
-                        {p.costoOrario !== null ? (
-                          <p className="text-xl font-bold text-red-600">€{p.costoOrario.toFixed(2)}</p>
-                        ) : (
-                          <p className="text-sm text-stone-400 italic">—</p>
+                            })} className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">−</button>
+                            <span className="w-10 text-center text-sm font-bold text-stone-800">
+                              {oreParr[p.id] ? parseFloat(oreParr[p.id]) : 0}
+                            </span>
+                            <button onClick={() => setOreParr(prev => {
+                              const cur = parseFloat(prev[p.id] ?? '0') + 1;
+                              const next = { ...prev, [p.id]: String(cur) };
+                              localStorage.setItem('ore_parrucchieri', JSON.stringify(next));
+                              return next;
+                            })} className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">+</button>
+                          </div>
+                        </div>
+                        {p.oreTot > 0 && (
+                          <div className="flex items-end">
+                            <div className="text-xs text-stone-400">
+                              <span className="font-semibold text-stone-600">{p.oreTot} ore</span> nel periodo · fatturato <span className="font-semibold text-emerald-600">€{p.fatturato.toFixed(2)}</span>
+                            </div>
+                          </div>
                         )}
-                        <p className="text-[10px] text-stone-400 mt-0.5">stipendio lordo ÷ ore</p>
+                      </div>
+                    </div>
+
+                    {/* KPI orari — griglia 4 colonne come la sezione negozio */}
+                    <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {/* Costo/ora */}
+                      <div className="bg-red-50 rounded-xl p-3.5 border border-red-100">
+                        <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wide mb-1">Costo/ora (stipendio)</p>
+                        {p.costoOrario !== null ? (
+                          <p className="text-2xl font-bold text-red-600">€{p.costoOrario.toFixed(2)}</p>
+                        ) : (
+                          <p className="text-2xl font-bold text-stone-300">—</p>
+                        )}
+                        <p className="text-[10px] text-stone-400 mt-0.5">stipendio lordo ÷ ore totali</p>
                       </div>
 
-                      {/* Incasso orario */}
-                      <div className={`rounded-xl p-3 border ${p.incassoOrario !== null ? (p.costoOrario !== null && p.incassoOrario >= p.costoOrario ? 'bg-teal-50 border-teal-100' : 'bg-amber-50 border-amber-100') : 'bg-stone-50 border-stone-100'}`}>
-                        <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Incasso/ora</p>
+                      {/* Minimo da incassare */}
+                      <div className="bg-amber-50 rounded-xl p-3.5 border border-amber-100">
+                        <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">Minimo/ora (pareggio)</p>
+                        {p.costoOrario !== null ? (
+                          <p className="text-2xl font-bold text-amber-700">€{p.costoOrario.toFixed(2)}</p>
+                        ) : (
+                          <p className="text-2xl font-bold text-stone-300">—</p>
+                        )}
+                        <p className="text-[10px] text-stone-400 mt-0.5">deve incassare almeno questa cifra/ora</p>
+                      </div>
+
+                      {/* Incasso/ora attuale */}
+                      <div className={`rounded-xl p-3.5 border ${p.incassoOrario !== null ? (incassoOk ? 'bg-teal-50 border-teal-100' : 'bg-red-50 border-red-100') : 'bg-stone-50 border-stone-100'}`}>
+                        <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Incasso attuale/ora</p>
                         {p.incassoOrario !== null ? (
-                          <p className={`text-xl font-bold ${p.costoOrario !== null && p.incassoOrario >= p.costoOrario ? 'text-teal-600' : 'text-amber-600'}`}>
+                          <p className={`text-2xl font-bold ${incassoOk ? 'text-teal-600' : 'text-red-600'}`}>
                             €{p.incassoOrario.toFixed(2)}
                           </p>
                         ) : (
-                          <p className="text-sm text-stone-400 italic">—</p>
+                          <p className="text-2xl font-bold text-stone-300">—</p>
                         )}
-                        <p className="text-[10px] text-stone-400 mt-0.5">fatturato ÷ ore</p>
+                        <p className="text-[10px] text-stone-400 mt-0.5">
+                          {p.incassoOrario !== null ? (incassoOk ? 'sopra il minimo' : 'sotto il minimo') : 'inserisci i dati'}
+                        </p>
+                      </div>
+
+                      {/* Margine % */}
+                      <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-100">
+                        <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Copertura stipendio</p>
+                        {p.copertura !== null ? (
+                          <p className={`text-2xl font-bold ${copOk ? 'text-teal-600' : copWarn ? 'text-amber-600' : 'text-red-500'}`}>
+                            {p.copertura >= 0 ? '' : '−'}{Math.abs(Math.min(p.copertura, 999)).toFixed(1)}%
+                          </p>
+                        ) : (
+                          <p className="text-2xl font-bold text-stone-300">—</p>
+                        )}
+                        <p className="text-[10px] text-stone-400 mt-0.5">
+                          {p.copertura !== null
+                            ? `€${p.fatturato.toFixed(0)} su €${(p.stipLordo * mesi).toFixed(0)} totali`
+                            : 'inserisci stipendio'}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Barra copertura */}
-                    {p.copertura !== null && p.stipLordo > 0 && (
-                      <div className="mt-3">
-                        <div className="flex justify-between text-[11px] text-stone-400 mb-1">
-                          <span>Copertura stipendio — il fatturato copre il {p.copertura.toFixed(1)}% dello stipendio lordo del periodo</span>
-                          <span className="font-semibold">€{p.fatturato.toFixed(0)} / €{(p.stipLordo * mesi).toFixed(0)}</span>
+                    {/* Banner semaforo */}
+                    <div className="px-5 pb-5">
+                      {p.costoOrario !== null && p.incassoOrario !== null ? (
+                        <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${incassoOk ? 'bg-teal-50 border border-teal-100' : copWarn ? 'bg-amber-50 border border-amber-100' : 'bg-red-50 border border-red-100'}`}>
+                          <Target size={16} className={incassoOk ? 'text-teal-600' : copWarn ? 'text-amber-600' : 'text-red-500'} />
+                          <div className="flex-1 min-w-0">
+                            {incassoOk ? (
+                              <p className="text-sm font-semibold text-teal-700">
+                                {p.nome} copre lo stipendio — rimane un surplus di €{(p.fatturato - p.stipLordo * mesi).toFixed(2)} nel periodo
+                              </p>
+                            ) : (
+                              <p className="text-sm font-semibold text-red-700">
+                                {p.nome} non copre lo stipendio — mancano €{Math.max(p.stipLordo * mesi - p.fatturato, 0).toFixed(2)} al pareggio
+                              </p>
+                            )}
+                            <p className="text-[11px] text-stone-400 mt-0.5">
+                              Deve incassare almeno <strong>€{p.costoOrario.toFixed(2)}/ora</strong> per coprire il costo stipendio
+                            </p>
+                          </div>
                         </div>
-                        <div className="w-full bg-stone-100 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full transition-all duration-500 ${copOk ? 'bg-teal-400' : copWarn ? 'bg-amber-400' : 'bg-red-400'}`}
-                            style={{ width: `${Math.min(p.copertura, 100)}%` }}
-                          />
+                      ) : (
+                        <div className="rounded-xl px-4 py-3 flex items-center gap-3 bg-stone-50 border border-stone-100">
+                          <Info size={16} className="text-stone-400" />
+                          <p className="text-sm text-stone-400">Inserisci stipendio e ore per vedere l'analisi di {p.nome}</p>
                         </div>
-                        {!copOk && p.stipLordo > 0 && (
-                          <p className="text-[11px] text-stone-400 mt-1">
-                            Mancano <span className="font-semibold text-red-500">€{Math.max(p.stipLordo * mesi - p.fatturato, 0).toFixed(2)}</span> al pareggio stipendio
-                          </p>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
+
             <div className="px-5 py-3 border-t border-stone-100 bg-stone-50/40">
               <p className="text-[11px] text-stone-400 flex items-center gap-1">
-                <Info size={11} /> I dati di stipendio e ore sono salvati localmente. Il fatturato è calcolato sulle fiches convalidate del periodo selezionato.
+                <AlertCircle size={11} /> Stipendio e ore sono salvati localmente. Il fatturato è calcolato sulle fiches convalidate del periodo selezionato.
               </p>
             </div>
           </div>
