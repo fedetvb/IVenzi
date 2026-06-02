@@ -117,7 +117,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
               onClick={() => onNavigate(id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
                 currentPage === id
-                  ? 'bg-amber-500 text-white'
+                  ? 'bg-black text-white'
                   : 'text-stone-400 hover:bg-stone-800 hover:text-white'
               }`}
             >

@@ -181,41 +181,45 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-stone-200 flex-shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-4 bg-white border-b border-stone-200 flex-shrink-0 gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <button onClick={() => setWeekStart(w => startOfWeek(addDays(w, -7)))} className="p-1.5 rounded-lg hover:bg-stone-100 transition-colors">
             <ChevronLeft size={18} />
           </button>
-          <span className="text-sm font-semibold text-stone-700 min-w-[180px] text-center">
+          <span className="text-xs sm:text-sm font-semibold text-stone-700 text-center hidden sm:inline min-w-[180px]">
             {weekStart.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })} –{' '}
             {addDays(weekStart, 6).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}
+          </span>
+          <span className="text-xs font-semibold text-stone-700 text-center sm:hidden">
+            {weekStart.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} –{' '}
+            {addDays(weekStart, 6).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
           </span>
           <button onClick={() => setWeekStart(w => startOfWeek(addDays(w, 7)))} className="p-1.5 rounded-lg hover:bg-stone-100 transition-colors">
             <ChevronRight size={18} />
           </button>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))} className="text-xs px-3 py-1.5 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors font-medium">
+          <button onClick={() => setWeekStart(startOfWeek(new Date()))} className="text-xs px-2.5 py-1.5 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors font-medium">
             Oggi
           </button>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-stone-500">
+        <div className="flex items-center gap-1.5 sm:gap-4">
+          <div className="hidden sm:flex items-center gap-1.5 text-stone-500">
             <Clock size={14} />
             <span className="text-sm font-semibold tabular-nums">{oraItaliana}</span>
           </div>
           <button
             onClick={loadAvvisoClienti}
             disabled={avvisoLoading}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 bg-emerald-600 text-white px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
           >
             <Bell size={15} />
-            Avviso appuntamento clienti
+            <span className="hidden sm:inline">Avviso appuntamento clienti</span>
           </button>
           <button
             onClick={() => setMultiModal(true)}
-            className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+            className="flex items-center gap-2 bg-amber-500 text-white px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
           >
             <Plus size={16} />
-            Nuovo appuntamento
+            <span className="hidden sm:inline">Nuovo appuntamento</span>
           </button>
         </div>
       </div>
@@ -340,7 +344,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 px-6 py-2 bg-white border-t border-stone-200 flex-shrink-0">
+      <div className="hidden sm:flex items-center gap-4 px-6 py-2 bg-white border-t border-stone-200 flex-shrink-0">
         {Object.entries(STATO_COLORS).map(([stato, cls]) => (
           <div key={stato} className="flex items-center gap-1.5">
             <div className={`w-3 h-3 rounded-full ${cls}`} />
