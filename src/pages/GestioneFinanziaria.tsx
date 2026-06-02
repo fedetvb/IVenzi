@@ -694,10 +694,10 @@ export default function GestioneFinanziaria() {
   const [stipendiParr, setStipendiParr] = useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem('stipendi_parrucchieri') || '{}'); } catch { return {}; }
   });
-  const [oreParr, setOreParr] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem('ore_parrucchieri') || '{}'); } catch { return {}; }
-  });
   const [fichePerParr, setFichePerParr] = useState<{ parrucchiere_id: string | null; data_riferimento: string; importo_convalidato: number }[]>([]);
+  // mese/anno di riferimento per il calcolo giorni lavorativi parrucchieri
+  const [parrMese, setParrMese] = useState(() => new Date().getMonth() + 1);
+  const [parrAnno, setParrAnno] = useState(() => new Date().getFullYear());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1409,24 +1409,35 @@ export default function GestioneFinanziaria() {
 
       {/* Costo orario per parrucchiere */}
       {parrucchieri.length > 0 && (() => {
-        const mesi = filtroMesi(filtroGest) || 12;
+        // Calcola i giorni lavorativi del mese selezionato escludendo domenica (0) e lunedì (1)
+        const giorniLavorativiMese = (() => {
+          const giorni = new Date(parrAnno, parrMese, 0).getDate(); // tot giorni del mese
+          let count = 0;
+          for (let d = 1; d <= giorni; d++) {
+            const dow = new Date(parrAnno, parrMese - 1, d).getDay();
+            if (dow !== 0 && dow !== 1) count++; // escludi domenica e lunedì
+          }
+          return count;
+        })();
+        const oreLavorativeMese = giorniLavorativiMese * 8;
+
+        // Fatturato del mese selezionato per ogni parrucchiere
+        const meseStr = String(parrMese).padStart(2, '0');
+        const meseStart = `${parrAnno}-${meseStr}-01`;
+        const meseEnd = `${parrAnno}-${meseStr}-${String(new Date(parrAnno, parrMese, 0).getDate()).padStart(2, '0')}`;
+
         const parrConDati = parrucchieri.map(p => {
           const fatturato = fichePerParr
-            .filter(f => f.parrucchiere_id === p.id && f.data_riferimento >= gStart && f.data_riferimento <= gEnd)
+            .filter(f => f.parrucchiere_id === p.id && f.data_riferimento >= meseStart && f.data_riferimento <= meseEnd)
             .reduce((acc, f) => acc + (f.importo_convalidato ?? 0), 0);
           const stipLordo = parseFloat((stipendiParr[p.id] ?? '').replace(',', '.')) || 0;
-          // oreParr stores giorni/mese; ore = giorni * 8
-          const giorniMese = parseFloat((oreParr[p.id] ?? '').replace(',', '.')) || 0;
-          const oreMese = giorniMese * 8;
-          const oreTot = oreMese * mesi;
-          const costoOrario = oreTot > 0 && stipLordo > 0 ? (stipLordo * mesi) / oreTot : null;
-          const incassoOrario = oreTot > 0 ? fatturato / oreTot : null;
-          const margine = incassoOrario !== null && costoOrario !== null
-            ? ((incassoOrario - costoOrario) / costoOrario) * 100
-            : null;
-          const copertura = stipLordo > 0 ? (fatturato / (stipLordo * mesi)) * 100 : null;
-          return { ...p, fatturato, stipLordo, giorniMese, oreMese, oreTot, costoOrario, incassoOrario, margine, copertura };
+          const costoOrario = oreLavorativeMese > 0 && stipLordo > 0 ? stipLordo / oreLavorativeMese : null;
+          const incassoOrario = oreLavorativeMese > 0 ? fatturato / oreLavorativeMese : null;
+          const copertura = stipLordo > 0 ? (fatturato / stipLordo) * 100 : null;
+          return { ...p, fatturato, stipLordo, costoOrario, incassoOrario, copertura };
         });
+
+        const nomiMesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
         return (
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
@@ -1442,6 +1453,54 @@ export default function GestioneFinanziaria() {
               </div>
             </div>
 
+            {/* Band selezione mese/anno — stile identico a "Ore lavorate (configura)" */}
+            <div className="px-5 py-4 border-b border-stone-100 bg-stone-50/60">
+              <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide mb-3">Mese di riferimento</p>
+              <div className="flex flex-wrap gap-6 items-end">
+                {/* Navigazione mese */}
+                <div>
+                  <label className="text-xs text-stone-500 mb-1 block">Mese</label>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => {
+                      if (parrMese === 1) { setParrMese(12); setParrAnno(y => y - 1); }
+                      else setParrMese(m => m - 1);
+                    }} className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">
+                      <ChevronLeft size={13} />
+                    </button>
+                    <span className="w-24 text-center text-sm font-bold text-stone-800">{nomiMesi[parrMese - 1]}</span>
+                    <button onClick={() => {
+                      if (parrMese === 12) { setParrMese(1); setParrAnno(y => y + 1); }
+                      else setParrMese(m => m + 1);
+                    }} className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
+                {/* Anno */}
+                <div>
+                  <label className="text-xs text-stone-500 mb-1 block">Anno</label>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setParrAnno(y => y - 1)}
+                      className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">
+                      <ChevronLeft size={13} />
+                    </button>
+                    <span className="w-12 text-center text-sm font-bold text-stone-800">{parrAnno}</span>
+                    <button onClick={() => setParrAnno(y => y + 1)}
+                      className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
+                {/* Riepilogo giorni calcolati */}
+                <div className="flex items-end">
+                  <div className="text-xs text-stone-400">
+                    <span className="font-semibold text-stone-600">{giorniLavorativiMese} giorni lavorativi</span>
+                    {' '}(escluso dom. e lun.) · <span className="font-semibold text-stone-600">{oreLavorativeMese} ore</span> totali
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Elenco parrucchieri */}
             <div className="divide-y divide-stone-100">
               {parrConDati.map(p => {
@@ -1452,7 +1511,7 @@ export default function GestioneFinanziaria() {
 
                 return (
                   <div key={p.id} className="overflow-hidden">
-                    {/* Band configurazione — stesso stile della sezione negozio */}
+                    {/* Band configurazione stipendio */}
                     <div className="px-5 py-4 border-b border-stone-100 bg-stone-50/60">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
@@ -1485,38 +1544,18 @@ export default function GestioneFinanziaria() {
                             />
                           </div>
                         </div>
-                        {/* Giorni/mese */}
-                        <div>
-                          <label className="text-xs text-stone-500 mb-1 block">Giorni lavorati/mese</label>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => setOreParr(prev => {
-                              const cur = Math.max(0, parseFloat(prev[p.id] ?? '0') - 1);
-                              const next = { ...prev, [p.id]: String(cur) };
-                              localStorage.setItem('ore_parrucchieri', JSON.stringify(next));
-                              return next;
-                            })} className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">−</button>
-                            <span className="w-10 text-center text-sm font-bold text-stone-800">
-                              {oreParr[p.id] ? parseFloat(oreParr[p.id]) : 0}
-                            </span>
-                            <button onClick={() => setOreParr(prev => {
-                              const cur = Math.min(31, parseFloat(prev[p.id] ?? '0') + 1);
-                              const next = { ...prev, [p.id]: String(cur) };
-                              localStorage.setItem('ore_parrucchieri', JSON.stringify(next));
-                              return next;
-                            })} className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-600 font-bold flex items-center justify-center text-sm transition-colors">+</button>
-                          </div>
-                        </div>
-                        {p.giorniMese > 0 && (
+                        {p.stipLordo > 0 && (
                           <div className="flex items-end">
                             <div className="text-xs text-stone-400">
-                              <span className="font-semibold text-stone-600">{p.oreMese} ore/mese</span> · <span className="font-semibold text-stone-600">{p.oreTot} ore</span> nel periodo · fatturato <span className="font-semibold text-emerald-600">€{p.fatturato.toFixed(2)}</span>
+                              fatturato <span className="font-semibold text-emerald-600">€{p.fatturato.toFixed(2)}</span>
+                              {' '}in {nomiMesi[parrMese - 1]} {parrAnno}
                             </div>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* KPI orari — griglia 4 colonne come la sezione negozio */}
+                    {/* KPI orari — griglia 4 colonne */}
                     <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
                       {/* Costo/ora */}
                       <div className="bg-red-50 rounded-xl p-3.5 border border-red-100">
@@ -1526,7 +1565,7 @@ export default function GestioneFinanziaria() {
                         ) : (
                           <p className="text-2xl font-bold text-stone-300">—</p>
                         )}
-                        <p className="text-[10px] text-stone-400 mt-0.5">stipendio lordo ÷ ore totali</p>
+                        <p className="text-[10px] text-stone-400 mt-0.5">stipendio ÷ {oreLavorativeMese} ore/mese</p>
                       </div>
 
                       {/* Minimo da incassare */}
@@ -1555,19 +1594,19 @@ export default function GestioneFinanziaria() {
                         </p>
                       </div>
 
-                      {/* Margine % */}
+                      {/* Copertura stipendio */}
                       <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-100">
                         <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Copertura stipendio</p>
                         {p.copertura !== null ? (
                           <p className={`text-2xl font-bold ${copOk ? 'text-teal-600' : copWarn ? 'text-amber-600' : 'text-red-500'}`}>
-                            {p.copertura >= 0 ? '' : '−'}{Math.abs(Math.min(p.copertura, 999)).toFixed(1)}%
+                            {Math.min(p.copertura, 999).toFixed(1)}%
                           </p>
                         ) : (
                           <p className="text-2xl font-bold text-stone-300">—</p>
                         )}
                         <p className="text-[10px] text-stone-400 mt-0.5">
                           {p.copertura !== null
-                            ? `€${p.fatturato.toFixed(0)} su €${(p.stipLordo * mesi).toFixed(0)} totali`
+                            ? `€${p.fatturato.toFixed(0)} su €${p.stipLordo.toFixed(0)} lordi`
                             : 'inserisci stipendio'}
                         </p>
                       </div>
@@ -1581,22 +1620,22 @@ export default function GestioneFinanziaria() {
                           <div className="flex-1 min-w-0">
                             {incassoOk ? (
                               <p className="text-sm font-semibold text-teal-700">
-                                {p.nome} copre lo stipendio — rimane un surplus di €{(p.fatturato - p.stipLordo * mesi).toFixed(2)} nel periodo
+                                {p.nome} copre lo stipendio — surplus di €{Math.max(p.fatturato - p.stipLordo, 0).toFixed(2)} in {nomiMesi[parrMese - 1]}
                               </p>
                             ) : (
                               <p className="text-sm font-semibold text-red-700">
-                                {p.nome} non copre lo stipendio — mancano €{Math.max(p.stipLordo * mesi - p.fatturato, 0).toFixed(2)} al pareggio
+                                {p.nome} non copre lo stipendio — mancano €{Math.max(p.stipLordo - p.fatturato, 0).toFixed(2)} al pareggio
                               </p>
                             )}
                             <p className="text-[11px] text-stone-400 mt-0.5">
-                              Deve incassare almeno <strong>€{p.costoOrario.toFixed(2)}/ora</strong> per coprire il costo stipendio
+                              Con {giorniLavorativiMese} giorni × 8 ore = {oreLavorativeMese} ore · minimo <strong>€{p.costoOrario.toFixed(2)}/ora</strong>
                             </p>
                           </div>
                         </div>
                       ) : (
                         <div className="rounded-xl px-4 py-3 flex items-center gap-3 bg-stone-50 border border-stone-100">
                           <Info size={16} className="text-stone-400" />
-                          <p className="text-sm text-stone-400">Inserisci stipendio e ore per vedere l'analisi di {p.nome}</p>
+                          <p className="text-sm text-stone-400">Inserisci lo stipendio lordo per vedere l'analisi di {p.nome}</p>
                         </div>
                       )}
                     </div>
@@ -1607,7 +1646,7 @@ export default function GestioneFinanziaria() {
 
             <div className="px-5 py-3 border-t border-stone-100 bg-stone-50/40">
               <p className="text-[11px] text-stone-400 flex items-center gap-1">
-                <AlertCircle size={11} /> Stipendio e ore sono salvati localmente. Il fatturato è calcolato sulle fiches convalidate del periodo selezionato.
+                <AlertCircle size={11} /> I giorni lavorativi escludono domenica e lunedì (giorno di chiusura). Stipendio salvato localmente.
               </p>
             </div>
           </div>
