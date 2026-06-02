@@ -147,6 +147,103 @@ export default function Clienti({ onSelectCliente }: Props) {
     setExportOpen(false);
   }
 
+  function scaricaCsv(filename: string, header: string[], rows: string[][]) {
+    const csvContent = [header, ...rows]
+      .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function esportaSchedeColore() {
+    setExporting(true);
+    setExportOpen(false);
+    const mappaClienti = Object.fromEntries(clienti.map(c => [c.id, c]));
+    const { data } = await supabase
+      .from('schede_colore')
+      .select('*')
+      .is('deleted_at', null)
+      .order('data_trattamento', { ascending: false });
+    const rows = (data || []).map(s => {
+      const c = mappaClienti[s.cliente_id];
+      return [
+        c ? `${c.cognome} ${c.nome}` : '',
+        c?.telefono ?? '',
+        formatDataIT(s.data_trattamento),
+        s.tecnica ?? '',
+        s.colore_base ?? '',
+        s.colore_target ?? '',
+        s.formula_colore ?? '',
+        s.ossidante ?? '',
+        s.tempo_posa ? String(s.tempo_posa) : '',
+        (s.note ?? '').replace(/\n/g, ' '),
+      ];
+    });
+    scaricaCsv(
+      `schede-colore-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.csv`,
+      ['Cliente', 'Telefono', 'Data trattamento', 'Tecnica', 'Colore base', 'Colore target', 'Formula colore', 'Ossidante', 'Tempo posa (min)', 'Note'],
+      rows
+    );
+    setExporting(false);
+  }
+
+  async function esportaCartePremium() {
+    setExporting(true);
+    setExportOpen(false);
+    const { data } = await supabase
+      .from('carte_premium')
+      .select('*, clienti(nome, cognome, telefono)')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    const rows = (data || []).map((cp: { codice: string; saldo: number; attiva: boolean; note: string; created_at: string; clienti?: { cognome?: string; nome?: string; telefono?: string } | null }) => [
+      cp.clienti ? `${cp.clienti.cognome ?? ''} ${cp.clienti.nome ?? ''}`.trim() : '',
+      cp.clienti?.telefono ?? '',
+      cp.codice ?? '',
+      cp.attiva ? 'Attiva' : 'Disattiva',
+      `€${Number(cp.saldo ?? 0).toFixed(2).replace('.', ',')}`,
+      (cp.note ?? '').replace(/\n/g, ' '),
+      formatDataIT(cp.created_at?.slice(0, 10)),
+    ]);
+    scaricaCsv(
+      `carte-premium-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.csv`,
+      ['Cliente', 'Telefono', 'Codice carta', 'Stato', 'Saldo', 'Note', 'Data creazione'],
+      rows
+    );
+    setExporting(false);
+  }
+
+  async function esportaCarteSconto() {
+    setExporting(true);
+    setExportOpen(false);
+    const { data } = await supabase
+      .from('carte_sconto')
+      .select('*, clienti(nome, cognome, telefono)')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    const rows = (data || []).map((cs: { codice: string; descrizione: string; tipo_sconto: string; valore_sconto: number; attiva: boolean; usa_e_getta: boolean; nominativa: boolean; created_at: string; clienti?: { cognome?: string; nome?: string; telefono?: string } | null }) => [
+      cs.clienti ? `${cs.clienti.cognome ?? ''} ${cs.clienti.nome ?? ''}`.trim() : '(Generica)',
+      cs.clienti?.telefono ?? '',
+      cs.codice ?? '',
+      cs.descrizione ?? '',
+      cs.tipo_sconto === 'percentuale' ? `${cs.valore_sconto}%` : `€${Number(cs.valore_sconto).toFixed(2).replace('.', ',')}`,
+      cs.attiva ? 'Attiva' : 'Disattiva',
+      cs.nominativa ? 'Si' : 'No',
+      cs.usa_e_getta ? 'Si' : 'No',
+      formatDataIT(cs.created_at?.slice(0, 10)),
+    ]);
+    scaricaCsv(
+      `carte-sconto-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.csv`,
+      ['Cliente', 'Telefono', 'Codice', 'Descrizione', 'Sconto', 'Stato', 'Nominativa', 'Usa e getta', 'Data creazione'],
+      rows
+    );
+    setExporting(false);
+  }
+
   function esportaPDF() {
     setExporting(true);
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -255,20 +352,45 @@ export default function Clienti({ onSelectCliente }: Props) {
               {exportOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1.5 z-20 bg-white border border-stone-200 rounded-xl shadow-xl py-1.5 min-w-[170px]">
+                  <div className="absolute right-0 top-full mt-1.5 z-20 bg-white border border-stone-200 rounded-xl shadow-xl py-1.5 min-w-[210px]">
+                    <p className="px-4 pt-2 pb-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Clienti</p>
                     <button
                       onClick={esportaExcel}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
                     >
-                      <FileSpreadsheet size={15} className="text-emerald-600" />
-                      <span>Scarica Excel (.csv)</span>
+                      <FileSpreadsheet size={14} className="text-emerald-600 flex-shrink-0" />
+                      <span>Anagrafiche Excel</span>
                     </button>
                     <button
                       onClick={esportaPDF}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
                     >
-                      <FileText size={15} className="text-red-500" />
-                      <span>Scarica PDF</span>
+                      <FileText size={14} className="text-red-500 flex-shrink-0" />
+                      <span>Anagrafiche PDF</span>
+                    </button>
+
+                    <div className="my-1 border-t border-stone-100" />
+                    <p className="px-4 pt-2 pb-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Schede & Carte</p>
+                    <button
+                      onClick={esportaSchedeColore}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                    >
+                      <FileSpreadsheet size={14} className="text-violet-500 flex-shrink-0" />
+                      <span>Schede colore Excel</span>
+                    </button>
+                    <button
+                      onClick={esportaCartePremium}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                    >
+                      <FileSpreadsheet size={14} className="text-amber-500 flex-shrink-0" />
+                      <span>Carte premium Excel</span>
+                    </button>
+                    <button
+                      onClick={esportaCarteSconto}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                    >
+                      <FileSpreadsheet size={14} className="text-blue-500 flex-shrink-0" />
+                      <span>Carte sconto Excel</span>
                     </button>
                   </div>
                 </>
