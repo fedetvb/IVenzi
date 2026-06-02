@@ -682,6 +682,7 @@ export default function GestioneFinanziaria() {
   const [tutteVoci, setTutteVoci] = useState<{ data: string; importo: number }[]>([]);
   const [oreSettimana, setOreSettimana] = useState(40);
   const [settimaneAnno, setSettimaneAnno] = useState(48);
+  const [mostraOrarioNetto, setMostraOrarioNetto] = useState<'lordo' | 'netto'>('lordo');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1226,13 +1227,22 @@ export default function GestioneFinanziaria() {
           ? totUscite / Math.max(1 - aliquotaEffettivaTasse, 0.01) / orePeriodoMin
           : 0;
 
-        // Incasso orario attuale
-        const incassoOrarioAttuale = fatturatoLordo / orePeriodoMin;
+        // Incasso orario attuale lordo e netto
+        const incassoOrarioLordo = fatturatoLordo / orePeriodoMin;
+        const nettoDisponibile = Math.max(fatturatoLordo - totUscite - stimaTasse.totale, 0);
+        const incassoOrarioNetto = nettoDisponibile / orePeriodoMin;
+        const incassoOrarioAttuale = mostraOrarioNetto === 'netto' ? incassoOrarioNetto : incassoOrarioLordo;
+
+        // Costo orario e break-even
+        const costoOrarioDisplay = mostraOrarioNetto === 'netto'
+          ? (totUscite + stimaTasse.totale) / orePeriodoMin
+          : costoOrarioSpese;
+        const breakEvenDisplay = mostraOrarioNetto === 'netto' ? breakEvenConTasse : breakEvenLordo;
 
         // Margine netto %
-        const nettoDisponibile = Math.max(fatturatoLordo - totUscite - stimaTasse.totale, 0);
         const margineNetto = fatturatoLordo > 0 ? (nettoDisponibile / fatturatoLordo) * 100 : 0;
         const margineLordo = fatturatoLordo > 0 ? ((fatturatoLordo - totUscite) / fatturatoLordo) * 100 : 0;
+        const margineDisplay = mostraOrarioNetto === 'netto' ? margineNetto : margineLordo;
 
         const inPari = fatturatoLordo >= totUscite;
         const superaTasse = fatturatoLordo >= (totUscite + stimaTasse.totale);
@@ -1244,9 +1254,19 @@ export default function GestioneFinanziaria() {
                 <Clock size={15} className="text-blue-500" />
                 <span className="text-sm font-semibold text-stone-700">Costo orario &amp; punto di pareggio</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-stone-400">
-                <Info size={11} />
-                <span>Basato sulle uscite del periodo selezionato</span>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-stone-100 rounded-lg p-0.5 gap-0.5 text-xs font-medium">
+                  {(['lordo', 'netto'] as const).map(v => (
+                    <button key={v} onClick={() => setMostraOrarioNetto(v)}
+                      className={`px-3 py-1 rounded-md transition-all ${mostraOrarioNetto === v ? 'bg-white shadow-sm text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}>
+                      {v === 'lordo' ? 'Lordo' : 'Netto'}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 text-[11px] text-stone-400">
+                  <Info size={11} />
+                  <span className="hidden sm:inline">Basato sulle uscite del periodo</span>
+                </div>
               </div>
             </div>
 
@@ -1284,38 +1304,52 @@ export default function GestioneFinanziaria() {
 
             {/* KPI orari */}
             <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {/* Costo orario spese */}
+              {/* Costo orario / soglia pareggio */}
               <div className="bg-red-50 rounded-xl p-3.5 border border-red-100">
-                <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wide mb-1">Costo orario (spese)</p>
-                <p className="text-2xl font-bold text-red-600">€{costoOrarioSpese.toFixed(2)}</p>
-                <p className="text-[10px] text-stone-400 mt-0.5">per stare a paro senza tasse</p>
+                <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wide mb-1">
+                  {mostraOrarioNetto === 'netto' ? 'Costo orario (tot.)' : 'Costo orario (spese)'}
+                </p>
+                <p className="text-2xl font-bold text-red-600">€{costoOrarioDisplay.toFixed(2)}</p>
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  {mostraOrarioNetto === 'netto' ? 'spese + tasse stimate' : 'solo spese, senza tasse'}
+                </p>
               </div>
 
-              {/* Break-even con tasse */}
+              {/* Break-even */}
               <div className="bg-amber-50 rounded-xl p-3.5 border border-amber-100">
-                <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">Break-even con tasse</p>
-                <p className="text-2xl font-bold text-amber-700">€{breakEvenConTasse.toFixed(2)}</p>
-                <p className="text-[10px] text-stone-400 mt-0.5">per coprire spese + fisco</p>
+                <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">
+                  {mostraOrarioNetto === 'netto' ? 'Break-even totale' : 'Break-even (solo spese)'}
+                </p>
+                <p className="text-2xl font-bold text-amber-700">€{breakEvenDisplay.toFixed(2)}</p>
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  {mostraOrarioNetto === 'netto' ? 'per coprire spese + fisco' : 'per coprire le spese'}
+                </p>
               </div>
 
               {/* Incasso orario attuale */}
-              <div className={`rounded-xl p-3.5 border ${incassoOrarioAttuale >= breakEvenConTasse ? 'bg-teal-50 border-teal-100' : incassoOrarioAttuale >= breakEvenLordo ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'}`}>
-                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Incasso orario attuale</p>
-                <p className={`text-2xl font-bold ${incassoOrarioAttuale >= breakEvenConTasse ? 'text-teal-600' : incassoOrarioAttuale >= breakEvenLordo ? 'text-amber-700' : 'text-red-600'}`}>
+              <div className={`rounded-xl p-3.5 border ${incassoOrarioAttuale >= breakEvenDisplay ? 'bg-teal-50 border-teal-100' : 'bg-red-50 border-red-100'}`}>
+                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">
+                  {mostraOrarioNetto === 'netto' ? 'Netto orario attuale' : 'Lordo orario attuale'}
+                </p>
+                <p className={`text-2xl font-bold ${incassoOrarioAttuale >= breakEvenDisplay ? 'text-teal-600' : 'text-red-600'}`}>
                   €{incassoOrarioAttuale.toFixed(2)}
                 </p>
                 <p className="text-[10px] text-stone-400 mt-0.5">
-                  {fatturatoLordo > 0 ? (incassoOrarioAttuale >= breakEvenConTasse ? 'in attivo netto' : incassoOrarioAttuale >= breakEvenLordo ? 'copre spese, non tasse' : 'sotto il punto di pareggio') : 'nessun incasso'}
+                  {fatturatoLordo > 0 ? (incassoOrarioAttuale >= breakEvenDisplay ? 'sopra il pareggio' : 'sotto il pareggio') : 'nessun incasso'}
                 </p>
               </div>
 
               {/* Margine */}
               <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-100">
-                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">Margine netto</p>
-                <p className={`text-2xl font-bold ${margineNetto > 20 ? 'text-teal-600' : margineNetto > 5 ? 'text-amber-600' : 'text-red-500'}`}>
-                  {margineNetto.toFixed(1)}%
+                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide mb-1">
+                  {mostraOrarioNetto === 'netto' ? 'Margine netto' : 'Margine lordo'}
                 </p>
-                <p className="text-[10px] text-stone-400 mt-0.5">lordo: {margineLordo.toFixed(1)}% (senza tasse)</p>
+                <p className={`text-2xl font-bold ${margineDisplay > 20 ? 'text-teal-600' : margineDisplay > 5 ? 'text-amber-600' : 'text-red-500'}`}>
+                  {margineDisplay.toFixed(1)}%
+                </p>
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  {mostraOrarioNetto === 'netto' ? `lordo: ${margineLordo.toFixed(1)}%` : `netto: ${margineNetto.toFixed(1)}%`}
+                </p>
               </div>
             </div>
 
