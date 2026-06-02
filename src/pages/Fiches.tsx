@@ -933,7 +933,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
     const nomevoce = `${p.nome}${p.marca ? ` (${p.marca})` : ''} - rivendita`;
     // Store catalog ID in note with prefix so convalida can find it and decrement stock
     const noteConId = `__catalogo_id__:${p.id}`;
-    const fakeVoce: VoceExtra = { id: p.id, nome: nomevoce, descrizione: '', prezzo: p.prezzo_vendita, colore: '#F97316', attivo: true };
+    const fakeVoce: VoceExtra = { id: p.id, nome: nomevoce, descrizione: noteConId, prezzo: p.prezzo_vendita, colore: '#F97316', attivo: true };
     setShowRivenditaPicker(false);
     setCercaProdotto('');
     if (parrucchieri.length > 1) {
