@@ -101,6 +101,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const isDragging = useRef(false);
   const pointerStartPos = useRef<{ x: number; y: number } | null>(null);
   const savingDrag = useRef(false);
+  const visibleParrRef = useRef<Parrucchiere[]>([]);
 
   useEffect(() => { localStorage.setItem('agenda_slotHeight', String(slotHeight)); }, [slotHeight]);
   useEffect(() => { localStorage.setItem('agenda_fontSize', String(fontSize)); }, [fontSize]);
@@ -256,15 +257,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     return clientY - rect.top + gridRef.current.scrollTop;
   }
 
-  function getParrIndexForPointer(clientX: number): number {
-    if (!gridRef.current) return -1;
+  function getParrIndexForPointer(clientX: number, parrCount: number): number {
+    if (!gridRef.current || parrCount === 0) return -1;
     const rect = gridRef.current.getBoundingClientRect();
-    const x = clientX - rect.left + gridRef.current.scrollLeft - 64; // subtract time column
-    const colWidth = gridRef.current.scrollWidth / (visibleParr.length + 64 / gridRef.current.scrollWidth);
-    // More accurate: measure each column by dividing available width
+    const x = clientX - rect.left + gridRef.current.scrollLeft - 64;
     const available = gridRef.current.scrollWidth - 64;
-    const idx = Math.floor(x / (available / visibleParr.length));
-    return Math.max(0, Math.min(visibleParr.length - 1, idx));
+    const idx = Math.floor(x / (available / parrCount));
+    return Math.max(0, Math.min(parrCount - 1, idx));
   }
 
   function snapTopToSlot(topPx: number): number {
@@ -323,10 +322,11 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
     if (!isDragging.current) return;
 
+    const vp = visibleParrRef.current;
     const gridTop = getGridTopForPointer(e.clientY);
     const newTop = Math.max(0, gridTop - dragRef.current.offsetY);
-    const parrIdx = getParrIndexForPointer(e.clientX);
-    const newParrId = visibleParr[parrIdx]?.id ?? dragRef.current.currentParrId;
+    const parrIdx = getParrIndexForPointer(e.clientX, vp.length);
+    const newParrId = vp[parrIdx]?.id ?? dragRef.current.currentParrId;
 
     dragRef.current = { ...dragRef.current, currentTop: newTop, currentParrId: newParrId };
     setDrag({ ...dragRef.current });
@@ -374,6 +374,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const visibleParr = parrucchieri.filter(p =>
     !hiddenParr.has(p.id) && !(assenzeMap.has(p.id) && assenzeMap.get(p.id) === null)
   );
+  visibleParrRef.current = visibleParr;
   const gridHeight = slots.length * slotHeight;
 
   // Ghost appointment data
