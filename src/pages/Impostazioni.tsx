@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, Printer, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, Printer, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi } from 'lucide-react';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const [sub, setSub] = useState<SubPage>(null);
@@ -23,6 +23,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'qrcode') return <PaginaQRCode onBack={() => setSub(null)} />;
   if (sub === 'backup') return <PaginaBackup onBack={() => setSub(null)} />;
   if (sub === 'connessione') return <PaginaConnessione onBack={() => setSub(null)} />;
+  if (sub === 'keepalive') return <PaginaKeepAlive onBack={() => setSub(null)} />;
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -181,6 +182,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Connessione Cloud</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica le chiavi API per connettere il gestionale al database</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Keep-alive automatico */}
+        <button
+          onClick={() => setSub('keepalive')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Activity size={18} className="text-stone-500 group-hover:text-emerald-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Keep-alive automatico</p>
+            <p className="text-xs text-stone-400 mt-0.5">Stato del ping automatico che mantiene attivo il database Supabase</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -2552,6 +2568,212 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
           <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Salva e riavvia</strong> — il programma si ricarica e si connette al nuovo database</li>
         </ol>
         <p className="text-xs text-stone-400 pt-1">Le chiavi vengono salvate solo su questo dispositivo e non vengono mai inviate a terzi.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pagina Keep-alive ────────────────────────────────────────────────────────
+
+function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
+  const [lastPing, setLastPing] = useState<string | null>(null);
+  const [pinging, setPinging] = useState(false);
+  const [pingResult, setPingResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showPopup, setShowPopup] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from('impostazioni')
+        .select('valore')
+        .eq('chiave', 'keep_alive_last_ping')
+        .maybeSingle();
+      setLastPing(data?.valore ?? null);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  async function eseguiPing() {
+    setPinging(true);
+    setPingResult(null);
+    try {
+      const sbUrl = localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL;
+      const sbKey = localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const res = await fetch(`${sbUrl}/functions/v1/keep-alive`, {
+        headers: { Authorization: `Bearer ${sbKey}`, apikey: sbKey },
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setLastPing(json.ts);
+        setPingResult({ ok: true, msg: 'Ping riuscito! Supabase ha confermato la connessione.' });
+        setShowPopup(true);
+      } else {
+        setPingResult({ ok: false, msg: `Errore: ${json.error ?? 'risposta non valida'}` });
+      }
+    } catch (e) {
+      setPingResult({ ok: false, msg: 'Impossibile raggiungere il server. Controlla la connessione.' });
+    }
+    setPinging(false);
+  }
+
+  function formatTs(ts: string) {
+    try {
+      return new Date(ts).toLocaleString('it-IT', {
+        day: '2-digit', month: 'long', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return ts;
+    }
+  }
+
+  function giorniAlProssimoPing(ts: string | null) {
+    if (!ts) return null;
+    const last = new Date(ts).getTime();
+    const now = Date.now();
+    const elapsed = (now - last) / (1000 * 60 * 60 * 24);
+    const remaining = Math.max(0, 6 - elapsed);
+    return Math.round(remaining);
+  }
+
+  const giorniRimanenti = giorniAlProssimoPing(lastPing);
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      {/* Popup conferma ping */}
+      {showPopup && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto">
+              <Wifi size={28} className="text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-stone-800">Ping riuscito!</p>
+              <p className="text-sm text-stone-500 mt-1">
+                Supabase ha ricevuto la visita e il timer di inattivit&agrave; &egrave; stato azzerato.
+              </p>
+              <p className="text-xs text-stone-400 mt-3">
+                Prossimo ping automatico tra circa 6 giorni
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPopup(false)}
+              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm rounded-xl transition-colors"
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors text-stone-500 hover:text-stone-800">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-2xl font-bold text-stone-800">Keep-alive automatico</h2>
+          <p className="text-sm text-stone-500 mt-0.5">Mantiene il database Supabase sempre attivo</p>
+        </div>
+      </div>
+
+      {/* Stato */}
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4">
+        <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Activity size={18} className="text-emerald-600" />
+        </div>
+        <div className="flex-1 space-y-1">
+          <p className="text-sm font-bold text-emerald-900">Sistema attivo</p>
+          <p className="text-xs text-emerald-700 leading-relaxed">
+            Un ping automatico visita Supabase ogni 6 giorni, impedendo la pausa del progetto
+            (che scatterebbe dopo 7 giorni di inattivit&agrave;).
+          </p>
+        </div>
+      </div>
+
+      {/* Ultimo ping */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <h3 className="text-sm font-bold text-stone-700">Ultimo ping a Supabase</h3>
+
+        {loading ? (
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-stone-400">Caricamento...</span>
+          </div>
+        ) : lastPing ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl">
+              <Clock size={16} className="text-stone-400 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-stone-800">{formatTs(lastPing)}</p>
+                <p className="text-xs text-stone-400 mt-0.5">
+                  {giorniRimanenti !== null && giorniRimanenti > 0
+                    ? `Prossimo ping automatico tra circa ${giorniRimanenti} giorn${giorniRimanenti === 1 ? 'o' : 'i'}`
+                    : 'Il prossimo ping automatico scatter\u00e0 presto'}
+                </p>
+              </div>
+            </div>
+
+            {/* Barra progresso */}
+            {giorniRimanenti !== null && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs text-stone-400">
+                  <span>Intervallo ping (6 giorni)</span>
+                  <span>{Math.min(6, 6 - (giorniRimanenti ?? 6))} / 6 giorni trascorsi</span>
+                </div>
+                <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, ((6 - (giorniRimanenti ?? 6)) / 6) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <AlertTriangle size={15} className="text-amber-500 flex-shrink-0" />
+            <p className="text-xs text-amber-700">Nessun ping registrato ancora. Esegui il primo ping manuale qui sotto.</p>
+          </div>
+        )}
+
+        {pingResult && (
+          <div className={`flex items-start gap-2 rounded-xl px-4 py-3 border ${pingResult.ok ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+            {pingResult.ok
+              ? <Check size={14} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+              : <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />}
+            <p className={`text-sm ${pingResult.ok ? 'text-emerald-700' : 'text-red-700'}`}>{pingResult.msg}</p>
+          </div>
+        )}
+
+        <button
+          onClick={eseguiPing}
+          disabled={pinging}
+          className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors"
+        >
+          <Wifi size={15} className={pinging ? 'animate-pulse' : ''} />
+          {pinging ? 'Ping in corso...' : 'Esegui ping manuale ora'}
+        </button>
+      </div>
+
+      {/* Info tecnica */}
+      <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2">
+        <p className="text-xs font-bold text-stone-700">Come funziona</p>
+        <ul className="space-y-1.5">
+          <li className="text-xs text-stone-500 leading-relaxed">
+            &bull; Il cron job del database chiama automaticamente la funzione ogni 6 giorni alle 09:00 UTC
+          </li>
+          <li className="text-xs text-stone-500 leading-relaxed">
+            &bull; Ogni ping registra il timestamp qui sopra — cos&igrave; sai sempre quando &egrave; avvenuto l&apos;ultimo
+          </li>
+          <li className="text-xs text-stone-500 leading-relaxed">
+            &bull; Supabase mette in pausa i progetti dopo 7 giorni senza attivit&agrave; — il ping ogni 6 giorni previene questo
+          </li>
+          <li className="text-xs text-stone-500 leading-relaxed">
+            &bull; Puoi eseguire un ping manuale in qualsiasi momento con il pulsante qui sopra
+          </li>
+        </ul>
       </div>
     </div>
   );

@@ -16,15 +16,20 @@ Deno.serve(async (req: Request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Lightweight ping — count one row from impostazioni
+    const now = new Date().toISOString();
+
+    // Upsert the last ping timestamp into impostazioni (shared row, no user_id for system keys)
     const { error } = await supabase
       .from("impostazioni")
-      .select("chiave", { count: "exact", head: true });
+      .upsert(
+        { chiave: "keep_alive_last_ping", valore: now, updated_at: now },
+        { onConflict: "chiave" }
+      );
 
     if (error) throw error;
 
     return new Response(
-      JSON.stringify({ ok: true, ts: new Date().toISOString() }),
+      JSON.stringify({ ok: true, ts: now }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

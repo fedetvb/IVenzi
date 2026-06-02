@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, Calendar } from 'lucide-react';
+import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import ClienteModal from '../components/ClienteModal';
 import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Props {
   onSelectCliente: (id: string) => void;
@@ -107,6 +109,69 @@ export default function Clienti({ onSelectCliente }: Props) {
     loadSchede();
   }
 
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  function calcEta(dataNascita: string | null) {
+    if (!dataNascita) return '';
+    const diff = Date.now() - new Date(dataNascita).getTime();
+    return String(Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000)));
+  }
+
+  function esportaExcel() {
+    setExporting(true);
+    const header = ['Cognome', 'Nome', 'Telefono', 'Email', 'Data nascita', 'Eta', 'Note'];
+    const rows = clienti.map(c => [
+      c.cognome, c.nome, c.telefono ?? '', c.email ?? '',
+      c.data_nascita ?? '', calcEta(c.data_nascita ?? null), (c.note ?? '').replace(/\n/g, ' '),
+    ]);
+    const csvContent = [header, ...rows]
+      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clienti-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExporting(false);
+    setExportOpen(false);
+  }
+
+  function esportaPDF() {
+    setExporting(true);
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Elenco Clienti', 14, 16);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120);
+    doc.text(`Esportato il ${new Date().toLocaleDateString('it-IT')} — ${clienti.length} clienti`, 14, 22);
+    doc.setTextColor(0);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Cognome', 'Nome', 'Telefono', 'Email', 'Data nascita', 'Eta', 'Note']],
+      body: clienti.map(c => [
+        c.cognome, c.nome, c.telefono ?? '', c.email ?? '',
+        c.data_nascita ? new Date(c.data_nascita).toLocaleDateString('it-IT') : '',
+        calcEta(c.data_nascita ?? null),
+        (c.note ?? '').slice(0, 60),
+      ]),
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [217, 119, 6], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250, 250, 249] },
+      columnStyles: { 6: { cellWidth: 50 } },
+    });
+
+    doc.save(`clienti-${new Date().toISOString().slice(0, 10)}.pdf`);
+    setExporting(false);
+    setExportOpen(false);
+  }
+
   const filtered = clienti.filter(c => {
     const q = query.toLowerCase();
     return (
@@ -157,7 +222,7 @@ export default function Clienti({ onSelectCliente }: Props) {
       {tab === 'clienti' && (
         <>
           {/* Toolbar */}
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-3 mb-6">
             <div className="flex-1 relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
               <input
@@ -168,6 +233,41 @@ export default function Clienti({ onSelectCliente }: Props) {
                 className="w-full pl-9 pr-4 py-2.5 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
               />
             </div>
+
+            {/* Export dropdown */}
+            <div className="relative flex-shrink-0">
+              <button
+                onClick={() => setExportOpen(v => !v)}
+                disabled={exporting || clienti.length === 0}
+                className="flex items-center gap-2 border border-stone-200 bg-white text-stone-700 px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-stone-50 transition-colors disabled:opacity-40"
+              >
+                <FileSpreadsheet size={15} />
+                Esporta
+                <ChevronDown size={13} className={`transition-transform ${exportOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {exportOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1.5 z-20 bg-white border border-stone-200 rounded-xl shadow-xl py-1.5 min-w-[170px]">
+                    <button
+                      onClick={esportaExcel}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                    >
+                      <FileSpreadsheet size={15} className="text-emerald-600" />
+                      <span>Scarica Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={esportaPDF}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                    >
+                      <FileText size={15} className="text-red-500" />
+                      <span>Scarica PDF</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               onClick={() => setShowModal(true)}
               className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors flex-shrink-0"
