@@ -18,18 +18,29 @@ Deno.serve(async (req: Request) => {
 
     const now = new Date().toISOString();
 
-    // Upsert the last ping timestamp into impostazioni (shared row, no user_id for system keys)
-    const { error } = await supabase
-      .from("impostazioni")
-      .upsert(
+    // Determine if called from cron (no Authorization header with user token)
+    // The cron job calls without a user JWT, manual calls come from the frontend with anon key
+    const authHeader = req.headers.get("authorization") || "";
+    const isCron = !authHeader || authHeader.includes(serviceKey);
+    const tipo = isCron ? "automatico" : "manuale";
+
+    const updates = [
+      supabase.from("impostazioni").upsert(
         { chiave: "keep_alive_last_ping", valore: now, updated_at: now },
         { onConflict: "chiave" }
-      );
+      ),
+      supabase.from("impostazioni").upsert(
+        { chiave: "keep_alive_last_ping_tipo", valore: tipo, updated_at: now },
+        { onConflict: "chiave" }
+      ),
+    ];
 
-    if (error) throw error;
+    const results = await Promise.all(updates);
+    const err = results.find(r => r.error)?.error;
+    if (err) throw err;
 
     return new Response(
-      JSON.stringify({ ok: true, ts: now }),
+      JSON.stringify({ ok: true, ts: now, tipo }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

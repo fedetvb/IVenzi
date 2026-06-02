@@ -2575,8 +2575,11 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
 
 // ─── Pagina Keep-alive ────────────────────────────────────────────────────────
 
+const KEEPALIVE_INTERVAL_DAYS = 2;
+
 function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
   const [lastPing, setLastPing] = useState<string | null>(null);
+  const [lastPingTipo, setLastPingTipo] = useState<'automatico' | 'manuale' | null>(null);
   const [pinging, setPinging] = useState(false);
   const [pingResult, setPingResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2584,12 +2587,12 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('impostazioni')
-        .select('valore')
-        .eq('chiave', 'keep_alive_last_ping')
-        .maybeSingle();
-      setLastPing(data?.valore ?? null);
+      const [{ data: pingData }, { data: tipoData }] = await Promise.all([
+        supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping').maybeSingle(),
+        supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping_tipo').maybeSingle(),
+      ]);
+      setLastPing(pingData?.valore ?? null);
+      setLastPingTipo((tipoData?.valore as 'automatico' | 'manuale') ?? null);
       setLoading(false);
     }
     load();
@@ -2607,6 +2610,7 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
       const json = await res.json();
       if (json.ok) {
         setLastPing(json.ts);
+        setLastPingTipo('manuale');
         setPingResult({ ok: true, msg: 'Ping riuscito! Supabase ha confermato la connessione.' });
         setShowPopup(true);
       } else {
@@ -2634,7 +2638,7 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
     const last = new Date(ts).getTime();
     const now = Date.now();
     const elapsed = (now - last) / (1000 * 60 * 60 * 24);
-    const remaining = Math.max(0, 6 - elapsed);
+    const remaining = Math.max(0, KEEPALIVE_INTERVAL_DAYS - elapsed);
     return Math.round(remaining);
   }
 
@@ -2655,7 +2659,7 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
                 Supabase ha ricevuto la visita e il timer di inattivit&agrave; &egrave; stato azzerato.
               </p>
               <p className="text-xs text-stone-400 mt-3">
-                Prossimo ping automatico tra circa 6 giorni
+                Prossimo ping automatico tra circa {KEEPALIVE_INTERVAL_DAYS} giorni
               </p>
             </div>
             <button
@@ -2686,7 +2690,7 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
         <div className="flex-1 space-y-1">
           <p className="text-sm font-bold text-emerald-900">Sistema attivo</p>
           <p className="text-xs text-emerald-700 leading-relaxed">
-            Un ping automatico visita Supabase ogni 6 giorni, impedendo la pausa del progetto
+            Un ping automatico visita Supabase ogni {KEEPALIVE_INTERVAL_DAYS} giorni, impedendo la pausa del progetto
             (che scatterebbe dopo 7 giorni di inattivit&agrave;).
           </p>
         </div>
@@ -2703,10 +2707,25 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
           </div>
         ) : lastPing ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl">
-              <Clock size={16} className="text-stone-400 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-stone-800">{formatTs(lastPing)}</p>
+            <div className="flex items-start gap-3 p-3 bg-stone-50 rounded-xl">
+              <Clock size={16} className="text-stone-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold text-stone-800">{formatTs(lastPing)}</p>
+                  {lastPingTipo && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      lastPingTipo === 'automatico'
+                        ? 'bg-sky-100 text-sky-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {lastPingTipo === 'automatico' ? (
+                        <><RefreshCw size={9} /> automatico</>
+                      ) : (
+                        <><Wifi size={9} /> manuale</>
+                      )}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-stone-400 mt-0.5">
                   {giorniRimanenti !== null && giorniRimanenti > 0
                     ? `Prossimo ping automatico tra circa ${giorniRimanenti} giorn${giorniRimanenti === 1 ? 'o' : 'i'}`
@@ -2719,13 +2738,13 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
             {giorniRimanenti !== null && (
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-stone-400">
-                  <span>Intervallo ping (6 giorni)</span>
-                  <span>{Math.min(6, 6 - (giorniRimanenti ?? 6))} / 6 giorni trascorsi</span>
+                  <span>Intervallo ping ({KEEPALIVE_INTERVAL_DAYS} giorni)</span>
+                  <span>{Math.min(KEEPALIVE_INTERVAL_DAYS, KEEPALIVE_INTERVAL_DAYS - (giorniRimanenti ?? KEEPALIVE_INTERVAL_DAYS))} / {KEEPALIVE_INTERVAL_DAYS} giorni trascorsi</span>
                 </div>
                 <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, ((6 - (giorniRimanenti ?? 6)) / 6) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((KEEPALIVE_INTERVAL_DAYS - (giorniRimanenti ?? KEEPALIVE_INTERVAL_DAYS)) / KEEPALIVE_INTERVAL_DAYS) * 100)}%` }}
                   />
                 </div>
               </div>
@@ -2762,13 +2781,13 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
         <p className="text-xs font-bold text-stone-700">Come funziona</p>
         <ul className="space-y-1.5">
           <li className="text-xs text-stone-500 leading-relaxed">
-            &bull; Il cron job del database chiama automaticamente la funzione ogni 6 giorni alle 09:00 UTC
+            &bull; Il cron job del database chiama automaticamente la funzione ogni {KEEPALIVE_INTERVAL_DAYS} giorni alle 09:00 UTC
           </li>
           <li className="text-xs text-stone-500 leading-relaxed">
-            &bull; Ogni ping registra il timestamp qui sopra — cos&igrave; sai sempre quando &egrave; avvenuto l&apos;ultimo
+            &bull; Ogni ping registra il timestamp e se &egrave; stato <span className="font-medium text-sky-600">automatico</span> o <span className="font-medium text-amber-600">manuale</span>
           </li>
           <li className="text-xs text-stone-500 leading-relaxed">
-            &bull; Supabase mette in pausa i progetti dopo 7 giorni senza attivit&agrave; — il ping ogni 6 giorni previene questo
+            &bull; Supabase mette in pausa i progetti dopo 7 giorni senza attivit&agrave; — il ping ogni {KEEPALIVE_INTERVAL_DAYS} giorni previene questo con ampio margine
           </li>
           <li className="text-xs text-stone-500 leading-relaxed">
             &bull; Puoi eseguire un ping manuale in qualsiasi momento con il pulsante qui sopra
