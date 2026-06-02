@@ -23,7 +23,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
-import { Bell, X, MessageSquare, Scissors } from 'lucide-react';
+import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw } from 'lucide-react';
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
 
@@ -69,6 +69,10 @@ export default function App() {
   const [birthdayClienti, setBirthdayClienti] = useState<ClienteCompleanno[]>([]);
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
 
+  // Popup ping automatico keepalive
+  const [showKeepAlivePopup, setShowKeepAlivePopup] = useState(false);
+  const [keepAlivePopupTs, setKeepAlivePopupTs] = useState<string | null>(null);
+
   const hasFicheNonConvalidateRef = { current: false };
 
   function getReminderKey(todayKey: string, orario: string) {
@@ -94,7 +98,21 @@ export default function App() {
       // 1. Banner "ricorda di inviare i messaggi appuntamento"
       setShowAppBanner(true);
 
-      // 2. Compleanni del giorno — mostrato ad ogni apertura dell'app
+      // 2. Popup ping automatico keepalive (mostrato una volta per sessione)
+      const kaShownKey = 'keepalive_popup_shown';
+      if (!sessionStorage.getItem(kaShownKey)) {
+        const [{ data: kaPing }, { data: kaTipo }] = await Promise.all([
+          supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping').maybeSingle(),
+          supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping_tipo').maybeSingle(),
+        ]);
+        if (kaTipo?.valore === 'automatico' && kaPing?.valore) {
+          sessionStorage.setItem(kaShownKey, '1');
+          setKeepAlivePopupTs(kaPing.valore);
+          setTimeout(() => setShowKeepAlivePopup(true), 1200);
+        }
+      }
+
+      // 3. Compleanni del giorno — mostrato ad ogni apertura dell'app
       const [month, day] = todayKey.split('-').slice(1).map(Number);
       const { data } = await supabase
         .from('clienti')
@@ -292,6 +310,48 @@ export default function App() {
             >
               <X size={15} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Popup ping automatico keepalive */}
+      {showKeepAlivePopup && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-red-600 px-6 py-5 flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <RefreshCw size={20} className="text-white" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-white">Ping automatico eseguito</p>
+                <p className="text-xs text-red-100 mt-0.5">Keep-alive Supabase</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-stone-600 leading-relaxed">
+                Il sistema ha eseguito automaticamente un ping a Supabase per mantenere il database attivo.
+              </p>
+              {keepAlivePopupTs && (
+                <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3">
+                  <Wifi size={14} className="text-stone-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-stone-700">
+                      {new Date(keepAlivePopupTs).toLocaleString('it-IT', {
+                        day: '2-digit', month: 'long', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                      })}
+                    </p>
+                    <p className="text-[11px] text-stone-400 mt-0.5">Orario dell'ultimo ping automatico</p>
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => setShowKeepAlivePopup(false)}
+                className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl transition-colors"
+              >
+                Ho capito
+              </button>
+            </div>
           </div>
         </div>
       )}
