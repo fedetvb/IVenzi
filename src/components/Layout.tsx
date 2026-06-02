@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { User } from '@supabase/supabase-js';
 import {
   Calendar,
@@ -63,14 +63,75 @@ function isMobile() {
   return window.innerWidth < 768;
 }
 
+function NavTooltipButton({
+  id,
+  label,
+  icon: Icon,
+  active,
+  collapsed,
+  onClick,
+}: {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  active: boolean;
+  collapsed: boolean;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [tooltipY, setTooltipY] = useState(0);
+  const ref = useRef<HTMLButtonElement>(null);
+
+  function handleMouseEnter() {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setTooltipY(rect.top + rect.height / 2);
+    }
+    setHovered(true);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        ref={ref}
+        key={id}
+        onClick={onClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setHovered(false)}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
+          active
+            ? 'bg-black text-white'
+            : 'text-stone-400 hover:bg-stone-800 hover:text-white'
+        }`}
+      >
+        <Icon size={18} className="flex-shrink-0" />
+        {!collapsed && <span>{label}</span>}
+      </button>
+
+      {/* Tooltip — only when collapsed on desktop */}
+      {collapsed && hovered && (
+        <div
+          className="fixed z-[200] pointer-events-none"
+          style={{ top: tooltipY, transform: 'translateY(-50%)', left: 72 }}
+        >
+          <div className="bg-stone-800 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap border border-stone-700">
+            {label}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Layout({ currentPage, onNavigate, children, user }: LayoutProps) {
-  // On desktop: collapsed = sidebar narrow. On mobile: collapsed = sidebar hidden (overlay).
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobile, setMobile] = useState(() => isMobile());
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { signOut } = useAuth();
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onResize = () => setMobile(isMobile());
@@ -78,7 +139,16 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Close mobile drawer when navigating
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    if (userMenuOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [userMenuOpen]);
+
   function handleNavigate(page: Page) {
     onNavigate(page);
     if (mobile) setMobileOpen(false);
@@ -108,7 +178,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '??';
   const userEmail = user?.email ?? '';
 
-  const sidebarContent = (showLabels: boolean) => (
+  const sidebarContent = (showLabels: boolean, isMobileDrawer = false) => (
     <>
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-stone-700 flex-shrink-0">
@@ -121,7 +191,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             <p className="text-xs text-amber-400 font-medium">Gestionale</p>
           </div>
         )}
-        {mobile && (
+        {isMobileDrawer && (
           <button onClick={() => setMobileOpen(false)} className="ml-auto p-1 text-stone-400 hover:text-white">
             <X size={18} />
           </button>
@@ -131,53 +201,21 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
         {navItems.map(({ id, label, icon: Icon }) => (
-          <button
+          <NavTooltipButton
             key={id}
+            id={id}
+            label={label}
+            icon={Icon}
+            active={currentPage === id}
+            collapsed={!showLabels}
             onClick={() => handleNavigate(id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
-              currentPage === id
-                ? 'bg-black text-white'
-                : 'text-stone-400 hover:bg-stone-800 hover:text-white'
-            }`}
-          >
-            <Icon size={18} className="flex-shrink-0" />
-            {showLabels && <span>{label}</span>}
-          </button>
+          />
         ))}
       </nav>
 
-      {/* User info + logout */}
-      <div className="px-2 pb-3 border-t border-stone-700 pt-3 flex-shrink-0">
-        {showLabels ? (
-          <div className="flex items-center gap-2 px-2 py-2 rounded-lg">
-            <div className="w-7 h-7 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
-              {userInitials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-stone-300 truncate">{userEmail}</p>
-            </div>
-            <button
-              onClick={signOut}
-              title="Esci"
-              className="p-1 rounded-lg text-stone-400 hover:bg-stone-700 hover:text-red-400 transition-colors flex-shrink-0"
-            >
-              <LogOut size={14} />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={signOut}
-            title="Esci"
-            className="w-full flex items-center justify-center p-2 rounded-lg text-stone-400 hover:bg-stone-700 hover:text-red-400 transition-colors"
-          >
-            <LogOut size={16} />
-          </button>
-        )}
-      </div>
-
       {/* Collapse button — desktop only */}
-      {!mobile && (
-        <div className="px-2 pb-4 flex-shrink-0">
+      {!isMobileDrawer && (
+        <div className="px-2 pb-4 flex-shrink-0 border-t border-stone-700 pt-3">
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-800 hover:text-white transition-all text-sm"
@@ -199,27 +237,25 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             collapsed ? 'w-16' : 'w-60'
           }`}
         >
-          {sidebarContent(!collapsed)}
+          {sidebarContent(!collapsed, false)}
         </aside>
       )}
 
       {/* Mobile overlay sidebar */}
       {mobile && (
         <>
-          {/* Backdrop */}
           {mobileOpen && (
             <div
               className="fixed inset-0 bg-black/50 z-40"
               onClick={() => setMobileOpen(false)}
             />
           )}
-          {/* Drawer */}
           <aside
             className={`fixed top-0 left-0 h-full w-64 bg-stone-900 text-stone-100 flex flex-col z-50 transition-transform duration-300 min-h-0 ${
               mobileOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
-            {sidebarContent(true)}
+            {sidebarContent(true, true)}
           </aside>
         </>
       )}
@@ -239,6 +275,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
               {navItems.find(n => n.id === currentPage)?.label}
             </h1>
           </div>
+
           <div className="flex items-center gap-3">
             {!isInstalled && installPrompt && (
               <button
@@ -249,10 +286,34 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
                 <span className="hidden sm:inline">Installa App</span>
               </button>
             )}
-            <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-              {userInitials}
+
+            {/* User menu */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-stone-100 transition-colors"
+              >
+                <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  {userInitials}
+                </div>
+                <span className="text-sm text-stone-600 font-medium hidden sm:block max-w-[140px] truncate">{userEmail}</span>
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-lg border border-stone-200 py-1 z-50">
+                  <div className="px-4 py-2 border-b border-stone-100">
+                    <p className="text-xs text-stone-400 truncate">{userEmail}</p>
+                  </div>
+                  <button
+                    onClick={() => { setUserMenuOpen(false); signOut(); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut size={15} />
+                    Esci
+                  </button>
+                </div>
+              )}
             </div>
-            <span className="text-sm text-stone-600 font-medium hidden sm:block">{userEmail}</span>
           </div>
         </header>
 
