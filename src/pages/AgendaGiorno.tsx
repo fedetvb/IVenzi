@@ -8,7 +8,7 @@ const SLOT_DURATION = 15;
 const START_HOUR = 8;
 const END_HOUR = 20;
 const SLOT_HEIGHT_DEFAULT = 28;
-const SLOT_HEIGHT_MIN = 16;
+const SLOT_HEIGHT_MIN = 8;
 const SLOT_HEIGHT_MAX = 72;
 const FONT_SIZE_DEFAULT = 100;
 const FONT_SIZE_MIN = 60;
@@ -657,7 +657,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     <div
                       key={time}
                       className="absolute w-full flex items-start justify-end pr-2 cursor-pointer hover:bg-amber-50 transition-colors group/timeslot"
-                      style={{ top: i * slotHeight, height: slotHeight }}
+                      style={{ top: i * slotHeight, height: slotHeight, backgroundColor: isHour ? 'rgba(0,0,0,0.03)' : undefined }}
                       onClick={() => {
                         if (drag) return;
                         const [h, m] = time.split(':').map(Number);
@@ -709,17 +709,18 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     className="flex-1 relative border-l border-stone-100"
                     style={{ height: gridHeight }}
                   >
-                    {/* Grid lines */}
+                    {/* Grid lines + hour band */}
                     {slots.map((time, i) => (
-                      <div
-                        key={`gl-${time}`}
-                        className="absolute left-0 right-0 pointer-events-none"
-                        style={{
-                          top: i * slotHeight,
+                      <div key={`gl-${time}`} className="absolute left-0 right-0 pointer-events-none" style={{ top: i * slotHeight, height: slotHeight }}>
+                        {time.endsWith(':00') && (
+                          <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.03)' }} />
+                        )}
+                        <div className="absolute left-0 right-0" style={{
+                          top: 0,
                           height: 1,
                           backgroundColor: time.endsWith(':00') ? '#c5c0ba' : time.endsWith(':30') ? '#e0dbd4' : '#eeebe7',
-                        }}
-                      />
+                        }} />
+                      </div>
                     ))}
 
                     <div className="absolute top-0 left-0 right-0 h-0.5" style={{ backgroundColor: p.colore }} />
