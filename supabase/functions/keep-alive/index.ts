@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const MIN_HOURS_BETWEEN_PINGS = 40;
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -16,11 +18,31 @@ Deno.serve(async (req: Request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const now = new Date().toISOString();
-
     const authHeader = req.headers.get("authorization") || "";
     const isCron = !authHeader || authHeader.includes(serviceKey);
     const tipo = isCron ? "automatico" : "manuale";
+
+    // Per chiamate automatiche del cron, controlla se il ping e' gia' stato fatto di recente
+    if (tipo === "automatico") {
+      const { data: lastPingRow } = await supabase
+        .from("impostazioni")
+        .select("valore")
+        .eq("chiave", "keep_alive_last_ping")
+        .maybeSingle();
+
+      if (lastPingRow?.valore) {
+        const lastPingTime = new Date(lastPingRow.valore).getTime();
+        const hoursSince = (Date.now() - lastPingTime) / (1000 * 60 * 60);
+        if (hoursSince < MIN_HOURS_BETWEEN_PINGS) {
+          return new Response(
+            JSON.stringify({ ok: true, skipped: true, reason: `last ping was ${hoursSince.toFixed(1)}h ago, minimum is ${MIN_HOURS_BETWEEN_PINGS}h` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
+
+    const now = new Date().toISOString();
 
     const updates = [
       supabase.from("impostazioni").upsert(
