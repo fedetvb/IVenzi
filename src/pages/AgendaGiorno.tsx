@@ -81,6 +81,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
   const [appModal, setAppModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [multiModal, setMultiModal] = useState<{ open: boolean; date?: Date }>({ open: false });
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [hiddenParr, setHiddenParr] = useState<Set<string>>(new Set());
   const [editingParr, setEditingParr] = useState<{ open: boolean; id?: string; nome: string; colore: string }>({ open: false, nome: '', colore: '' });
   const [showSettings, setShowSettings] = useState(false);
@@ -237,8 +238,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   }
 
   async function deleteAppuntamento(id: string) {
-    if (!confirm('Eliminare questo appuntamento?')) return;
-    await supabase.from('appuntamenti').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await supabase.from('appuntamenti').delete().eq('id', id);
+    setConfirmDelete(null);
     load();
   }
 
@@ -818,7 +819,11 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                             e.stopPropagation();
                             if (!isDragging.current) {
                               cancelDrag();
-                              setAppModal({ open: true, id: app.id });
+                              if (confirmDelete === app.id) {
+                                setConfirmDelete(null);
+                              } else {
+                                setAppModal({ open: true, id: app.id });
+                              }
                             } else {
                               onPointerUp();
                             }
@@ -889,20 +894,41 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                           </div>
 
                           <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover/app:opacity-100 transition-opacity z-20">
-                            <button
-                              onPointerDown={e => e.stopPropagation()}
-                              onClick={e => { e.stopPropagation(); setAppModal({ open: true, id: app.id }); }}
-                              className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
-                            >
-                              <Edit2 size={9} />
-                            </button>
-                            <button
-                              onPointerDown={e => e.stopPropagation()}
-                              onClick={e => { e.stopPropagation(); deleteAppuntamento(app.id); }}
-                              className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
-                            >
-                              <Trash2 size={9} />
-                            </button>
+                            {confirmDelete === app.id ? (
+                              <>
+                                <button
+                                  onPointerDown={e => e.stopPropagation()}
+                                  onClick={e => { e.stopPropagation(); deleteAppuntamento(app.id); }}
+                                  className="bg-red-600 hover:bg-red-700 rounded px-1.5 py-0.5 text-white text-[9px] font-bold"
+                                >
+                                  Si
+                                </button>
+                                <button
+                                  onPointerDown={e => e.stopPropagation()}
+                                  onClick={e => { e.stopPropagation(); setConfirmDelete(null); }}
+                                  className="bg-black/30 hover:bg-black/50 rounded px-1.5 py-0.5 text-white text-[9px] font-bold"
+                                >
+                                  No
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onPointerDown={e => e.stopPropagation()}
+                                  onClick={e => { e.stopPropagation(); setAppModal({ open: true, id: app.id }); }}
+                                  className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
+                                >
+                                  <Edit2 size={9} />
+                                </button>
+                                <button
+                                  onPointerDown={e => e.stopPropagation()}
+                                  onClick={e => { e.stopPropagation(); setConfirmDelete(app.id); }}
+                                  className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
+                                >
+                                  <Trash2 size={9} />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       );
