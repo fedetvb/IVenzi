@@ -1772,13 +1772,26 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
                       const disattiva = !c.attiva && !esaurita;
                       const label = esaurita ? ' (esaurita)' : disattiva ? ' (disattiva)' : '';
                       return (
-                        <option key={c.id} value={c.id} disabled={esaurita || disattiva}>
+                        <option key={c.id} value={c.id}>
                           {c.codice} · Saldo €{c.saldo.toFixed(2)}{label}
                         </option>
                       );
                     })}
                   </select>
-                  {cartaPremium && creditoPremium > 0 && (
+                  {cartaPremium && cartaPremium.saldo <= 0 && (
+                    <div className="mt-2 flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      <p className="text-xs text-red-600 font-medium flex items-center gap-1.5">
+                        <AlertCircle size={12} /> Carta esaurita — ricaricala per usarla
+                      </p>
+                      <button
+                        onClick={() => setShowPasswordGate(true)}
+                        className="flex items-center gap-1 px-3 py-1 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                      >
+                        <Plus size={11} /> Ricarica
+                      </button>
+                    </div>
+                  )}
+                  {cartaPremium && cartaPremium.saldo > 0 && creditoPremium > 0 && (
                     <p className="text-xs text-emerald-600 mt-1 font-medium">Credito utilizzato: -€{creditoPremium.toFixed(2)}</p>
                   )}
                   {saldoInsufficient && (
