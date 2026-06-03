@@ -6,6 +6,14 @@ import { parseQuery, formatToolResult } from '../lib/chatParser';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import AppuntamentoModal from './AppuntamentoModal';
+import PasswordGateModal from './PasswordGateModal';
+
+const STATS_TOOLS = new Set(['get_statistiche_incassi', 'get_statistiche_servizi', 'get_statistiche_parrucchieri']);
+const STATS_SESSION_KEY = 'chat_stats_unlocked';
+
+function isChatStatsUnlocked() {
+  return sessionStorage.getItem(STATS_SESSION_KEY) === '1';
+}
 
 interface Parrucchiere {
   id: string;
@@ -140,6 +148,7 @@ export default function AiChat() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [statsGate, setStatsGate] = useState<{ tool: string; args: Record<string, unknown>; label: string } | null>(null);
 
   useEffect(() => {
     supabase
@@ -156,6 +165,14 @@ export default function AiChat() {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [open, messages]);
+
+  function runToolGuarded(tool: string, args: Record<string, unknown>, userLabel: string) {
+    if (STATS_TOOLS.has(tool) && !isChatStatsUnlocked()) {
+      setStatsGate({ tool, args, label: userLabel });
+      return;
+    }
+    runTool(tool, args, userLabel);
+  }
 
   async function runTool(tool: string, args: Record<string, unknown>, userLabel: string) {
     if (loading) return;
@@ -263,7 +280,7 @@ export default function AiChat() {
       return;
     }
 
-    await runTool(intent.tool, intent.args, text);
+    runToolGuarded(intent.tool, intent.args, text);
   }
 
   async function handleSend() {
@@ -388,6 +405,7 @@ export default function AiChat() {
     setAwaitingGiorni(false);
     setAwaitingParrucchiere(null);
     setAppModal(null);
+    setStatsGate(null);
   }
 
   return (
@@ -410,6 +428,21 @@ export default function AiChat() {
               },
             ]);
           }}
+        />,
+        document.body
+      )}
+      {statsGate && createPortal(
+        <PasswordGateModal
+          titolo="Sezione protetta"
+          descrizione="Inserisci la password per visualizzare incassi, servizi e statistiche parrucchieri."
+          chiavePassword="password_chat_stats"
+          onSuccess={() => {
+            sessionStorage.setItem(STATS_SESSION_KEY, '1');
+            const { tool, args, label } = statsGate;
+            setStatsGate(null);
+            runTool(tool, args, label);
+          }}
+          onClose={() => setStatsGate(null)}
         />,
         document.body
       )}
@@ -669,7 +702,7 @@ export default function AiChat() {
                 {CATEGORIES.find(c => c.id === activeCategory)?.questions.map((q, qi) => (
                   <button
                     key={qi}
-                    onClick={() => runTool(q.tool, q.args, q.label)}
+                    onClick={() => runToolGuarded(q.tool, q.args, q.label)}
                     disabled={loading}
                     className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-stone-50 hover:bg-amber-50 hover:text-amber-700 border border-stone-200 hover:border-amber-300 text-stone-700 text-xs font-medium transition-all duration-150 text-left disabled:opacity-40 disabled:cursor-not-allowed"
                   >
