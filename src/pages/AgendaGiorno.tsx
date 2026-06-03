@@ -984,29 +984,25 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       </div>
 
       {/* Legenda carte */}
-      <div className="hidden sm:flex flex-shrink-0 border-t border-stone-100 bg-stone-50 px-6 py-2.5 items-center gap-5 flex-wrap">
-        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wide">Legenda carte</span>
-        <div className="flex items-center gap-1.5">
-          <svg width="20" height="13" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="url(#lg1)" stroke="#D97706" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.18)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.55)"/><defs><linearGradient id="lg1" x1="0" y1="0" x2="18" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#F59E0B"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs></svg>
-          <span className="text-xs text-stone-600">Carta Premium</span>
+      <div className="hidden sm:flex flex-shrink-0 border-t border-stone-100 bg-stone-50 px-3 py-1 items-center gap-3 flex-wrap">
+        <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wide">Legenda</span>
+        <div className="flex items-center gap-1">
+          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="url(#lg1)" stroke="#D97706" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.18)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.55)"/><defs><linearGradient id="lg1" x1="0" y1="0" x2="18" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#F59E0B"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs></svg>
+          <span className="text-[10px] text-stone-500">Premium</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <svg width="20" height="13" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#EF4444" stroke="#DC2626" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.15)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.45)"/></svg>
-          <span className="text-xs text-stone-600">Premium da ricaricare</span>
+        <div className="flex items-center gap-1">
+          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#EF4444" stroke="#DC2626" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.15)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.45)"/></svg>
+          <span className="text-[10px] text-stone-500">Da ricaricare</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <svg width="20" height="13" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#1c1917" stroke="#44403c" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(255,255,255,0.1)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.2)"/></svg>
-          <span className="text-xs text-stone-600">Carta Sconto Usa e Getta</span>
+        <div className="flex items-center gap-1">
+          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#1c1917" stroke="#44403c" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(255,255,255,0.1)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.2)"/></svg>
+          <span className="text-[10px] text-stone-500">Usa e Getta</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <svg width="20" height="13" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="white" stroke="#d6d3d1" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(100,100,100,0.12)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(100,100,100,0.18)"/></svg>
-          <span className="text-xs text-stone-600">Carta Sconto</span>
+        <div className="flex items-center gap-1">
+          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="white" stroke="#d6d3d1" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(100,100,100,0.12)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(100,100,100,0.18)"/></svg>
+          <span className="text-[10px] text-stone-500">Sconto</span>
         </div>
-
-        {/* Drag hint */}
-        <span className="ml-auto text-[10px] text-stone-400 italic hidden sm:block">
-          Tieni premuto un appuntamento per spostarlo
-        </span>
+        <span className="ml-auto text-[9px] text-stone-400 italic hidden sm:block">Tieni premuto per spostare</span>
       </div>
 
       {/* Edit parrucchiere modal */}
