@@ -124,7 +124,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
         .order('data_ora'),
       supabase.from('impostazioni').select('valore').eq('chiave', 'messaggio_auguri').maybeSingle(),
       supabase.from('carte_sconto').select('cliente_id, usa_e_getta, attiva').not('cliente_id', 'is', null).eq('attiva', true),
-      supabase.from('carte_premium').select('cliente_id, saldo'),
+      supabase.from('carte_premium').select('cliente_id, saldo, attiva').is('deleted_at', null),
       supabase.from('assenze_parrucchieri').select('parrucchiere_id, data_inizio, data_fine, ora_inizio')
         .lte('data_inizio', dateStr)
         .gte('data_fine', dateStr),
@@ -142,8 +142,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     for (const r of (sc || []) as { cliente_id: string; usa_e_getta: boolean }[]) {
       if (r.cliente_id) addCarta(r.cliente_id, r.usa_e_getta ? 'sconto_ueg' : 'sconto_normale');
     }
-    for (const r of (pr || []) as { cliente_id: string; saldo: number }[]) {
-      if (r.cliente_id) addCarta(r.cliente_id, r.saldo <= 0 ? 'premium_vuota' : 'premium');
+    for (const r of (pr || []) as { cliente_id: string; saldo: number; attiva: boolean }[]) {
+      if (r.cliente_id) addCarta(r.cliente_id, (r.saldo <= 0 || !r.attiva) ? 'premium_vuota' : 'premium');
     }
     setClientiCarte(carteMap);
 

@@ -269,14 +269,14 @@ function FichesTab() {
       .filter(id => /^[0-9a-f-]{36}$/i.test(id));
     const allClienteIds = [...new Set([...clienteIds, ...manualeIds])];
 
-    const carteMap = new Map<string, { hasPremium: boolean; hasSconto: boolean }>();
+    const carteMap = new Map<string, { hasPremium: boolean; hasPremiumEsaurita: boolean; hasSconto: boolean }>();
     if (allClienteIds.length > 0) {
       const [{ data: scData }, { data: prData }] = await Promise.all([
         supabase.from('carte_sconto').select('cliente_id').in('cliente_id', allClienteIds),
-        supabase.from('carte_premium').select('cliente_id').in('cliente_id', allClienteIds),
+        supabase.from('carte_premium').select('cliente_id, saldo, attiva').in('cliente_id', allClienteIds).is('deleted_at', null),
       ]);
       for (const id of allClienteIds) {
-        carteMap.set(id, { hasPremium: false, hasSconto: false });
+        carteMap.set(id, { hasPremium: false, hasPremiumEsaurita: false, hasSconto: false });
       }
       for (const r of (scData || [])) {
         if (r.cliente_id) {
@@ -287,7 +287,10 @@ function FichesTab() {
       for (const r of (prData || [])) {
         if (r.cliente_id) {
           const e = carteMap.get(r.cliente_id);
-          if (e) e.hasPremium = true;
+          if (e) {
+            e.hasPremium = true;
+            if (r.saldo <= 0 || !r.attiva) e.hasPremiumEsaurita = true;
+          }
         }
       }
     }
@@ -750,7 +753,7 @@ interface FicheCardProps {
   onToggle: () => void;
   onSaved: () => void;
   onConvalidata: () => void;
-  carteTipi?: { hasPremium: boolean; hasSconto: boolean };
+  carteTipi?: { hasPremium: boolean; hasPremiumEsaurita: boolean; hasSconto: boolean };
 }
 
 interface CartaScontoSimple {
@@ -1387,11 +1390,11 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
           <div className="flex items-center gap-1.5">
             <p className="font-semibold text-stone-800">{gruppo.clienteNome} {gruppo.clienteCognome}</p>
             {carteTipi?.hasPremium && (
-              <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" title="Carta Premium">
-                <defs><linearGradient id="pgold-fiche" x1="0" y1="0" x2="18" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#F59E0B"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs>
-                <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="url(#pgold-fiche)" stroke="#D97706" strokeWidth="0.5"/>
+              <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" title={carteTipi.hasPremiumEsaurita ? 'Carta Premium esaurita' : 'Carta Premium'}>
+                {!carteTipi.hasPremiumEsaurita && <defs><linearGradient id="pgold-fiche" x1="0" y1="0" x2="18" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#F59E0B"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs>}
+                <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill={carteTipi.hasPremiumEsaurita ? '#EF4444' : 'url(#pgold-fiche)'} stroke={carteTipi.hasPremiumEsaurita ? '#DC2626' : '#D97706'} strokeWidth="0.5"/>
                 <rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.18)"/>
-                <rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.55)"/>
+                <rect x="2" y="7" width="5" height="3" rx="0.8" fill={carteTipi.hasPremiumEsaurita ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.55)'}/>
               </svg>
             )}
             {carteTipi?.hasSconto && (
