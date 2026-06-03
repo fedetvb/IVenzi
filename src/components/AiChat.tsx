@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot, User, Loader2, ChevronDown, Sparkles } from 'lucide-react';
 import { TOOL_DECLARATIONS, executeTool } from '../lib/geminiTools';
 
-const GEMINI_API_KEY = 'AQ.Ab8RN6KhdtFt24pE2vE0BNNE0d7jzsCO21PjVkaSonm_erZljw';
+const GEMINI_API_KEY = 'AQ.Ab8RN6K0pxI_-Lg24ROoA1dDry6y6V8uXwfijHBN1axuWR9_7g';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 const SYSTEM_PROMPT = `Sei l'assistente AI integrato nel gestionale di un salone di parrucchiere italiano. Il tuo UNICO scopo e' aiutare con la gestione del salone.
