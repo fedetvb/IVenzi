@@ -73,8 +73,8 @@ export const TOOL_DECLARATIONS = [
       properties: {
         periodo: {
           type: 'STRING',
-          description: 'oggi | settimana | mese | anno. Default: mese',
-          enum: ['oggi', 'settimana', 'mese', 'anno'],
+          description: 'oggi | ieri | settimana | mese | anno. Default: mese',
+          enum: ['oggi', 'ieri', 'settimana', 'mese', 'anno'],
         },
       },
       required: [],
@@ -88,8 +88,8 @@ export const TOOL_DECLARATIONS = [
       properties: {
         periodo: {
           type: 'STRING',
-          description: 'oggi | settimana | mese | anno. Default: mese',
-          enum: ['oggi', 'settimana', 'mese', 'anno'],
+          description: 'oggi | ieri | settimana | mese | anno. Default: mese',
+          enum: ['oggi', 'ieri', 'settimana', 'mese', 'anno'],
         },
       },
       required: [],
@@ -166,6 +166,12 @@ function getDateRange(periodo: string): { from: string; to: string } {
 
   if (periodo === 'oggi') {
     return { from: today, to: today };
+  }
+  if (periodo === 'ieri') {
+    const ieri = new Date(now);
+    ieri.setDate(now.getDate() - 1);
+    const d = localDateStr(ieri);
+    return { from: d, to: d };
   }
   if (periodo === 'settimana') {
     const day = now.getDay(); // 0=domenica
