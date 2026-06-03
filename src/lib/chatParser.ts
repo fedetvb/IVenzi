@@ -116,45 +116,81 @@ function resolveDateText(text: string): string {
   return oggi();
 }
 
-function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null {
-  const KW_FISSA = ['fissa ', 'fissiamo', 'prenota ', 'prenotare', 'prendi appuntamento', 'metti appuntamento',
-    'segna appuntamento', 'crea appuntamento', 'nuovo appuntamento per ', 'appuntamento per ', 'appuntamento a '];
-  if (!KW_FISSA.some(k => text.includes(k))) return null;
+// Parole "stop" che terminano il nome cliente/parrucchiere
+const STOP_WORDS = /\b(per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|alle|ore|fissa|fissiamo|prenota|prendi|crea|segna|metti|nuovo|appuntamento|\d)\b/i;
 
-  // Estrai ora
+function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null {
+  // Trigger: deve contenere un verbo di prenotazione
+  const KW_VERBI = /\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea)\b/i;
+  // E deve contenere "appuntamento" oppure essere "prenota/prendi" senza "appuntamento" (basta il verbo + nome + ora)
+  const hasVerbo = KW_VERBI.test(text);
+  const hasAppuntamento = text.includes('appuntamento');
+  if (!hasVerbo) return null;
+  // Se c'è il verbo ma non "appuntamento", richiedi almeno "prenota" o "prendi" + ora
+  if (!hasAppuntamento && !/\b(prenota|prendi|fissa)\b/.test(text)) return null;
+
+  // Estrai ora — obbligatoria
   const ora = extractOra(text);
   if (!ora) return null;
 
   // Estrai data
   const data = resolveDateText(text);
 
-  // Estrai nome cliente: pattern "a [nome]" / "per [nome]" nella frase originale (raw)
-  // Cerca "a/per NOME" prima di parole chiave come "per domani", "con", "alle"
+  // Estrai nome cliente: la parola/e DOPO il verbo+appuntamento (o solo verbo) e PRIMA delle stop words
   let nomeCliente: string | null = null;
-  const rawLower = raw.toLowerCase();
-  // pattern: fissa appuntamento a/per NOME ... con / per [data] / alle
-  const mCliente = rawLower.match(
-    /(?:appuntamento\s+(?:a|per|di)\s+)([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)??)(?:\s+(?:per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|\d))/i
-  );
-  if (mCliente) {
-    nomeCliente = mCliente[1].trim();
-  } else {
-    // fallback: "fissa a [nome]" / "prenota [nome]"
-    const mAlt = rawLower.match(/(?:fissa|prenota|prendi)\s+(?:appuntamento\s+)?(?:a|per)?\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)??)(?:\s+(?:per|con|alle?|ore?|domani|oggi|\d))/i);
-    if (mAlt) nomeCliente = mAlt[1].trim();
+
+  // Pattern 1: "... appuntamento [a/per/di]? NOME [stop]"
+  const m1 = text.match(/appuntamento\s+(?:[a-z]{1,3}\s+)?([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)\s+(?:per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|\d)/i);
+  if (m1) {
+    // escludi preposizioni singole come "a", "per", "di"
+    const candidate = m1[1].trim();
+    if (candidate.length > 2 && !/^(per|con|di|da|a|in|su|il|la|lo|le|un|una)$/i.test(candidate)) {
+      nomeCliente = candidate;
+    }
   }
+
+  // Pattern 2: "prendi/prenota/fissa [appuntamento] NOME [stop]" — nome senza preposizione
+  if (!nomeCliente) {
+    const m2 = text.match(/(?:fissa|prenota|prendi|crea|segna|metti)\s+(?:appuntamento\s+)?([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)\s+(?:per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|\d)/i);
+    if (m2) {
+      const candidate = m2[1].trim();
+      if (candidate.length > 2 && !/^(appuntamento|per|con|di|da|a|in|su|il|la|lo|le|un|una)$/i.test(candidate)) {
+        nomeCliente = candidate;
+      }
+    }
+  }
+
+  // Pattern 3: verbo + appuntamento + nome alla fine, con "con" come separatore
+  if (!nomeCliente) {
+    const m3 = text.match(/(?:fissa|prenota|prendi|crea|segna|metti)\s+(?:appuntamento\s+)?(?:a\s+|per\s+)?([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)/i);
+    if (m3) {
+      const candidate = m3[1].trim().split(STOP_WORDS)[0].trim();
+      if (candidate.length > 2 && !/^(appuntamento|per|con|di|da|a|in|su)$/i.test(candidate)) {
+        nomeCliente = candidate;
+      }
+    }
+  }
+
   if (!nomeCliente) return null;
 
-  // Estrai parrucchiere: "con [nome]"
+  // Estrai parrucchiere: "con [nome]" — non deve sovrapporsi al nome cliente
   let nomeParrucchiere: string | undefined;
-  const mParr = rawLower.match(/con\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)??)(?:\s+(?:alle?|ore?|\d|per|un |la |lo |il ))/i)
-    || rawLower.match(/con\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)$/i);
-  if (mParr) nomeParrucchiere = mParr[1].trim();
+  const mParr = text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)(?:\s+(?:alle?|ore?|\d|$))/i)
+    || text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)$/i);
+  if (mParr) {
+    const candidate = mParr[1].trim();
+    if (candidate.toLowerCase() !== nomeCliente.toLowerCase()) {
+      nomeParrucchiere = candidate;
+    }
+  }
 
-  // Estrai servizio/note: parole dopo l'ora che non sono connettivi
-  const CONNETTIVI = /^(e|il|la|lo|le|un|una|con|per|alle?|ore?|di|da|del|della|del)$/i;
-  const afterOra = text.replace(/.*(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/, '').trim();
-  const noteParts = afterOra.split(/\s+/).filter(w => w.length > 1 && !CONNETTIVI.test(w));
+  // Estrai note: parole dopo l'ora che non siano connettivi né il parrucchiere
+  const CONNETTIVI_RE = /^(e|il|la|lo|le|un|una|con|per|alle?|ore?|di|da|del|della)$/i;
+  const oraIndex = text.search(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/);
+  let afterOra = oraIndex >= 0 ? text.slice(oraIndex).replace(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/, '').trim() : '';
+  // rimuovi il nome del parrucchiere dalle note
+  if (nomeParrucchiere) afterOra = afterOra.replace(new RegExp(`\\bcon\\s+${nomeParrucchiere}\\b`, 'i'), '').trim();
+  const noteParts = afterOra.split(/\s+/).filter(w => w.length > 2 && !CONNETTIVI_RE.test(w));
   const note = noteParts.join(' ').trim() || undefined;
 
   return {
