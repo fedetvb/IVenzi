@@ -714,7 +714,7 @@ export default function GestioneFinanziaria() {
     const [{ data: sp }, { data: tx }, { data: fiches }, { data: riv }, { data: parr }, { data: ficheParr }] = await Promise.all([
       supabase.from('spese').select('*').is('deleted_at', null).order('data', { ascending: false }),
       supabase.from('impostazioni_tasse').select('*').limit(1),
-      supabase.from('fiches').select('data_riferimento, importo_convalidato').eq('convalidata', true),
+      supabase.from('fiches').select('data_riferimento, importo_convalidato, appuntamenti(data_ora)').eq('convalidata', true).is('deleted_at', null),
       supabase.from('rivendita_prodotti').select('data_vendita, totale'),
       supabase.from('parrucchieri').select('id, nome, colore').eq('attivo', true).order('nome'),
       supabase.from('fiches').select('appuntamento_id, data_riferimento, importo_convalidato, appuntamenti(parrucchiere_id, data_ora)').eq('convalidata', true).is('deleted_at', null),
@@ -722,8 +722,16 @@ export default function GestioneFinanziaria() {
     setSpese((sp || []) as Spesa[]);
     if (tx && tx.length > 0) setTasse(tx[0] as ImpostazioneTasse);
 
+    type RawFicha = {
+      data_riferimento: string | null;
+      importo_convalidato: number;
+      appuntamenti: { data_ora: string | null } | null;
+    };
     const vociFinali: { data: string; importo: number }[] = [
-      ...((fiches || []).map(f => ({ data: f.data_riferimento as string, importo: f.importo_convalidato as number }))),
+      ...((fiches || []) as unknown as RawFicha[]).map(f => ({
+        data: (f.data_riferimento ?? f.appuntamenti?.data_ora?.slice(0, 10) ?? '') as string,
+        importo: f.importo_convalidato as number,
+      })),
       ...((riv || []).map(r => ({ data: r.data_vendita as string, importo: r.totale as number }))),
     ].filter(v => v.data && v.importo > 0);
 
