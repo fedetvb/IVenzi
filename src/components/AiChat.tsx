@@ -55,8 +55,10 @@ const CATEGORIES: Category[] = [
     label: 'Clienti',
     icon: <Users size={15} />,
     questions: [
+      { label: 'Clienti assenti da 30 giorni', tool: 'get_clienti_assenti', args: { giorni: 30 } },
       { label: 'Clienti assenti da 60 giorni', tool: 'get_clienti_assenti', args: { giorni: 60 } },
       { label: 'Clienti assenti da 90 giorni', tool: 'get_clienti_assenti', args: { giorni: 90 } },
+      { label: 'Clienti assenti da 120 giorni', tool: 'get_clienti_assenti', args: { giorni: 120 } },
     ],
   },
   {
@@ -111,6 +113,7 @@ export default function AiChat() {
   const [loading, setLoading] = useState(false);
   const [input, setInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [awaitingGiorni, setAwaitingGiorni] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -166,7 +169,38 @@ export default function AiChat() {
     setInput('');
     setShowSuggestions(false);
 
+    // Se stiamo aspettando un numero di giorni dall'utente
+    if (awaitingGiorni) {
+      const num = parseInt(text.replace(/[^\d]/g, ''), 10);
+      if (!isNaN(num) && num > 0) {
+        setAwaitingGiorni(false);
+        await runTool('get_clienti_assenti', { giorni: num }, `Clienti assenti da ${num} giorni`);
+      } else {
+        setMessages(prev => [
+          ...prev,
+          { role: 'user', content: text },
+          { role: 'assistant', content: 'Inserisci un numero valido di giorni (es. 45).' },
+        ]);
+      }
+      return;
+    }
+
     const intent = parseQuery(text);
+
+    // Caso speciale: utente chiede clienti assenti senza specificare i giorni
+    if (!intent && /assent|non vengo|non vengono|persi|mancant/i.test(text) && !/\d/.test(text)) {
+      setAwaitingGiorni(true);
+      setMessages(prev => [
+        ...prev,
+        { role: 'user', content: text },
+        {
+          role: 'assistant',
+          content: 'Da quanti giorni? Scrivi il numero (es. 45) oppure scegli:',
+          table: undefined,
+        },
+      ]);
+      return;
+    }
 
     if (!intent) {
       setMessages(prev => [
@@ -195,6 +229,7 @@ export default function AiChat() {
     setActiveCategory(null);
     setInput('');
     setShowSuggestions(false);
+    setAwaitingGiorni(false);
   }
 
   return (
@@ -278,6 +313,24 @@ export default function AiChat() {
           ))}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Quick giorni picker — appare solo quando l'assistente aspetta i giorni */}
+        {awaitingGiorni && (
+          <div className="mx-4 mb-1 flex flex-wrap gap-2 flex-shrink-0">
+            {[15, 30, 45, 60, 90, 120, 180].map(g => (
+              <button
+                key={g}
+                onClick={() => {
+                  setAwaitingGiorni(false);
+                  runTool('get_clienti_assenti', { giorni: g }, `Clienti assenti da ${g} giorni`);
+                }}
+                className="px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-semibold transition-colors"
+              >
+                {g} giorni
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Suggestions dropdown */}
         {showSuggestions && (
