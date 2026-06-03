@@ -99,15 +99,15 @@ export default function App() {
       // 1. Banner "ricorda di inviare i messaggi appuntamento"
       setShowAppBanner(true);
 
-      // 2. Popup ping automatico keepalive (mostrato una volta per sessione)
-      const kaShownKey = 'keepalive_popup_shown';
-      if (!sessionStorage.getItem(kaShownKey)) {
-        const [{ data: kaPing }, { data: kaTipo }] = await Promise.all([
-          supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping').maybeSingle(),
-          supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping_tipo').maybeSingle(),
-        ]);
-        if (kaTipo?.valore === 'automatico' && kaPing?.valore) {
-          sessionStorage.setItem(kaShownKey, '1');
+      // 2. Popup ping automatico keepalive (mostrato una volta per ping — chiave = timestamp del ping)
+      const [{ data: kaPing }, { data: kaTipo }] = await Promise.all([
+        supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping').maybeSingle(),
+        supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping_tipo').maybeSingle(),
+      ]);
+      if (kaTipo?.valore === 'automatico' && kaPing?.valore) {
+        const kaShownKey = `keepalive_popup_shown_${kaPing.valore}`;
+        if (!localStorage.getItem(kaShownKey)) {
+          localStorage.setItem(kaShownKey, '1');
           setKeepAlivePopupTs(kaPing.valore);
           setTimeout(() => setShowKeepAlivePopup(true), 1200);
         }
