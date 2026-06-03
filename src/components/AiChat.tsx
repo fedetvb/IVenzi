@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, BarChart2, ChevronRight, RotateCcw, Send, Loader2, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { executeTool } from '../lib/geminiTools';
 import { parseQuery, formatToolResult } from '../lib/chatParser';
@@ -287,19 +288,26 @@ export default function AiChat() {
 
   return (
     <>
-      {appModal && (
+      {appModal && createPortal(
         <AppuntamentoModal
           dataIniziale={new Date(`${appModal.data}T${appModal.ora}:00`)}
           parrucchiereId={appModal.parrucchiereId}
           onClose={() => setAppModal(null)}
           onSaved={() => {
+            const savedData = appModal.data;
+            const savedOra = appModal.ora;
             setAppModal(null);
             setMessages(prev => [
               ...prev,
-              { role: 'assistant', content: `Appuntamento fissato per il ${new Date(appModal.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })} alle ${appModal.ora}.`, successAction: true },
+              {
+                role: 'assistant',
+                content: `Appuntamento fissato per il ${new Date(savedData + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })} alle ${savedOra}.`,
+                successAction: true,
+              },
             ]);
           }}
-        />
+        />,
+        document.body
       )}
       {/* Floating button */}
       <button
