@@ -74,7 +74,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [editingMsg, setEditingMsg] = useState(false);
   const [msgDraft, setMsgDraft] = useState('');
   const [savingMsg, setSavingMsg] = useState(false);
-  const [compleanniDismissed, setCompleanniDismissed] = useState(false);
+  const compleanniKey = `compleanniDismissed_${date.toISOString().slice(0, 10)}`;
+  const [compleanniDismissed, setCompleanniDismissed] = useState(() => sessionStorage.getItem(compleanniKey) === '1');
   const msgInputRef = useRef<HTMLTextAreaElement>(null);
   const [loading, setLoading] = useState(true);
   const [assenzeMap, setAssenzeMap] = useState<Map<string, string | null>>(new Map());
@@ -170,7 +171,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       if (mm === dayMM && dd === dayDD) uniciBirthday.set(c.id, { nome: c.nome, cognome: c.cognome, telefono: c.telefono || undefined });
     }
     setCompleanni(Array.from(uniciBirthday.values()));
-    setCompleanniDismissed(false);
     setLoading(false);
   }, [date]);
 
@@ -413,7 +413,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                   <span>Modifica messaggio</span>
                 </button>
                 <button
-                  onClick={() => setCompleanniDismissed(true)}
+                  onClick={() => { sessionStorage.setItem(compleanniKey, '1'); setCompleanniDismissed(true); }}
                   className="p-0.5 rounded text-rose-300 hover:text-rose-600 hover:bg-rose-100 transition-colors"
                   title="Chiudi"
                 >
