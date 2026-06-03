@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, BarChart2, ChevronRight, RotateCcw, Send, Loader2, HelpCircle, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, BarChart2, ChevronRight, RotateCcw, Send, Loader2, HelpCircle, CheckCircle2, Mic, MicOff } from 'lucide-react';
 import { executeTool } from '../lib/geminiTools';
 import { parseQuery, formatToolResult } from '../lib/chatParser';
 import { supabase } from '../lib/supabase';
@@ -135,6 +135,9 @@ export default function AiChat() {
   const [awaitingParrucchiere, setAwaitingParrucchiere] = useState<{ data: string } | null>(null);
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [appModal, setAppModal] = useState<{ data: string; ora: string; parrucchiereId?: string } | null>(null);
+  const [listening, setListening] = useState(false);
+  const [voiceSupported] = useState(() => 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -217,13 +220,10 @@ export default function AiChat() {
     }
   }
 
-  async function handleSend() {
-    const text = input.trim();
+  async function sendText(text: string) {
     if (!text || loading) return;
-    setInput('');
     setShowSuggestions(false);
 
-    // Se stiamo aspettando un numero di giorni dall'utente
     if (awaitingGiorni) {
       const num = parseInt(text.replace(/[^\d]/g, ''), 10);
       if (!isNaN(num) && num > 0) {
@@ -241,17 +241,12 @@ export default function AiChat() {
 
     const intent = parseQuery(text);
 
-    // Caso speciale: utente chiede clienti assenti senza specificare i giorni
     if (!intent && /assent|non vengo|non vengono|persi|mancant/i.test(text) && !/\d/.test(text)) {
       setAwaitingGiorni(true);
       setMessages(prev => [
         ...prev,
         { role: 'user', content: text },
-        {
-          role: 'assistant',
-          content: 'Da quanti giorni? Scrivi il numero (es. 45) oppure scegli:',
-          table: undefined,
-        },
+        { role: 'assistant', content: 'Da quanti giorni? Scrivi il numero (es. 45) oppure scegli:', table: undefined },
       ]);
       return;
     }
@@ -271,12 +266,67 @@ export default function AiChat() {
     await runTool(intent.tool, intent.args, text);
   }
 
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput('');
+    await sendText(text);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   }
+
+  const voiceTranscriptRef = useRef('');
+
+  const toggleVoice = useCallback(() => {
+    if (!voiceSupported) return;
+
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    voiceTranscriptRef.current = '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition: SpeechRecognition = new SpeechRec();
+    recognition.lang = 'it-IT';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => setListening(true);
+
+    recognition.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+      voiceTranscriptRef.current = transcript;
+      setInput(transcript);
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 80)}px`;
+      }
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+      const text = voiceTranscriptRef.current.trim();
+      if (!text) return;
+      setInput('');
+      voiceTranscriptRef.current = '';
+      // Invia automaticamente il testo riconosciuto
+      sendText(text);
+    };
+
+    recognition.onerror = () => { setListening(false); voiceTranscriptRef.current = ''; };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceSupported, listening]);
 
   function resetChat() {
     setMessages([{ role: 'assistant', content: 'Ciao! Scrivi una domanda in italiano oppure scegli una categoria qui sotto.' }]);
@@ -483,7 +533,7 @@ export default function AiChat() {
 
         {/* Input */}
         <div className="px-4 pb-3 pt-2 flex-shrink-0 border-t border-stone-100">
-          <div className="flex items-end gap-2 bg-stone-100 rounded-xl px-3 py-2">
+          <div className={`flex items-end gap-2 rounded-xl px-3 py-2 transition-colors ${listening ? 'bg-red-50 ring-2 ring-red-300' : 'bg-stone-100'}`}>
             <button
               onClick={() => setShowSuggestions(v => !v)}
               className={`p-1 rounded-lg transition-colors flex-shrink-0 mb-0.5 ${showSuggestions ? 'text-amber-600 bg-amber-100' : 'text-stone-400 hover:text-stone-600'}`}
@@ -497,7 +547,7 @@ export default function AiChat() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => setShowSuggestions(false)}
-              placeholder="Es: quanti appuntamenti ho domani?"
+              placeholder={listening ? 'Sto ascoltando...' : 'Es: quanti appuntamenti ho domani?'}
               rows={1}
               disabled={loading}
               className="flex-1 bg-transparent text-sm text-stone-800 placeholder:text-stone-400 resize-none outline-none min-h-[24px] max-h-[80px] leading-6 disabled:opacity-50"
@@ -507,6 +557,20 @@ export default function AiChat() {
                 t.style.height = `${Math.min(t.scrollHeight, 80)}px`;
               }}
             />
+            {voiceSupported && (
+              <button
+                onClick={toggleVoice}
+                disabled={loading}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  listening
+                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                    : 'text-stone-400 hover:text-amber-600 hover:bg-amber-100'
+                }`}
+                title={listening ? 'Interrompi registrazione' : 'Parla'}
+              >
+                {listening ? <MicOff size={14} /> : <Mic size={14} />}
+              </button>
+            )}
             <button
               onClick={handleSend}
               disabled={!input.trim() || loading}
@@ -515,7 +579,9 @@ export default function AiChat() {
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             </button>
           </div>
-          <p className="text-center text-[10px] text-stone-300 mt-1">Invio con Invio &bull; A capo con Shift+Invio</p>
+          <p className="text-center text-[10px] text-stone-300 mt-1">
+            {voiceSupported ? 'Invio con Invio • A capo con Shift+Invio • Microfono per parlare' : 'Invio con Invio • A capo con Shift+Invio'}
+          </p>
         </div>
 
         {/* Category picker */}
