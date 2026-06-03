@@ -24,6 +24,7 @@ import ResetPassword from './pages/ResetPassword';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw } from 'lucide-react';
+import AiChat from './components/AiChat';
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
 
@@ -363,6 +364,8 @@ export default function App() {
           onClose={() => setShowBirthdayModal(false)}
         />
       )}
+
+      <AiChat />
 
       <Layout currentPage={page} onNavigate={p => navigateTo(p as Page)} user={user}>
         {page === 'dashboard' && (
