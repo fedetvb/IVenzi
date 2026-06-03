@@ -3,7 +3,7 @@ import { Send, Bot, User, Loader2, ChevronDown, Sparkles } from 'lucide-react';
 import { TOOL_DECLARATIONS, executeTool } from '../lib/geminiTools';
 
 const OPENROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-chat`;
-const MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+const MODEL = 'google/gemma-3-27b-it:free';
 
 const SYSTEM_PROMPT = `Sei l'assistente AI integrato nel gestionale di un salone di parrucchiere italiano. Il tuo UNICO scopo e' aiutare con la gestione del salone.
 
