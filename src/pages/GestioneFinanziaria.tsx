@@ -711,13 +711,13 @@ export default function GestioneFinanziaria() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: sp }, { data: tx }, { data: fiches }, { data: riv }, { data: parr }, { data: ficheParr }] = await Promise.all([
+    const [{ data: sp }, { data: tx }, { data: fiches }, { data: riv }, { data: parr }, { data: ficheVociParr }] = await Promise.all([
       supabase.from('spese').select('*').is('deleted_at', null).order('data', { ascending: false }),
       supabase.from('impostazioni_tasse').select('*').limit(1),
       supabase.from('fiches').select('data_riferimento, importo_convalidato, appuntamenti(data_ora)').eq('convalidata', true).is('deleted_at', null),
       supabase.from('rivendita_prodotti').select('data_vendita, totale'),
       supabase.from('parrucchieri').select('id, nome, colore').eq('attivo', true).order('nome'),
-      supabase.from('fiches').select('appuntamento_id, data_riferimento, importo_convalidato, appuntamenti(parrucchiere_id, data_ora)').eq('convalidata', true).is('deleted_at', null),
+      supabase.from('fiche_voci').select('parrucchiere_id, prezzo, fiches!inner(data_riferimento, convalidata, deleted_at, appuntamenti(data_ora))').eq('fiches.convalidata', true).is('fiches.deleted_at', null),
     ]);
     setSpese((sp || []) as Spesa[]);
     if (tx && tx.length > 0) setTasse(tx[0] as ImpostazioneTasse);
@@ -737,18 +737,22 @@ export default function GestioneFinanziaria() {
 
     setTutteVoci(vociFinali);
 
-    // Normalizza: usa data_riferimento se presente, altrimenti data_ora dell'appuntamento
-    type RawFichaParr = {
-      appuntamento_id: string | null;
-      data_riferimento: string | null;
-      importo_convalidato: number;
-      appuntamenti: { parrucchiere_id: string | null; data_ora: string | null } | null;
+    // Per ogni voce di fiche convalidate, attribuisce il prezzo al parrucchiere che l'ha eseguita
+    // (stesso principio usato nelle Statistiche)
+    type RawVoceParr = {
+      parrucchiere_id: string | null;
+      prezzo: number;
+      fiches: {
+        data_riferimento: string | null;
+        appuntamenti: { data_ora: string | null } | null;
+      } | null;
     };
-    const ficheNorm = ((ficheParr || []) as unknown as RawFichaParr[]).map(f => {
-      const data = f.data_riferimento ?? f.appuntamenti?.data_ora?.slice(0, 10) ?? null;
-      const parrucchiere_id = f.appuntamenti?.parrucchiere_id ?? null;
-      return { parrucchiere_id, data_riferimento: data, importo_convalidato: f.importo_convalidato };
-    }).filter(f => f.parrucchiere_id && f.data_riferimento);
+    const ficheNorm = ((ficheVociParr || []) as unknown as RawVoceParr[]).flatMap(v => {
+      if (!v.parrucchiere_id) return [];
+      const data = v.fiches?.data_riferimento ?? v.fiches?.appuntamenti?.data_ora?.slice(0, 10) ?? null;
+      if (!data) return [];
+      return [{ parrucchiere_id: v.parrucchiere_id, data_riferimento: data, importo_convalidato: v.prezzo }];
+    });
 
     setFichePerParr(ficheNorm as { parrucchiere_id: string | null; data_riferimento: string; importo_convalidato: number }[]);
     setParrucchieri((parr || []).map(p => ({ id: p.id, nome: p.nome, colore: p.colore ?? '#10b981', fatturatoNelPeriodo: 0 })));
