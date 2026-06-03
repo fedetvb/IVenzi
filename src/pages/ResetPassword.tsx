@@ -30,8 +30,18 @@ export default function ResetPassword({ onDone }: Props) {
     setLoading(true);
     const { error: err } = await supabase.auth.updateUser({ password });
     if (!err) {
-      // Invalida tutte le altre sessioni attive (altri dispositivi)
-      await supabase.auth.signOut({ scope: 'others' }).catch(() => {});
+      // Invalida tutte le altre sessioni attive (altri dispositivi) via Admin API
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        await fetch(`${supabaseUrl}/functions/v1/revoke-sessions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }).catch(() => {});
+      }
     }
     setLoading(false);
 

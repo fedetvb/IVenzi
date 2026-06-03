@@ -34,8 +34,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function signOut() {
-    setSession(null);
+    // Pulisce la sessione localmente anche se il server la rifiuta
     await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    // Rimuove manualmente le chiavi Supabase dal localStorage come fallback
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-'))
+      .forEach(k => localStorage.removeItem(k));
+    setSession(null);
   }
 
   return (
