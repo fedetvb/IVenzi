@@ -472,14 +472,25 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           </div>
         )}
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={onBack} className="p-1 rounded-lg hover:bg-stone-100 transition-colors flex-shrink-0">
-            <ChevronLeft size={18} />
-          </button>
-          <h1 className="font-bold text-stone-800 capitalize text-sm md:text-base">
-            {date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          </h1>
-          <div className="flex items-center gap-1.5 flex-wrap ml-auto">
+        <div className="flex flex-col gap-1.5">
+          {/* Riga 1: freccia + data + ingranaggio */}
+          <div className="flex items-center gap-2">
+            <button onClick={onBack} className="p-1 rounded-lg hover:bg-stone-100 transition-colors flex-shrink-0">
+              <ChevronLeft size={18} />
+            </button>
+            <h1 className="font-bold text-stone-800 capitalize text-sm md:text-base flex-1 min-w-0 truncate">
+              {date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </h1>
+            <button
+              onClick={() => setShowSettings(s => !s)}
+              className={`p-1.5 rounded-lg border transition-all flex-shrink-0 ${showSettings ? 'bg-amber-50 border-amber-300 text-amber-600' : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}
+              title="Impostazioni visualizzazione"
+            >
+              <Settings size={14} />
+            </button>
+          </div>
+          {/* Riga 2: bottoni parrucchieri */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             {parrucchieri.map(p => {
               const assenteOggi = assenzeMap.has(p.id) && assenzeMap.get(p.id) === null;
               const assenteDopo = assenzeMap.has(p.id) && assenzeMap.get(p.id) !== null;
@@ -495,7 +506,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     });
                   }}
                   title={assenteOggi ? 'Assente oggi' : assenteDopo ? `Assente dalle ${assenzeMap.get(p.id)}` : undefined}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all"
+                  className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-medium transition-all"
                   style={{
                     borderColor: assenteOggi ? '#fca5a5' : hiddenParr.has(p.id) ? '#d1d5db' : p.colore,
                     backgroundColor: assenteOggi ? '#fef2f2' : hiddenParr.has(p.id) ? '#f9fafb' : `${p.colore}18`,
@@ -510,13 +521,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                 </button>
               );
             })}
-            <button
-              onClick={() => setShowSettings(s => !s)}
-              className={`p-1.5 rounded-lg border transition-all ${showSettings ? 'bg-amber-50 border-amber-300 text-amber-600' : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}
-              title="Impostazioni visualizzazione"
-            >
-              <Settings size={14} />
-            </button>
           </div>
         </div>
 
