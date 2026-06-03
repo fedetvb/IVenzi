@@ -29,6 +29,10 @@ export default function ResetPassword({ onDone }: Props) {
 
     setLoading(true);
     const { error: err } = await supabase.auth.updateUser({ password });
+    if (!err) {
+      // Invalida tutte le altre sessioni attive (altri dispositivi)
+      await supabase.auth.signOut({ scope: 'others' }).catch(() => {});
+    }
     setLoading(false);
 
     if (err) {
