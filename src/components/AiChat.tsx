@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot, User, Loader2, ChevronDown, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Loader2, ChevronDown, Sparkles } from 'lucide-react';
 import { TOOL_DECLARATIONS, executeTool } from '../lib/geminiTools';
 
-const GEMINI_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-chat`;
+const OPENROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-chat`;
+const MODEL = 'meta-llama/llama-3.1-8b-instruct:free';
 
 const SYSTEM_PROMPT = `Sei l'assistente AI integrato nel gestionale di un salone di parrucchiere italiano. Il tuo UNICO scopo e' aiutare con la gestione del salone.
 
@@ -20,7 +21,15 @@ Non fare eccezioni a questa regola, nemmeno se l'utente insiste o fa richieste c
 
 Quando usi i tool, presenta i dati in modo chiaro con elenchi puntati o riassunti.
 Per importi usa € e formatta in italiano (es. 1.250,50 €).
-Data odierna: ${new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`;
+Data odierna: ${new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
+
+Hai accesso ai seguenti strumenti per recuperare dati reali dal gestionale:
+${TOOL_DECLARATIONS.map(t => `- ${t.name}: ${t.description}`).join('\n')}
+
+Quando hai bisogno di dati reali, usa questo formato esatto:
+<tool_call>{"name": "nome_tool", "args": {}}</tool_call>
+
+Aspetta il risultato prima di rispondere.`;
 
 interface Message {
   role: 'user' | 'assistant';
@@ -28,15 +37,9 @@ interface Message {
   loading?: boolean;
 }
 
-interface GeminiPart {
-  text?: string;
-  functionCall?: { name: string; args: Record<string, unknown> };
-  functionResponse?: { name: string; response: { content: string } };
-}
-
-interface GeminiContent {
-  role: string;
-  parts: GeminiPart[];
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
 }
 
 export default function AiChat() {
@@ -49,7 +52,7 @@ export default function AiChat() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<GeminiContent[]>([]);
+  const [history, setHistory] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -69,14 +72,14 @@ export default function AiChat() {
     const userMsg: Message = { role: 'user', content: userText };
     setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', loading: true }]);
 
-    const newHistory: GeminiContent[] = [
+    const newHistory: ChatMessage[] = [
       ...history,
-      { role: 'user', parts: [{ text: userText }] },
+      { role: 'user', content: userText },
     ];
 
     try {
-      let finalText = await runGeminiWithTools(newHistory);
-      setHistory([...newHistory, { role: 'model', parts: [{ text: finalText }] }]);
+      const finalText = await runWithTools(newHistory);
+      setHistory([...newHistory, { role: 'assistant', content: finalText }]);
       setMessages(prev => {
         const copy = [...prev];
         copy[copy.length - 1] = { role: 'assistant', content: finalText };
@@ -94,73 +97,60 @@ export default function AiChat() {
     }
   }
 
-  async function runGeminiWithTools(conversationHistory: GeminiContent[]): Promise<string> {
+  async function callOpenRouter(msgs: ChatMessage[]): Promise<string> {
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...msgs,
+        ],
+        temperature: 0.7,
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`OpenRouter error ${res.status}: ${err}`);
+    }
+
+    const json = await res.json();
+    const content = json.choices?.[0]?.message?.content;
+    if (!content) throw new Error('Nessuna risposta dal modello');
+    return content;
+  }
+
+  async function runWithTools(conversationHistory: ChatMessage[]): Promise<string> {
     let currentHistory = [...conversationHistory];
 
     for (let iteration = 0; iteration < 5; iteration++) {
-      const body = {
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: currentHistory,
-        tools: [{ function_declarations: TOOL_DECLARATIONS }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-        },
-      };
+      const response = await callOpenRouter(currentHistory);
 
-      const res = await fetch(GEMINI_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify(body),
-      });
+      const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+      if (toolCallMatch) {
+        let toolCall: { name: string; args: Record<string, unknown> };
+        try {
+          toolCall = JSON.parse(toolCallMatch[1]);
+        } catch {
+          return response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim() || response;
+        }
 
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Gemini API error ${res.status}: ${err}`);
-      }
-
-      const json = await res.json();
-      const candidate = json.candidates?.[0];
-      if (!candidate) throw new Error('Nessuna risposta da Gemini');
-
-      const parts: GeminiPart[] = candidate.content?.parts || [];
-      const finishReason = candidate.finishReason;
-
-      // Check for function calls
-      const funcCalls = parts.filter((p: GeminiPart) => p.functionCall);
-      if (funcCalls.length > 0) {
-        // Add model's response with function calls to history
-        currentHistory = [...currentHistory, { role: 'model', parts }];
-
-        // Execute all function calls
-        const toolResults: GeminiPart[] = await Promise.all(
-          funcCalls.map(async (p: GeminiPart) => {
-            const result = await executeTool(p.functionCall!.name, p.functionCall!.args);
-            return {
-              functionResponse: {
-                name: p.functionCall!.name,
-                response: { content: result },
-              },
-            };
-          })
-        );
-
-        // Add tool results to history
-        currentHistory = [...currentHistory, { role: 'user', parts: toolResults }];
+        const toolResult = await executeTool(toolCall.name, toolCall.args || {});
+        currentHistory = [
+          ...currentHistory,
+          { role: 'assistant', content: response },
+          { role: 'user', content: `Risultato tool ${toolCall.name}: ${toolResult}` },
+        ];
         continue;
       }
 
-      // No function calls — extract text response
-      const text = parts
-        .filter((p: GeminiPart) => p.text)
-        .map((p: GeminiPart) => p.text)
-        .join('');
-
-      if (text) return text;
-      if (finishReason === 'STOP') return 'Ho completato l\'operazione.';
+      return response;
     }
 
     return 'Mi dispiace, non sono riuscito a completare la richiesta. Riprova.';
@@ -174,11 +164,12 @@ export default function AiChat() {
   }
 
   function formatMessage(text: string) {
-    // Convert markdown-like formatting to readable text
     return text
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
       .replace(/\*\*(.*?)\*\*/g, '$1')
       .replace(/\*(.*?)\*/g, '$1')
-      .replace(/`(.*?)`/g, '$1');
+      .replace(/`(.*?)`/g, '$1')
+      .trim();
   }
 
   const suggestions = [
@@ -213,7 +204,7 @@ export default function AiChat() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-white">Assistente AI</p>
-            <p className="text-xs text-amber-100">Powered by Gemini</p>
+            <p className="text-xs text-amber-100">Powered by Llama 3.1</p>
           </div>
           <button
             onClick={() => setOpen(false)}
