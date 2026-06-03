@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Scissors, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Scissors, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-type Mode = 'login' | 'register' | 'reset-email' | 'reset-sent';
+type Mode = 'login' | 'register' | 'reset-email' | 'reset-otp';
 
 export default function Login() {
   const [mode, setMode] = useState<Mode>('login');
@@ -13,6 +13,10 @@ export default function Login() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [resetEmail, setResetEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   function resetState() {
     setError('');
@@ -32,22 +36,56 @@ export default function Login() {
       if (err) setError(translateError(err.message));
       else setSuccessMsg('Account creato! Controlla la tua email per confermare la registrazione.');
     } else if (mode === 'reset-email') {
-      await handleSendReset();
+      await handleSendOtp();
+    } else if (mode === 'reset-otp') {
+      await handleVerifyOtp();
     }
 
     setLoading(false);
   }
 
-  async function handleSendReset() {
-    const redirectUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-password`;
-    const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: redirectUrl,
-    });
-    if (err) {
-      setError('Errore durante l\'invio. Riprova.');
-    } else {
-      setMode('reset-sent');
-      setSuccessMsg('');
+  async function handleSendOtp() {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/send-otp-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante l\'invio.');
+      setMode('reset-otp');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Errore durante l\'invio.');
+    }
+  }
+
+  async function handleVerifyOtp() {
+    if (newPassword.length < 6) {
+      setError('La password deve essere di almeno 6 caratteri.');
+      setLoading(false);
+      return;
+    }
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/verify-otp-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+        body: JSON.stringify({ email: resetEmail, code: otpCode, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante la verifica.');
+      setResetSuccess(true);
+      setTimeout(() => {
+        setMode('login');
+        setResetEmail(''); setOtpCode(''); setNewPassword('');
+        setResetSuccess(false);
+        resetState();
+      }, 2500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Errore durante la verifica.');
     }
   }
 
@@ -122,13 +160,13 @@ export default function Login() {
               {mode === 'login' && 'Accedi al tuo account'}
               {mode === 'register' && 'Crea un account'}
               {mode === 'reset-email' && 'Password dimenticata'}
-              {mode === 'reset-sent' && 'Email inviata'}
+              {mode === 'reset-otp' && 'Inserisci il codice'}
             </h2>
             <p className="text-stone-500 text-sm mt-1">
               {mode === 'login' && 'Inserisci le tue credenziali per continuare'}
               {mode === 'register' && 'Crea il tuo account per iniziare'}
-              {mode === 'reset-email' && 'Inserisci la tua email per ricevere il link di reset'}
-              {mode === 'reset-sent' && `Controlla la casella di posta di ${resetEmail}`}
+              {mode === 'reset-email' && 'Inserisci la tua email per ricevere il codice di verifica'}
+              {mode === 'reset-otp' && `Abbiamo inviato un codice a 6 cifre a ${resetEmail}`}
             </p>
           </div>
 
@@ -157,101 +195,135 @@ export default function Login() {
             </>
           )}
 
-          {/* Schermo conferma invio */}
-          {mode === 'reset-sent' && (
-            <div className="flex flex-col items-center gap-4 py-4 text-center">
-              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
-                <Mail size={28} className="text-amber-600" />
+          {/* Reset success */}
+          {resetSuccess && (
+            <div className="flex flex-col items-center gap-4 py-8 text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle size={32} className="text-green-600" />
               </div>
-              <p className="text-stone-700 font-medium">Abbiamo inviato un link a <span className="font-semibold">{resetEmail}</span></p>
-              <p className="text-stone-500 text-sm leading-relaxed">Clicca il link nell'email per scegliere una nuova password. Controlla anche la cartella spam.</p>
-              <button
-                onClick={async () => { resetState(); setLoading(true); await handleSendReset(); setLoading(false); }}
-                disabled={loading}
-                className="mt-2 text-xs text-stone-400 hover:text-amber-600 transition-colors"
-              >
-                Non hai ricevuto l'email? Reinvia
-              </button>
+              <p className="text-green-700 font-semibold">Password aggiornata con successo!</p>
+              <p className="text-stone-500 text-sm">Verrai reindirizzato al login...</p>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* email per reset */}
-            {mode === 'reset-email' && (
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1.5">Email account</label>
-                <div className="relative">
-                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                  <input
-                    type="email"
-                    value={resetEmail}
-                    onChange={e => setResetEmail(e.target.value)}
-                    required
-                    autoFocus
-                    placeholder="tuaemail@esempio.com"
-                    className="w-full pl-9 pr-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Login / Register fields */}
-            {(mode === 'login' || mode === 'register') && (
-              <>
+          {!resetSuccess && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Reset email step */}
+              {mode === 'reset-email' && (
                 <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1.5">Email</label>
+                  <label className="block text-sm font-medium text-stone-700 mb-1.5">Email account</label>
                   <div className="relative">
                     <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                     <input
                       type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
+                      value={resetEmail}
+                      onChange={e => setResetEmail(e.target.value)}
                       required
+                      autoFocus
                       placeholder="tuaemail@esempio.com"
                       className="w-full pl-9 pr-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1.5">Password</label>
-                  <div className="relative">
-                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              )}
+
+              {/* Reset OTP step */}
+              {mode === 'reset-otp' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Codice di verifica</label>
                     <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
+                      type="text"
+                      value={otpCode}
+                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                       required
-                      placeholder="••••••••"
-                      minLength={6}
-                      className="w-full pl-9 pr-10 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                      autoFocus
+                      placeholder="123456"
+                      maxLength={6}
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-center tracking-widest font-mono text-lg transition"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Nuova password</label>
+                    <div className="relative">
+                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        minLength={6}
+                        className="w-full pl-9 pr-10 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                      >
+                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Login / Register fields */}
+              {(mode === 'login' || mode === 'register') && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Email</label>
+                    <div className="relative">
+                      <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        required
+                        placeholder="tuaemail@esempio.com"
+                        className="w-full pl-9 pr-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Password</label>
+                    <div className="relative">
+                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        minLength={6}
+                        className="w-full pl-9 pr-10 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {error && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                  <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700">{error}</p>
                 </div>
-              </>
-            )}
+              )}
 
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
+              {successMsg && (
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                  <p className="text-sm text-green-700">{successMsg}</p>
+                </div>
+              )}
 
-            {successMsg && (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-                <p className="text-sm text-green-700">{successMsg}</p>
-              </div>
-            )}
-
-            {(mode === 'login' || mode === 'register' || mode === 'reset-email') && (
               <button
                 type="submit"
                 disabled={loading}
@@ -263,10 +335,23 @@ export default function Login() {
                   ? 'Accedi'
                   : mode === 'register'
                   ? 'Crea account'
-                  : 'Invia link via email'}
+                  : mode === 'reset-email'
+                  ? 'Invia codice via email'
+                  : 'Reimposta password'}
               </button>
-            )}
-          </form>
+
+              {mode === 'reset-otp' && (
+                <button
+                  type="button"
+                  onClick={async () => { resetState(); setLoading(true); await handleSendOtp(); setLoading(false); }}
+                  disabled={loading}
+                  className="w-full text-xs text-stone-400 hover:text-amber-600 transition-colors py-1"
+                >
+                  Non hai ricevuto il codice? Reinvia
+                </button>
+              )}
+            </form>
+          )}
 
           {/* Footer links */}
           <div className="mt-6 text-center space-y-2">
@@ -300,9 +385,9 @@ export default function Login() {
                 </button>
               </p>
             )}
-            {(mode === 'reset-email' || mode === 'reset-sent') && (
+            {(mode === 'reset-email' || mode === 'reset-otp') && (
               <button
-                onClick={() => { setMode('login'); setResetEmail(''); resetState(); }}
+                onClick={() => { setMode('login'); setResetEmail(''); setOtpCode(''); setNewPassword(''); resetState(); }}
                 className="text-sm text-stone-500 hover:text-amber-600 transition-colors"
               >
                 Torna al login
