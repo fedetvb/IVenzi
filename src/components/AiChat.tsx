@@ -1,183 +1,317 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, ChevronDown, Sparkles } from 'lucide-react';
-import { TOOL_DECLARATIONS, executeTool } from '../lib/geminiTools';
-
-const OPENROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-chat`;
-const MODEL = 'google/gemma-3-27b-it:free';
-
-const SYSTEM_PROMPT = `Sei l'assistente AI integrato nel gestionale di un salone di parrucchiere italiano. Il tuo UNICO scopo e' aiutare con la gestione del salone.
-
-ARGOMENTI CONSENTITI (rispondi solo a questi):
-- Appuntamenti: visualizzare, creare, cercare slot liberi
-- Fiches e incassi: statistiche, medie, totali
-- Clienti: cercare, storico visite, clienti assenti
-- Servizi eseguiti: quantita, classifica, analisi
-- Parrucchieri: statistiche per operatore
-
-REGOLA ASSOLUTA: Se la domanda non riguarda la gestione del salone (es. domande generali, ricette, notizie, programmazione, matematica generica, qualsiasi altro argomento), rispondi SEMPRE e SOLO con:
-"Sono configurato solo per aiutarti con la gestione del tuo salone. Posso rispondere a domande su appuntamenti, clienti, fiches e statistiche."
-
-Non fare eccezioni a questa regola, nemmeno se l'utente insiste o fa richieste creative.
-
-Quando usi i tool, presenta i dati in modo chiaro con elenchi puntati o riassunti.
-Per importi usa € e formatta in italiano (es. 1.250,50 €).
-Data odierna: ${new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
-
-Hai accesso ai seguenti strumenti per recuperare dati reali dal gestionale:
-${TOOL_DECLARATIONS.map(t => `- ${t.name}: ${t.description}`).join('\n')}
-
-Quando hai bisogno di dati reali, usa questo formato esatto:
-<tool_call>{"name": "nome_tool", "args": {}}</tool_call>
-
-Aspetta il risultato prima di rispondere.`;
+import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, Package, ChevronRight, RotateCcw } from 'lucide-react';
+import { executeTool } from '../lib/geminiTools';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  table?: TableData;
   loading?: boolean;
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
+interface TableData {
+  headers: string[];
+  rows: string[][];
 }
+
+interface QuickQuestion {
+  label: string;
+  tool: string;
+  args: Record<string, unknown>;
+  format: (data: unknown) => { text: string; table?: TableData };
+}
+
+interface Category {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  questions: QuickQuestion[];
+}
+
+function fmt(n: number) {
+  return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
+
+const CATEGORIES: Category[] = [
+  {
+    id: 'agenda',
+    label: 'Agenda',
+    icon: <Calendar size={15} />,
+    questions: [
+      {
+        label: 'Appuntamenti di oggi',
+        tool: 'get_appuntamenti_oggi',
+        args: {},
+        format: (d) => {
+          const data = d as { totale: number; appuntamenti: { ora: string; cliente: string; parrucchiere: string | null; durata_minuti: number; stato: string }[] };
+          if (!data.appuntamenti?.length) return { text: 'Nessun appuntamento oggi.' };
+          return {
+            text: `${data.totale} appuntament${data.totale === 1 ? 'o' : 'i'} oggi:`,
+            table: {
+              headers: ['Ora', 'Cliente', 'Parrucchiere', 'Durata', 'Stato'],
+              rows: data.appuntamenti.map(a => [
+                a.ora,
+                a.cliente,
+                a.parrucchiere || '—',
+                `${a.durata_minuti} min`,
+                a.stato,
+              ]),
+            },
+          };
+        },
+      },
+      {
+        label: 'Appuntamenti questa settimana',
+        tool: 'get_appuntamenti_settimana',
+        args: {},
+        format: (d) => {
+          const data = d as { totale: number; per_giorno: Record<string, { ora: string; cliente: string; parrucchiere: string | null; stato: string }[]> };
+          if (!data.totale) return { text: 'Nessun appuntamento questa settimana.' };
+          const rows: string[][] = [];
+          Object.entries(data.per_giorno).forEach(([giorno, apps]) => {
+            apps.forEach(a => rows.push([giorno, a.ora, a.cliente, a.parrucchiere || '—', a.stato]));
+          });
+          return {
+            text: `${data.totale} appuntament${data.totale === 1 ? 'o' : 'i'} questa settimana:`,
+            table: { headers: ['Giorno', 'Ora', 'Cliente', 'Parrucchiere', 'Stato'], rows },
+          };
+        },
+      },
+      {
+        label: 'Slot liberi oggi',
+        tool: 'get_slot_liberi',
+        args: { data: new Date().toISOString().split('T')[0] },
+        format: (d) => {
+          const data = d as { slot_liberi: string[]; totale_slot_liberi: number };
+          if (!data.totale_slot_liberi) return { text: 'Nessuno slot libero oggi.' };
+          return { text: `${data.totale_slot_liberi} slot liberi oggi: ${data.slot_liberi.join(', ')}` };
+        },
+      },
+    ],
+  },
+  {
+    id: 'clienti',
+    label: 'Clienti',
+    icon: <Users size={15} />,
+    questions: [
+      {
+        label: 'Clienti assenti da 60 giorni',
+        tool: 'get_clienti_assenti',
+        args: { giorni: 60 },
+        format: (d) => {
+          const data = d as { totale_assenti: number; clienti: { nome: string; telefono: string | null; ultima_visita: string; giorni_assenza: number | null }[] };
+          if (!data.totale_assenti) return { text: 'Nessun cliente assente da 60+ giorni.' };
+          return {
+            text: `${data.totale_assenti} clienti assenti da oltre 60 giorni:`,
+            table: {
+              headers: ['Cliente', 'Telefono', 'Ultima visita', 'Giorni assenza'],
+              rows: data.clienti.map(c => [c.nome, c.telefono || '—', c.ultima_visita, c.giorni_assenza ? `${c.giorni_assenza} gg` : 'Mai venuto']),
+            },
+          };
+        },
+      },
+      {
+        label: 'Clienti assenti da 90 giorni',
+        tool: 'get_clienti_assenti',
+        args: { giorni: 90 },
+        format: (d) => {
+          const data = d as { totale_assenti: number; clienti: { nome: string; telefono: string | null; ultima_visita: string; giorni_assenza: number | null }[] };
+          if (!data.totale_assenti) return { text: 'Nessun cliente assente da 90+ giorni.' };
+          return {
+            text: `${data.totale_assenti} clienti assenti da oltre 90 giorni:`,
+            table: {
+              headers: ['Cliente', 'Telefono', 'Ultima visita', 'Giorni assenza'],
+              rows: data.clienti.map(c => [c.nome, c.telefono || '—', c.ultima_visita, c.giorni_assenza ? `${c.giorni_assenza} gg` : 'Mai venuto']),
+            },
+          };
+        },
+      },
+    ],
+  },
+  {
+    id: 'incassi',
+    label: 'Incassi',
+    icon: <TrendingUp size={15} />,
+    questions: [
+      {
+        label: 'Incasso di oggi',
+        tool: 'get_statistiche_incassi',
+        args: { periodo: 'oggi' },
+        format: (d) => {
+          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
+          return { text: `Incasso oggi: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
+        },
+      },
+      {
+        label: 'Incasso questa settimana',
+        tool: 'get_statistiche_incassi',
+        args: { periodo: 'settimana' },
+        format: (d) => {
+          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
+          return { text: `Incasso questa settimana: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
+        },
+      },
+      {
+        label: 'Incasso questo mese',
+        tool: 'get_statistiche_incassi',
+        args: { periodo: 'mese' },
+        format: (d) => {
+          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
+          return { text: `Incasso questo mese: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
+        },
+      },
+      {
+        label: "Incasso quest'anno",
+        tool: 'get_statistiche_incassi',
+        args: { periodo: 'anno' },
+        format: (d) => {
+          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
+          return { text: `Incasso quest'anno: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
+        },
+      },
+    ],
+  },
+  {
+    id: 'servizi',
+    label: 'Servizi',
+    icon: <Scissors size={15} />,
+    questions: [
+      {
+        label: 'Servizi piu eseguiti questo mese',
+        tool: 'get_statistiche_servizi',
+        args: { periodo: 'mese' },
+        format: (d) => {
+          const data = d as { servizi_piu_eseguiti: { nome: string; quantita: number; totale_euro: string }[] };
+          if (!data.servizi_piu_eseguiti?.length) return { text: 'Nessun servizio registrato questo mese.' };
+          return {
+            text: `Servizi piu eseguiti questo mese:`,
+            table: {
+              headers: ['Servizio', 'Quantita', 'Totale'],
+              rows: data.servizi_piu_eseguiti.map(s => [s.nome, String(s.quantita), fmt(parseFloat(s.totale_euro))]),
+            },
+          };
+        },
+      },
+      {
+        label: "Servizi piu eseguiti quest'anno",
+        tool: 'get_statistiche_servizi',
+        args: { periodo: 'anno' },
+        format: (d) => {
+          const data = d as { servizi_piu_eseguiti: { nome: string; quantita: number; totale_euro: string }[] };
+          if (!data.servizi_piu_eseguiti?.length) return { text: "Nessun servizio registrato quest'anno." };
+          return {
+            text: `Servizi piu eseguiti quest'anno:`,
+            table: {
+              headers: ['Servizio', 'Quantita', 'Totale'],
+              rows: data.servizi_piu_eseguiti.map(s => [s.nome, String(s.quantita), fmt(parseFloat(s.totale_euro))]),
+            },
+          };
+        },
+      },
+    ],
+  },
+  {
+    id: 'parrucchieri',
+    label: 'Parrucchieri',
+    icon: <Package size={15} />,
+    questions: [
+      {
+        label: 'Statistiche parrucchieri questo mese',
+        tool: 'get_statistiche_parrucchieri',
+        args: { periodo: 'mese' },
+        format: (d) => {
+          const data = d as { parrucchieri: { parrucchiere: string; appuntamenti: number; incasso_totale: string; media_appuntamento: string }[] };
+          if (!data.parrucchieri?.length) return { text: 'Nessun dato parrucchieri questo mese.' };
+          return {
+            text: `Statistiche parrucchieri questo mese:`,
+            table: {
+              headers: ['Parrucchiere', 'Appuntamenti', 'Incasso', 'Media'],
+              rows: data.parrucchieri.map(p => [p.parrucchiere, String(p.appuntamenti), fmt(parseFloat(p.incasso_totale)), fmt(parseFloat(p.media_appuntamento))]),
+            },
+          };
+        },
+      },
+      {
+        label: "Statistiche parrucchieri quest'anno",
+        tool: 'get_statistiche_parrucchieri',
+        args: { periodo: 'anno' },
+        format: (d) => {
+          const data = d as { parrucchieri: { parrucchiere: string; appuntamenti: number; incasso_totale: string; media_appuntamento: string }[] };
+          if (!data.parrucchieri?.length) return { text: "Nessun dato parrucchieri quest'anno." };
+          return {
+            text: `Statistiche parrucchieri quest'anno:`,
+            table: {
+              headers: ['Parrucchiere', 'Appuntamenti', 'Incasso', 'Media'],
+              rows: data.parrucchieri.map(p => [p.parrucchiere, String(p.appuntamenti), fmt(parseFloat(p.incasso_totale)), fmt(parseFloat(p.media_appuntamento))]),
+            },
+          };
+        },
+      },
+    ],
+  },
+];
 
 export default function AiChat() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Ciao! Sono il tuo assistente AI. Posso aiutarti con appuntamenti, statistiche e clienti. Come posso aiutarti?',
+      content: 'Ciao! Seleziona una categoria e scegli una domanda per consultare i dati del salone.',
     },
   ]);
-  const [input, setInput] = useState('');
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (open) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [open, messages]);
 
-  async function sendMessage() {
-    if (!input.trim() || loading) return;
-    const userText = input.trim();
-    setInput('');
+  async function askQuestion(q: QuickQuestion) {
+    if (loading) return;
     setLoading(true);
+    setActiveCategory(null);
 
-    const userMsg: Message = { role: 'user', content: userText };
+    const userMsg: Message = { role: 'user', content: q.label };
     setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', loading: true }]);
 
-    const newHistory: ChatMessage[] = [
-      ...history,
-      { role: 'user', content: userText },
-    ];
-
     try {
-      const finalText = await runWithTools(newHistory);
-      setHistory([...newHistory, { role: 'assistant', content: finalText }]);
+      const raw = await executeTool(q.tool, q.args);
+      const parsed = JSON.parse(raw);
+
+      if (parsed.errore) {
+        setMessages(prev => {
+          const copy = [...prev];
+          copy[copy.length - 1] = { role: 'assistant', content: `Errore: ${parsed.errore}` };
+          return copy;
+        });
+        return;
+      }
+
+      const { text, table } = q.format(parsed);
       setMessages(prev => {
         const copy = [...prev];
-        copy[copy.length - 1] = { role: 'assistant', content: finalText };
+        copy[copy.length - 1] = { role: 'assistant', content: text, table };
         return copy;
       });
     } catch (err) {
-      const errMsg = `Mi dispiace, si e' verificato un errore: ${String(err)}`;
       setMessages(prev => {
         const copy = [...prev];
-        copy[copy.length - 1] = { role: 'assistant', content: errMsg };
+        copy[copy.length - 1] = { role: 'assistant', content: `Errore nel recupero dati: ${String(err)}` };
         return copy;
       });
     } finally {
       setLoading(false);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }
   }
 
-  async function callOpenRouter(msgs: ChatMessage[]): Promise<string> {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...msgs,
-        ],
-        temperature: 0.7,
-        max_tokens: 1024,
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`OpenRouter error ${res.status}: ${err}`);
-    }
-
-    const json = await res.json();
-    const content = json.choices?.[0]?.message?.content;
-    if (!content) throw new Error('Nessuna risposta dal modello');
-    return content;
+  function resetChat() {
+    setMessages([{ role: 'assistant', content: 'Ciao! Seleziona una categoria e scegli una domanda per consultare i dati del salone.' }]);
+    setActiveCategory(null);
   }
-
-  async function runWithTools(conversationHistory: ChatMessage[]): Promise<string> {
-    let currentHistory = [...conversationHistory];
-
-    for (let iteration = 0; iteration < 5; iteration++) {
-      const response = await callOpenRouter(currentHistory);
-
-      const toolCallMatch = response.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
-      if (toolCallMatch) {
-        let toolCall: { name: string; args: Record<string, unknown> };
-        try {
-          toolCall = JSON.parse(toolCallMatch[1]);
-        } catch {
-          return response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim() || response;
-        }
-
-        const toolResult = await executeTool(toolCall.name, toolCall.args || {});
-        currentHistory = [
-          ...currentHistory,
-          { role: 'assistant', content: response },
-          { role: 'user', content: `Risultato tool ${toolCall.name}: ${toolResult}` },
-        ];
-        continue;
-      }
-
-      return response;
-    }
-
-    return 'Mi dispiace, non sono riuscito a completare la richiesta. Riprova.';
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
-
-  function formatMessage(text: string) {
-    return text
-      .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-      .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/\*(.*?)\*/g, '$1')
-      .replace(/`(.*?)`/g, '$1')
-      .trim();
-  }
-
-  const suggestions = [
-    'Chi ha appuntamento oggi?',
-    'Media fiches questo mese',
-    'Servizi piu eseguiti',
-    'Clienti assenti da 60 giorni',
-  ];
 
   return (
     <>
@@ -185,27 +319,34 @@ export default function AiChat() {
       <button
         onClick={() => setOpen(true)}
         className={`fixed bottom-6 right-6 z-50 w-14 h-14 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-xl flex items-center justify-center transition-all duration-200 hover:scale-110 ${open ? 'opacity-0 pointer-events-none scale-90' : 'opacity-100 scale-100'}`}
-        title="Assistente AI"
+        title="Consulta dati salone"
       >
-        <Sparkles size={22} />
+        <MessageSquare size={22} />
       </button>
 
       {/* Chat panel */}
       <div
-        className={`fixed bottom-6 right-6 z-50 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right ${
+        className={`fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right ${
           open ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none'
         }`}
-        style={{ height: '560px', maxHeight: 'calc(100vh - 3rem)' }}
+        style={{ height: '600px', maxHeight: 'calc(100vh - 3rem)' }}
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 bg-amber-500 rounded-t-2xl flex-shrink-0">
           <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-            <Sparkles size={16} className="text-white" />
+            <MessageSquare size={16} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white">Assistente AI</p>
-            <p className="text-xs text-amber-100">Powered by Llama 3.1</p>
+            <p className="text-sm font-bold text-white">Consulta Dati Salone</p>
+            <p className="text-xs text-amber-100">Domande rapide sul tuo gestionale</p>
           </div>
+          <button
+            onClick={resetChat}
+            className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white"
+            title="Nuova conversazione"
+          >
+            <RotateCcw size={14} />
+          </button>
           <button
             onClick={() => setOpen(false)}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white"
@@ -228,21 +369,45 @@ export default function AiChat() {
                   : <Bot size={13} className="text-amber-600" />
                 }
               </div>
-              <div
-                className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-stone-900 text-white rounded-tr-sm'
-                    : 'bg-stone-100 text-stone-800 rounded-tl-sm'
-                }`}
-              >
-                {msg.loading ? (
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className={`max-w-[90%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                <div
+                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-stone-900 text-white rounded-tr-sm'
+                      : 'bg-stone-100 text-stone-800 rounded-tl-sm'
+                  }`}
+                >
+                  {msg.loading ? (
+                    <div className="flex items-center gap-1.5 py-0.5">
+                      <div className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
+                </div>
+                {msg.table && (
+                  <div className="w-full overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="bg-amber-50 border-b border-stone-200">
+                          {msg.table.headers.map((h, hi) => (
+                            <th key={hi} className="px-3 py-2 text-left font-semibold text-stone-700 whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {msg.table.rows.map((row, ri) => (
+                          <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-stone-50'}>
+                            {row.map((cell, ci) => (
+                              <td key={ci} className="px-3 py-2 text-stone-700 whitespace-nowrap">{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                ) : (
-                  <p className="whitespace-pre-wrap">{formatMessage(msg.content)}</p>
                 )}
               </div>
             </div>
@@ -250,49 +415,55 @@ export default function AiChat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Suggestions (only when first message shown) */}
-        {messages.length === 1 && (
-          <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0">
-            {suggestions.map(s => (
-              <button
-                key={s}
-                onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 50); }}
-                className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-full px-2.5 py-1 transition-colors"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="px-4 pb-4 pt-2 flex-shrink-0 border-t border-stone-100">
-          <div className="flex items-end gap-2 bg-stone-100 rounded-xl px-3 py-2">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Scrivi un messaggio..."
-              rows={1}
-              disabled={loading}
-              className="flex-1 bg-transparent text-sm text-stone-800 placeholder:text-stone-400 resize-none outline-none min-h-[24px] max-h-[96px] leading-6 disabled:opacity-50"
-              style={{ height: 'auto' }}
-              onInput={e => {
-                const t = e.target as HTMLTextAreaElement;
-                t.style.height = 'auto';
-                t.style.height = `${Math.min(t.scrollHeight, 96)}px`;
-              }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || loading}
-              className="w-8 h-8 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            </button>
-          </div>
-          <p className="text-center text-[10px] text-stone-300 mt-1.5">Invio con Invio &bull; A capo con Shift+Invio</p>
+        {/* Category picker / Questions */}
+        <div className="flex-shrink-0 border-t border-stone-100 px-4 py-3 space-y-2">
+          {activeCategory === null ? (
+            <>
+              <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide">Scegli categoria</p>
+              <div className="grid grid-cols-3 gap-2">
+                {CATEGORIES.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    disabled={loading}
+                    className="flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-xl bg-stone-50 hover:bg-amber-50 hover:text-amber-700 border border-stone-200 hover:border-amber-300 text-stone-600 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-current">{cat.icon}</span>
+                    <span className="text-[11px] font-medium leading-tight text-center">{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveCategory(null)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700 transition-colors"
+                >
+                  <ChevronRight size={12} className="rotate-180" />
+                  Categorie
+                </button>
+                <span className="text-[11px] text-stone-400">/</span>
+                <span className="text-[11px] font-semibold text-stone-600">
+                  {CATEGORIES.find(c => c.id === activeCategory)?.label}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {CATEGORIES.find(c => c.id === activeCategory)?.questions.map((q, qi) => (
+                  <button
+                    key={qi}
+                    onClick={() => askQuestion(q)}
+                    disabled={loading}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-stone-50 hover:bg-amber-50 hover:text-amber-700 border border-stone-200 hover:border-amber-300 text-stone-700 text-xs font-medium transition-all duration-150 text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span>{q.label}</span>
+                    <ChevronRight size={13} className="flex-shrink-0 text-stone-400" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>
