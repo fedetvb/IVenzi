@@ -2,6 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, BarChart2, ChevronRight, RotateCcw, Send, Loader2, HelpCircle } from 'lucide-react';
 import { executeTool } from '../lib/geminiTools';
 import { parseQuery, formatToolResult } from '../lib/chatParser';
+import { supabase } from '../lib/supabase';
+
+interface Parrucchiere {
+  id: string;
+  nome: string;
+}
 
 interface Message {
   role: 'user' | 'assistant';
@@ -114,8 +120,19 @@ export default function AiChat() {
   const [input, setInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [awaitingGiorni, setAwaitingGiorni] = useState(false);
+  const [awaitingParrucchiere, setAwaitingParrucchiere] = useState<{ data: string } | null>(null);
+  const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    supabase
+      .from('parrucchieri')
+      .select('id, nome')
+      .eq('attivo', true)
+      .order('nome')
+      .then(({ data }) => { if (data) setParrucchieri(data as Parrucchiere[]); });
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -151,6 +168,11 @@ export default function AiChat() {
         copy[copy.length - 1] = { role: 'assistant', content: text, table };
         return copy;
       });
+
+      // Dopo slot liberi senza filtro parrucchiere, proponi la scelta
+      if (tool === 'get_slot_liberi' && !args.parrucchiere_id && parrucchieri.length > 0) {
+        setAwaitingParrucchiere({ data: args.data as string });
+      }
     } catch (err) {
       setMessages(prev => {
         const copy = [...prev];
@@ -230,6 +252,7 @@ export default function AiChat() {
     setInput('');
     setShowSuggestions(false);
     setAwaitingGiorni(false);
+    setAwaitingParrucchiere(null);
   }
 
   return (
@@ -314,7 +337,7 @@ export default function AiChat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Quick giorni picker — appare solo quando l'assistente aspetta i giorni */}
+        {/* Quick giorni picker */}
         {awaitingGiorni && (
           <div className="mx-4 mb-1 flex flex-wrap gap-2 flex-shrink-0">
             {[15, 30, 45, 60, 90, 120, 180].map(g => (
@@ -329,6 +352,34 @@ export default function AiChat() {
                 {g} giorni
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Parrucchiere picker per slot liberi */}
+        {awaitingParrucchiere && parrucchieri.length > 0 && (
+          <div className="mx-4 mb-1 flex-shrink-0">
+            <p className="text-[10px] text-stone-400 font-medium mb-1.5 uppercase tracking-wide">Filtra per parrucchiere:</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setAwaitingParrucchiere(null)}
+                className="px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-600 text-xs font-semibold transition-colors"
+              >
+                Tutti
+              </button>
+              {parrucchieri.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    const d = awaitingParrucchiere.data;
+                    setAwaitingParrucchiere(null);
+                    runTool('get_slot_liberi', { data: d, parrucchiere_id: p.id }, `Slot liberi di ${p.nome}`);
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-semibold transition-colors"
+                >
+                  {p.nome}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

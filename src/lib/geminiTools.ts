@@ -152,9 +152,18 @@ export const TOOL_DECLARATIONS = [
           type: 'NUMBER',
           description: 'Durata dello slot richiesto in minuti (default 60)',
         },
+        parrucchiere_id: {
+          type: 'STRING',
+          description: 'ID del parrucchiere per filtrare gli slot (opzionale)',
+        },
       },
       required: ['data'],
     },
+  },
+  {
+    name: 'get_parrucchieri',
+    description: 'Restituisce la lista dei parrucchieri attivi.',
+    parameters: { type: 'OBJECT', properties: {}, required: [] },
   },
 ];
 
@@ -213,6 +222,8 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         return await getClientiAssenti(args);
       case 'get_slot_liberi':
         return await getSlotLiberi(args);
+      case 'get_parrucchieri':
+        return await getParrucchieri();
       default:
         return JSON.stringify({ errore: `Tool sconosciuto: ${name}` });
     }
@@ -583,19 +594,36 @@ async function getClientiAssenti(args: Record<string, unknown>): Promise<string>
 async function getSlotLiberi(args: Record<string, unknown>): Promise<string> {
   const data = String(args.data);
   const durata = Number(args.durata_minuti) || 60;
+  const parrucchiereId = args.parrucchiere_id as string | undefined;
   const from = `${data}T00:00:00`;
   const to = `${data}T23:59:59`;
 
-  const { data: apps, error } = await supabase
+  let query = supabase
     .from('appuntamenti')
-    .select('data_ora, durata_minuti, parrucchieri(nome)')
+    .select('data_ora, durata_minuti, parrucchiere_id, parrucchieri(nome)')
     .gte('data_ora', new Date(from).toISOString())
     .lte('data_ora', new Date(to).toISOString())
     .is('deleted_at', null)
     .neq('stato', 'cancellato')
     .order('data_ora');
 
+  if (parrucchiereId) {
+    query = query.eq('parrucchiere_id', parrucchiereId);
+  }
+
+  const { data: apps, error } = await query;
   if (error) return JSON.stringify({ errore: error.message });
+
+  // Recupera nome parrucchiere se filtrato
+  let nomeParrucchiere: string | null = null;
+  if (parrucchiereId) {
+    const { data: parr } = await supabase
+      .from('parrucchieri')
+      .select('nome')
+      .eq('id', parrucchiereId)
+      .maybeSingle();
+    nomeParrucchiere = (parr as Record<string, string> | null)?.nome || null;
+  }
 
   // Slot ogni 30 min dalle 8:00 alle 19:30
   const slotsOccupati: { inizio: number; fine: number }[] = (apps || []).map((a: Record<string, unknown>) => {
@@ -618,7 +646,18 @@ async function getSlotLiberi(args: Record<string, unknown>): Promise<string> {
   return JSON.stringify({
     data,
     durata_minuti: durata,
+    parrucchiere: nomeParrucchiere,
     slot_liberi: liberi,
     totale_slot_liberi: liberi.length,
   });
+}
+
+async function getParrucchieri(): Promise<string> {
+  const { data, error } = await supabase
+    .from('parrucchieri')
+    .select('id, nome')
+    .eq('attivo', true)
+    .order('nome');
+  if (error) return JSON.stringify({ errore: error.message });
+  return JSON.stringify({ parrucchieri: data || [] });
 }

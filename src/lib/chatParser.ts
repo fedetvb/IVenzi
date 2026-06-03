@@ -284,8 +284,9 @@ export function formatToolResult(tool: string, parsed: any): FormatResult {
       const label = parsed.data
         ? new Date(parsed.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
         : 'questa data';
-      if (!parsed.totale_slot_liberi) return { text: `Nessuno slot libero per ${label}.` };
-      return { text: `${parsed.totale_slot_liberi} slot liberi per ${label}:\n${(parsed.slot_liberi as string[]).join('  •  ')}` };
+      const chi = parsed.parrucchiere ? ` — ${parsed.parrucchiere}` : '';
+      if (!parsed.totale_slot_liberi) return { text: `Nessuno slot libero per ${label}${chi}.` };
+      return { text: `${parsed.totale_slot_liberi} slot liberi per ${label}${chi}:\n${(parsed.slot_liberi as string[]).join('  •  ')}` };
     }
     case 'get_statistiche_incassi': {
       const totale = parseFloat(parsed.totale_incassato);
