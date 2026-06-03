@@ -393,7 +393,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-6 py-4 bg-white border-b border-stone-200 flex-shrink-0">
+      <div className="px-3 py-2 md:px-6 md:py-4 bg-white border-b border-stone-200 flex-shrink-0">
         {compleanni.length > 0 && (
           <div className="mb-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
@@ -472,16 +472,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-stone-100 transition-colors">
-              <ChevronLeft size={18} />
-            </button>
-            <h1 className="font-bold text-stone-800 capitalize">
-              {date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={onBack} className="p-1 rounded-lg hover:bg-stone-100 transition-colors flex-shrink-0">
+            <ChevronLeft size={18} />
+          </button>
+          <h1 className="font-bold text-stone-800 capitalize text-sm md:text-base">
+            {date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </h1>
+          <div className="flex items-center gap-1.5 flex-wrap ml-auto">
             {parrucchieri.map(p => {
               const assenteOggi = assenzeMap.has(p.id) && assenzeMap.get(p.id) === null;
               const assenteDopo = assenzeMap.has(p.id) && assenzeMap.get(p.id) !== null;
@@ -497,7 +495,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     });
                   }}
                   title={assenteOggi ? 'Assente oggi' : assenteDopo ? `Assente dalle ${assenzeMap.get(p.id)}` : undefined}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-medium transition-all"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all"
                   style={{
                     borderColor: assenteOggi ? '#fca5a5' : hiddenParr.has(p.id) ? '#d1d5db' : p.colore,
                     backgroundColor: assenteOggi ? '#fef2f2' : hiddenParr.has(p.id) ? '#f9fafb' : `${p.colore}18`,
@@ -505,19 +503,19 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     cursor: assenteOggi ? 'default' : 'pointer',
                   }}
                 >
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: assenteOggi ? '#ef4444' : hiddenParr.has(p.id) ? '#d1d5db' : p.colore }} />
+                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: assenteOggi ? '#ef4444' : hiddenParr.has(p.id) ? '#d1d5db' : p.colore }} />
                   {p.nome}
-                  {assenteOggi && <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">Assente</span>}
-                  {assenteDopo && <span className="text-[10px] font-semibold opacity-60">dalle {assenzeMap.get(p.id)}</span>}
+                  {assenteOggi && <span className="text-[9px] font-bold uppercase tracking-wide opacity-70">Assente</span>}
+                  {assenteDopo && <span className="text-[9px] font-semibold opacity-60">dalle {assenzeMap.get(p.id)}</span>}
                 </button>
               );
             })}
             <button
               onClick={() => setShowSettings(s => !s)}
-              className={`p-2 rounded-lg border transition-all ${showSettings ? 'bg-amber-50 border-amber-300 text-amber-600' : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}
+              className={`p-1.5 rounded-lg border transition-all ${showSettings ? 'bg-amber-50 border-amber-300 text-amber-600' : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}
               title="Impostazioni visualizzazione"
             >
-              <Settings size={16} />
+              <Settings size={14} />
             </button>
           </div>
         </div>
