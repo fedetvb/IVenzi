@@ -280,14 +280,31 @@ export default function AiChat() {
     }
   }
 
+  // Ref always pointing to latest sendText to avoid stale closures inside recognition handlers
+  const sendTextRef = useRef(sendText);
+  useEffect(() => { sendTextRef.current = sendText; });
+
   const voiceTranscriptRef = useRef('');
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopListening = useCallback(() => {
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    recognitionRef.current?.stop();
+    setListening(false);
+  }, []);
 
   const toggleVoice = useCallback(() => {
     if (!voiceSupported) return;
 
     if (listening) {
-      recognitionRef.current?.stop();
-      setListening(false);
+      stopListening();
+      // Se c'è testo accumulato, invialo
+      const text = voiceTranscriptRef.current.trim();
+      if (text) {
+        setInput('');
+        voiceTranscriptRef.current = '';
+        sendTextRef.current(text);
+      }
       return;
     }
 
@@ -296,37 +313,72 @@ export default function AiChat() {
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition: SpeechRecognition = new SpeechRec();
     recognition.lang = 'it-IT';
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
 
-    recognition.onstart = () => setListening(true);
+    const resetSilenceTimer = () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      // Invia dopo 2.5 secondi di silenzio
+      silenceTimerRef.current = setTimeout(() => {
+        const text = voiceTranscriptRef.current.trim();
+        recognition.stop();
+        setListening(false);
+        if (text) {
+          setInput('');
+          voiceTranscriptRef.current = '';
+          sendTextRef.current(text);
+        }
+      }, 2500);
+    };
+
+    recognition.onstart = () => {
+      setListening(true);
+      resetSilenceTimer();
+    };
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
-      voiceTranscriptRef.current = transcript;
-      setInput(transcript);
+      // Accumula solo i risultati finali + l'ultimo interlocutorio
+      let finalText = '';
+      let interimText = '';
+      for (let i = 0; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          finalText += e.results[i][0].transcript;
+        } else {
+          interimText += e.results[i][0].transcript;
+        }
+      }
+      const display = (finalText + ' ' + interimText).trim();
+      voiceTranscriptRef.current = finalText.trim() || display;
+      setInput(display);
       if (inputRef.current) {
         inputRef.current.style.height = 'auto';
         inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 80)}px`;
       }
+      // Resetta il timer di silenzio ad ogni parola rilevata
+      resetSilenceTimer();
     };
 
     recognition.onend = () => {
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
       setListening(false);
       const text = voiceTranscriptRef.current.trim();
       if (!text) return;
       setInput('');
       voiceTranscriptRef.current = '';
-      // Invia automaticamente il testo riconosciuto
-      sendText(text);
+      sendTextRef.current(text);
     };
 
-    recognition.onerror = () => { setListening(false); voiceTranscriptRef.current = ''; };
+    recognition.onerror = (e) => {
+      // 'no-speech' è normale quando si fa una pausa, non è un errore critico
+      if ((e as SpeechRecognitionErrorEvent).error === 'no-speech') return;
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+      setListening(false);
+      voiceTranscriptRef.current = '';
+    };
 
     recognitionRef.current = recognition;
     recognition.start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceSupported, listening]);
+  }, [voiceSupported, listening, stopListening]);
 
   function resetChat() {
     setMessages([{ role: 'assistant', content: 'Ciao! Scrivi una domanda in italiano oppure scegli una categoria qui sotto.' }]);
