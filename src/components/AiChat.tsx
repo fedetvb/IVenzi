@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot, User, Loader2, ChevronDown, Sparkles } from 'lucide-react';
 import { TOOL_DECLARATIONS, executeTool } from '../lib/geminiTools';
 
-const GEMINI_API_KEY = 'AQ.Ab8RN6J6NS3_Ps9ZevZ0elBe2bLBxSZdm-6qWYTrG5kaL09Ppw';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-chat`;
 
 const SYSTEM_PROMPT = `Sei l'assistente AI integrato nel gestionale di un salone di parrucchiere italiano. Il tuo UNICO scopo e' aiutare con la gestione del salone.
 
@@ -111,7 +110,10 @@ export default function AiChat() {
 
       const res = await fetch(GEMINI_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
         body: JSON.stringify(body),
       });
 
