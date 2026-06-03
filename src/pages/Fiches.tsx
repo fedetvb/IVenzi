@@ -759,7 +759,7 @@ interface CartaScontoSimple {
   nominativa?: boolean; cliente_id?: string | null;
 }
 interface CartaPremiumSimple {
-  id: string; codice: string; saldo: number;
+  id: string; codice: string; saldo: number; attiva?: boolean;
 }
 
 function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, parrucchieri, isOpen, onToggle, onSaved, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
@@ -865,11 +865,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
       }
 
       if (realClienteId) {
-        const { data: pr } = await supabase.from('carte_premium').select('id, codice, saldo').eq('cliente_id', realClienteId).eq('attiva', true);
+        const { data: pr } = await supabase.from('carte_premium').select('id, codice, saldo, attiva').eq('cliente_id', realClienteId).is('deleted_at', null);
         const premiumList = (pr || []) as CartaPremiumSimple[];
         setCartePremium(premiumList);
-        // Auto-seleziona la prima carta premium del cliente (anche se saldo = 0)
-        if (premiumList.length > 0) setCartaPremiumId(premiumList[0].id);
+        // Auto-seleziona la prima carta premium attiva con saldo disponibile
+        const attiva = premiumList.find(c => c.attiva && c.saldo > 0);
+        if (attiva) setCartaPremiumId(attiva.id);
       }
     })();
     setInitialized(true);
@@ -1763,9 +1764,16 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
                   <select value={cartaPremiumId} onChange={e => setCartaPremiumId(e.target.value)}
                     className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-emerald-400">
                     <option value="">— Nessuna carta premium —</option>
-                    {cartePremium.map(c => (
-                      <option key={c.id} value={c.id}>{c.codice} · Saldo €{c.saldo.toFixed(2)}{c.saldo === 0 ? ' (esaurita)' : ''}</option>
-                    ))}
+                    {cartePremium.map(c => {
+                      const esaurita = c.saldo <= 0;
+                      const disattiva = !c.attiva && !esaurita;
+                      const label = esaurita ? ' (esaurita)' : disattiva ? ' (disattiva)' : '';
+                      return (
+                        <option key={c.id} value={c.id} disabled={esaurita || disattiva}>
+                          {c.codice} · Saldo €{c.saldo.toFixed(2)}{label}
+                        </option>
+                      );
+                    })}
                   </select>
                   {cartaPremium && creditoPremium > 0 && (
                     <p className="text-xs text-emerald-600 mt-1 font-medium">Credito utilizzato: -€{creditoPremium.toFixed(2)}</p>

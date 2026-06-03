@@ -984,12 +984,13 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
           {filtered.map(carta => {
             const saldoBasso = carta.saldo < 20 && carta.saldo > 0;
             const saldoEsaurito = carta.saldo <= 0;
+            const esauritaDisattiva = !carta.attiva && saldoEsaurito;
             return (
-              <div key={carta.id} className={`bg-white rounded-2xl border p-4 transition-all ${!carta.attiva ? 'border-stone-100 opacity-60' : saldoEsaurito ? 'border-red-200' : saldoBasso ? 'border-amber-200' : 'border-stone-200'}`}>
+              <div key={carta.id} className={`bg-white rounded-2xl border p-4 transition-all ${esauritaDisattiva ? 'border-red-200 opacity-70' : !carta.attiva ? 'border-stone-100 opacity-60' : saldoEsaurito ? 'border-red-200' : saldoBasso ? 'border-amber-200' : 'border-stone-200'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${!carta.attiva ? 'bg-stone-100' : saldoEsaurito ? 'bg-red-100' : 'bg-emerald-100'}`}>
-                      <Star size={18} className={!carta.attiva ? 'text-stone-400' : saldoEsaurito ? 'text-red-500' : 'text-emerald-600'} />
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${esauritaDisattiva ? 'bg-red-100' : !carta.attiva ? 'bg-stone-100' : saldoEsaurito ? 'bg-red-100' : 'bg-emerald-100'}`}>
+                      <Star size={18} className={esauritaDisattiva ? 'text-red-500' : !carta.attiva ? 'text-stone-400' : saldoEsaurito ? 'text-red-500' : 'text-emerald-600'} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -997,8 +998,8 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
                           {carta.codice}
                           {copied === carta.codice ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} className="text-stone-300" />}
                         </button>
-                        {!carta.attiva && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Disattiva</span>}
-                        {saldoEsaurito && carta.attiva && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Saldo esaurito</span>}
+                        {!carta.attiva && !saldoEsaurito && <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-semibold">Disattiva</span>}
+                        {saldoEsaurito && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Saldo esaurito</span>}
                         {saldoBasso && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">Saldo basso</span>}
                       </div>
                       {carta.clienti && <p className="text-xs text-stone-500 mt-0.5 font-medium">{carta.clienti.nome} {carta.clienti.cognome}</p>}
