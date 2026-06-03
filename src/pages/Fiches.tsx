@@ -488,6 +488,7 @@ function FichesTab() {
             isOpen={openCard === g.clienteId}
             onToggle={() => setOpenCard(prev => prev === g.clienteId ? null : g.clienteId)}
             onSaved={load}
+            onConvalidata={() => { setOpenCard(null); load(); }}
             showImporti={incassoVisible}
             carteTipi={carteTipi}
           />
@@ -748,6 +749,7 @@ interface FicheCardProps {
   showImporti: boolean;
   onToggle: () => void;
   onSaved: () => void;
+  onConvalidata: () => void;
   carteTipi?: { hasPremium: boolean; hasSconto: boolean };
 }
 
@@ -760,7 +762,7 @@ interface CartaPremiumSimple {
   id: string; codice: string; saldo: number;
 }
 
-function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, parrucchieri, isOpen, onToggle, onSaved, showImporti, carteTipi }: FicheCardProps) {
+function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, parrucchieri, isOpen, onToggle, onSaved, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
   const { user } = useAuth();
   const [voci, setVoci] = useState<FicheVoce[]>([]);
   const [note, setNote] = useState('');
@@ -1175,7 +1177,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
         azione: { tipo: 'detrazione', importoDetratto: creditoPremium, nuovoSaldo: cartaPremium.saldo - creditoPremium },
       });
     } else {
-      onSaved();
+      onConvalidata();
     }
   }
 
@@ -1986,7 +1988,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
           codice={smsModal.codiceOverride ?? cartaPremium?.codice ?? ''}
           telefono={clienteTelefono}
           azione={smsModal.azione}
-          onClose={() => { setSmsModal(null); onSaved(); }}
+          onClose={() => { setSmsModal(null); onConvalidata(); }}
         />
       )}
     </div>
