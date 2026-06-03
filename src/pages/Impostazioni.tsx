@@ -251,26 +251,14 @@ async function runAutoBackupIfDue(): Promise<boolean> {
     const jsonStr = JSON.stringify(data, null, 2);
     const filename = `backup-salone-${todayStr}.json`;
 
-    if ('showSaveFilePicker' in window) {
-      try {
-        const handle = await (window as Window & { showSaveFilePicker: (o: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: 'Backup JSON', accept: { 'application/json': ['.json'] } }],
-        });
-        const w = await handle.createWritable();
-        await w.write(jsonStr);
-        await w.close();
-      } catch (e) {
-        if ((e as { name?: string }).name === 'AbortError') return false;
-        throw e;
-      }
-    } else {
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
-    }
+    // Backup automatico: usa sempre il download silenzioso (a.click) perché
+    // showSaveFilePicker richiede un gesto utente e viene bloccato da setInterval.
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+
     localStorage.setItem(AB_LAST_KEY, todayStr);
     return true;
   } catch {
