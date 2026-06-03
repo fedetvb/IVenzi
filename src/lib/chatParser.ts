@@ -116,18 +116,25 @@ function resolveDateText(text: string): string {
   return oggi();
 }
 
-// Parole "stop" che terminano il nome cliente/parrucchiere
-const STOP_WORDS = /\b(per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|alle|ore|fissa|fissiamo|prenota|prendi|crea|segna|metti|nuovo|appuntamento|\d)\b/i;
+const SERVIZI_LISTA = ['cheratina', 'colorazione', 'colore', 'meches', 'meche', 'balayage', 'riflessante', 'permanente', 'taglio', 'piega', 'piastra', 'shampoo', 'trattamento'];
+const SERVIZI_SET = new Set(SERVIZI_LISTA);
+
+const PAROLE_FUNZIONE = new Set([
+  'appuntamento', 'appuntamenti',
+  'fissa', 'fissiamo', 'prenota', 'prenotare', 'prendi', 'metti', 'segna', 'crea', 'nuovo',
+  'con', 'per', 'alle', 'ale', 'ore', 'ore', 'a', 'da', 'di', 'del', 'della', 'in', 'su', 'un', 'una',
+  'il', 'la', 'lo', 'le', 'e', 'o',
+  'oggi', 'domani', 'dopodomani', 'ieri',
+  'lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica',
+  'prossimo', 'prossima', 'questo', 'questa', 'che',
+]);
 
 function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null {
-  // Trigger: deve contenere un verbo di prenotazione
   const KW_VERBI = /\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea)\b/i;
-  // E deve contenere "appuntamento" oppure essere "prenota/prendi" senza "appuntamento" (basta il verbo + nome + ora)
   const hasVerbo = KW_VERBI.test(text);
   const hasAppuntamento = text.includes('appuntamento');
+  if (!hasVerbo && !hasAppuntamento) return null;
   if (!hasVerbo) return null;
-  // Se c'è il verbo ma non "appuntamento", richiedi almeno "prenota" o "prendi" + ora
-  if (!hasAppuntamento && !/\b(prenota|prendi|fissa)\b/.test(text)) return null;
 
   // Estrai ora — obbligatoria
   const ora = extractOra(text);
@@ -136,76 +143,61 @@ function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null 
   // Estrai data
   const data = resolveDateText(text);
 
-  // Estrai nome cliente: la parola/e DOPO il verbo+appuntamento (o solo verbo) e PRIMA delle stop words
-  let nomeCliente: string | null = null;
-
-  // Pattern 1: "... appuntamento [a/per/di]? NOME [stop]"
-  const m1 = text.match(/appuntamento\s+(?:[a-z]{1,3}\s+)?([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)\s+(?:per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|\d)/i);
-  if (m1) {
-    // escludi preposizioni singole come "a", "per", "di"
-    const candidate = m1[1].trim();
-    if (candidate.length > 2 && !/^(per|con|di|da|a|in|su|il|la|lo|le|un|una)$/i.test(candidate)) {
-      nomeCliente = candidate;
-    }
-  }
-
-  // Pattern 2: "prendi/prenota/fissa [appuntamento] NOME [stop]" — nome senza preposizione
-  if (!nomeCliente) {
-    const m2 = text.match(/(?:fissa|prenota|prendi|crea|segna|metti)\s+(?:appuntamento\s+)?([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)\s+(?:per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|\d)/i);
-    if (m2) {
-      const candidate = m2[1].trim();
-      if (candidate.length > 2 && !/^(appuntamento|per|con|di|da|a|in|su|il|la|lo|le|un|una)$/i.test(candidate)) {
-        nomeCliente = candidate;
-      }
-    }
-  }
-
-  // Pattern 3: verbo + appuntamento + nome alla fine, con "con" come separatore
-  if (!nomeCliente) {
-    const m3 = text.match(/(?:fissa|prenota|prendi|crea|segna|metti)\s+(?:appuntamento\s+)?(?:a\s+|per\s+)?([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)/i);
-    if (m3) {
-      const candidate = m3[1].trim().split(STOP_WORDS)[0].trim();
-      if (candidate.length > 2 && !/^(appuntamento|per|con|di|da|a|in|su)$/i.test(candidate)) {
-        nomeCliente = candidate;
-      }
-    }
-  }
-
-  if (!nomeCliente) return null;
-
-  // Estrai parrucchiere: "con [nome]" — solo il nome proprio (1-2 parole), prima dei servizi/fine frase
-  // I servizi comuni non sono nomi di persona
-  const SERVIZI_RE = /\b(colore|colorazione|taglio|piega|piastra|shampoo|cheratina|meche|balayage|riflessante|permanente|trattamento)\b/i;
-  let nomeParrucchiere: string | undefined;
-  const mParr = text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)(?:\s+(?:alle?|ore?|\d))/i)
-    || text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+)(?:\s+\w+)?$/i);
-  if (mParr) {
-    // Prendi solo la prima parola dopo "con" come nome parrucchiere (esclude servizi)
-    const firstWord = mParr[1].trim().split(/\s+/)[0];
-    if (
-      firstWord.length > 2
-      && firstWord.toLowerCase() !== nomeCliente.toLowerCase().split(/\s+/)[0]
-      && !SERVIZI_RE.test(firstWord)
-    ) {
-      nomeParrucchiere = firstWord;
-    }
-  }
-
-  // Estrai servizio: parola/e dal SERVIZI_RE presenti nel testo
-  const SERVIZI_LISTA = ['cheratina', 'colorazione', 'colore', 'meches', 'meche', 'balayage', 'riflessante', 'permanente', 'taglio', 'piega', 'piastra', 'shampoo', 'trattamento'];
+  // Estrai servizio: scansiona la lista in ordine di priorità
   let nomeServizio: string | undefined;
   for (const s of SERVIZI_LISTA) {
     if (text.includes(s)) { nomeServizio = s; break; }
   }
 
-  // Estrai note: parole dopo l'ora che non siano connettivi né il parrucchiere né il servizio
-  const CONNETTIVI_RE = /^(e|il|la|lo|le|un|una|con|per|alle?|ore?|di|da|del|della)$/i;
-  const oraIndex = text.search(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/);
-  let afterOra = oraIndex >= 0 ? text.slice(oraIndex).replace(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/, '').trim() : '';
-  if (nomeParrucchiere) afterOra = afterOra.replace(new RegExp(`\\bcon\\s+${nomeParrucchiere}\\b`, 'i'), '').trim();
-  if (nomeServizio) afterOra = afterOra.replace(new RegExp(`\\b${nomeServizio}\\b`, 'i'), '').trim();
-  const noteParts = afterOra.split(/\s+/).filter(w => w.length > 2 && !CONNETTIVI_RE.test(w));
-  const note = noteParts.join(' ').trim() || undefined;
+  // Estrai parrucchiere: parola/e immediatamente dopo "con"
+  // ma solo se NON è un servizio
+  let nomeParrucchiere: string | undefined;
+  const mCon = text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)/i);
+  if (mCon) {
+    // raccoglie fino a 2 token dopo "con", si ferma ai servizi/parole funzione
+    const tokens = mCon[1].trim().split(/\s+/);
+    const parrTokens: string[] = [];
+    for (const tok of tokens) {
+      const t = tok.toLowerCase();
+      if (PAROLE_FUNZIONE.has(t) || SERVIZI_SET.has(t)) break;
+      parrTokens.push(tok);
+      if (parrTokens.length === 2) break; // max 2 token = nome + cognome
+    }
+    if (parrTokens.length > 0) nomeParrucchiere = parrTokens.join(' ');
+  }
+
+  // Costruisci un testo "pulito" rimuovendo le parti già identificate
+  // per isolare più facilmente il nome del cliente
+  let cleaned = text
+    .replace(/\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea)\b/gi, '')
+    .replace(/\bappuntamento\b/gi, '')
+    .replace(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/gi, '')   // rimuovi ora
+    .replace(/\bdomani\b|\boggi\b|\bdopodomani\b|\bieri\b/gi, '')
+    .replace(/\b(lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)\b/gi, '')
+    .replace(/\bprossim[oa]\b/gi, '');
+
+  // rimuovi servizio
+  if (nomeServizio) cleaned = cleaned.replace(new RegExp(`\\b${nomeServizio}\\b`, 'gi'), '');
+
+  // rimuovi "con parrucchiere"
+  if (nomeParrucchiere) {
+    cleaned = cleaned.replace(new RegExp(`\\bcon\\s+${nomeParrucchiere.replace(/\s+/g, '\\s+')}\\b`, 'gi'), '');
+  } else {
+    cleaned = cleaned.replace(/\bcon\b/gi, '');
+  }
+
+  // rimuovi preposizioni e connettivi rimasti
+  cleaned = cleaned.replace(/\b(per|con|alle?|ore?|di|da|del|della|a|in|su|il|la|lo|le|un|una|e|o)\b/gi, '');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  // I token rimasti sono il nome del cliente (fino a 3 parole)
+  const nameTokens = cleaned
+    .split(/\s+/)
+    .filter(t => t.length > 1 && !PAROLE_FUNZIONE.has(t.toLowerCase()) && !SERVIZI_SET.has(t.toLowerCase()) && !/^\d+$/.test(t))
+    .slice(0, 3); // max 3 token = nome + cognome + eventuale secondo cognome
+
+  if (nameTokens.length === 0) return null;
+  const nomeCliente = nameTokens.join(' ');
 
   return {
     tool: 'crea_appuntamento',
@@ -215,7 +207,6 @@ function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null 
       ora,
       ...(nomeParrucchiere ? { nome_parrucchiere: nomeParrucchiere } : {}),
       ...(nomeServizio ? { nome_servizio: nomeServizio } : {}),
-      ...(note ? { note } : {}),
     },
     displayQuestion: raw,
   };
