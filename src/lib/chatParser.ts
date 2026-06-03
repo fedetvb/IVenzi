@@ -173,14 +173,21 @@ function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null 
 
   if (!nomeCliente) return null;
 
-  // Estrai parrucchiere: "con [nome]" — non deve sovrapporsi al nome cliente
+  // Estrai parrucchiere: "con [nome]" — solo il nome proprio (1-2 parole), prima dei servizi/fine frase
+  // I servizi comuni non sono nomi di persona
+  const SERVIZI_RE = /\b(colore|colorazione|taglio|piega|piastra|shampoo|cheratina|meche|balayage|riflessante|permanente|trattamento)\b/i;
   let nomeParrucchiere: string | undefined;
-  const mParr = text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)(?:\s+(?:alle?|ore?|\d|$))/i)
-    || text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)$/i);
+  const mParr = text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)(?:\s+(?:alle?|ore?|\d))/i)
+    || text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+)(?:\s+\w+)?$/i);
   if (mParr) {
-    const candidate = mParr[1].trim();
-    if (candidate.toLowerCase() !== nomeCliente.toLowerCase()) {
-      nomeParrucchiere = candidate;
+    // Prendi solo la prima parola dopo "con" come nome parrucchiere (esclude servizi)
+    const firstWord = mParr[1].trim().split(/\s+/)[0];
+    if (
+      firstWord.length > 2
+      && firstWord.toLowerCase() !== nomeCliente.toLowerCase().split(/\s+/)[0]
+      && !SERVIZI_RE.test(firstWord)
+    ) {
+      nomeParrucchiere = firstWord;
     }
   }
 
