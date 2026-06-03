@@ -98,6 +98,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressModalOpen = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const pointerStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -819,8 +820,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                             e.stopPropagation();
                             if (!isDragging.current) {
                               cancelDrag();
-                              if (confirmDelete === app.id) {
-                                setConfirmDelete(null);
+                              if (suppressModalOpen.current) {
+                                suppressModalOpen.current = false;
                               } else {
                                 setAppModal({ open: true, id: app.id });
                               }
@@ -897,14 +898,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                             {confirmDelete === app.id ? (
                               <>
                                 <button
-                                  onPointerDown={e => e.stopPropagation()}
+                                  onPointerDown={e => { e.stopPropagation(); suppressModalOpen.current = true; }}
                                   onClick={e => { e.stopPropagation(); deleteAppuntamento(app.id); }}
                                   className="bg-red-600 hover:bg-red-700 rounded px-1.5 py-0.5 text-white text-[9px] font-bold"
                                 >
                                   Si
                                 </button>
                                 <button
-                                  onPointerDown={e => e.stopPropagation()}
+                                  onPointerDown={e => { e.stopPropagation(); suppressModalOpen.current = true; }}
                                   onClick={e => { e.stopPropagation(); setConfirmDelete(null); }}
                                   className="bg-black/30 hover:bg-black/50 rounded px-1.5 py-0.5 text-white text-[9px] font-bold"
                                 >
@@ -914,14 +915,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                             ) : (
                               <>
                                 <button
-                                  onPointerDown={e => e.stopPropagation()}
+                                  onPointerDown={e => { e.stopPropagation(); suppressModalOpen.current = true; }}
                                   onClick={e => { e.stopPropagation(); setAppModal({ open: true, id: app.id }); }}
                                   className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
                                 >
                                   <Edit2 size={9} />
                                 </button>
                                 <button
-                                  onPointerDown={e => e.stopPropagation()}
+                                  onPointerDown={e => { e.stopPropagation(); suppressModalOpen.current = true; }}
                                   onClick={e => { e.stopPropagation(); setConfirmDelete(app.id); }}
                                   className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
                                 >
