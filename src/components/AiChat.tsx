@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, Package, ChevronRight, RotateCcw } from 'lucide-react';
+import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, BarChart2, ChevronRight, RotateCcw, Send, Loader2, HelpCircle } from 'lucide-react';
 import { executeTool } from '../lib/geminiTools';
+import { parseQuery, formatToolResult } from '../lib/chatParser';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -18,7 +19,6 @@ interface QuickQuestion {
   label: string;
   tool: string;
   args: Record<string, unknown>;
-  format: (data: unknown) => { text: string; table?: TableData };
 }
 
 interface Category {
@@ -32,61 +32,22 @@ function fmt(n: number) {
   return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 }
 
+// ─── Format functions per domande rapide ─────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatQuick(tool: string, parsed: any): { text: string; table?: TableData } {
+  return formatToolResult(tool, parsed);
+}
+
 const CATEGORIES: Category[] = [
   {
     id: 'agenda',
     label: 'Agenda',
     icon: <Calendar size={15} />,
     questions: [
-      {
-        label: 'Appuntamenti di oggi',
-        tool: 'get_appuntamenti_oggi',
-        args: {},
-        format: (d) => {
-          const data = d as { totale: number; appuntamenti: { ora: string; cliente: string; parrucchiere: string | null; durata_minuti: number; stato: string }[] };
-          if (!data.appuntamenti?.length) return { text: 'Nessun appuntamento oggi.' };
-          return {
-            text: `${data.totale} appuntament${data.totale === 1 ? 'o' : 'i'} oggi:`,
-            table: {
-              headers: ['Ora', 'Cliente', 'Parrucchiere', 'Durata', 'Stato'],
-              rows: data.appuntamenti.map(a => [
-                a.ora,
-                a.cliente,
-                a.parrucchiere || '—',
-                `${a.durata_minuti} min`,
-                a.stato,
-              ]),
-            },
-          };
-        },
-      },
-      {
-        label: 'Appuntamenti questa settimana',
-        tool: 'get_appuntamenti_settimana',
-        args: {},
-        format: (d) => {
-          const data = d as { totale: number; per_giorno: Record<string, { ora: string; cliente: string; parrucchiere: string | null; stato: string }[]> };
-          if (!data.totale) return { text: 'Nessun appuntamento questa settimana.' };
-          const rows: string[][] = [];
-          Object.entries(data.per_giorno).forEach(([giorno, apps]) => {
-            apps.forEach(a => rows.push([giorno, a.ora, a.cliente, a.parrucchiere || '—', a.stato]));
-          });
-          return {
-            text: `${data.totale} appuntament${data.totale === 1 ? 'o' : 'i'} questa settimana:`,
-            table: { headers: ['Giorno', 'Ora', 'Cliente', 'Parrucchiere', 'Stato'], rows },
-          };
-        },
-      },
-      {
-        label: 'Slot liberi oggi',
-        tool: 'get_slot_liberi',
-        args: { data: new Date().toISOString().split('T')[0] },
-        format: (d) => {
-          const data = d as { slot_liberi: string[]; totale_slot_liberi: number };
-          if (!data.totale_slot_liberi) return { text: 'Nessuno slot libero oggi.' };
-          return { text: `${data.totale_slot_liberi} slot liberi oggi: ${data.slot_liberi.join(', ')}` };
-        },
-      },
+      { label: 'Appuntamenti di oggi', tool: 'get_appuntamenti_oggi', args: {} },
+      { label: 'Appuntamenti questa settimana', tool: 'get_appuntamenti_settimana', args: {} },
+      { label: 'Slot liberi oggi', tool: 'get_slot_liberi', args: {} },
     ],
   },
   {
@@ -94,38 +55,8 @@ const CATEGORIES: Category[] = [
     label: 'Clienti',
     icon: <Users size={15} />,
     questions: [
-      {
-        label: 'Clienti assenti da 60 giorni',
-        tool: 'get_clienti_assenti',
-        args: { giorni: 60 },
-        format: (d) => {
-          const data = d as { totale_assenti: number; clienti: { nome: string; telefono: string | null; ultima_visita: string; giorni_assenza: number | null }[] };
-          if (!data.totale_assenti) return { text: 'Nessun cliente assente da 60+ giorni.' };
-          return {
-            text: `${data.totale_assenti} clienti assenti da oltre 60 giorni:`,
-            table: {
-              headers: ['Cliente', 'Telefono', 'Ultima visita', 'Giorni assenza'],
-              rows: data.clienti.map(c => [c.nome, c.telefono || '—', c.ultima_visita, c.giorni_assenza ? `${c.giorni_assenza} gg` : 'Mai venuto']),
-            },
-          };
-        },
-      },
-      {
-        label: 'Clienti assenti da 90 giorni',
-        tool: 'get_clienti_assenti',
-        args: { giorni: 90 },
-        format: (d) => {
-          const data = d as { totale_assenti: number; clienti: { nome: string; telefono: string | null; ultima_visita: string; giorni_assenza: number | null }[] };
-          if (!data.totale_assenti) return { text: 'Nessun cliente assente da 90+ giorni.' };
-          return {
-            text: `${data.totale_assenti} clienti assenti da oltre 90 giorni:`,
-            table: {
-              headers: ['Cliente', 'Telefono', 'Ultima visita', 'Giorni assenza'],
-              rows: data.clienti.map(c => [c.nome, c.telefono || '—', c.ultima_visita, c.giorni_assenza ? `${c.giorni_assenza} gg` : 'Mai venuto']),
-            },
-          };
-        },
-      },
+      { label: 'Clienti assenti da 60 giorni', tool: 'get_clienti_assenti', args: { giorni: 60 } },
+      { label: 'Clienti assenti da 90 giorni', tool: 'get_clienti_assenti', args: { giorni: 90 } },
     ],
   },
   {
@@ -133,42 +64,10 @@ const CATEGORIES: Category[] = [
     label: 'Incassi',
     icon: <TrendingUp size={15} />,
     questions: [
-      {
-        label: 'Incasso di oggi',
-        tool: 'get_statistiche_incassi',
-        args: { periodo: 'oggi' },
-        format: (d) => {
-          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
-          return { text: `Incasso oggi: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
-        },
-      },
-      {
-        label: 'Incasso questa settimana',
-        tool: 'get_statistiche_incassi',
-        args: { periodo: 'settimana' },
-        format: (d) => {
-          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
-          return { text: `Incasso questa settimana: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
-        },
-      },
-      {
-        label: 'Incasso questo mese',
-        tool: 'get_statistiche_incassi',
-        args: { periodo: 'mese' },
-        format: (d) => {
-          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
-          return { text: `Incasso questo mese: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
-        },
-      },
-      {
-        label: "Incasso quest'anno",
-        tool: 'get_statistiche_incassi',
-        args: { periodo: 'anno' },
-        format: (d) => {
-          const data = d as { totale_incassato: string; numero_fiches_convalidate: number; media_fiche: string };
-          return { text: `Incasso quest'anno: ${fmt(parseFloat(data.totale_incassato))}\n${data.numero_fiches_convalidate} fiches convalidate — Media: ${fmt(parseFloat(data.media_fiche))}` };
-        },
-      },
+      { label: 'Incasso di oggi', tool: 'get_statistiche_incassi', args: { periodo: 'oggi' } },
+      { label: 'Incasso questa settimana', tool: 'get_statistiche_incassi', args: { periodo: 'settimana' } },
+      { label: 'Incasso questo mese', tool: 'get_statistiche_incassi', args: { periodo: 'mese' } },
+      { label: "Incasso quest'anno", tool: 'get_statistiche_incassi', args: { periodo: 'anno' } },
     ],
   },
   {
@@ -176,79 +75,28 @@ const CATEGORIES: Category[] = [
     label: 'Servizi',
     icon: <Scissors size={15} />,
     questions: [
-      {
-        label: 'Servizi piu eseguiti questo mese',
-        tool: 'get_statistiche_servizi',
-        args: { periodo: 'mese' },
-        format: (d) => {
-          const data = d as { servizi_piu_eseguiti: { nome: string; quantita: number; totale_euro: string }[] };
-          if (!data.servizi_piu_eseguiti?.length) return { text: 'Nessun servizio registrato questo mese.' };
-          return {
-            text: `Servizi piu eseguiti questo mese:`,
-            table: {
-              headers: ['Servizio', 'Quantita', 'Totale'],
-              rows: data.servizi_piu_eseguiti.map(s => [s.nome, String(s.quantita), fmt(parseFloat(s.totale_euro))]),
-            },
-          };
-        },
-      },
-      {
-        label: "Servizi piu eseguiti quest'anno",
-        tool: 'get_statistiche_servizi',
-        args: { periodo: 'anno' },
-        format: (d) => {
-          const data = d as { servizi_piu_eseguiti: { nome: string; quantita: number; totale_euro: string }[] };
-          if (!data.servizi_piu_eseguiti?.length) return { text: "Nessun servizio registrato quest'anno." };
-          return {
-            text: `Servizi piu eseguiti quest'anno:`,
-            table: {
-              headers: ['Servizio', 'Quantita', 'Totale'],
-              rows: data.servizi_piu_eseguiti.map(s => [s.nome, String(s.quantita), fmt(parseFloat(s.totale_euro))]),
-            },
-          };
-        },
-      },
+      { label: 'Servizi piu eseguiti questo mese', tool: 'get_statistiche_servizi', args: { periodo: 'mese' } },
+      { label: "Servizi piu eseguiti quest'anno", tool: 'get_statistiche_servizi', args: { periodo: 'anno' } },
     ],
   },
   {
     id: 'parrucchieri',
     label: 'Parrucchieri',
-    icon: <Package size={15} />,
+    icon: <BarChart2 size={15} />,
     questions: [
-      {
-        label: 'Statistiche parrucchieri questo mese',
-        tool: 'get_statistiche_parrucchieri',
-        args: { periodo: 'mese' },
-        format: (d) => {
-          const data = d as { parrucchieri: { parrucchiere: string; appuntamenti: number; incasso_totale: string; media_appuntamento: string }[] };
-          if (!data.parrucchieri?.length) return { text: 'Nessun dato parrucchieri questo mese.' };
-          return {
-            text: `Statistiche parrucchieri questo mese:`,
-            table: {
-              headers: ['Parrucchiere', 'Appuntamenti', 'Incasso', 'Media'],
-              rows: data.parrucchieri.map(p => [p.parrucchiere, String(p.appuntamenti), fmt(parseFloat(p.incasso_totale)), fmt(parseFloat(p.media_appuntamento))]),
-            },
-          };
-        },
-      },
-      {
-        label: "Statistiche parrucchieri quest'anno",
-        tool: 'get_statistiche_parrucchieri',
-        args: { periodo: 'anno' },
-        format: (d) => {
-          const data = d as { parrucchieri: { parrucchiere: string; appuntamenti: number; incasso_totale: string; media_appuntamento: string }[] };
-          if (!data.parrucchieri?.length) return { text: "Nessun dato parrucchieri quest'anno." };
-          return {
-            text: `Statistiche parrucchieri quest'anno:`,
-            table: {
-              headers: ['Parrucchiere', 'Appuntamenti', 'Incasso', 'Media'],
-              rows: data.parrucchieri.map(p => [p.parrucchiere, String(p.appuntamenti), fmt(parseFloat(p.incasso_totale)), fmt(parseFloat(p.media_appuntamento))]),
-            },
-          };
-        },
-      },
+      { label: 'Statistiche parrucchieri questo mese', tool: 'get_statistiche_parrucchieri', args: { periodo: 'mese' } },
+      { label: "Statistiche parrucchieri quest'anno", tool: 'get_statistiche_parrucchieri', args: { periodo: 'anno' } },
     ],
   },
+];
+
+const SUGGESTIONS = [
+  'Quanti appuntamenti ho domani?',
+  'Incasso di questo mese',
+  'Clienti assenti da 90 giorni',
+  'Servizi piu richiesti',
+  'Cerca Mario Rossi',
+  'Slot liberi oggi',
 ];
 
 export default function AiChat() {
@@ -256,41 +104,45 @@ export default function AiChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Ciao! Seleziona una categoria e scegli una domanda per consultare i dati del salone.',
+      content: 'Ciao! Scrivi una domanda in italiano oppure scegli una categoria qui sotto.',
     },
   ]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (open) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [open, messages]);
 
-  async function askQuestion(q: QuickQuestion) {
+  async function runTool(tool: string, args: Record<string, unknown>, userLabel: string) {
     if (loading) return;
     setLoading(true);
     setActiveCategory(null);
 
-    const userMsg: Message = { role: 'user', content: q.label };
-    setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', loading: true }]);
+    setMessages(prev => [
+      ...prev,
+      { role: 'user', content: userLabel },
+      { role: 'assistant', content: '', loading: true },
+    ]);
 
     try {
-      const raw = await executeTool(q.tool, q.args);
-      const parsed = JSON.parse(raw);
-
-      if (parsed.errore) {
-        setMessages(prev => {
-          const copy = [...prev];
-          copy[copy.length - 1] = { role: 'assistant', content: `Errore: ${parsed.errore}` };
-          return copy;
-        });
-        return;
+      // Slot liberi: inietta data di oggi se mancante
+      if (tool === 'get_slot_liberi' && !args.data) {
+        const today = new Date();
+        args = { ...args, data: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}` };
       }
 
-      const { text, table } = q.format(parsed);
+      const raw = await executeTool(tool, args);
+      const parsed = JSON.parse(raw);
+      const { text, table } = formatQuick(tool, parsed);
+
       setMessages(prev => {
         const copy = [...prev];
         copy[copy.length - 1] = { role: 'assistant', content: text, table };
@@ -308,9 +160,41 @@ export default function AiChat() {
     }
   }
 
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput('');
+    setShowSuggestions(false);
+
+    const intent = parseQuery(text);
+
+    if (!intent) {
+      setMessages(prev => [
+        ...prev,
+        { role: 'user', content: text },
+        {
+          role: 'assistant',
+          content: `Non ho capito la richiesta. Prova a scrivere qualcosa come:\n• "appuntamenti di domani"\n• "incasso di questo mese"\n• "clienti assenti da 60 giorni"\n• "cerca Maria Rossi"\n• "servizi piu eseguiti"`,
+        },
+      ]);
+      return;
+    }
+
+    await runTool(intent.tool, intent.args, text);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }
+
   function resetChat() {
-    setMessages([{ role: 'assistant', content: 'Ciao! Seleziona una categoria e scegli una domanda per consultare i dati del salone.' }]);
+    setMessages([{ role: 'assistant', content: 'Ciao! Scrivi una domanda in italiano oppure scegli una categoria qui sotto.' }]);
     setActiveCategory(null);
+    setInput('');
+    setShowSuggestions(false);
   }
 
   return (
@@ -326,10 +210,10 @@ export default function AiChat() {
 
       {/* Chat panel */}
       <div
-        className={`fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right ${
+        className={`fixed bottom-6 right-6 z-50 w-[440px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col transition-all duration-300 origin-bottom-right ${
           open ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none'
         }`}
-        style={{ height: '600px', maxHeight: 'calc(100vh - 3rem)' }}
+        style={{ height: '640px', maxHeight: 'calc(100vh - 3rem)' }}
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 bg-amber-500 rounded-t-2xl flex-shrink-0">
@@ -337,20 +221,13 @@ export default function AiChat() {
             <MessageSquare size={16} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white">Consulta Dati Salone</p>
-            <p className="text-xs text-amber-100">Domande rapide sul tuo gestionale</p>
+            <p className="text-sm font-bold text-white">Assistente Salone</p>
+            <p className="text-xs text-amber-100">Fai domande sui tuoi dati</p>
           </div>
-          <button
-            onClick={resetChat}
-            className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white"
-            title="Nuova conversazione"
-          >
+          <button onClick={resetChat} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white" title="Nuova conversazione">
             <RotateCcw size={14} />
           </button>
-          <button
-            onClick={() => setOpen(false)}
-            className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white"
-          >
+          <button onClick={() => setOpen(false)} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white">
             <ChevronDown size={16} />
           </button>
         </div>
@@ -359,24 +236,11 @@ export default function AiChat() {
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
           {messages.map((msg, i) => (
             <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                  msg.role === 'user' ? 'bg-stone-800' : 'bg-amber-100'
-                }`}
-              >
-                {msg.role === 'user'
-                  ? <User size={13} className="text-white" />
-                  : <Bot size={13} className="text-amber-600" />
-                }
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${msg.role === 'user' ? 'bg-stone-800' : 'bg-amber-100'}`}>
+                {msg.role === 'user' ? <User size={13} className="text-white" /> : <Bot size={13} className="text-amber-600" />}
               </div>
-              <div className={`max-w-[90%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-                <div
-                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-stone-900 text-white rounded-tr-sm'
-                      : 'bg-stone-100 text-stone-800 rounded-tl-sm'
-                  }`}
-                >
+              <div className={`max-w-[90%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${msg.role === 'user' ? 'bg-stone-900 text-white rounded-tr-sm' : 'bg-stone-100 text-stone-800 rounded-tl-sm'}`}>
                   {msg.loading ? (
                     <div className="flex items-center gap-1.5 py-0.5">
                       <div className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -415,21 +279,76 @@ export default function AiChat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Category picker / Questions */}
-        <div className="flex-shrink-0 border-t border-stone-100 px-4 py-3 space-y-2">
+        {/* Suggestions dropdown */}
+        {showSuggestions && (
+          <div className="mx-4 mb-1 bg-white border border-stone-200 rounded-xl shadow-lg overflow-hidden flex-shrink-0">
+            <div className="px-3 py-1.5 border-b border-stone-100">
+              <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">Esempi di domande</p>
+            </div>
+            {SUGGESTIONS.map(s => (
+              <button
+                key={s}
+                onMouseDown={e => { e.preventDefault(); setInput(s); setShowSuggestions(false); setTimeout(() => inputRef.current?.focus(), 50); }}
+                className="w-full text-left px-3 py-2 text-xs text-stone-700 hover:bg-amber-50 hover:text-amber-700 transition-colors border-b border-stone-50 last:border-0"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="px-4 pb-3 pt-2 flex-shrink-0 border-t border-stone-100">
+          <div className="flex items-end gap-2 bg-stone-100 rounded-xl px-3 py-2">
+            <button
+              onClick={() => setShowSuggestions(v => !v)}
+              className={`p-1 rounded-lg transition-colors flex-shrink-0 mb-0.5 ${showSuggestions ? 'text-amber-600 bg-amber-100' : 'text-stone-400 hover:text-stone-600'}`}
+              title="Esempi di domande"
+            >
+              <HelpCircle size={15} />
+            </button>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => setShowSuggestions(false)}
+              placeholder="Es: quanti appuntamenti ho domani?"
+              rows={1}
+              disabled={loading}
+              className="flex-1 bg-transparent text-sm text-stone-800 placeholder:text-stone-400 resize-none outline-none min-h-[24px] max-h-[80px] leading-6 disabled:opacity-50"
+              onInput={e => {
+                const t = e.target as HTMLTextAreaElement;
+                t.style.height = 'auto';
+                t.style.height = `${Math.min(t.scrollHeight, 80)}px`;
+              }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || loading}
+              className="w-8 h-8 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            </button>
+          </div>
+          <p className="text-center text-[10px] text-stone-300 mt-1">Invio con Invio &bull; A capo con Shift+Invio</p>
+        </div>
+
+        {/* Category picker */}
+        <div className="flex-shrink-0 border-t border-stone-100 px-4 pb-3 pt-2 space-y-2">
           {activeCategory === null ? (
             <>
-              <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide">Scegli categoria</p>
-              <div className="grid grid-cols-3 gap-2">
+              <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-wide">Oppure scegli categoria</p>
+              <div className="grid grid-cols-5 gap-1.5">
                 {CATEGORIES.map(cat => (
                   <button
                     key={cat.id}
                     onClick={() => setActiveCategory(cat.id)}
                     disabled={loading}
-                    className="flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-xl bg-stone-50 hover:bg-amber-50 hover:text-amber-700 border border-stone-200 hover:border-amber-300 text-stone-600 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex flex-col items-center gap-1 px-1 py-2 rounded-xl bg-stone-50 hover:bg-amber-50 hover:text-amber-700 border border-stone-200 hover:border-amber-300 text-stone-600 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="text-current">{cat.icon}</span>
-                    <span className="text-[11px] font-medium leading-tight text-center">{cat.label}</span>
+                    <span className="text-[10px] font-medium leading-tight text-center">{cat.label}</span>
                   </button>
                 ))}
               </div>
@@ -437,25 +356,20 @@ export default function AiChat() {
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setActiveCategory(null)}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700 transition-colors"
-                >
+                <button onClick={() => setActiveCategory(null)} className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700 transition-colors">
                   <ChevronRight size={12} className="rotate-180" />
                   Categorie
                 </button>
                 <span className="text-[11px] text-stone-400">/</span>
-                <span className="text-[11px] font-semibold text-stone-600">
-                  {CATEGORIES.find(c => c.id === activeCategory)?.label}
-                </span>
+                <span className="text-[11px] font-semibold text-stone-600">{CATEGORIES.find(c => c.id === activeCategory)?.label}</span>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {CATEGORIES.find(c => c.id === activeCategory)?.questions.map((q, qi) => (
                   <button
                     key={qi}
-                    onClick={() => askQuestion(q)}
+                    onClick={() => runTool(q.tool, q.args, q.label)}
                     disabled={loading}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-stone-50 hover:bg-amber-50 hover:text-amber-700 border border-stone-200 hover:border-amber-300 text-stone-700 text-xs font-medium transition-all duration-150 text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-stone-50 hover:bg-amber-50 hover:text-amber-700 border border-stone-200 hover:border-amber-300 text-stone-700 text-xs font-medium transition-all duration-150 text-left disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span>{q.label}</span>
                     <ChevronRight size={13} className="flex-shrink-0 text-stone-400" />
@@ -469,3 +383,6 @@ export default function AiChat() {
     </>
   );
 }
+
+// keep fmt in scope to avoid unused-import warning
+void fmt;
