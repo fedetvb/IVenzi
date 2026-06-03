@@ -4,6 +4,7 @@ import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Sci
 import { executeTool } from '../lib/geminiTools';
 import { parseQuery, formatToolResult } from '../lib/chatParser';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
 import AppuntamentoModal from './AppuntamentoModal';
 
 interface Parrucchiere {
@@ -118,6 +119,7 @@ const SUGGESTIONS = [
 ];
 
 export default function AiChat() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -170,7 +172,7 @@ export default function AiChat() {
         args = { ...args, data: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}` };
       }
 
-      const raw = await executeTool(tool, args);
+      const raw = await executeTool(tool, args, user?.id);
       const parsed = JSON.parse(raw);
       const { text, table } = formatQuick(tool, parsed);
 

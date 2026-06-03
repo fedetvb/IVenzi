@@ -201,7 +201,7 @@ function getDateRange(periodo: string): { from: string; to: string } {
   return { from: `${y}-${m}-01`, to: `${y}-${m}-${lastDay}` };
 }
 
-export async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
+export async function executeTool(name: string, args: Record<string, unknown>, userId?: string): Promise<string> {
   try {
     switch (name) {
       case 'get_appuntamenti_oggi':
@@ -209,7 +209,7 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
       case 'get_appuntamenti_settimana':
         return await getAppuntamentiSettimana(args);
       case 'crea_appuntamento':
-        return await creaAppuntamento(args);
+        return await creaAppuntamento(args, userId);
       case 'get_statistiche_incassi':
         return await getStatisticheIncassi(args);
       case 'get_statistiche_servizi':
@@ -316,7 +316,7 @@ async function getAppuntamentiSettimana(args: Record<string, unknown>): Promise<
   return JSON.stringify({ settimana_dal: dataInizio, totale: apps?.length || 0, per_giorno: byDay });
 }
 
-async function creaAppuntamento(args: Record<string, unknown>): Promise<string> {
+async function creaAppuntamento(args: Record<string, unknown>, userId?: string): Promise<string> {
   const { nome_cliente, data, ora, durata_minuti = 60, nome_parrucchiere, note } = args as {
     nome_cliente: string; data: string; ora: string;
     durata_minuti?: number; nome_parrucchiere?: string; note?: string;
@@ -369,6 +369,7 @@ async function creaAppuntamento(args: Record<string, unknown>): Promise<string> 
       stato: 'confermato',
       note: note || '',
       prezzo_totale: 0,
+      ...(userId ? { user_id: userId } : {}),
     })
     .select('id')
     .single();
