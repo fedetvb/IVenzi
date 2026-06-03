@@ -62,6 +62,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
   const [clientiConCarte, setClientiConCarte] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [clickedDate, setClickedDate] = useState<Date | undefined>();
@@ -146,8 +147,8 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   }, []);
 
   async function deleteAppuntamento(id: string) {
-    if (!confirm('Eliminare questo appuntamento?')) return;
-    await supabase.from('appuntamenti').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await supabase.from('appuntamenti').delete().eq('id', id);
+    setConfirmDelete(null);
     loadAppuntamenti();
   }
 
@@ -304,7 +305,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
                         return (
                           <div
                             key={app.id}
-                            onClick={e => { e.stopPropagation(); openEdit(app.id); }}
+                            onClick={e => { e.stopPropagation(); if (confirmDelete === app.id) { setConfirmDelete(null); } else { openEdit(app.id); } }}
                             className={`${colorClass} text-white rounded-md px-2 py-1 text-xs mb-1 cursor-pointer group/app relative ${isCancellato ? 'opacity-70' : ''}`}
                             style={isCancellato ? { backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.15) 5px, rgba(0,0,0,0.15) 7px)' } : undefined}
                           >
@@ -317,18 +318,37 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
                                 <p className="opacity-80">{new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · {app.durata_minuti}min</p>
                               </div>
                               <div className="flex gap-0.5 opacity-0 group-hover/app:opacity-100 transition-opacity flex-shrink-0">
-                                <button
-                                  onClick={e => { e.stopPropagation(); openEdit(app.id); }}
-                                  className="hover:bg-white/20 rounded p-0.5"
-                                >
-                                  <Edit2 size={10} />
-                                </button>
-                                <button
-                                  onClick={e => { e.stopPropagation(); deleteAppuntamento(app.id); }}
-                                  className="hover:bg-white/20 rounded p-0.5"
-                                >
-                                  <Trash2 size={10} />
-                                </button>
+                                {confirmDelete === app.id ? (
+                                  <>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); deleteAppuntamento(app.id); }}
+                                      className="bg-red-600 hover:bg-red-700 rounded px-1.5 py-0.5 text-white text-[9px] font-bold"
+                                    >
+                                      Si
+                                    </button>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setConfirmDelete(null); }}
+                                      className="hover:bg-white/20 rounded px-1.5 py-0.5 text-[9px] font-bold"
+                                    >
+                                      No
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); openEdit(app.id); }}
+                                      className="hover:bg-white/20 rounded p-0.5"
+                                    >
+                                      <Edit2 size={10} />
+                                    </button>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setConfirmDelete(app.id); }}
+                                      className="hover:bg-white/20 rounded p-0.5"
+                                    >
+                                      <Trash2 size={10} />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
