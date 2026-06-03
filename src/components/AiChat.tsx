@@ -406,6 +406,7 @@ export default function AiChat() {
     setAwaitingParrucchiere(null);
     setAppModal(null);
     setStatsGate(null);
+    sessionStorage.removeItem(STATS_SESSION_KEY);
   }
 
   return (
