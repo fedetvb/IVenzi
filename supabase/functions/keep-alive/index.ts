@@ -18,8 +18,6 @@ Deno.serve(async (req: Request) => {
 
     const now = new Date().toISOString();
 
-    // Determine if called from cron (no Authorization header with user token)
-    // The cron job calls without a user JWT, manual calls come from the frontend with anon key
     const authHeader = req.headers.get("authorization") || "";
     const isCron = !authHeader || authHeader.includes(serviceKey);
     const tipo = isCron ? "automatico" : "manuale";
