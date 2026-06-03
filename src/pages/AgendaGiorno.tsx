@@ -74,6 +74,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [editingMsg, setEditingMsg] = useState(false);
   const [msgDraft, setMsgDraft] = useState('');
   const [savingMsg, setSavingMsg] = useState(false);
+  const [compleanniDismissed, setCompleanniDismissed] = useState(false);
   const msgInputRef = useRef<HTMLTextAreaElement>(null);
   const [loading, setLoading] = useState(true);
   const [assenzeMap, setAssenzeMap] = useState<Map<string, string | null>>(new Map());
@@ -169,6 +170,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       if (mm === dayMM && dd === dayDD) uniciBirthday.set(c.id, { nome: c.nome, cognome: c.cognome, telefono: c.telefono || undefined });
     }
     setCompleanni(Array.from(uniciBirthday.values()));
+    setCompleanniDismissed(false);
     setLoading(false);
   }, [date]);
 
@@ -395,20 +397,29 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-3 py-1.5 md:px-4 md:py-1.5 bg-white border-b border-stone-200 flex-shrink-0">
-        {compleanni.length > 0 && (
-          <div className="mb-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 space-y-2.5">
+        {compleanni.length > 0 && !compleanniDismissed && (
+          <div className="mb-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Cake size={15} className="text-rose-500 flex-shrink-0" />
+                <Cake size={14} className="text-rose-500 flex-shrink-0" />
                 <p className="text-sm text-rose-700 font-semibold">Oggi è il compleanno di:</p>
               </div>
-              <button
-                onClick={openEditMsg}
-                className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-600 transition-colors"
-              >
-                <Pencil size={11} />
-                <span>Modifica messaggio</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={openEditMsg}
+                  className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-600 transition-colors"
+                >
+                  <Pencil size={11} />
+                  <span>Modifica messaggio</span>
+                </button>
+                <button
+                  onClick={() => setCompleanniDismissed(true)}
+                  className="p-0.5 rounded text-rose-300 hover:text-rose-600 hover:bg-rose-100 transition-colors"
+                  title="Chiudi"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
