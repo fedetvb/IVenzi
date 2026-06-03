@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check, Settings, ZoomIn, ZoomOut, Type } from 'lucide-react';
 import { supabase, type Appuntamento, type Parrucchiere } from '../lib/supabase';
-import AppuntamentoModal from '../components/AppuntamentoModal';
 import MultiBookModal from '../components/MultiBookModal';
 
 const SLOT_DURATION = 15;
@@ -1050,8 +1049,9 @@ export default function AgendaGiorno({ date, onBack }: Props) {
         />
       )}
 
-      {appModal.open && (
-        <AppuntamentoModal
+      {appModal.open && appModal.id && (
+        <MultiBookModal
+          dataIniziale={date}
           appuntamentoId={appModal.id}
           onClose={() => setAppModal({ open: false, id: null })}
           onSaved={() => { setAppModal({ open: false, id: null }); load(); }}

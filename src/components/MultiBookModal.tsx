@@ -14,6 +14,7 @@ interface ServizioRiga {
 
 interface Props {
   dataIniziale: Date;
+  appuntamentoId?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -31,7 +32,7 @@ function timeToDate(base: Date, time: string): Date {
   return d;
 }
 
-export default function MultiBookModal({ dataIniziale, onClose, onSaved }: Props) {
+export default function MultiBookModal({ dataIniziale, appuntamentoId, onClose, onSaved }: Props) {
   const { user } = useAuth();
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [catalogo, setCatalogo] = useState<TrattamentoCatalogo[]>([]);
@@ -75,9 +76,66 @@ export default function MultiBookModal({ dataIniziale, onClose, onSaved }: Props
       setParrucchieri((parr || []) as Parrucchiere[]);
       setCatalogo((cat || []) as TrattamentoCatalogo[]);
       setClienti((cl || []) as Cliente[]);
+
+      if (appuntamentoId) {
+        const { data: app } = await supabase
+          .from('appuntamenti')
+          .select('*, clienti(id, nome, cognome), appuntamento_trattamenti(*)')
+          .eq('id', appuntamentoId)
+          .maybeSingle();
+        if (app) {
+          const d = new Date(app.data_ora);
+          const dataStr = localDateStr(d);
+          const oraStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+          setDataSelezionata(dataStr);
+          setOraSelezionata(oraStr);
+          if (app.clienti) {
+            const c = app.clienti as { id: string; nome: string; cognome: string };
+            setClienteId(c.id);
+            setClienteInput(`${c.nome} ${c.cognome}`);
+          }
+          if (app.stato) setStato(app.stato as StatoAppuntamento);
+          if (app.note) setNote(app.note);
+          const tratt = (app.appuntamento_trattamenti || []) as {
+            trattamento_id: string; nome_trattamento: string; prezzo: number; durataMinuti?: number;
+          }[];
+          if (tratt.length > 0) {
+            // Per ogni trattamento, recupera durata dal catalogo
+            const catData = (cat || []) as TrattamentoCatalogo[];
+            let cursor = oraStr;
+            const rows: ServizioRiga[] = tratt.map(t => {
+              const catItem = catData.find(c => c.id === t.trattamento_id);
+              const durata = catItem?.durata_minuti ?? app.durata_minuti ?? 60;
+              const start = cursor;
+              cursor = addMinutes(cursor, durata);
+              return {
+                parrucchiereId: app.parrucchiere_id ?? '',
+                trattamentoId: t.trattamento_id ?? '',
+                nomeTrattamento: t.nome_trattamento,
+                prezzo: t.prezzo,
+                durataMinuti: durata,
+                orarioInizio: start,
+              };
+            });
+            setRighe(rows);
+            setOpenParr(rows.map(() => false));
+            setOpenServ(rows.map(() => false));
+          } else {
+            // nessun trattamento — popola almeno parrucchiere e durata
+            setRighe([{
+              parrucchiereId: app.parrucchiere_id ?? '',
+              trattamentoId: '',
+              nomeTrattamento: '',
+              prezzo: 0,
+              durataMinuti: app.durata_minuti ?? 60,
+              orarioInizio: oraStr,
+            }]);
+          }
+        }
+      }
     }
     load();
-  }, []);
+  }, [appuntamentoId]);
 
   function recalcOrari(rows: ServizioRiga[], base: string = orarioBase): ServizioRiga[] {
     let cursor = base;
@@ -169,12 +227,11 @@ export default function MultiBookModal({ dataIniziale, onClose, onSaved }: Props
     setSaving(true);
     setError('');
 
-    // Se non è stato selezionato un cliente dall'archivio, ne crea uno nuovo
+    // Risolvi cliente
     let resolvedClienteId = clienteId;
     if (!resolvedClienteId) {
       const parts = clienteInput.trim().split(/\s+/);
       const nome = parts[0] ?? '';
-      // Se l'ultimo token è un numero di telefono (cifre, +, spazi) usalo come tel
       const lastPart = parts[parts.length - 1] ?? '';
       const isPhone = parts.length >= 3 && /^[+\d]{6,15}$/.test(lastPart);
       const cognome = isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' ');
@@ -192,43 +249,67 @@ export default function MultiBookModal({ dataIniziale, onClose, onSaved }: Props
       resolvedClienteId = nuovoCliente.id;
     }
 
-    // Group righe by parrucchiere — each parrucchiere gets one appointment
-    // containing all services assigned to them, starting at the earliest slot
-    const byParr: Record<string, ServizioRiga[]> = {};
-    for (const r of righe) {
-      if (!byParr[r.parrucchiereId]) byParr[r.parrucchiereId] = [];
-      byParr[r.parrucchiereId].push(r);
-    }
-
-    for (const [parrId, rows] of Object.entries(byParr)) {
-      // earliest start time among the rows for this parrucchiere
-      const firstRow = rows.reduce((a, b) => a.orarioInizio < b.orarioInizio ? a : b);
+    if (appuntamentoId) {
+      // MODIFICA: aggiorna l'appuntamento esistente
+      const firstRow = righe.reduce((a, b) => a.orarioInizio < b.orarioInizio ? a : b);
       const baseDate = new Date(dataSelezionata + 'T00:00:00');
       const data_ora = timeToDate(baseDate, firstRow.orarioInizio).toISOString();
-      const durata_totale = rows.reduce((s, r) => s + r.durataMinuti, 0);
-      const prezzo_totale = rows.reduce((s, r) => s + r.prezzo, 0);
-
-      const { data: app } = await supabase.from('appuntamenti').insert({
+      const durata_totale = righe.reduce((s, r) => s + r.durataMinuti, 0);
+      const prezzo_totale = righe.reduce((s, r) => s + r.prezzo, 0);
+      await supabase.from('appuntamenti').update({
         cliente_id: resolvedClienteId,
-        parrucchiere_id: parrId,
+        parrucchiere_id: righe[0]?.parrucchiereId || null,
         data_ora,
         durata_minuti: durata_totale,
         stato,
         note,
         prezzo_totale,
-        user_id: user?.id,
-      }).select('id').single();
-
-      if (app?.id) {
-        await supabase.from('appuntamento_trattamenti').insert(
-          rows.map(r => ({
-            appuntamento_id: app.id,
-            trattamento_id: r.trattamentoId,
-            nome_trattamento: r.nomeTrattamento,
-            prezzo: r.prezzo,
-            user_id: user?.id,
-          }))
-        );
+        updated_at: new Date().toISOString(),
+      }).eq('id', appuntamentoId);
+      await supabase.from('appuntamento_trattamenti').delete().eq('appuntamento_id', appuntamentoId);
+      await supabase.from('appuntamento_trattamenti').insert(
+        righe.map(r => ({
+          appuntamento_id: appuntamentoId,
+          trattamento_id: r.trattamentoId || null,
+          nome_trattamento: r.nomeTrattamento,
+          prezzo: r.prezzo,
+          user_id: user?.id,
+        }))
+      );
+    } else {
+      // NUOVO: raggruppa per parrucchiere
+      const byParr: Record<string, ServizioRiga[]> = {};
+      for (const r of righe) {
+        if (!byParr[r.parrucchiereId]) byParr[r.parrucchiereId] = [];
+        byParr[r.parrucchiereId].push(r);
+      }
+      for (const [parrId, rows] of Object.entries(byParr)) {
+        const firstRow = rows.reduce((a, b) => a.orarioInizio < b.orarioInizio ? a : b);
+        const baseDate = new Date(dataSelezionata + 'T00:00:00');
+        const data_ora = timeToDate(baseDate, firstRow.orarioInizio).toISOString();
+        const durata_totale = rows.reduce((s, r) => s + r.durataMinuti, 0);
+        const prezzo_totale = rows.reduce((s, r) => s + r.prezzo, 0);
+        const { data: app } = await supabase.from('appuntamenti').insert({
+          cliente_id: resolvedClienteId,
+          parrucchiere_id: parrId,
+          data_ora,
+          durata_minuti: durata_totale,
+          stato,
+          note,
+          prezzo_totale,
+          user_id: user?.id,
+        }).select('id').single();
+        if (app?.id) {
+          await supabase.from('appuntamento_trattamenti').insert(
+            rows.map(r => ({
+              appuntamento_id: app.id,
+              trattamento_id: r.trattamentoId,
+              nome_trattamento: r.nomeTrattamento,
+              prezzo: r.prezzo,
+              user_id: user?.id,
+            }))
+          );
+        }
       }
     }
 
@@ -247,7 +328,7 @@ export default function MultiBookModal({ dataIniziale, onClose, onSaved }: Props
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 flex-shrink-0">
           <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-stone-800 text-lg">Nuovo Appuntamento</h2>
+            <h2 className="font-bold text-stone-800 text-lg">{appuntamentoId ? 'Modifica Appuntamento' : 'Nuovo Appuntamento'}</h2>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <input
                 type="date"
