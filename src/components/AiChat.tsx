@@ -239,7 +239,7 @@ export default function AiChat() {
       return;
     }
 
-    const intent = parseQuery(text);
+    const intent = parseQuery(text, parrucchieri.map(p => p.nome));
 
     if (!intent && /assent|non vengo|non vengono|persi|mancant/i.test(text) && !/\d/.test(text)) {
       setAwaitingGiorni(true);

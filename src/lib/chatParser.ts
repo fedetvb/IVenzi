@@ -129,7 +129,7 @@ const PAROLE_FUNZIONE = new Set([
   'prossimo', 'prossima', 'questo', 'questa', 'che',
 ]);
 
-function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null {
+function parseFissaAppuntamento(raw: string, text: string, parrucchieriNomi: string[] = []): ParsedIntent | null {
   const KW_VERBI = /\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea)\b/i;
   const hasVerbo = KW_VERBI.test(text);
   const hasAppuntamento = text.includes('appuntamento');
@@ -149,21 +149,36 @@ function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null 
     if (text.includes(s)) { nomeServizio = s; break; }
   }
 
-  // Estrai parrucchiere: parola/e immediatamente dopo "con"
-  // ma solo se NON è un servizio
+  // Estrai parrucchiere: prima cerca match con lista reale parrucchieri
   let nomeParrucchiere: string | undefined;
-  const mCon = text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)/i);
-  if (mCon) {
-    // raccoglie fino a 2 token dopo "con", si ferma ai servizi/parole funzione
-    const tokens = mCon[1].trim().split(/\s+/);
-    const parrTokens: string[] = [];
-    for (const tok of tokens) {
-      const t = tok.toLowerCase();
-      if (PAROLE_FUNZIONE.has(t) || SERVIZI_SET.has(t)) break;
-      parrTokens.push(tok);
-      if (parrTokens.length === 2) break; // max 2 token = nome + cognome
+
+  // Normalizza nomi parrucchieri (rimuovi accenti per confronto)
+  const parrNorm = parrucchieriNomi.map(n => ({
+    original: n,
+    norm: n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+  }));
+
+  // Cerca il match più lungo nel testo (es. "mario rossi" prima di "mario")
+  const parrMatch = parrNorm
+    .filter(p => text.includes(p.norm))
+    .sort((a, b) => b.norm.length - a.norm.length)[0];
+
+  if (parrMatch) {
+    nomeParrucchiere = parrMatch.original;
+  } else {
+    // Fallback: parola immediatamente dopo "con" se non è un servizio
+    const mCon = text.match(/\bcon\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)/i);
+    if (mCon) {
+      const tokens = mCon[1].trim().split(/\s+/);
+      const parrTokens: string[] = [];
+      for (const tok of tokens) {
+        const t = tok.toLowerCase();
+        if (PAROLE_FUNZIONE.has(t) || SERVIZI_SET.has(t)) break;
+        parrTokens.push(tok);
+        if (parrTokens.length === 2) break;
+      }
+      if (parrTokens.length > 0) nomeParrucchiere = parrTokens.join(' ');
     }
-    if (parrTokens.length > 0) nomeParrucchiere = parrTokens.join(' ');
   }
 
   // Costruisci un testo "pulito" rimuovendo tutto tranne i nomi propri
@@ -177,55 +192,25 @@ function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null 
 
   if (nomeServizio) cleaned = cleaned.replace(new RegExp(`\\b${nomeServizio}\\b`, 'gi'), '');
 
-  // Rimuovi "con + parrucchiere già trovato" oppure solo "con"
+  // Rimuovi il parrucchiere (con o senza "con") dal testo pulito
   if (nomeParrucchiere) {
-    cleaned = cleaned.replace(new RegExp(`\\bcon\\s+${nomeParrucchiere.replace(/\s+/g, '\\s+')}\\b`, 'gi'), '');
+    const parrNormForRemoval = nomeParrucchiere.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    cleaned = cleaned.replace(new RegExp(`\\bcon\\s+${parrNormForRemoval.replace(/\s+/g, '\\s+')}\\b`, 'gi'), '');
+    cleaned = cleaned.replace(new RegExp(`\\b${parrNormForRemoval.replace(/\s+/g, '\\s+')}\\b`, 'gi'), '');
   } else {
-    // Rimuovi "con" ma conserva le parole dopo (potrebbero essere il parrucchiere senza "con" esplicito)
     cleaned = cleaned.replace(/\bcon\b/gi, '');
   }
 
   cleaned = cleaned.replace(/\b(per|alle?|ore?|di|da|del|della|a|in|su|il|la|lo|le|un|una|e|o)\b/gi, '');
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
-  // Token rimasti = nomi propri (cliente + eventuale parrucchiere senza "con")
+  // I token rimasti sono il nome cliente
   const nameTokens = cleaned
     .split(/\s+/)
     .filter(t => t.length > 1 && !PAROLE_FUNZIONE.has(t.toLowerCase()) && !SERVIZI_SET.has(t.toLowerCase()) && !/^\d+$/.test(t));
 
   if (nameTokens.length === 0) return null;
-
-  // Euristca: se c'è un token isolato (solo nome, senza cognome accanto) separato da
-  // nome+cognome, è probabilmente il parrucchiere.
-  // Strategia: raggruppa i token in "blocchi contigui" nell'originale.
-  // Token 1 parola da solo lontano dagli altri → parrucchiere candidato.
-  // Caso semplice: [nome, cognome, nome_singolo] → cliente = primi 2, parr = ultimo
-  // Caso: [nome_singolo, nome, cognome] → cliente = ultimi 2, parr = primo
-  let nomeCliente: string;
-  if (!nomeParrucchiere && nameTokens.length >= 3) {
-    // Trova la posizione di ogni token nel testo originale
-    const positions = nameTokens.map(tok => text.indexOf(tok.toLowerCase()));
-    // Calcola gap tra token consecutivi
-    const gaps = positions.slice(1).map((pos, i) => pos - positions[i] - nameTokens[i].length);
-    // Il token più isolato (gap più grande da entrambi i lati) è il parrucchiere
-    const scores = nameTokens.map((_, i) => {
-      const before = i === 0 ? 999 : gaps[i - 1];
-      const after = i === nameTokens.length - 1 ? 999 : gaps[i];
-      return Math.min(before, after);
-    });
-    const maxScore = Math.max(...scores);
-    // Usa il token isolato come parrucchiere solo se il gap è significativo (>3 chars)
-    if (maxScore > 3) {
-      const parrIdx = scores.indexOf(maxScore);
-      nomeParrucchiere = nameTokens[parrIdx];
-      const clientTokens = nameTokens.filter((_, i) => i !== parrIdx).slice(0, 3);
-      nomeCliente = clientTokens.join(' ');
-    } else {
-      nomeCliente = nameTokens.slice(0, 3).join(' ');
-    }
-  } else {
-    nomeCliente = nameTokens.slice(0, 3).join(' ');
-  }
+  const nomeCliente = nameTokens.slice(0, 3).join(' ');
 
   return {
     tool: 'crea_appuntamento',
@@ -268,7 +253,7 @@ function resolvePeriodo(text: string): PeriodoBase {
 
 // ─── Main parser ──────────────────────────────────────────────────────────────
 
-export function parseQuery(raw: string): ParsedIntent | null {
+export function parseQuery(raw: string, parrucchieriNomi: string[] = []): ParsedIntent | null {
   // normalizza: minuscolo, rimuovi punteggiatura superflua
   const text = raw
     .toLowerCase()
@@ -278,7 +263,7 @@ export function parseQuery(raw: string): ParsedIntent | null {
     .trim();
 
   // ── 0. Fissa / prendi appuntamento (massima priorità) ────────────────────
-  const intentFissa = parseFissaAppuntamento(raw, text);
+  const intentFissa = parseFissaAppuntamento(raw, text, parrucchieriNomi);
   if (intentFissa) return intentFissa;
 
   // ── 1. Cerca cliente (alta priorità) ──────────────────────────────────────
