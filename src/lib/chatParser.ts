@@ -95,6 +95,81 @@ function extractGiorni(text: string, def = 60): number {
   return m ? parseInt(m[1], 10) : def;
 }
 
+function extractOra(text: string): string | null {
+  // "alle 10", "alle 10:30", "10:30", "ore 10"
+  const m = text.match(/(?:alle?|ore?)\s*(\d{1,2})(?::(\d{2}))?/) || text.match(/\b(\d{1,2}):(\d{2})\b/);
+  if (!m) return null;
+  const h = m[1].padStart(2, '0');
+  const min = (m[2] || '00').padStart(2, '0');
+  return `${h}:${min}`;
+}
+
+function resolveDateText(text: string): string {
+  const dataEsplicita = parseDataItaliana(text);
+  if (dataEsplicita) return dataEsplicita;
+  if (has(text, 'dopodomani')) return dopodomani();
+  if (has(text, 'domani')) return domani();
+  if (has(text, 'oggi')) return oggi();
+  for (const [nome] of Object.entries(GIORNI_SETTIMANA)) {
+    if (text.includes(nome)) return dateFromGiorno(nome, has(text, 'prossim'));
+  }
+  return oggi();
+}
+
+function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null {
+  const KW_FISSA = ['fissa ', 'fissiamo', 'prenota ', 'prenotare', 'prendi appuntamento', 'metti appuntamento',
+    'segna appuntamento', 'crea appuntamento', 'nuovo appuntamento per ', 'appuntamento per ', 'appuntamento a '];
+  if (!KW_FISSA.some(k => text.includes(k))) return null;
+
+  // Estrai ora
+  const ora = extractOra(text);
+  if (!ora) return null;
+
+  // Estrai data
+  const data = resolveDateText(text);
+
+  // Estrai nome cliente: pattern "a [nome]" / "per [nome]" nella frase originale (raw)
+  // Cerca "a/per NOME" prima di parole chiave come "per domani", "con", "alle"
+  let nomeCliente: string | null = null;
+  const rawLower = raw.toLowerCase();
+  // pattern: fissa appuntamento a/per NOME ... con / per [data] / alle
+  const mCliente = rawLower.match(
+    /(?:appuntamento\s+(?:a|per|di)\s+)([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)??)(?:\s+(?:per|con|alle?|ore?|domani|oggi|dopodomani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|\d))/i
+  );
+  if (mCliente) {
+    nomeCliente = mCliente[1].trim();
+  } else {
+    // fallback: "fissa a [nome]" / "prenota [nome]"
+    const mAlt = rawLower.match(/(?:fissa|prenota|prendi)\s+(?:appuntamento\s+)?(?:a|per)?\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)??)(?:\s+(?:per|con|alle?|ore?|domani|oggi|\d))/i);
+    if (mAlt) nomeCliente = mAlt[1].trim();
+  }
+  if (!nomeCliente) return null;
+
+  // Estrai parrucchiere: "con [nome]"
+  let nomeParrucchiere: string | undefined;
+  const mParr = rawLower.match(/con\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)??)(?:\s+(?:alle?|ore?|\d|per|un |la |lo |il ))/i)
+    || rawLower.match(/con\s+([a-zA-ZÀ-ÿ']+(?:\s+[a-zA-ZÀ-ÿ']+)?)$/i);
+  if (mParr) nomeParrucchiere = mParr[1].trim();
+
+  // Estrai servizio/note: parole dopo l'ora che non sono connettivi
+  const CONNETTIVI = /^(e|il|la|lo|le|un|una|con|per|alle?|ore?|di|da|del|della|del)$/i;
+  const afterOra = text.replace(/.*(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/, '').trim();
+  const noteParts = afterOra.split(/\s+/).filter(w => w.length > 1 && !CONNETTIVI.test(w));
+  const note = noteParts.join(' ').trim() || undefined;
+
+  return {
+    tool: 'crea_appuntamento',
+    args: {
+      nome_cliente: nomeCliente,
+      data,
+      ora,
+      ...(nomeParrucchiere ? { nome_parrucchiere: nomeParrucchiere } : {}),
+      ...(note ? { note } : {}),
+    },
+    displayQuestion: raw,
+  };
+}
+
 // ─── Contiene parole chiave "agenda/appuntamenti" ─────────────────────────────
 
 const KW_AGENDA = ['appuntament', 'agenda', 'prenotat', 'chi viene', 'chi ha', 'occupato', 'chi c\'è', 'clienti di', 'booking'];
@@ -131,6 +206,10 @@ export function parseQuery(raw: string): ParsedIntent | null {
     .replace(/[?!,;]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // ── 0. Fissa / prendi appuntamento (massima priorità) ────────────────────
+  const intentFissa = parseFissaAppuntamento(raw, text);
+  if (intentFissa) return intentFissa;
 
   // ── 1. Cerca cliente (alta priorità) ──────────────────────────────────────
   const nomeCliente = extractNome(text);

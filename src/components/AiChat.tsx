@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, BarChart2, ChevronRight, RotateCcw, Send, Loader2, HelpCircle } from 'lucide-react';
+import { ChevronDown, MessageSquare, User, Bot, Calendar, Users, TrendingUp, Scissors, BarChart2, ChevronRight, RotateCcw, Send, Loader2, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { executeTool } from '../lib/geminiTools';
 import { parseQuery, formatToolResult } from '../lib/chatParser';
 import { supabase } from '../lib/supabase';
+import AppuntamentoModal from './AppuntamentoModal';
 
 interface Parrucchiere {
   id: string;
   nome: string;
+}
+
+interface SlotMeta {
+  data: string;
+  parrucchiereId?: string;
+  slots: string[];
 }
 
 interface Message {
@@ -14,6 +21,8 @@ interface Message {
   content: string;
   table?: TableData;
   loading?: boolean;
+  slotMeta?: SlotMeta;
+  successAction?: boolean;
 }
 
 interface TableData {
@@ -122,6 +131,7 @@ export default function AiChat() {
   const [awaitingGiorni, setAwaitingGiorni] = useState(false);
   const [awaitingParrucchiere, setAwaitingParrucchiere] = useState<{ data: string } | null>(null);
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
+  const [appModal, setAppModal] = useState<{ data: string; ora: string; parrucchiereId?: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -163,15 +173,34 @@ export default function AiChat() {
       const parsed = JSON.parse(raw);
       const { text, table } = formatQuick(tool, parsed);
 
+      // Slot liberi: prepara metadati per bottoni cliccabili
+      let slotMeta: SlotMeta | undefined;
+      if (tool === 'get_slot_liberi' && parsed.slot_liberi?.length > 0) {
+        slotMeta = {
+          data: parsed.data as string,
+          parrucchiereId: args.parrucchiere_id as string | undefined,
+          slots: parsed.slot_liberi as string[],
+        };
+      }
+
       setMessages(prev => {
         const copy = [...prev];
-        copy[copy.length - 1] = { role: 'assistant', content: text, table };
+        copy[copy.length - 1] = { role: 'assistant', content: text, table, slotMeta };
         return copy;
       });
 
       // Dopo slot liberi senza filtro parrucchiere, proponi la scelta
       if (tool === 'get_slot_liberi' && !args.parrucchiere_id && parrucchieri.length > 0) {
         setAwaitingParrucchiere({ data: args.data as string });
+      }
+
+      // Appuntamento creato con successo
+      if (tool === 'crea_appuntamento' && parsed.successo) {
+        setMessages(prev => {
+          const copy = [...prev];
+          copy[copy.length - 1] = { role: 'assistant', content: parsed.messaggio, successAction: true };
+          return copy;
+        });
       }
     } catch (err) {
       setMessages(prev => {
@@ -253,10 +282,25 @@ export default function AiChat() {
     setShowSuggestions(false);
     setAwaitingGiorni(false);
     setAwaitingParrucchiere(null);
+    setAppModal(null);
   }
 
   return (
     <>
+      {appModal && (
+        <AppuntamentoModal
+          dataIniziale={new Date(`${appModal.data}T${appModal.ora}:00`)}
+          parrucchiereId={appModal.parrucchiereId}
+          onClose={() => setAppModal(null)}
+          onSaved={() => {
+            setAppModal(null);
+            setMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: `Appuntamento fissato per il ${new Date(appModal.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })} alle ${appModal.ora}.`, successAction: true },
+            ]);
+          }}
+        />
+      )}
       {/* Floating button */}
       <button
         onClick={() => setOpen(true)}
@@ -329,6 +373,32 @@ export default function AiChat() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+                {msg.slotMeta && (
+                  <div className="w-full mt-1">
+                    <p className="text-[10px] text-stone-400 font-medium mb-1.5 uppercase tracking-wide">Tocca un orario per prenotare:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {msg.slotMeta.slots.map(ora => (
+                        <button
+                          key={ora}
+                          onClick={() => setAppModal({
+                            data: msg.slotMeta!.data,
+                            ora,
+                            parrucchiereId: msg.slotMeta!.parrucchiereId,
+                          })}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors shadow-sm"
+                        >
+                          {ora}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {msg.successAction && (
+                  <div className="flex items-center gap-1.5 mt-1 text-emerald-600 text-xs font-semibold">
+                    <CheckCircle2 size={14} />
+                    Appuntamento salvato
                   </div>
                 )}
               </div>
