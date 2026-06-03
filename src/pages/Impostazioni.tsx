@@ -1135,9 +1135,16 @@ function PaginaAccount({ onBack }: { onBack: () => void }) {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
-  // password reset via email
+  // password reset via OTP
+  const [resetStep, setResetStep] = useState<'idle' | 'sent' | 'done'>('idle');
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMsg, setResetMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpNewPwd, setOtpNewPwd] = useState('');
+  const [otpConfirmPwd, setOtpConfirmPwd] = useState('');
+  const [showOtpPwd, setShowOtpPwd] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpMsg, setOtpMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   async function handleEmailChange(e: React.FormEvent) {
     e.preventDefault();
@@ -1188,20 +1195,66 @@ function PaginaAccount({ onBack }: { onBack: () => void }) {
     setPwdLoading(false);
   }
 
-  async function handleResetPassword() {
+  async function handleSendOtp() {
     setResetLoading(true);
     setResetMsg(null);
-    const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
-    const redirectTo = isElectron
-      ? 'gestionale-salone://reset-password'
-      : `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-password`;
-    const { error } = await supabase.auth.resetPasswordForEmail(user?.email ?? '', { redirectTo });
-    if (error) {
-      setResetMsg({ type: 'err', text: 'Errore: ' + error.message });
-    } else {
-      setResetMsg({ type: 'ok', text: `Email di recupero inviata a ${user?.email}. Controlla la tua casella di posta.` });
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-otp-reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ email: user?.email }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setResetMsg({ type: 'err', text: data.error ?? 'Errore invio email.' });
+      } else {
+        setResetStep('sent');
+        setResetMsg({ type: 'ok', text: `Codice inviato a ${user?.email}. Controlla la casella di posta.` });
+      }
+    } catch {
+      setResetMsg({ type: 'err', text: 'Errore di rete.' });
     }
     setResetLoading(false);
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setOtpMsg(null);
+    if (otpCode.length !== 6) {
+      setOtpMsg({ type: 'err', text: 'Il codice deve essere di 6 cifre.' });
+      return;
+    }
+    if (otpNewPwd.length < 6) {
+      setOtpMsg({ type: 'err', text: 'La password deve avere almeno 6 caratteri.' });
+      return;
+    }
+    if (otpNewPwd !== otpConfirmPwd) {
+      setOtpMsg({ type: 'err', text: 'Le due password non coincidono.' });
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-otp-reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ email: user?.email, code: otpCode, newPassword: otpNewPwd }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setOtpMsg({ type: 'err', text: data.error ?? 'Codice non valido o scaduto.' });
+      } else {
+        setResetStep('done');
+      }
+    } catch {
+      setOtpMsg({ type: 'err', text: 'Errore di rete.' });
+    }
+    setOtpLoading(false);
   }
 
   return (
@@ -1358,30 +1411,131 @@ function PaginaAccount({ onBack }: { onBack: () => void }) {
         </form>
       </div>
 
-      {/* Reset password via email */}
+      {/* Reset password via OTP */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-stone-100">
           <div className="flex items-center gap-2">
-            <Mail size={16} className="text-stone-500" />
+            <KeyRound size={16} className="text-stone-500" />
             <h3 className="text-sm font-semibold text-stone-800">Recupero Password via Email</h3>
           </div>
-          <p className="text-xs text-stone-400 mt-0.5 ml-6">Ricevi un link per reimpostare la password senza conoscere quella attuale</p>
+          <p className="text-xs text-stone-400 mt-0.5 ml-6">Ricevi un codice OTP via email per reimpostare la password senza conoscere quella attuale</p>
         </div>
-        <div className="px-5 py-4 space-y-3">
-          {resetMsg && (
-            <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 ${resetMsg.type === 'ok' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-              {resetMsg.type === 'ok' ? <Check size={14} className="text-green-600 flex-shrink-0 mt-0.5" /> : <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />}
-              <p className={`text-xs ${resetMsg.type === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{resetMsg.text}</p>
+
+        {resetStep === 'idle' && (
+          <div className="px-5 py-4 space-y-3">
+            {resetMsg && (
+              <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 ${resetMsg.type === 'ok' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                {resetMsg.type === 'ok' ? <Check size={14} className="text-green-600 flex-shrink-0 mt-0.5" /> : <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />}
+                <p className={`text-xs ${resetMsg.type === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{resetMsg.text}</p>
+              </div>
+            )}
+            <button
+              onClick={handleSendOtp}
+              disabled={resetLoading}
+              className="w-full border border-stone-200 hover:border-stone-300 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50 text-sm"
+            >
+              {resetLoading ? 'Invio in corso...' : `Invia codice OTP a ${user?.email}`}
+            </button>
+          </div>
+        )}
+
+        {resetStep === 'sent' && (
+          <form onSubmit={handleVerifyOtp} className="px-5 py-4 space-y-3">
+            {resetMsg && (
+              <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 bg-green-50 border border-green-200">
+                <Check size={14} className="text-green-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-green-700">{resetMsg.text}</p>
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1.5">Codice OTP (6 cifre)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otpCode}
+                onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="Es. 482910"
+                className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm font-mono tracking-widest transition text-center"
+              />
             </div>
-          )}
-          <button
-            onClick={handleResetPassword}
-            disabled={resetLoading}
-            className="w-full border border-stone-200 hover:border-stone-300 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50 text-sm"
-          >
-            {resetLoading ? 'Invio in corso...' : `Invia email di recupero a ${user?.email}`}
-          </button>
-        </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1.5">Nuova password</label>
+              <div className="relative">
+                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type={showOtpPwd ? 'text' : 'password'}
+                  value={otpNewPwd}
+                  onChange={e => setOtpNewPwd(e.target.value)}
+                  placeholder="Minimo 6 caratteri"
+                  className="w-full pl-8 pr-10 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                />
+                <button type="button" onClick={() => setShowOtpPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                  {showOtpPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1.5">Conferma nuova password</label>
+              <div className="relative">
+                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type={showOtpPwd ? 'text' : 'password'}
+                  value={otpConfirmPwd}
+                  onChange={e => setOtpConfirmPwd(e.target.value)}
+                  placeholder="Ripeti la password"
+                  className="w-full pl-8 pr-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                />
+              </div>
+            </div>
+            {otpMsg && (
+              <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 ${otpMsg.type === 'ok' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                {otpMsg.type === 'ok' ? <Check size={14} className="text-green-600 flex-shrink-0 mt-0.5" /> : <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />}
+                <p className={`text-xs ${otpMsg.type === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{otpMsg.text}</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setResetStep('idle'); setResetMsg(null); setOtpCode(''); setOtpNewPwd(''); setOtpConfirmPwd(''); setOtpMsg(null); }}
+                className="flex-1 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-600 font-semibold py-2.5 rounded-xl transition-colors text-sm"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={otpLoading || otpCode.length !== 6 || !otpNewPwd || !otpConfirmPwd}
+                className="flex-2 flex-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50 text-sm"
+              >
+                {otpLoading ? 'Verifica...' : 'Imposta nuova password'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleSendOtp}
+              disabled={resetLoading}
+              className="w-full text-xs text-stone-400 hover:text-stone-600 transition-colors py-1"
+            >
+              {resetLoading ? 'Invio...' : 'Non hai ricevuto il codice? Invia di nuovo'}
+            </button>
+          </form>
+        )}
+
+        {resetStep === 'done' && (
+          <div className="px-5 py-6 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+              <Check size={22} className="text-green-600" />
+            </div>
+            <p className="text-sm font-semibold text-stone-800">Password aggiornata con successo!</p>
+            <p className="text-xs text-stone-400">Usa la nuova password al prossimo accesso.</p>
+            <button
+              onClick={() => { setResetStep('idle'); setOtpCode(''); setOtpNewPwd(''); setOtpConfirmPwd(''); setResetMsg(null); setOtpMsg(null); }}
+              className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors"
+            >
+              Chiudi
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
