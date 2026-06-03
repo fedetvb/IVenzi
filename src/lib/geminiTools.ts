@@ -57,6 +57,10 @@ export const TOOL_DECLARATIONS = [
           type: 'STRING',
           description: 'Nome parrucchiere (opzionale)',
         },
+        nome_servizio: {
+          type: 'STRING',
+          description: 'Nome o parola chiave del servizio (es. colore, cheratina, taglio, meche). Se fornito cerca nel catalogo servizi e usa durata e prezzo reali.',
+        },
         note: {
           type: 'STRING',
           description: 'Note appuntamento (opzionale)',
@@ -317,9 +321,9 @@ async function getAppuntamentiSettimana(args: Record<string, unknown>): Promise<
 }
 
 async function creaAppuntamento(args: Record<string, unknown>, userId?: string): Promise<string> {
-  const { nome_cliente, data, ora, durata_minuti = 60, nome_parrucchiere, note } = args as {
+  const { nome_cliente, data, ora, durata_minuti: durataArg = 60, nome_parrucchiere, nome_servizio, note } = args as {
     nome_cliente: string; data: string; ora: string;
-    durata_minuti?: number; nome_parrucchiere?: string; note?: string;
+    durata_minuti?: number; nome_parrucchiere?: string; nome_servizio?: string; note?: string;
   };
 
   // Cerca cliente
@@ -354,6 +358,23 @@ async function creaAppuntamento(args: Record<string, unknown>, userId?: string):
     if (parr) parrucchiereId = (parr as { id: string }).id;
   }
 
+  // Cerca servizio nel catalogo se specificato
+  type ServizioRow = { id: string; nome: string; durata_minuti: number; prezzo: number };
+  let servizioTrovato: ServizioRow | null = null;
+  if (nome_servizio) {
+    const { data: srv } = await supabase
+      .from('trattamenti_catalogo')
+      .select('id, nome, durata_minuti, prezzo')
+      .ilike('nome', `%${nome_servizio}%`)
+      .eq('attivo', true)
+      .limit(1)
+      .maybeSingle();
+    if (srv) servizioTrovato = srv as ServizioRow;
+  }
+
+  const durata_minuti = servizioTrovato?.durata_minuti ?? durataArg;
+  const prezzo_totale = servizioTrovato?.prezzo ?? 0;
+
   // Costruisci data_ora
   const dataOra = new Date(`${data}T${ora}:00`);
   if (isNaN(dataOra.getTime()))
@@ -368,7 +389,7 @@ async function creaAppuntamento(args: Record<string, unknown>, userId?: string):
       durata_minuti,
       stato: 'confermato',
       note: note || '',
-      prezzo_totale: 0,
+      prezzo_totale,
       ...(userId ? { user_id: userId } : {}),
     })
     .select('id')
@@ -376,10 +397,25 @@ async function creaAppuntamento(args: Record<string, unknown>, userId?: string):
 
   if (insErr) return JSON.stringify({ errore: insErr.message });
 
+  const appId = (newApp as { id: string }).id;
+
+  // Inserisci trattamento se trovato
+  if (servizioTrovato) {
+    await supabase.from('appuntamento_trattamenti').insert({
+      appuntamento_id: appId,
+      trattamento_id: servizioTrovato.id,
+      nome_trattamento: servizioTrovato.nome,
+      prezzo: servizioTrovato.prezzo,
+      ...(userId ? { user_id: userId } : {}),
+    });
+  }
+
+  const durataLabel = `${durata_minuti} min`;
+  const servizioLabel = servizioTrovato ? ` — ${servizioTrovato.nome}` : nome_servizio ? ` (servizio "${nome_servizio}" non trovato in catalogo)` : '';
   return JSON.stringify({
     successo: true,
-    messaggio: `Appuntamento creato per ${cliente.nome} ${cliente.cognome} il ${data} alle ${ora} (${durata_minuti} min).`,
-    appuntamento_id: (newApp as { id: string }).id,
+    messaggio: `Appuntamento creato per ${cliente.nome} ${cliente.cognome} il ${data} alle ${ora} (${durataLabel})${servizioLabel}.`,
+    appuntamento_id: appId,
   });
 }
 

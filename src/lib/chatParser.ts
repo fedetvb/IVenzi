@@ -191,12 +191,19 @@ function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null 
     }
   }
 
-  // Estrai note: parole dopo l'ora che non siano connettivi né il parrucchiere
+  // Estrai servizio: parola/e dal SERVIZI_RE presenti nel testo
+  const SERVIZI_LISTA = ['cheratina', 'colorazione', 'colore', 'meches', 'meche', 'balayage', 'riflessante', 'permanente', 'taglio', 'piega', 'piastra', 'shampoo', 'trattamento'];
+  let nomeServizio: string | undefined;
+  for (const s of SERVIZI_LISTA) {
+    if (text.includes(s)) { nomeServizio = s; break; }
+  }
+
+  // Estrai note: parole dopo l'ora che non siano connettivi né il parrucchiere né il servizio
   const CONNETTIVI_RE = /^(e|il|la|lo|le|un|una|con|per|alle?|ore?|di|da|del|della)$/i;
   const oraIndex = text.search(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/);
   let afterOra = oraIndex >= 0 ? text.slice(oraIndex).replace(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/, '').trim() : '';
-  // rimuovi il nome del parrucchiere dalle note
   if (nomeParrucchiere) afterOra = afterOra.replace(new RegExp(`\\bcon\\s+${nomeParrucchiere}\\b`, 'i'), '').trim();
+  if (nomeServizio) afterOra = afterOra.replace(new RegExp(`\\b${nomeServizio}\\b`, 'i'), '').trim();
   const noteParts = afterOra.split(/\s+/).filter(w => w.length > 2 && !CONNETTIVI_RE.test(w));
   const note = noteParts.join(' ').trim() || undefined;
 
@@ -207,6 +214,7 @@ function parseFissaAppuntamento(raw: string, text: string): ParsedIntent | null 
       data,
       ora,
       ...(nomeParrucchiere ? { nome_parrucchiere: nomeParrucchiere } : {}),
+      ...(nomeServizio ? { nome_servizio: nomeServizio } : {}),
       ...(note ? { note } : {}),
     },
     displayQuestion: raw,
