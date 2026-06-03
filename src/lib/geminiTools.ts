@@ -463,21 +463,36 @@ async function getStatisticheParrucchieri(args: Record<string, unknown>): Promis
 
 async function cercaCliente(args: Record<string, unknown>): Promise<string> {
   const query = String(args.query || '').trim();
+  const parti = query.split(/\s+/).filter(Boolean);
+
+  // Costruisce filtri OR: ogni parola cerca in nome, cognome e telefono
+  // In questo modo "Riccardo Bartoli" trova chi ha nome=Riccardo e cognome=Bartoli
+  const orFilters = parti.length > 1
+    ? parti.map(p => `nome.ilike.%${p}%,cognome.ilike.%${p}%`).join(',')
+    : `nome.ilike.%${query}%,cognome.ilike.%${query}%,telefono.ilike.%${query}%`;
 
   const { data: clienti, error } = await supabase
     .from('clienti')
     .select('id, nome, cognome, telefono, email, data_nascita, note')
     .is('deleted_at', null)
-    .or(`nome.ilike.%${query}%,cognome.ilike.%${query}%,telefono.ilike.%${query}%`)
-    .limit(5);
+    .or(orFilters)
+    .limit(10);
+
+  // Se multi-parola, filtra i risultati che matchano TUTTE le parole (nome+cognome)
+  const clientiFiltrati = parti.length > 1
+    ? (clienti || []).filter((c: Record<string, unknown>) => {
+        const full = `${c.nome} ${c.cognome}`.toLowerCase();
+        return parti.every(p => full.includes(p.toLowerCase()));
+      })
+    : (clienti || []);
 
   if (error) return JSON.stringify({ errore: error.message });
-  if (!clienti || clienti.length === 0)
-    return JSON.stringify({ messaggio: `Nessun cliente trovato per "${query}".` });
+  if (!clientiFiltrati || clientiFiltrati.length === 0)
+    return JSON.stringify({ trovati: 0, messaggio: `Nessun cliente trovato per "${query}".` });
 
   // Per ogni cliente recupera l'ultimo appuntamento
   const risultati = await Promise.all(
-    clienti.map(async (c: Record<string, unknown>) => {
+    (clientiFiltrati as Record<string, unknown>[]).map(async (c: Record<string, unknown>) => {
       const { data: ultApp } = await supabase
         .from('appuntamenti')
         .select('data_ora, stato')
