@@ -21,7 +21,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(GEMINI_URL, {
       method: "POST",
