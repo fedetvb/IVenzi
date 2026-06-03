@@ -394,7 +394,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-3 py-2 md:px-6 md:py-4 bg-white border-b border-stone-200 flex-shrink-0">
+      <div className="px-3 py-1.5 md:px-4 md:py-1.5 bg-white border-b border-stone-200 flex-shrink-0">
         {compleanni.length > 0 && (
           <div className="mb-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
@@ -473,25 +473,16 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           </div>
         )}
 
-        <div className="flex flex-col gap-1.5">
-          {/* Riga 1: freccia + data + ingranaggio */}
-          <div className="flex items-center gap-2">
-            <button onClick={onBack} className="p-1 rounded-lg hover:bg-stone-100 transition-colors flex-shrink-0">
-              <ChevronLeft size={18} />
-            </button>
-            <h1 className="font-bold text-stone-800 capitalize text-sm md:text-base flex-1 min-w-0 truncate">
-              {date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </h1>
-            <button
-              onClick={() => setShowSettings(s => !s)}
-              className={`p-1.5 rounded-lg border transition-all flex-shrink-0 ${showSettings ? 'bg-amber-50 border-amber-300 text-amber-600' : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}
-              title="Impostazioni visualizzazione"
-            >
-              <Settings size={14} />
-            </button>
-          </div>
-          {/* Riga 2: bottoni parrucchieri */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button onClick={onBack} className="p-1 rounded-lg hover:bg-stone-100 transition-colors flex-shrink-0">
+            <ChevronLeft size={18} />
+          </button>
+          <h1 className="font-bold text-stone-800 capitalize text-sm flex-shrink-0">
+            {date.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+          </h1>
+          <div className="w-px h-4 bg-stone-200 flex-shrink-0" />
+          {/* bottoni parrucchieri */}
+          <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
             {parrucchieri.map(p => {
               const assenteOggi = assenzeMap.has(p.id) && assenzeMap.get(p.id) === null;
               const assenteDopo = assenzeMap.has(p.id) && assenzeMap.get(p.id) !== null;
@@ -523,6 +514,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               );
             })}
           </div>
+          <button
+            onClick={() => setShowSettings(s => !s)}
+            className={`p-1.5 rounded-lg border transition-all flex-shrink-0 ${showSettings ? 'bg-amber-50 border-amber-300 text-amber-600' : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}
+            title="Impostazioni visualizzazione"
+          >
+            <Settings size={14} />
+          </button>
         </div>
 
         {showSettings && (
