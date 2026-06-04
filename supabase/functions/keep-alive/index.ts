@@ -19,15 +19,19 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const authHeader = req.headers.get("authorization") || "";
+    const url = new URL(req.url);
+    const force = url.searchParams.get("force") === "true";
     const isCron = !authHeader || authHeader.includes(serviceKey);
     const tipo = isCron ? "automatico" : "manuale";
 
     // Per chiamate automatiche del cron, controlla se il ping e' gia' stato fatto di recente
-    if (tipo === "automatico") {
+    // Il ping manuale (force=true) bypassa sempre questo controllo
+    if (tipo === "automatico" && !force) {
       const { data: lastPingRow } = await supabase
         .from("impostazioni")
         .select("valore")
         .eq("chiave", "keep_alive_last_ping")
+        .is("user_id", null)
         .maybeSingle();
 
       if (lastPingRow?.valore) {
@@ -46,12 +50,12 @@ Deno.serve(async (req: Request) => {
 
     const updates = [
       supabase.from("impostazioni").upsert(
-        { chiave: "keep_alive_last_ping", valore: now, updated_at: now },
-        { onConflict: "chiave" }
+        { chiave: "keep_alive_last_ping", valore: now, updated_at: now, user_id: null },
+        { onConflict: "chiave,user_id" }
       ),
       supabase.from("impostazioni").upsert(
-        { chiave: "keep_alive_last_ping_tipo", valore: tipo, updated_at: now },
-        { onConflict: "chiave" }
+        { chiave: "keep_alive_last_ping_tipo", valore: tipo, updated_at: now, user_id: null },
+        { onConflict: "chiave,user_id" }
       ),
     ];
 

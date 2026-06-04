@@ -3263,7 +3263,8 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
     try {
       const sbUrl = localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL;
       const sbKey = localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const res = await fetch(`${sbUrl}/functions/v1/keep-alive`, {
+      const res = await fetch(`${sbUrl}/functions/v1/keep-alive?force=true`, {
+        method: 'POST',
         headers: { Authorization: `Bearer ${sbKey}`, apikey: sbKey },
       });
       const json = await res.json();
