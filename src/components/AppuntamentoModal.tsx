@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { supabase, localDateStr, type Cliente, type TrattamentoCatalogo, type StatoAppuntamento, type Parrucchiere } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -59,6 +59,8 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
   const [clienteSearch, setClienteSearch] = useState('');
   const [clienteDropdown, setClienteDropdown] = useState(false);
   const clienteRef = useRef<HTMLDivElement>(null);
+  const [parrDropdownIdx, setParrDropdownIdx] = useState<number | null>(null);
+  const parrDropdownRef = useRef<HTMLDivElement>(null);
 
   const now = dataIniziale ?? new Date();
   const [form, setForm] = useState<AppuntamentoForm>({
@@ -75,11 +77,14 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     if (appuntamentoId) loadAppuntamento();
   }, [appuntamentoId]);
 
-  // Close cliente dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (clienteRef.current && !clienteRef.current.contains(e.target as Node)) {
         setClienteDropdown(false);
+      }
+      if (parrDropdownRef.current && !parrDropdownRef.current.contains(e.target as Node)) {
+        setParrDropdownIdx(null);
       }
     }
     document.addEventListener('mousedown', onClick);
@@ -313,35 +318,75 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
               {form.servizi.map((s, idx) => (
                 <div key={idx} className="border border-stone-200 rounded-xl overflow-hidden">
                   {/* Slot header */}
-                  <div className="flex items-center justify-between px-3 py-2 bg-stone-50 border-b border-stone-200">
-                    <span className="text-xs font-bold text-stone-500">{idx + 1}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-stone-400 font-medium">
-                        {slotTimes[idx].start} → {slotTimes[idx].end}
-                      </span>
-                      {form.servizi.length > 1 && (
-                        <button onClick={() => removeServizio(idx)} className="text-stone-300 hover:text-red-400 transition-colors ml-1">
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  {(() => {
+                    const pSel = parrucchieri.find(p => p.id === s.parrucchiere_id);
+                    return (
+                      <div className="flex items-center justify-between px-3 py-2 bg-stone-50 border-b border-stone-200">
+                        <div className="flex items-center gap-2">
+                          {pSel && <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: pSel.colore }} />}
+                          <span className="text-xs font-bold text-stone-500">{idx + 1}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-stone-400 font-medium">
+                            {slotTimes[idx].start} → {slotTimes[idx].end}
+                          </span>
+                          {form.servizi.length > 1 && (
+                            <button onClick={() => removeServizio(idx)} className="text-stone-300 hover:text-red-400 transition-colors ml-1">
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Service fields */}
                   <div className="p-3 grid grid-cols-2 gap-3">
-                    {/* Parrucchiere */}
-                    <div>
+                    {/* Parrucchiere custom dropdown */}
+                    <div ref={parrDropdownIdx === idx ? parrDropdownRef : undefined}>
                       <label className="block text-[10px] font-semibold text-stone-400 mb-1 uppercase tracking-wide">Parrucchiere</label>
-                      <select
-                        value={s.parrucchiere_id}
-                        onChange={e => updateServizio(idx, { parrucchiere_id: e.target.value })}
-                        className="w-full border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
-                      >
-                        <option value="">Scegli...</option>
-                        {parrucchieri.map(p => (
-                          <option key={p.id} value={p.id}>{p.nome}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setParrDropdownIdx(parrDropdownIdx === idx ? null : idx)}
+                          className="w-full flex items-center gap-2 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs text-stone-800 bg-white hover:border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-400 text-left"
+                        >
+                          {(() => {
+                            const p = parrucchieri.find(p => p.id === s.parrucchiere_id);
+                            return p ? (
+                              <>
+                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.colore }} />
+                                <span className="flex-1 truncate">{p.nome}</span>
+                              </>
+                            ) : (
+                              <span className="flex-1 text-stone-400">Scegli...</span>
+                            );
+                          })()}
+                          <svg className="w-3 h-3 text-stone-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                        </button>
+                        {parrDropdownIdx === idx && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-20">
+                            <button
+                              type="button"
+                              onMouseDown={e => { e.preventDefault(); updateServizio(idx, { parrucchiere_id: '' }); setParrDropdownIdx(null); }}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-stone-400 hover:bg-stone-50 first:rounded-t-lg"
+                            >
+                              Scegli...
+                            </button>
+                            {parrucchieri.map(p => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onMouseDown={e => { e.preventDefault(); updateServizio(idx, { parrucchiere_id: p.id }); setParrDropdownIdx(null); }}
+                                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-stone-800 hover:bg-amber-50 hover:text-amber-700 last:rounded-b-lg transition-colors"
+                              >
+                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.colore }} />
+                                {p.nome}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Servizio */}
