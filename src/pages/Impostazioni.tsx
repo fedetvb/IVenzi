@@ -3240,9 +3240,9 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
   const [lastPing, setLastPing] = useState<string | null>(null);
   const [lastPingTipo, setLastPingTipo] = useState<'automatico' | 'manuale' | null>(null);
   const [pinging, setPinging] = useState(false);
-  const [pingResult, setPingResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [pingOk, setPingOk] = useState<boolean | null>(null);
+  const [pingError, setPingError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showPopup, setShowPopup] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -3259,7 +3259,8 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 
   async function eseguiPing() {
     setPinging(true);
-    setPingResult(null);
+    setPingOk(null);
+    setPingError(null);
     try {
       const sbUrl = localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL;
       const sbKey = localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -3271,13 +3272,12 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
       if (json.ok) {
         setLastPing(json.ts);
         setLastPingTipo('manuale');
-        setPingResult({ ok: true, msg: 'Ping riuscito! Supabase ha confermato la connessione.' });
-        setShowPopup(true);
+        setPingOk(true);
       } else {
-        setPingResult({ ok: false, msg: `Errore: ${json.error ?? 'risposta non valida'}` });
+        setPingError(json.error ?? 'risposta non valida');
       }
-    } catch (e) {
-      setPingResult({ ok: false, msg: 'Impossibile raggiungere il server. Controlla la connessione.' });
+    } catch {
+      setPingError('Impossibile raggiungere il server. Controlla la connessione.');
     }
     setPinging(false);
   }
@@ -3306,32 +3306,6 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
-      {/* Popup conferma ping */}
-      {showPopup && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto">
-              <Wifi size={28} className="text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-stone-800">Ping riuscito!</p>
-              <p className="text-sm text-stone-500 mt-1">
-                Supabase ha ricevuto la visita e il timer di inattivit&agrave; &egrave; stato azzerato.
-              </p>
-              <p className="text-xs text-stone-400 mt-3">
-                Prossimo ping automatico tra circa {KEEPALIVE_INTERVAL_DAYS} giorni
-              </p>
-            </div>
-            <button
-              onClick={() => setShowPopup(false)}
-              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm rounded-xl transition-colors"
-            >
-              Chiudi
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors text-stone-500 hover:text-stone-800">
           <ArrowLeft size={18} />
@@ -3417,12 +3391,10 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {pingResult && (
-          <div className={`flex items-start gap-2 rounded-xl px-4 py-3 border ${pingResult.ok ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-            {pingResult.ok
-              ? <Check size={14} className="text-emerald-600 flex-shrink-0 mt-0.5" />
-              : <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />}
-            <p className={`text-sm ${pingResult.ok ? 'text-emerald-700' : 'text-red-700'}`}>{pingResult.msg}</p>
+        {pingError && (
+          <div className="flex items-start gap-2 rounded-xl px-4 py-3 border bg-red-50 border-red-200">
+            <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">{pingError}</p>
           </div>
         )}
 
@@ -3431,8 +3403,10 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
           disabled={pinging}
           className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors"
         >
-          <Wifi size={15} className={pinging ? 'animate-pulse' : ''} />
-          {pinging ? 'Ping in corso...' : 'Esegui ping manuale ora'}
+          {pingOk && !pinging
+            ? <><Check size={15} /> Ping eseguito</>
+            : <><Wifi size={15} className={pinging ? 'animate-pulse' : ''} />{pinging ? 'Ping in corso...' : 'Esegui ping manuale ora'}</>
+          }
         </button>
       </div>
 

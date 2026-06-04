@@ -23,8 +23,16 @@ import {
   Trash2,
   BookOpen,
   Download,
+  Wifi,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { supabase } from '../lib/supabase';
+
+interface PingLogRow {
+  eseguito_at: string;
+  tipo: string;
+}
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
 
@@ -123,6 +131,20 @@ function NavTooltipButton({
   );
 }
 
+function isTuesdayAfter10Italian() {
+  const now = new Date();
+  const itStr = now.toLocaleString('en-US', { timeZone: 'Europe/Rome', hour12: false, weekday: 'short', hour: 'numeric' });
+  // itStr es: "Tue 10" or "Tue 14"
+  const parts = itStr.split(' ');
+  const weekday = parts[0];
+  const hour = parseInt(parts[1], 10);
+  return weekday === 'Tue' && hour >= 10;
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function Layout({ currentPage, onNavigate, children, user }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -132,6 +154,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [pingBanner, setPingBanner] = useState<PingLogRow[] | null>(null);
 
   useEffect(() => {
     const onResize = () => setMobile(isMobile());
@@ -165,6 +188,23 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
       setIsInstalled(true);
     }
     return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!isTuesdayAfter10Italian()) return;
+    const dismissedKey = `keepalive_banner_dismissed_${todayKey()}`;
+    if (localStorage.getItem(dismissedKey)) return;
+
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+    supabase
+      .from('keep_alive_ping_log')
+      .select('eseguito_at, tipo')
+      .gte('eseguito_at', since.toISOString())
+      .order('eseguito_at', { ascending: false })
+      .then(({ data }) => {
+        if (data && data.length > 0) setPingBanner(data as PingLogRow[]);
+      });
   }, []);
 
   const handleInstall = async () => {
@@ -316,6 +356,41 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             </div>
           </div>
         </header>
+
+        {/* Banner riepilogo ping settimanale — martedi >= 10:00 italiane */}
+        {pingBanner && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-3 flex items-start gap-3 flex-shrink-0">
+            <div className="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Wifi size={14} className="text-emerald-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-emerald-800">
+                Riepilogo settimanale keep-alive
+              </p>
+              <p className="text-xs text-emerald-600 mt-0.5">
+                {pingBanner.length} ping eseguiti negli ultimi 7 giorni:&nbsp;
+                {pingBanner.map((p, i) => (
+                  <span key={i}>
+                    <span className={`font-medium ${p.tipo === 'automatico' ? 'text-sky-700' : 'text-amber-700'}`}>
+                      {new Date(p.eseguito_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {' '}({p.tipo})
+                    </span>
+                    {i < pingBanner.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                localStorage.setItem(`keepalive_banner_dismissed_${todayKey()}`, '1');
+                setPingBanner(null);
+              }}
+              className="text-emerald-500 hover:text-emerald-700 flex-shrink-0 mt-0.5"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <main className="flex-1 overflow-auto">

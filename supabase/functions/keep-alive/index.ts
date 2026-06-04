@@ -24,8 +24,8 @@ Deno.serve(async (req: Request) => {
     const isCron = !authHeader || authHeader.includes(serviceKey);
     const tipo = isCron ? "automatico" : "manuale";
 
-    // Per chiamate automatiche del cron, controlla se il ping e' gia' stato fatto di recente
-    // Il ping manuale (force=true) bypassa sempre questo controllo
+    // Per chiamate automatiche del cron, controlla se il ping e' gia' stato fatto di recente.
+    // Il ping manuale (force=true) bypassa sempre questo controllo.
     if (tipo === "automatico" && !force) {
       const { data: lastPingRow } = await supabase
         .from("impostazioni")
@@ -48,7 +48,7 @@ Deno.serve(async (req: Request) => {
 
     const now = new Date().toISOString();
 
-    const updates = [
+    const results = await Promise.all([
       supabase.from("impostazioni").upsert(
         { chiave: "keep_alive_last_ping", valore: now, updated_at: now, user_id: null },
         { onConflict: "chiave,user_id" }
@@ -57,9 +57,9 @@ Deno.serve(async (req: Request) => {
         { chiave: "keep_alive_last_ping_tipo", valore: tipo, updated_at: now, user_id: null },
         { onConflict: "chiave,user_id" }
       ),
-    ];
+      supabase.from("keep_alive_ping_log").insert({ eseguito_at: now, tipo }),
+    ]);
 
-    const results = await Promise.all(updates);
     const err = results.find(r => r.error)?.error;
     if (err) throw err;
 
