@@ -141,6 +141,7 @@ export default function AiChat() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [awaitingGiorni, setAwaitingGiorni] = useState(false);
   const [awaitingParrucchiere, setAwaitingParrucchiere] = useState<{ data: string } | null>(null);
+  const [activeParrucchiereId, setActiveParrucchiereId] = useState<string>('');
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [appModal, setAppModal] = useState<{ data: string; ora: string; parrucchiereId?: string } | null>(null);
   const [listening, setListening] = useState(false);
@@ -404,6 +405,7 @@ export default function AiChat() {
     setShowSuggestions(false);
     setAwaitingGiorni(false);
     setAwaitingParrucchiere(null);
+    setActiveParrucchiereId('');
     setAppModal(null);
     setStatsGate(null);
     sessionStorage.removeItem(STATS_SESSION_KEY);
@@ -531,7 +533,7 @@ export default function AiChat() {
                           onClick={() => setAppModal({
                             data: msg.slotMeta!.data,
                             ora,
-                            parrucchiereId: msg.slotMeta!.parrucchiereId,
+                            parrucchiereId: msg.slotMeta!.parrucchiereId || activeParrucchiereId || undefined,
                           })}
                           className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors shadow-sm"
                         >
@@ -577,7 +579,7 @@ export default function AiChat() {
             <p className="text-[10px] text-stone-400 font-medium mb-1.5 uppercase tracking-wide">Filtra per parrucchiere:</p>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => runTool('get_slot_liberi', { data: awaitingParrucchiere.data }, 'Slot liberi tutti')}
+                onClick={() => { setActiveParrucchiereId(''); runTool('get_slot_liberi', { data: awaitingParrucchiere.data }, 'Slot liberi tutti'); }}
                 className="px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-600 text-xs font-semibold transition-colors"
               >
                 Tutti
@@ -587,6 +589,7 @@ export default function AiChat() {
                   key={p.id}
                   onClick={() => {
                     const d = awaitingParrucchiere.data;
+                    setActiveParrucchiereId(p.id);
                     runTool('get_slot_liberi', { data: d, parrucchiere_id: p.id }, `Slot liberi di ${p.nome}`);
                   }}
                   className="px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-semibold transition-colors"
