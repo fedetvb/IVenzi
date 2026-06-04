@@ -1323,7 +1323,7 @@ export default function GestioneFinanziaria() {
                   {(['lordo', 'netto'] as const).map(v => (
                     <button key={v} onClick={() => setMostraOrarioNetto(v)}
                       className={`px-3 py-1 rounded-md transition-all ${mostraOrarioNetto === v ? 'bg-white shadow-sm text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}>
-                      {v === 'lordo' ? 'Lordo' : 'Netto'}
+                      {v === 'lordo' ? 'Solo Spese' : 'Spese + Tasse'}
                     </button>
                   ))}
                 </div>
