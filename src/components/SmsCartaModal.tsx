@@ -35,28 +35,33 @@ function normalizePhone(tel: string): string {
   return `39${cleaned}`;
 }
 
+const CORNICE_CARTE = '🌟👑💎🎀💎👑🌟';
+
+function conCornice(testo: string): string {
+  return `${CORNICE_CARTE}\n${testo}\n${CORNICE_CARTE}`;
+}
+
 function buildMessaggioStandard(nominativo: string, codice: string, azione: AzioneCarta): string {
   const header = `Gentile ${nominativo},`;
   const footer = `Per info: contattaci in salone.\nGrazie`;
 
+  let corpo: string;
   if (azione.tipo === 'creazione') {
-    return `${header}\nla tua nuova Carta Premium è stata creata!\n\nCodice: ${codice}\nCredito iniziale: €${azione.credito.toFixed(2)}\n\n${footer}`;
-  }
-  if (azione.tipo === 'ricarica') {
-    return `${header}\nla tua Carta Premium è stata ricaricata.\n\nCodice: ${codice}\nCredito aggiunto: €${azione.credito.toFixed(2)}\nHai pagato: €${azione.prezzoClientePagato}\nSaldo aggiornato: €${azione.nuovoSaldo.toFixed(2)}\n\n${footer}`;
-  }
-  if (azione.tipo === 'ricarica_gratuita') {
-    return `${header}\nhai ricevuto un credito bonus sulla tua Carta Premium!\n\nCodice: ${codice}\nBonus aggiunto: €${azione.credito.toFixed(2)}\nSaldo aggiornato: €${azione.nuovoSaldo.toFixed(2)}\n\n${footer}`;
-  }
-  if (azione.tipo === 'ripristino_credito') {
-    return `${header}\nè stato ripristinato del credito sulla tua Carta Premium.\n\nCodice: ${codice}\nCredito ripristinato: €${azione.importoRipristinato.toFixed(2)}\nSaldo aggiornato: €${azione.nuovoSaldo.toFixed(2)}\n\n${footer}`;
-  }
-  if (azione.tipo === 'sconto_utilizzo') {
+    corpo = `${header}\nla tua nuova Carta Premium è stata creata!\n\nCodice: ${codice}\nCredito iniziale: €${azione.credito.toFixed(2)}\n\n${footer}`;
+  } else if (azione.tipo === 'ricarica') {
+    corpo = `${header}\nla tua Carta Premium è stata ricaricata.\n\nCodice: ${codice}\nCredito aggiunto: €${azione.credito.toFixed(2)}\nHai pagato: €${azione.prezzoClientePagato}\nSaldo aggiornato: €${azione.nuovoSaldo.toFixed(2)}\n\n${footer}`;
+  } else if (azione.tipo === 'ricarica_gratuita') {
+    corpo = `${header}\nhai ricevuto un credito bonus sulla tua Carta Premium!\n\nCodice: ${codice}\nBonus aggiunto: €${azione.credito.toFixed(2)}\nSaldo aggiornato: €${azione.nuovoSaldo.toFixed(2)}\n\n${footer}`;
+  } else if (azione.tipo === 'ripristino_credito') {
+    corpo = `${header}\nè stato ripristinato del credito sulla tua Carta Premium.\n\nCodice: ${codice}\nCredito ripristinato: €${azione.importoRipristinato.toFixed(2)}\nSaldo aggiornato: €${azione.nuovoSaldo.toFixed(2)}\n\n${footer}`;
+  } else if (azione.tipo === 'sconto_utilizzo') {
     const desc = azione.tipoSconto === 'percentuale' ? `${azione.valoreSconto}%` : `€${azione.valoreSconto.toFixed(2)}`;
-    return `${header}\nla tua Carta Sconto è stata utilizzata.\n\nCodice: ${codice}\nSconto applicato: ${desc} (−€${azione.scontoApplicato.toFixed(2)})\nTotale pagato: €${azione.importoFinale.toFixed(2)}\n\n${footer}`;
+    corpo = `${header}\nla tua Carta Sconto è stata utilizzata.\n\nCodice: ${codice}\nSconto applicato: ${desc} (−€${azione.scontoApplicato.toFixed(2)})\nTotale pagato: €${azione.importoFinale.toFixed(2)}\n\n${footer}`;
+  } else {
+    // detrazione premium
+    corpo = `${header}\nla tua Carta Premium è stata utilizzata.\n\nCodice: ${codice}\nImporto detratto: €${(azione as { importoDetratto: number }).importoDetratto.toFixed(2)}\nSaldo rimanente: €${(azione as { nuovoSaldo: number }).nuovoSaldo.toFixed(2)}\n\n${footer}`;
   }
-  // detrazione premium
-  return `${header}\nla tua Carta Premium è stata utilizzata.\n\nCodice: ${codice}\nImporto detratto: €${azione.importoDetratto.toFixed(2)}\nSaldo rimanente: €${azione.nuovoSaldo.toFixed(2)}\n\n${footer}`;
+  return conCornice(corpo);
 }
 
 function applyTemplate(testo: string, vars: { nome: string; codice: string; sconto: string; da: string }) {
@@ -89,7 +94,7 @@ function ScontoCreazionePart({
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedId, setSelectedId] = useState<string>('');
   const [daValue, setDaValue] = useState('');
-  const [messaggio, setMessaggio] = useState(messaggioOverride ?? '');
+  const [messaggio, setMessaggio] = useState(messaggioOverride ? conCornice(messaggioOverride) : '');
   const [copied, setCopied] = useState(false);
   const [showSelect, setShowSelect] = useState(false);
   const [includiMappa, setIncludiMappa] = useState(!messaggioOverride);
@@ -123,7 +128,7 @@ function ScontoCreazionePart({
       const def = list.find(t => t.is_default) ?? list[0];
       if (def) {
         setSelectedId(def.id);
-        setMessaggio(applyTemplate(def.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: '' }));
+        setMessaggio(conCornice(applyTemplate(def.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: '' })));
       }
       if (ind?.valore) setIndirizzoMappa(ind.valore);
       setLoadingTemplates(false);
@@ -135,14 +140,14 @@ function ScontoCreazionePart({
     setShowSelect(false);
     const tmpl = templates.find(t => t.id === id);
     if (!tmpl) return;
-    setMessaggio(applyTemplate(tmpl.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: daValue }));
+    setMessaggio(conCornice(applyTemplate(tmpl.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: daValue })));
   }
 
   function handleDaChange(val: string) {
     setDaValue(val);
     const tmpl = templates.find(t => t.id === selectedId);
     if (!tmpl) return;
-    setMessaggio(applyTemplate(tmpl.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: val }));
+    setMessaggio(conCornice(applyTemplate(tmpl.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: val })));
   }
 
   const selectedTemplate = templates.find(t => t.id === selectedId);
