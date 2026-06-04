@@ -512,15 +512,19 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
                         <button
                           type="button"
                           onClick={() => toggleServ(idx)}
-                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm transition-all bg-stone-50 border-stone-200 hover:border-amber-300"
+                          className="w-full flex items-center justify-between gap-1 px-3 py-2 rounded-lg border text-sm transition-all bg-stone-50 border-stone-200 hover:border-amber-300 min-h-[36px]"
                         >
-                          <span className={servSelezionato ? 'font-medium text-stone-800 truncate' : 'text-stone-400'}>
-                            {servSelezionato ? servSelezionato.nome : 'Scegli...'}
-                          </span>
-                          <ChevronDown size={12} className="text-stone-400 flex-shrink-0" />
+                          {servSelezionato ? (
+                            <span className="font-medium text-stone-800 text-left leading-tight break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                              {servSelezionato.nome}
+                            </span>
+                          ) : (
+                            <span className="text-stone-400">Scegli...</span>
+                          )}
+                          <ChevronDown size={12} className="text-stone-400 flex-shrink-0 ml-1" />
                         </button>
                         {openServ[idx] && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-30 overflow-hidden max-h-48 overflow-y-auto">
+                          <div className="absolute top-full left-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-30 overflow-hidden max-h-52 overflow-y-auto" style={{ minWidth: 'max(100%, 180px)', right: 'auto' }}>
                             {catalogo.map(cat => (
                               <button
                                 key={cat.id}
@@ -534,16 +538,14 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
                                   });
                                   toggleServ(idx);
                                 }}
-                                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-stone-50 transition-colors text-left"
+                                className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-stone-50 transition-colors text-left"
                               >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.colore }} />
-                                  <span className="text-sm text-stone-700 truncate">{cat.nome}</span>
+                                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: cat.colore }} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-stone-800 leading-tight">{cat.nome}</p>
+                                  <p className="text-xs text-stone-400 mt-0.5">{cat.durata_minuti}min · <span className="font-semibold text-stone-600">€{cat.prezzo.toFixed(0)}</span></p>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0 text-xs text-stone-400">
-                                  <span>{cat.durata_minuti}min</span>
-                                  <span className="font-semibold text-stone-600">€{cat.prezzo.toFixed(0)}</span>
-                                </div>
+                                {riga.trattamentoId === cat.id && <span className="text-amber-500 text-xs font-bold flex-shrink-0 mt-0.5">✓</span>}
                               </button>
                             ))}
                           </div>
