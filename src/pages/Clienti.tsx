@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, Copy, CheckCheck } from 'lucide-react';
+import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import ClienteModal from '../components/ClienteModal';
 import PasswordGateModal from '../components/PasswordGateModal';
@@ -37,8 +37,7 @@ export default function Clienti({ onSelectCliente }: Props) {
   const [confermando, setConfermando] = useState<string | null>(null);
   const [eliminaGate, setEliminaGate] = useState<string | null>(null);
   const [eliminaClienteGate, setEliminaClienteGate] = useState<string | null>(null);
-  const [messaggioConferma, setMessaggioConferma] = useState<{ nome: string; testo: string; clienteId: string } | null>(null);
-  const [copiato, setCopiato] = useState(false);
+  const [messaggioConferma, setMessaggioConferma] = useState<{ nome: string; testo: string; clienteId: string; telefono: string } | null>(null);
 
   const loadClienti = useCallback(async () => {
     setLoading(true);
@@ -117,7 +116,7 @@ export default function Clienti({ onSelectCliente }: Props) {
   function buildMessaggioConferma(nome: string): string {
     const benvenuto = genderBenvenuto(nome);
     const cornice = '🌟🌸🌈🦋🌸🦋🌈🌸🌟';
-    return `${cornice}\n\n${benvenuto} ${nome}! 🌸\n\nGrazie di cuore per aver scelto il nostro salone. Siamo davvero felici di averti con noi!\n\nI tuoi dati sono al sicuro: verranno trattati con la massima riservatezza e usati esclusivamente per offrirti il miglior servizio possibile. La tua privacy è una nostra priorità.\n\nLa scheda che hai compilato ci aiuterà a conoscerti meglio e a coccolarti con un servizio su misura, sempre vicino alle tue esigenze e ai tuoi desideri. ✨\n\nNon vediamo l'ora di vederti! 💛\n\n${cornice}`;
+    return `${cornice}\n${benvenuto} ${nome}!\n\nGrazie mille per aver scelto il nostro salone. Siamo felicissimi di averti con noi!\n\nI tuoi dati sono trattati con la massima riservatezza e non verranno mai condivisi con terzi. La tua privacy è al sicuro.\n\nLa scheda che hai compilato ci permetterà di conoscerti al meglio e di offrirti un servizio personalizzato, sempre in linea con le tue esigenze e i tuoi desideri.\n\nNon vediamo l'ora di prenderci cura di te!\n${cornice}`;
   }
 
   async function confermaScheda(scheda: SchedaDaConfermare) {
@@ -138,7 +137,7 @@ export default function Clienti({ onSelectCliente }: Props) {
       setSchedaAperta(null);
       loadSchede();
       loadClienti();
-      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome), clienteId: data.id });
+      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome), clienteId: data.id, telefono: scheda.telefono || '' });
     }
     setConfermando(null);
   }
@@ -849,33 +848,37 @@ export default function Clienti({ onSelectCliente }: Props) {
             <div className="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-stone-800">Messaggio di benvenuto</h2>
-                <p className="text-xs text-stone-400 mt-0.5">Copia e invia a {messaggioConferma.nome}</p>
+                <p className="text-xs text-stone-400 mt-0.5">Invia su WhatsApp a {messaggioConferma.nome}</p>
               </div>
               <button
-                onClick={() => { const id = messaggioConferma.clienteId; setMessaggioConferma(null); setCopiato(false); onSelectCliente(id); }}
+                onClick={() => { const id = messaggioConferma.clienteId; setMessaggioConferma(null); onSelectCliente(id); }}
                 className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"
               >
                 <X size={18} />
               </button>
             </div>
             <div className="px-6 py-5">
-              <div className="bg-stone-50 rounded-xl px-4 py-4 text-sm text-stone-700 leading-relaxed whitespace-pre-wrap border border-stone-100 font-mono">
+              <div className="bg-stone-50 rounded-xl px-4 py-4 text-sm text-stone-700 leading-relaxed whitespace-pre-wrap border border-stone-100">
                 {messaggioConferma.testo}
               </div>
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(messaggioConferma.testo);
-                  setCopiato(true);
-                  setTimeout(() => setCopiato(false), 2500);
+                  const phone = messaggioConferma.telefono.replace(/\D/g, '');
+                  const numero = phone.startsWith('39') ? phone : phone ? `39${phone}` : '';
+                  const url = numero
+                    ? `https://wa.me/${numero}?text=${encodeURIComponent(messaggioConferma.testo)}`
+                    : `https://wa.me/?text=${encodeURIComponent(messaggioConferma.testo)}`;
+                  window.open(url, '_blank');
                 }}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${copiato ? 'bg-green-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-green-500 hover:bg-green-600 text-white transition-colors"
               >
-                {copiato ? <><CheckCheck size={16} /> Copiato!</> : <><Copy size={16} /> Copia messaggio</>}
+                <MessageCircle size={16} />
+                Invia su WhatsApp
               </button>
               <button
-                onClick={() => { const id = messaggioConferma.clienteId; setMessaggioConferma(null); setCopiato(false); onSelectCliente(id); }}
+                onClick={() => { const id = messaggioConferma.clienteId; setMessaggioConferma(null); onSelectCliente(id); }}
                 className="px-4 py-3 rounded-xl border border-stone-200 text-sm font-semibold text-stone-600 hover:bg-stone-50 transition-colors"
               >
                 Vai alla scheda
