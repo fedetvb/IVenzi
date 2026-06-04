@@ -35,7 +35,7 @@ function normalizePhone(tel: string): string {
   return `39${cleaned}`;
 }
 
-const CORNICE_CARTE = '🌟👑💎🎀💎👑🌟';
+const CORNICE_CARTE = '🌟👑💎🎀💎🎀💎👑🌟';
 
 function conCornice(testo: string): string {
   return `${CORNICE_CARTE}\n${testo}\n${CORNICE_CARTE}`;
