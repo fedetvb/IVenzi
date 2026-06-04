@@ -43,7 +43,7 @@ export default function Clienti({ onSelectCliente }: Props) {
     const [{ data }, { data: sc }, { data: pr }] = await Promise.all([
       supabase.from('clienti').select('*').is('deleted_at', null).order('cognome').order('nome'),
       supabase.from('carte_sconto').select('cliente_id').not('cliente_id', 'is', null),
-      supabase.from('carte_premium').select('cliente_id'),
+      supabase.from('carte_premium').select('cliente_id').is('deleted_at', null),
     ]);
     setClienti((data || []) as Cliente[]);
     const ids = new Set<string>();
