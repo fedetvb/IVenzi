@@ -24,10 +24,13 @@ import {
   BookOpen,
   Download,
   Wifi,
+  WifiOff,
+  RefreshCw,
   Check,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
+import { onOfflineStateChange, type SyncState } from '../lib/offlineFetch';
 
 interface PingLogRow {
   eseguito_at: string;
@@ -155,6 +158,17 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
   const [isInstalled, setIsInstalled] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [pingBanner, setPingBanner] = useState<PingLogRow[] | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [syncState, setSyncState] = useState<SyncState>('idle');
+
+  useEffect(() => {
+    return onOfflineStateChange((online, pending, state) => {
+      setIsOnline(online);
+      setPendingCount(pending);
+      setSyncState(state);
+    });
+  }, []);
 
   useEffect(() => {
     const onResize = () => setMobile(isMobile());
@@ -317,6 +331,12 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Online/offline status dot */}
+            <div
+              title={isOnline ? (pendingCount > 0 ? `${pendingCount} modifiche offline in attesa` : 'Online') : 'Offline'}
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? (pendingCount > 0 ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-red-400'}`}
+            />
+
             {!isInstalled && installPrompt && (
               <button
                 onClick={handleInstall}
@@ -389,6 +409,41 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             >
               <X size={16} />
             </button>
+          </div>
+        )}
+
+        {/* Offline banner */}
+        {!isOnline && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-shrink-0">
+            <div className="w-6 h-6 bg-amber-100 rounded-md flex items-center justify-center flex-shrink-0">
+              <WifiOff size={13} className="text-amber-600" />
+            </div>
+            <p className="text-sm text-amber-800 font-medium flex-1">
+              Modalita' offline — i dati mostrati sono quelli salvati localmente.
+              {pendingCount > 0 && (
+                <span className="ml-1 text-amber-700">
+                  {pendingCount} {pendingCount === 1 ? 'modifica in attesa' : 'modifiche in attesa'} di sincronizzazione.
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Sync in progress banner */}
+        {isOnline && syncState === 'syncing' && (
+          <div className="bg-sky-50 border-b border-sky-200 px-4 sm:px-6 py-2 flex items-center gap-3 flex-shrink-0">
+            <RefreshCw size={14} className="text-sky-600 animate-spin flex-shrink-0" />
+            <p className="text-sm text-sky-700">Sincronizzazione modifiche offline in corso...</p>
+          </div>
+        )}
+
+        {/* Sync error banner */}
+        {isOnline && syncState === 'error' && pendingCount > 0 && (
+          <div className="bg-red-50 border-b border-red-200 px-4 sm:px-6 py-2 flex items-center gap-3 flex-shrink-0">
+            <WifiOff size={14} className="text-red-500 flex-shrink-0" />
+            <p className="text-sm text-red-700">
+              Impossibile sincronizzare {pendingCount} {pendingCount === 1 ? 'modifica' : 'modifiche'}. Riprovera' automaticamente.
+            </p>
           </div>
         )}
 

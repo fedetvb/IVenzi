@@ -1,4 +1,8 @@
 import { StrictMode } from 'react';
+import { initOfflineFetch } from './lib/offlineFetch';
+
+// Must be called before any Supabase fetch happens
+initOfflineFetch();
 
 // Registrazione Service Worker per PWA
 if ('serviceWorker' in navigator && !window.location.protocol.startsWith('file')) {
