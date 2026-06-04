@@ -661,7 +661,8 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
   const [carte, setCarte] = useState<CartaSconto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [showPasswordGate, setShowPasswordGate] = useState(false);
+  const [showPasswordGate, setShowPasswordGate] = useState<'nuova' | 'elimina' | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filtroStato, setFiltroStato] = useState<'tutte' | 'attive' | 'disattive'>('tutte');
   const [storicoCarta, setStoricoCarta] = useState<{ carta: CartaSconto; utilizzi: UtilizzoCarta[] } | null>(null);
@@ -686,10 +687,15 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
     load();
   }
 
-  async function deleteCarta(id: string) {
-    if (!confirm('Eliminare questa carta sconto?')) return;
+  async function confirmDeleteCarta(id: string) {
     await supabase.from('carte_sconto').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    setPendingDeleteId(null);
     load();
+  }
+
+  function deleteCarta(id: string) {
+    setPendingDeleteId(id);
+    setShowPasswordGate('elimina');
   }
 
   async function openStorico(carta: CartaSconto) {
@@ -734,7 +740,7 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
             </button>
           ))}
         </div>
-        <button onClick={() => setShowPasswordGate(true)} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex-shrink-0">
+        <button onClick={() => setShowPasswordGate('nuova')} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex-shrink-0">
           <Plus size={15} />
           Nuova carta
         </button>
@@ -830,10 +836,13 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
 
       {showPasswordGate && (
         <PasswordGateModal
-          titolo="Nuova carta sconto"
-          descrizione="Inserisci la password per creare una nuova carta sconto."
-          onSuccess={() => { setShowPasswordGate(false); setShowModal(true); }}
-          onClose={() => setShowPasswordGate(false)}
+          titolo={showPasswordGate === 'nuova' ? 'Nuova carta sconto' : 'Elimina carta sconto'}
+          descrizione={showPasswordGate === 'nuova' ? 'Inserisci la password per creare una nuova carta sconto.' : 'Inserisci la password per eliminare questa carta sconto.'}
+          onSuccess={() => {
+            if (showPasswordGate === 'nuova') { setShowPasswordGate(null); setShowModal(true); }
+            else if (pendingDeleteId) { setShowPasswordGate(null); confirmDeleteCarta(pendingDeleteId); }
+          }}
+          onClose={() => { setShowPasswordGate(null); setPendingDeleteId(null); }}
         />
       )}
       {showModal && (
@@ -883,7 +892,8 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
   const [carte, setCarte] = useState<CartaPremium[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [showPasswordGate, setShowPasswordGate] = useState<'nuova' | 'ricarica' | null>(null);
+  const [showPasswordGate, setShowPasswordGate] = useState<'nuova' | 'ricarica' | 'elimina' | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [cartaPendingRicarica, setCartaPendingRicarica] = useState<CartaPremium | null>(null);
   const [ricaricaCarta, setRicaricaCarta] = useState<CartaPremium | null>(null);
   const [storicoCarta, setStoricoCarta] = useState<{ carta: CartaPremium; utilizzi: UtilizzoCarta[]; ricariche: RicaricaPremium[] } | null>(null);
@@ -909,10 +919,15 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
     load();
   }
 
-  async function deleteCarta(id: string) {
-    if (!confirm('Eliminare questa carta premium?')) return;
+  async function confirmDeleteCarta(id: string) {
     await supabase.from('carte_premium').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    setPendingDeleteId(null);
     load();
+  }
+
+  function deleteCarta(id: string) {
+    setPendingDeleteId(id);
+    setShowPasswordGate('elimina');
   }
 
   async function openStorico(carta: CartaPremium) {
@@ -1035,13 +1050,14 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
 
       {showPasswordGate && (
         <PasswordGateModal
-          titolo={showPasswordGate === 'nuova' ? 'Nuova carta premium' : 'Ricarica carta premium'}
-          descrizione={showPasswordGate === 'nuova' ? 'Inserisci la password per creare una nuova carta premium.' : 'Inserisci la password per ricaricare questa carta premium.'}
+          titolo={showPasswordGate === 'nuova' ? 'Nuova carta premium' : showPasswordGate === 'elimina' ? 'Elimina carta premium' : 'Ricarica carta premium'}
+          descrizione={showPasswordGate === 'nuova' ? 'Inserisci la password per creare una nuova carta premium.' : showPasswordGate === 'elimina' ? 'Inserisci la password per eliminare questa carta premium.' : 'Inserisci la password per ricaricare questa carta premium.'}
           onSuccess={() => {
             if (showPasswordGate === 'nuova') { setShowPasswordGate(null); setShowModal(true); }
+            else if (showPasswordGate === 'elimina' && pendingDeleteId) { setShowPasswordGate(null); confirmDeleteCarta(pendingDeleteId); }
             else { setShowPasswordGate(null); setRicaricaCarta(cartaPendingRicarica); setCartaPendingRicarica(null); }
           }}
-          onClose={() => { setShowPasswordGate(null); setCartaPendingRicarica(null); }}
+          onClose={() => { setShowPasswordGate(null); setCartaPendingRicarica(null); setPendingDeleteId(null); }}
         />
       )}
       {showModal && (
