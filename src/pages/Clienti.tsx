@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import ClienteModal from '../components/ClienteModal';
@@ -65,8 +65,24 @@ export default function Clienti({ onSelectCliente }: Props) {
     setSchedeLoading(false);
   }, []);
 
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => { loadClienti(); }, [loadClienti]);
-  useEffect(() => { if (tab === 'da_confermare') loadSchede(); }, [tab, loadSchede]);
+
+  // Carica schede in attesa all'avvio
+  useEffect(() => { loadSchede(); }, [loadSchede]);
+
+  // Realtime: aggiorna il conteggio quando arriva una nuova scheda
+  useEffect(() => {
+    const ch = supabase
+      .channel('schede_da_confermare_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schede_clienti_da_confermare' }, () => {
+        loadSchede();
+      })
+      .subscribe();
+    channelRef.current = ch;
+    return () => { supabase.removeChannel(ch); };
+  }, [loadSchede]);
 
   async function deleteCliente(id: string, e: React.MouseEvent) {
     e.stopPropagation();
