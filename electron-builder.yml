@@ -29,8 +29,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  installerLanguages: [ItalianIT]
-  language: 1040   # codice lingua italiano
+  language: 1040
   shortcutName: Gestionale Salone
   createDesktopShortcut: true
   createStartMenuShortcut: true

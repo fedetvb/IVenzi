@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
-  base: process.env.ELECTRON === 'true' || mode === 'electron' ? './' : '/',
+  base: process.env.ELECTRON ? './' : '/',
   build: {
     outDir: 'dist',
   },
