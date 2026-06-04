@@ -420,7 +420,7 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
       supabase.from('schede_colore').select('*').eq('cliente_id', clienteId).is('deleted_at', null).order('data_trattamento', { ascending: false }),
       supabase.from('appuntamenti').select('*, appuntamento_trattamenti(nome_trattamento, prezzo)').eq('cliente_id', clienteId).is('deleted_at', null).order('data_ora', { ascending: false }),
       supabase.from('carte_sconto').select('id, codice, descrizione, tipo_sconto, valore_sconto, attiva, usa_e_getta').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
-      supabase.from('carte_premium').select('id, codice, saldo, note, attiva').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
+      supabase.from('carte_premium').select('id, codice, saldo, note, attiva').eq('cliente_id', clienteId).is('deleted_at', null).order('created_at', { ascending: false }),
     ]);
     if (cl) setCliente(cl as Cliente);
     setSchede((sc || []) as SchedaColore[]);
