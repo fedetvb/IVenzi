@@ -100,8 +100,13 @@ export default function App() {
       const romeStr = now.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
       const todayKey = romeStr.split(' ')[0]; // yyyy-mm-dd
 
-      // 1. Banner "ricorda di inviare i messaggi appuntamento"
-      setShowAppBanner(true);
+      // 1. Banner "ricorda di inviare i messaggi appuntamento" — solo prima delle 11:00 ora italiana
+      const appBannerKey = `app_banner_dismissed_${todayKey}`;
+      const romeTimePart = romeStr.split(' ')[1]; // HH:mm:ss
+      const romeHour = parseInt(romeTimePart.split(':')[0], 10);
+      if (romeHour < 11 && !localStorage.getItem(appBannerKey)) {
+        setShowAppBanner(true);
+      }
 
       // 2. Popup ping automatico keepalive (mostrato una volta per ping — chiave = timestamp del ping)
       const [{ data: kaPing }, { data: kaTipo }] = await Promise.all([
@@ -355,7 +360,11 @@ export default function App() {
               <p className="text-xs text-sky-700 mt-0.5">Hai inviato i promemoria appuntamento alle clienti di oggi?</p>
             </div>
             <button
-              onClick={() => setShowAppBanner(false)}
+              onClick={() => {
+                const todayIt = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+                localStorage.setItem(`app_banner_dismissed_${todayIt}`, '1');
+                setShowAppBanner(false);
+              }}
               className="p-1 hover:bg-sky-100 rounded-lg transition-colors text-sky-500 hover:text-sky-700 flex-shrink-0"
             >
               <X size={15} />
