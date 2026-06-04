@@ -25,6 +25,8 @@ import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw, ClipboardList } from 'lucide-react';
 import AiChat from './components/AiChat';
+import { isElectron } from './lib/localDb';
+import { syncSupabaseToLocal, syncLocalToSupabase } from './lib/sync';
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
 
@@ -144,6 +146,33 @@ export default function App() {
 
     checkStartupAlerts();
   }, []);
+
+  // Sync SQLite <-> Supabase all'avvio (solo in Electron, solo se online)
+  useEffect(() => {
+    if (!user || !isElectron() || !navigator.onLine) return;
+    const userId = user.id;
+    let cancelled = false;
+
+    async function doSync() {
+      try {
+        // Prima scarica da Supabase verso SQLite (per avere i dati piu' aggiornati)
+        await syncSupabaseToLocal(userId);
+        if (cancelled) return;
+        // Poi carica le modifiche locali non ancora sincronizzate verso Supabase
+        await syncLocalToSupabase(userId);
+      } catch (e) {
+        console.warn('[Sync] Errore sync iniziale:', e);
+      }
+    }
+
+    doSync();
+    // Retry ogni 5 minuti se online
+    const interval = setInterval(() => {
+      if (navigator.onLine && !cancelled) doSync();
+    }, 5 * 60 * 1000);
+
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user]);
 
   // Promemoria convalida fiches (controllato ogni 30s in base all'orario configurato)
   useEffect(() => {

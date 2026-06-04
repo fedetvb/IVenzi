@@ -2,21 +2,18 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const isDev = !app.isPackaged;
 
-// ─── Deep link protocol (reset password via email) ───────────────────────────
+// ─── Deep link protocol ───────────────────────────────────────────────────────
 const PROTOCOL = 'gestionale-salone';
-
-// Registra il protocollo personalizzato (necessario solo nella build packaged)
-if (!isDev) {
-  app.setAsDefaultProtocolClient(PROTOCOL);
-}
-
-// Tiene in memoria il deep link se l'app era chiusa quando l'utente ha cliccato
+if (!isDev) app.setAsDefaultProtocolClient(PROTOCOL);
 let pendingDeepLink = null;
 
 function handleDeepLink(url) {
@@ -30,40 +27,398 @@ function handleDeepLink(url) {
   }
 }
 
-// Windows: l'istanza già aperta riceve il link tramite secondo processo
 app.on('second-instance', (_event, argv) => {
   const url = argv.find(a => a.startsWith(`${PROTOCOL}://`));
   if (url) handleDeepLink(url);
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
 });
+app.on('open-url', (_event, url) => handleDeepLink(url));
 
-// macOS: il link arriva tramite 'open-url'
-app.on('open-url', (_event, url) => {
-  handleDeepLink(url);
-});
-
-// Forza istanza singola su Windows/Linux
 const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
-  app.quit();
-}
+if (!gotLock) app.quit();
 
 // ─── Config backup automatico ─────────────────────────────────────────────────
 const USER_DATA = app.getPath('userData');
 const CONFIG_PATH = join(USER_DATA, 'auto-backup-config.json');
 
 function readConfig() {
-  try {
-    if (existsSync(CONFIG_PATH)) return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
-  } catch { /* ignore */ }
+  try { if (existsSync(CONFIG_PATH)) return JSON.parse(readFileSync(CONFIG_PATH, 'utf8')); }
+  catch { /* ignore */ }
   return { enabled: false, time: '08:00', days: [1, 2, 3, 4, 5], last: '', folder: '' };
 }
+function writeConfig(cfg) { writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8'); }
 
-function writeConfig(cfg) {
-  writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8');
+// ─── Database SQLite ──────────────────────────────────────────────────────────
+let db = null;
+let dbReady = false;
+
+function initDatabase() {
+  let Database;
+  try {
+    if (app.isPackaged) {
+      const unpackedBase = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'better-sqlite3');
+      Database = require(existsSync(unpackedBase) ? unpackedBase : 'better-sqlite3');
+    } else {
+      Database = require('better-sqlite3');
+    }
+  } catch (e) {
+    console.warn('[DB] better-sqlite3 non disponibile:', e.message);
+    return false;
+  }
+  try {
+    const { mkdirSync } = require('fs');
+    const dbDir = join(USER_DATA, 'database');
+    if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
+    const dbPath = join(dbDir, 'gestionale.db');
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    createSchema();
+    console.log('[DB] SQLite inizializzato:', dbPath);
+    return true;
+  } catch (e) {
+    console.error('[DB] Errore inizializzazione:', e);
+    return false;
+  }
+}
+
+function nowIso() { return new Date().toISOString(); }
+function generateId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+function createSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clienti (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', cognome TEXT NOT NULL DEFAULT '',
+      telefono TEXT DEFAULT '', email TEXT DEFAULT '', data_nascita TEXT,
+      note TEXT DEFAULT '', foto_url TEXT DEFAULT '', user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS parrucchieri (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', colore TEXT NOT NULL DEFAULT '#888888',
+      attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS trattamenti_catalogo (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', descrizione TEXT DEFAULT '',
+      durata_minuti INTEGER NOT NULL DEFAULT 60, prezzo REAL NOT NULL DEFAULT 0,
+      colore TEXT NOT NULL DEFAULT '#888888', attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS appuntamenti (
+      id TEXT PRIMARY KEY, cliente_id TEXT, parrucchiere_id TEXT,
+      data_ora TEXT NOT NULL, durata_minuti INTEGER NOT NULL DEFAULT 60,
+      stato TEXT NOT NULL DEFAULT 'confermato', note TEXT DEFAULT '',
+      prezzo_totale REAL NOT NULL DEFAULT 0, user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS appuntamento_trattamenti (
+      id TEXT PRIMARY KEY, appuntamento_id TEXT NOT NULL, trattamento_id TEXT,
+      nome_trattamento TEXT NOT NULL DEFAULT '', prezzo REAL NOT NULL DEFAULT 0, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS schede_colore (
+      id TEXT PRIMARY KEY, cliente_id TEXT NOT NULL, data_trattamento TEXT NOT NULL,
+      formula_colore TEXT DEFAULT '', ossidante TEXT DEFAULT '', tempo_posa INTEGER DEFAULT 0,
+      note TEXT DEFAULT '', colore_base TEXT DEFAULT '', colore_target TEXT DEFAULT '',
+      tecnica TEXT DEFAULT '', foto_prima_url TEXT DEFAULT '', foto_dopo_url TEXT DEFAULT '',
+      user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS fiches (
+      id TEXT PRIMARY KEY, appuntamento_id TEXT, cliente_id TEXT, note TEXT DEFAULT '',
+      convalidata INTEGER NOT NULL DEFAULT 0, convalidata_at TEXT,
+      importo_convalidato REAL NOT NULL DEFAULT 0, manuale INTEGER NOT NULL DEFAULT 0,
+      data_riferimento TEXT, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS fiche_voci (
+      id TEXT PRIMARY KEY, fiche_id TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'servizio',
+      nome_voce TEXT NOT NULL DEFAULT '', parrucchiere_id TEXT, nome_parrucchiere TEXT DEFAULT '',
+      prezzo REAL NOT NULL DEFAULT 0, note TEXT DEFAULT '', ordine INTEGER NOT NULL DEFAULT 0, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS incassi (
+      id TEXT PRIMARY KEY, data TEXT NOT NULL, fiche_id TEXT, cliente_nome TEXT DEFAULT '',
+      importo REAL NOT NULL DEFAULT 0, note TEXT DEFAULT '', user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS carte_sconto (
+      id TEXT PRIMARY KEY, codice TEXT NOT NULL DEFAULT '', descrizione TEXT DEFAULT '',
+      tipo_sconto TEXT NOT NULL DEFAULT 'percentuale', valore_sconto REAL NOT NULL DEFAULT 0,
+      nominativa INTEGER NOT NULL DEFAULT 0, cliente_id TEXT, telefono_override TEXT DEFAULT '',
+      attiva INTEGER NOT NULL DEFAULT 1, usa_e_getta INTEGER NOT NULL DEFAULT 0, user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS utilizzi_carta_sconto (
+      id TEXT PRIMARY KEY, carta_sconto_id TEXT NOT NULL, fiche_id TEXT,
+      importo_originale REAL NOT NULL DEFAULT 0, sconto_applicato REAL NOT NULL DEFAULT 0,
+      importo_finale REAL NOT NULL DEFAULT 0, cliente_id TEXT, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS carte_premium (
+      id TEXT PRIMARY KEY, cliente_id TEXT NOT NULL, saldo REAL NOT NULL DEFAULT 0,
+      attiva INTEGER NOT NULL DEFAULT 1, user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS ricariche_carte_premium (
+      id TEXT PRIMARY KEY, carta_premium_id TEXT NOT NULL, importo REAL NOT NULL DEFAULT 0,
+      note TEXT DEFAULT '', tipo_ricarica TEXT DEFAULT 'manuale', user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS utilizzi_carta_premium (
+      id TEXT PRIMARY KEY, carta_premium_id TEXT NOT NULL, fiche_id TEXT,
+      importo_detratto REAL NOT NULL DEFAULT 0, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS prodotti_rivendita_catalogo (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', categoria TEXT DEFAULT '',
+      prezzo_vendita REAL NOT NULL DEFAULT 0, prezzo_acquisto REAL DEFAULT 0,
+      quantita_stock INTEGER NOT NULL DEFAULT 0, quantita_venduta INTEGER NOT NULL DEFAULT 0,
+      attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS rivendita_prodotti (
+      id TEXT PRIMARY KEY, fiche_id TEXT, parrucchiere_id TEXT,
+      nome_prodotto TEXT NOT NULL DEFAULT '', quantita INTEGER NOT NULL DEFAULT 1,
+      prezzo_unitario REAL NOT NULL DEFAULT 0, costo_unitario REAL DEFAULT 0,
+      data_vendita TEXT NOT NULL, note TEXT DEFAULT '', catalogo_id TEXT, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS trattamenti_eseguiti (
+      id TEXT PRIMARY KEY, fiche_id TEXT, parrucchiere_id TEXT,
+      nome_trattamento TEXT NOT NULL DEFAULT '', prezzo REAL NOT NULL DEFAULT 0,
+      data_esecuzione TEXT NOT NULL, note TEXT DEFAULT '', user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS impostazioni (
+      id TEXT PRIMARY KEY, chiave TEXT NOT NULL, valore TEXT, is_default INTEGER DEFAULT 0,
+      ordine INTEGER DEFAULT 0, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1, UNIQUE(chiave, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS template_messaggi (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', testo TEXT NOT NULL DEFAULT '',
+      is_default INTEGER NOT NULL DEFAULT 0, ordine INTEGER NOT NULL DEFAULT 0, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS assenze_parrucchieri (
+      id TEXT PRIMARY KEY, parrucchiere_id TEXT NOT NULL, data_inizio TEXT NOT NULL,
+      data_fine TEXT NOT NULL, note TEXT DEFAULT '', user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS magazzino_prodotti (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', categoria TEXT DEFAULT '',
+      quantita_attuale REAL NOT NULL DEFAULT 0, quantita_minima REAL DEFAULT 0,
+      unita_misura TEXT DEFAULT 'pz', fornitore TEXT DEFAULT '', prezzo_acquisto REAL DEFAULT 0,
+      note TEXT DEFAULT '', attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS magazzino_movimenti (
+      id TEXT PRIMARY KEY, prodotto_id TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'carico',
+      quantita REAL NOT NULL DEFAULT 0, note TEXT DEFAULT '', data_movimento TEXT NOT NULL, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS magazzino_schede_salvate (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', dati TEXT NOT NULL DEFAULT '[]', user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS spese_voci (
+      id TEXT PRIMARY KEY, descrizione TEXT NOT NULL DEFAULT '', importo REAL NOT NULL DEFAULT 0,
+      iva REAL DEFAULT 0, categoria TEXT DEFAULT '', data_spesa TEXT NOT NULL,
+      ricorrente INTEGER NOT NULL DEFAULT 0, ricorrenza TEXT DEFAULT '',
+      periodo_riferimento TEXT DEFAULT '', data_inizio TEXT, data_fine TEXT,
+      note TEXT DEFAULT '', user_id TEXT, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS schede_clienti_da_confermare (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', cognome TEXT DEFAULT '',
+      telefono TEXT DEFAULT '', email TEXT DEFAULT '', data_nascita TEXT,
+      note TEXT DEFAULT '', stato TEXT NOT NULL DEFAULT 'in_attesa', user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS giorni_parrucchiere (
+      id TEXT PRIMARY KEY, data_specifica TEXT NOT NULL, parrucchiere_id TEXT NOT NULL,
+      ordine INTEGER NOT NULL DEFAULT 0, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS voci_extra_catalogo (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', prezzo REAL NOT NULL DEFAULT 0,
+      attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS idx_appuntamenti_data ON appuntamenti(data_ora);
+    CREATE INDEX IF NOT EXISTS idx_fiches_app ON fiches(appuntamento_id);
+    CREATE INDEX IF NOT EXISTS idx_fiche_voci_fiche ON fiche_voci(fiche_id);
+    CREATE INDEX IF NOT EXISTS idx_clienti_nome ON clienti(cognome, nome);
+  `);
+}
+
+// ─── DB helpers ───────────────────────────────────────────────────────────────
+
+function applyFilters(whereParts, params, filters) {
+  for (const f of (filters || [])) {
+    if (f.op === 'is_null') { whereParts.push(`${f.col} IS NULL`); }
+    else if (f.op === 'not_null') { whereParts.push(`${f.col} IS NOT NULL`); }
+    else if (f.op === 'in') {
+      if (!f.val || f.val.length === 0) { whereParts.push('1=0'); }
+      else { whereParts.push(`${f.col} IN (${f.val.map(() => '?').join(',')})`); params.push(...f.val); }
+    }
+    else if (f.op === '=' || f.op === 'eq') { whereParts.push(`${f.col} = ?`); params.push(f.val); }
+    else if (f.op === '!=' || f.op === 'neq') { whereParts.push(`${f.col} != ?`); params.push(f.val); }
+    else if (f.op === '>=' || f.op === 'gte') { whereParts.push(`${f.col} >= ?`); params.push(f.val); }
+    else if (f.op === '<=' || f.op === 'lte') { whereParts.push(`${f.col} <= ?`); params.push(f.val); }
+    else if (f.op === '>') { whereParts.push(`${f.col} > ?`); params.push(f.val); }
+    else if (f.op === '<') { whereParts.push(`${f.col} < ?`); params.push(f.val); }
+    else if (f.op === 'like') { whereParts.push(`${f.col} LIKE ?`); params.push(f.val); }
+  }
+}
+
+function dbSelect({ table, columns = '*', filters = [], orderBy = [], limit = null, countOnly = false }) {
+  if (!db) return countOnly ? 0 : [];
+  try {
+    const wp = [], params = [];
+    applyFilters(wp, params, filters);
+    const where = wp.length ? ' WHERE ' + wp.join(' AND ') : '';
+    if (countOnly) {
+      const row = db.prepare(`SELECT COUNT(*) as cnt FROM ${table}${where}`).get(...params);
+      return row ? row.cnt : 0;
+    }
+    const order = orderBy.length ? ' ORDER BY ' + orderBy.map(o => `${o.col} ${o.asc !== false ? 'ASC' : 'DESC'}`).join(', ') : '';
+    const lim = limit !== null ? ` LIMIT ${parseInt(limit)}` : '';
+    return db.prepare(`SELECT ${columns} FROM ${table}${where}${order}${lim}`).all(...params);
+  } catch (e) { console.error(`[DB] SELECT ${table}:`, e.message); return countOnly ? 0 : []; }
+}
+
+function coerce(obj) {
+  const out = { ...obj };
+  for (const k of Object.keys(out)) { if (typeof out[k] === 'boolean') out[k] = out[k] ? 1 : 0; }
+  return out;
+}
+
+function dbInsert({ table, data, userId }) {
+  if (!db) return null;
+  try {
+    const id = data.id || generateId();
+    const ts = nowIso();
+    const row = coerce({ ...data, id, user_id: userId || data.user_id, created_at: data.created_at || ts, updated_at: ts, _dirty: 1 });
+    const cols = Object.keys(row).filter(k => row[k] !== undefined);
+    db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).run(...cols.map(k => row[k]));
+    return dbSelect({ table, filters: [{ col: 'id', op: '=', val: id }] })[0] || null;
+  } catch (e) { console.error(`[DB] INSERT ${table}:`, e.message); return null; }
+}
+
+function dbUpdate({ table, id, data }) {
+  if (!db) return null;
+  try {
+    const updates = coerce({ ...data, updated_at: nowIso(), _dirty: 1 });
+    const cols = Object.keys(updates).filter(k => k !== 'id' && updates[k] !== undefined);
+    db.prepare(`UPDATE ${table} SET ${cols.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cols.map(k => updates[k]), id);
+    return dbSelect({ table, filters: [{ col: 'id', op: '=', val: id }] })[0] || null;
+  } catch (e) { console.error(`[DB] UPDATE ${table}:`, e.message); return null; }
+}
+
+function dbDelete({ table, filters }) {
+  if (!db) return false;
+  try {
+    const wp = [], params = [];
+    applyFilters(wp, params, filters);
+    db.prepare(`DELETE FROM ${table} WHERE ${wp.join(' AND ')}`).run(...params);
+    return true;
+  } catch (e) { console.error(`[DB] DELETE ${table}:`, e.message); return false; }
+}
+
+function dbUpsert({ table, data, onConflict, userId }) {
+  if (!db) return null;
+  try {
+    const existing = (() => {
+      if (!onConflict) return null;
+      const filters = onConflict.split(',').map(c => c.trim()).map(col => ({ col, op: '=', val: data[col] })).filter(f => f.val !== undefined && f.val !== null);
+      if (!filters.length) return null;
+      const rows = dbSelect({ table, filters });
+      return rows.length > 0 ? rows[0] : null;
+    })();
+    if (existing) return dbUpdate({ table, id: existing.id, data });
+    return dbInsert({ table, data: { ...data, id: data.id || generateId() }, userId });
+  } catch (e) { console.error(`[DB] UPSERT ${table}:`, e.message); return null; }
+}
+
+function dbSyncUpsert({ table, rows }) {
+  if (!db || !rows || rows.length === 0) return;
+  const ts = nowIso();
+  const upsertAll = db.transaction((allRows) => {
+    for (const row of allRows) {
+      const r = coerce({ ...row, synced_at: ts, _dirty: 0 });
+      const cols = Object.keys(r).filter(k => r[k] !== undefined);
+      db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).run(...cols.map(k => r[k]));
+    }
+  });
+  upsertAll(rows);
+}
+
+function getDirtyRows(table) {
+  if (!db) return [];
+  try { return db.prepare(`SELECT * FROM ${table} WHERE _dirty = 1`).all(); }
+  catch { return []; }
+}
+
+function markSynced(table, ids) {
+  if (!db || !ids.length) return;
+  const ph = ids.map(() => '?').join(',');
+  db.prepare(`UPDATE ${table} SET _dirty = 0, synced_at = ? WHERE id IN (${ph})`).run(nowIso(), ...ids);
+}
+
+const ALL_TABLES = [
+  'clienti','parrucchieri','trattamenti_catalogo','appuntamenti','appuntamento_trattamenti',
+  'schede_colore','fiches','fiche_voci','incassi','carte_sconto','utilizzi_carta_sconto',
+  'carte_premium','ricariche_carte_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
+  'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
+  'assenze_parrucchieri','magazzino_prodotti','magazzino_movimenti','magazzino_schede_salvate',
+  'spese_voci','schede_clienti_da_confermare','giorni_parrucchiere','voci_extra_catalogo',
+];
+
+function exportLocalData() {
+  if (!db) return null;
+  const out = {};
+  for (const t of ALL_TABLES) {
+    try { out[t] = db.prepare(`SELECT * FROM ${t}`).all(); }
+    catch { out[t] = []; }
+  }
+  return out;
+}
+
+function importBackup(backupData) {
+  if (!db) return { success: false, error: 'DB non disponibile' };
+  const results = {};
+  const doImport = db.transaction(() => {
+    for (const table of ALL_TABLES) {
+      const rows = backupData[table];
+      if (!Array.isArray(rows) || rows.length === 0) continue;
+      try { dbSyncUpsert({ table, rows }); results[table] = { ok: true, count: rows.length }; }
+      catch (e) { results[table] = { ok: false, error: String(e) }; }
+    }
+  });
+  try { doImport(); return { success: true, results }; }
+  catch (e) { return { success: false, error: String(e), results }; }
 }
 
 // ─── Finestra principale ──────────────────────────────────────────────────────
@@ -71,57 +426,34 @@ let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1280, height: 800, minWidth: 900, minHeight: 600,
     title: 'Gestionale Salone',
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: false,
     },
     autoHideMenuBar: true,
   });
-
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
-  } else {
-    mainWindow.loadFile(join(__dirname, '../dist/index.html'));
-  }
-
+  if (isDev) { mainWindow.loadURL('http://localhost:5173'); }
+  else { mainWindow.loadFile(join(__dirname, '../dist/index.html')); }
   mainWindow.on('closed', () => { mainWindow = null; });
-
-  // F12 apre/chiude DevTools per diagnostica
-  mainWindow.webContents.on('before-input-event', (_event, input) => {
-    if (input.key === 'F12') mainWindow.webContents.toggleDevTools();
-  });
-
-  // Invia il deep link pendente una volta che il renderer è pronto
+  mainWindow.webContents.on('before-input-event', (_e, input) => { if (input.key === 'F12') mainWindow.webContents.toggleDevTools(); });
   mainWindow.webContents.once('did-finish-load', () => {
-    if (pendingDeepLink) {
-      mainWindow.webContents.send('deep-link', pendingDeepLink);
-      pendingDeepLink = null;
-    }
+    if (pendingDeepLink) { mainWindow.webContents.send('deep-link', pendingDeepLink); pendingDeepLink = null; }
+    mainWindow.webContents.send('db:ready', dbReady);
   });
 }
 
 app.whenReady().then(() => {
-  // Su Windows il deep link arriva come argomento CLI al primo avvio
   const deepLinkArg = process.argv.find(a => a.startsWith(`${PROTOCOL}://`));
   if (deepLinkArg) pendingDeepLink = deepLinkArg;
-
+  dbReady = initDatabase();
   createWindow();
   startBackupScheduler();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 // ─── Scheduler backup automatico ─────────────────────────────────────────────
 let schedulerInterval = null;
@@ -135,63 +467,32 @@ function startBackupScheduler() {
 async function checkAndRunBackup() {
   const cfg = readConfig();
   if (!cfg.enabled) return;
-
-  const now = new Date();
-  const todayStr = toLocalDateStr(now);
+  const n = new Date();
+  const todayStr = toLocalDateStr(n);
   if (cfg.last === todayStr) return;
-  if (!cfg.days.includes(now.getDay())) return;
-
+  if (!cfg.days.includes(n.getDay())) return;
   const [hh, mm] = cfg.time.split(':').map(Number);
-  if (now.getHours() < hh || (now.getHours() === hh && now.getMinutes() < mm)) return;
-
-  // Invia al renderer per scaricare i dati dal DB
-  if (mainWindow) {
-    mainWindow.webContents.send('trigger-auto-backup', { todayStr });
-  }
+  if (n.getHours() < hh || (n.getHours() === hh && n.getMinutes() < mm)) return;
+  if (mainWindow) mainWindow.webContents.send('trigger-auto-backup', { todayStr });
 }
 
 function toLocalDateStr(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// ─── IPC handlers ─────────────────────────────────────────────────────────────
-
+// ─── IPC: backup file ─────────────────────────────────────────────────────────
 ipcMain.handle('backup:get-config', () => readConfig());
-
-ipcMain.handle('backup:set-config', (_e, cfg) => {
-  writeConfig(cfg);
-  startBackupScheduler();
-  return { ok: true };
-});
-
-// Dialogo per scegliere la cartella di destinazione
+ipcMain.handle('backup:set-config', (_e, cfg) => { writeConfig(cfg); startBackupScheduler(); return { ok: true }; });
 ipcMain.handle('backup:pick-folder', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: 'Scegli la cartella per i backup automatici',
-    properties: ['openDirectory', 'createDirectory'],
-  });
-  if (canceled || !filePaths.length) return { ok: false };
-  return { ok: true, folder: filePaths[0] };
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { title: 'Scegli cartella backup', properties: ['openDirectory', 'createDirectory'] });
+  return canceled || !filePaths.length ? { ok: false } : { ok: true, folder: filePaths[0] };
 });
-
-// Salvataggio silenzioso nella cartella configurata (backup automatico)
 ipcMain.handle('backup:save-auto', async (_e, { filename, content }) => {
   const cfg = readConfig();
-  const folder = cfg.folder;
-  if (!folder) return { ok: false, reason: 'no-folder' };
-  try {
-    const filePath = join(folder, filename);
-    writeFileSync(filePath, content, 'utf8');
-    return { ok: true, filePath };
-  } catch (err) {
-    return { ok: false, reason: String(err) };
-  }
+  if (!cfg.folder) return { ok: false, reason: 'no-folder' };
+  try { writeFileSync(join(cfg.folder, filename), content, 'utf8'); return { ok: true, filePath: join(cfg.folder, filename) }; }
+  catch (err) { return { ok: false, reason: String(err) }; }
 });
-
-// Dialogo "Salva come" manuale (backup manuale dall'interfaccia)
 ipcMain.handle('backup:save-file', async (_e, { filename, content }) => {
   const cfg = readConfig();
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -199,27 +500,64 @@ ipcMain.handle('backup:save-file', async (_e, { filename, content }) => {
     filters: [{ name: 'Backup JSON', extensions: ['json'] }],
   });
   if (canceled || !filePath) return { ok: false, reason: 'canceled' };
+  try { writeFileSync(filePath, content, 'utf8'); return { ok: true, filePath }; }
+  catch (err) { return { ok: false, reason: String(err) }; }
+});
+ipcMain.handle('backup:mark-done', (_e, { todayStr }) => { const cfg = readConfig(); cfg.last = todayStr; writeConfig(cfg); return { ok: true }; });
+ipcMain.handle('shell:show-folder', (_e, fp) => shell.openPath(fp));
+ipcMain.handle('shell:show-item', (_e, fp) => shell.showItemInFolder(fp));
+
+// ─── IPC: database locale ─────────────────────────────────────────────────────
+ipcMain.handle('db:is-ready', () => dbReady);
+
+ipcMain.handle('db:select', (_e, args) => {
+  try { return { ok: true, data: dbSelect(args) }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:insert', (_e, args) => {
+  try { return { ok: true, data: dbInsert(args) }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:update', (_e, args) => {
+  try { return { ok: true, data: dbUpdate(args) }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:delete', (_e, args) => {
+  try { return { ok: true, data: dbDelete(args) }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:upsert', (_e, args) => {
+  try { return { ok: true, data: dbUpsert(args) }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:bulk-insert', (_e, { table, rows, userId }) => {
+  if (!db || !rows || rows.length === 0) return { ok: true, count: 0 };
   try {
-    writeFileSync(filePath, content, 'utf8');
-    return { ok: true, filePath };
-  } catch (err) {
-    return { ok: false, reason: String(err) };
-  }
+    const insertAll = db.transaction((allRows) => { for (const row of allRows) dbInsert({ table, data: row, userId }); return allRows.length; });
+    return { ok: true, count: insertAll(rows) };
+  } catch (e) { return { ok: false, error: String(e) }; }
 });
-
-// Segna il backup automatico come eseguito oggi
-ipcMain.handle('backup:mark-done', (_e, { todayStr }) => {
-  const cfg = readConfig();
-  cfg.last = todayStr;
-  writeConfig(cfg);
-  return { ok: true };
+ipcMain.handle('db:sync-upsert', (_e, { table, rows }) => {
+  try { dbSyncUpsert({ table, rows }); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e) }; }
 });
-
-// Apri la cartella nel file explorer
-ipcMain.handle('shell:show-folder', (_e, folderPath) => {
-  shell.openPath(folderPath);
+ipcMain.handle('db:get-dirty', (_e, { table }) => {
+  try { return { ok: true, data: getDirtyRows(table) }; }
+  catch (e) { return { ok: false, error: String(e) }; }
 });
-
-ipcMain.handle('shell:show-item', (_e, filePath) => {
-  shell.showItemInFolder(filePath);
+ipcMain.handle('db:mark-synced', (_e, { table, ids }) => {
+  try { markSynced(table, ids); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:export', () => {
+  try { return { ok: true, data: exportLocalData() }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:import-backup', (_e, backupData) => {
+  try { return importBackup(backupData); }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:get-path', () => {
+  const dbPath = join(USER_DATA, 'database', 'gestionale.db');
+  return { path: dbPath, exists: existsSync(dbPath) };
 });

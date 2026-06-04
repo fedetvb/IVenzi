@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi } from 'lucide-react';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import { restoreBackup, exportBackup, isElectron as isElectronEnv } from '../lib/localDb';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive';
@@ -317,7 +318,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
   const [restorePreview, setRestorePreview] = useState<Record<string, number> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isElectron = !!window.electronAPI;
+  const isElectronApp = !!window.electronAPI;
 
   // Backup automatico
   const [abEnabled, setAbEnabled] = useState(() => localStorage.getItem(AB_ENABLED_KEY) === '1');
@@ -364,8 +365,8 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
     setTimeout(() => setAbSaved(false), 2000);
   }
 
-  const apiUrl = `${localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-database`;
-  const headers = {
+  const cloudApiUrl = `${localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-database`;
+  const cloudHeaders = {
     'Authorization': `Bearer ${localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
     'Content-Type': 'application/json',
   };
@@ -374,9 +375,18 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
     setExporting(true);
     setFeedback(null);
     try {
-      const res = await fetch(apiUrl, { headers });
-      if (!res.ok) throw new Error('Errore durante l\'esportazione');
-      const data = await res.json();
+      let data: Record<string, unknown> | null = null;
+
+      // In Electron: usa DB locale (funziona anche offline)
+      if (isElectronEnv()) {
+        data = await exportBackup();
+        if (!data) throw new Error('Esportazione locale non riuscita');
+      } else {
+        const res = await fetch(cloudApiUrl, { headers: cloudHeaders });
+        if (!res.ok) throw new Error('Errore durante l\'esportazione');
+        data = await res.json();
+      }
+
       const jsonStr = JSON.stringify(data, null, 2);
       const suggestedName = `backup-salone-${localDateStr()}.json`;
 
@@ -457,12 +467,10 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
       const text = await confirmRestore.text();
       const parsed = JSON.parse(text);
 
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(parsed),
-      });
-      const result = await res.json();
+      // Supporta sia il formato legacy {data, tables} che il formato diretto {clienti:[...], ...}
+      const backupData = parsed?.data ?? parsed;
+
+      const result = await restoreBackup(backupData);
 
       if (result.success) {
         setFeedback({ tipo: 'ok', msg: 'Ripristino completato. Tutti i dati sono stati ripristinati dal backup.' });
@@ -471,7 +479,11 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
           .filter(([, v]) => !(v as { ok: boolean }).ok)
           .map(([k]) => k)
           .join(', ');
-        setFeedback({ tipo: 'warn', msg: `Ripristino parziale. Errori nelle tabelle: ${errors}` });
+        if (errors) {
+          setFeedback({ tipo: 'warn', msg: `Ripristino parziale. Errori nelle tabelle: ${errors}` });
+        } else {
+          setFeedback({ tipo: 'err', msg: `Errore: ${result.error ?? 'Sconosciuto'}` });
+        }
       }
     } catch (e) {
       setFeedback({ tipo: 'err', msg: `Errore durante il ripristino: ${String(e)}` });
@@ -625,7 +637,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
                 : 'Il backup scatta mentre il programma è aperto nel browser'}
             </p>
           </div>
-          {isElectron && (
+          {isElectronApp && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 flex-shrink-0">
               App desktop
             </span>
@@ -662,7 +674,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
             </div>
 
             {/* Cartella destinazione (solo Electron) */}
-            {isElectron && (
+            {isElectronApp && (
               <div>
                 <label className="block text-sm font-semibold text-stone-700 mb-2 flex items-center gap-2">
                   <FolderOpen size={14} className="text-stone-400" />
