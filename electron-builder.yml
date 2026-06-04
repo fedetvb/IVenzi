@@ -5,7 +5,6 @@ copyright: Copyright © 2025
 # Directory dell'app compilata da Vite
 directories:
   output: dist-electron
-  buildResources: electron/assets
 
 # File da includere nel pacchetto
 files:
@@ -18,12 +17,14 @@ files:
 extraMetadata:
   main: electron/main.js
 
+# Icona condivisa (electron-builder converte automaticamente in .ico / .icns)
+icon: public/icons/icon-512x512.png
+
 # ── Windows ───────────────────────────────────────────────────────────────────
 win:
   target:
     - target: nsis
       arch: [x64]
-  icon: electron/assets/icon.ico
 
 nsis:
   oneClick: false
@@ -39,7 +40,6 @@ mac:
   target:
     - target: dmg
       arch: [x64, arm64]
-  icon: electron/assets/icon.icns
   category: public.app-category.business
 
 dmg:
@@ -50,7 +50,6 @@ linux:
   target:
     - target: AppImage
       arch: [x64]
-  icon: electron/assets/icon.png
   category: Office
 
 # ── Auto-update (opzionale, configurare in futuro) ────────────────────────────
