@@ -212,8 +212,8 @@ export default function AiChat() {
         return copy;
       });
 
-      // Dopo slot liberi senza filtro parrucchiere, proponi la scelta
-      if (tool === 'get_slot_liberi' && !args.parrucchiere_id && parrucchieri.length > 0) {
+      // Dopo slot liberi mostra sempre il filtro parrucchiere
+      if (tool === 'get_slot_liberi' && parrucchieri.length > 0) {
         setAwaitingParrucchiere({ data: args.data as string });
       }
 
@@ -577,7 +577,7 @@ export default function AiChat() {
             <p className="text-[10px] text-stone-400 font-medium mb-1.5 uppercase tracking-wide">Filtra per parrucchiere:</p>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => setAwaitingParrucchiere(null)}
+                onClick={() => runTool('get_slot_liberi', { data: awaitingParrucchiere.data }, 'Slot liberi tutti')}
                 className="px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-600 text-xs font-semibold transition-colors"
               >
                 Tutti
@@ -587,7 +587,6 @@ export default function AiChat() {
                   key={p.id}
                   onClick={() => {
                     const d = awaitingParrucchiere.data;
-                    setAwaitingParrucchiere(null);
                     runTool('get_slot_liberi', { data: d, parrucchiere_id: p.id }, `Slot liberi di ${p.nome}`);
                   }}
                   className="px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-semibold transition-colors"
