@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, Copy, CheckCheck } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import ClienteModal from '../components/ClienteModal';
 import PasswordGateModal from '../components/PasswordGateModal';
@@ -37,6 +37,8 @@ export default function Clienti({ onSelectCliente }: Props) {
   const [confermando, setConfermando] = useState<string | null>(null);
   const [eliminaGate, setEliminaGate] = useState<string | null>(null);
   const [eliminaClienteGate, setEliminaClienteGate] = useState<string | null>(null);
+  const [messaggioConferma, setMessaggioConferma] = useState<{ nome: string; testo: string } | null>(null);
+  const [copiato, setCopiato] = useState(false);
 
   const loadClienti = useCallback(async () => {
     setLoading(true);
@@ -104,6 +106,20 @@ export default function Clienti({ onSelectCliente }: Props) {
     loadClienti();
   }
 
+  function genderBenvenuto(nome: string): string {
+    const n = nome.trim().toLowerCase();
+    const maschiliEccezioni = ['luca', 'andrea', 'nicola', 'mattia', 'enea', 'elia', 'tobia', 'battista'];
+    if (maschiliEccezioni.includes(n)) return 'Benvenuto';
+    if (n.endsWith('a') || n.endsWith('e')) return 'Benvenuta';
+    return 'Benvenuto';
+  }
+
+  function buildMessaggioConferma(nome: string): string {
+    const benvenuto = genderBenvenuto(nome);
+    const cornice = '🌟🌸🌈🦋🌈🌸🌟';
+    return `${cornice}\n${benvenuto} ${nome}!\n\nGrazie mille per aver scelto il nostro salone. Siamo felicissimi di averti con noi!\n\nI tuoi dati sono trattati con la massima riservatezza e non verranno mai condivisi con terzi. La tua privacy è al sicuro.\n\nLa scheda che hai compilato ci permetterà di conoscerti al meglio e di offrirti un servizio personalizzato, sempre in linea con le tue esigenze e i tuoi desideri.\n\nNon vediamo l'ora di prenderci cura di te!\n${cornice}`;
+  }
+
   async function confermaScheda(scheda: SchedaDaConfermare) {
     setConfermando(scheda.id);
     const { data, error } = await supabase.from('clienti').insert({
@@ -122,6 +138,7 @@ export default function Clienti({ onSelectCliente }: Props) {
       setSchedaAperta(null);
       loadSchede();
       loadClienti();
+      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome) });
       onSelectCliente(data.id);
     }
     setConfermando(null);
@@ -825,6 +842,42 @@ export default function Clienti({ onSelectCliente }: Props) {
           onSuccess={() => eseguiEliminaCliente(eliminaClienteGate)}
           onClose={() => setEliminaClienteGate(null)}
         />
+      )}
+
+      {messaggioConferma && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
+            <div className="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-stone-800">Messaggio di benvenuto</h2>
+                <p className="text-xs text-stone-400 mt-0.5">Copia e invia a {messaggioConferma.nome}</p>
+              </div>
+              <button
+                onClick={() => { setMessaggioConferma(null); setCopiato(false); }}
+                className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              <div className="bg-stone-50 rounded-xl px-4 py-4 text-sm text-stone-700 leading-relaxed whitespace-pre-wrap border border-stone-100 font-mono">
+                {messaggioConferma.testo}
+              </div>
+            </div>
+            <div className="px-6 pb-5">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(messaggioConferma.testo);
+                  setCopiato(true);
+                  setTimeout(() => setCopiato(false), 2500);
+                }}
+                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${copiato ? 'bg-green-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+              >
+                {copiato ? <><CheckCheck size={16} /> Copiato!</> : <><Copy size={16} /> Copia messaggio</>}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
