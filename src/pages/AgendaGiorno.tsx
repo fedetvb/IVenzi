@@ -179,7 +179,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   async function saveMessaggio() {
     setSavingMsg(true);
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('impostazioni').upsert({ chiave: 'messaggio_auguri', valore: msgDraft, updated_at: new Date().toISOString(), user_id: user?.id });
+    await supabase.from('impostazioni').upsert({ chiave: 'messaggio_auguri', valore: msgDraft, updated_at: new Date().toISOString(), user_id: user?.id }, { onConflict: 'chiave,user_id' });
     setMessaggioAuguri(msgDraft);
     setSavingMsg(false);
     setEditingMsg(false);

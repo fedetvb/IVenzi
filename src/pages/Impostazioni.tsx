@@ -776,7 +776,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     if (!trimmed) return;
     setSavingUrl(true);
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('impostazioni').upsert({ chiave: 'registrazione_url', valore: trimmed, user_id: user?.id }, { onConflict: 'chiave' });
+    await supabase.from('impostazioni').upsert({ chiave: 'registrazione_url', valore: trimmed, user_id: user?.id }, { onConflict: 'chiave,user_id' });
     setRegistrazioneUrl(trimmed);
     setEditingUrl(false);
     setSavingUrl(false);
@@ -1603,8 +1603,8 @@ function PaginaPromemoria({ onBack, onTestReminder }: { onBack: () => void; onTe
     const { data: { user } } = await supabase.auth.getUser();
     const uid = user?.id;
     const [r1, r2] = await Promise.all([
-      supabase.from('impostazioni').upsert({ chiave: 'promemoria_convalida_giorni', valore: JSON.stringify(giorni), user_id: uid }),
-      supabase.from('impostazioni').upsert({ chiave: 'promemoria_convalida_orario', valore: orario, user_id: uid }),
+      supabase.from('impostazioni').upsert({ chiave: 'promemoria_convalida_giorni', valore: JSON.stringify(giorni), user_id: uid }, { onConflict: 'chiave,user_id' }),
+      supabase.from('impostazioni').upsert({ chiave: 'promemoria_convalida_orario', valore: orario, user_id: uid }, { onConflict: 'chiave,user_id' }),
     ]);
     setSaving(false);
     if (r1.error || r2.error) {
@@ -2003,8 +2003,8 @@ function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
     const { data: { user } } = await supabase.auth.getUser();
     const uid = user?.id;
     const [r1, r2] = await Promise.all([
-      supabase.from('impostazioni').upsert({ chiave: 'messaggio_avviso_appuntamento', valore: messaggio, user_id: uid }),
-      supabase.from('impostazioni').upsert({ chiave: 'avviso_appuntamento_indirizzo', valore: indirizzo, user_id: uid }),
+      supabase.from('impostazioni').upsert({ chiave: 'messaggio_avviso_appuntamento', valore: messaggio, user_id: uid }, { onConflict: 'chiave,user_id' }),
+      supabase.from('impostazioni').upsert({ chiave: 'avviso_appuntamento_indirizzo', valore: indirizzo, user_id: uid }, { onConflict: 'chiave,user_id' }),
     ]);
     setSaving(false);
     if (r1.error || r2.error) {
@@ -2462,7 +2462,7 @@ function PasswordRow({ chiave, titolo, descrizione, feedbackMsg, onSaved, aperta
     if (!nuovaPassword.trim()) { setFeedback({ tipo: 'err', msg: 'La nuova password non può essere vuota' }); return; }
     if (nuovaPassword !== confermaPassword) { setFeedback({ tipo: 'err', msg: 'Le password non coincidono' }); return; }
     setLoading(true);
-    const { error } = await supabase.from('impostazioni').upsert({ chiave, valore: nuovaPassword, user_id: user?.id });
+    const { error } = await supabase.from('impostazioni').upsert({ chiave, valore: nuovaPassword, user_id: user?.id }, { onConflict: 'chiave,user_id' });
     setLoading(false);
     if (error) {
       setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio' });
@@ -2520,7 +2520,7 @@ function PasswordRow({ chiave, titolo, descrizione, feedbackMsg, onSaved, aperta
       return;
     }
     // OTP valido: salva nuova password di sezione
-    const { error } = await supabase.from('impostazioni').upsert({ chiave, valore: otpNuova, user_id: user?.id });
+    const { error } = await supabase.from('impostazioni').upsert({ chiave, valore: otpNuova, user_id: user?.id }, { onConflict: 'chiave,user_id' });
     setOtpVerifyLoading(false);
     if (error) {
       setOtpVerifyMsg({ tipo: 'err', msg: 'Errore durante il salvataggio.' });
