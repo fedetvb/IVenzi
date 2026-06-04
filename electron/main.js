@@ -93,6 +93,11 @@ function createWindow() {
 
   mainWindow.on('closed', () => { mainWindow = null; });
 
+  // F12 apre/chiude DevTools per diagnostica
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'F12') mainWindow.webContents.toggleDevTools();
+  });
+
   // Invia il deep link pendente una volta che il renderer è pronto
   mainWindow.webContents.once('did-finish-load', () => {
     if (pendingDeepLink) {
