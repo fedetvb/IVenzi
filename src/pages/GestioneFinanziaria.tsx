@@ -1382,7 +1382,7 @@ export default function GestioneFinanziaria() {
               {/* Soglia minima da incassare per ora */}
               <div className="bg-amber-50 rounded-xl p-3.5 border border-amber-100">
                 <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">
-                  {mostraOrarioNetto === 'netto' ? 'Minimo/ora (con tasse)' : 'Minimo/ora (senza tasse)'}
+                  {mostraOrarioNetto === 'netto' ? 'Minimo da incassare/ora (con tasse)' : 'Minimo da incassare/ora (senza tasse)'}
                 </p>
                 <p className="text-2xl font-bold text-amber-700">€{breakEvenDisplay.toFixed(2)}</p>
                 <p className="text-[10px] text-stone-400 mt-0.5">
@@ -1614,7 +1614,7 @@ export default function GestioneFinanziaria() {
 
                       {/* Minimo da incassare */}
                       <div className="bg-amber-50 rounded-xl p-3.5 border border-amber-100">
-                        <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">Minimo/ora (pareggio)</p>
+                        <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-1">Minimo da incassare/ora</p>
                         {p.costoOrario !== null ? (
                           <p className="text-2xl font-bold text-amber-700">€{p.costoOrario.toFixed(2)}</p>
                         ) : (
