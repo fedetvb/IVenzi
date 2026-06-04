@@ -25,8 +25,11 @@ import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw, ClipboardList } from 'lucide-react';
 import AiChat from './components/AiChat';
-import { isElectron } from './lib/localDb';
-import { syncSupabaseToLocal, syncLocalToSupabase } from './lib/sync';
+import { isElectron, setCurrentUserId, registerPushRowNow } from './lib/localDb';
+import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow } from './lib/sync';
+
+// Registra il push immediato una volta sola al caricamento del modulo
+registerPushRowNow(pushRowNow);
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
 
@@ -147,6 +150,11 @@ export default function App() {
     checkStartupAlerts();
   }, []);
 
+  // Imposta userId corrente per il push immediato in localDb
+  useEffect(() => {
+    setCurrentUserId(user?.id ?? null);
+  }, [user]);
+
   // Sync SQLite <-> Supabase all'avvio (solo in Electron, solo se online)
   useEffect(() => {
     if (!user || !isElectron() || !navigator.onLine) return;
@@ -155,10 +163,8 @@ export default function App() {
 
     async function doSync() {
       try {
-        // Prima scarica da Supabase verso SQLite (per avere i dati piu' aggiornati)
         await syncSupabaseToLocal(userId);
         if (cancelled) return;
-        // Poi carica le modifiche locali non ancora sincronizzate verso Supabase
         await syncLocalToSupabase(userId);
       } catch (e) {
         console.warn('[Sync] Errore sync iniziale:', e);
@@ -166,7 +172,7 @@ export default function App() {
     }
 
     doSync();
-    // Retry ogni 5 minuti se online
+    // Retry ogni 5 minuti per recuperare eventuali dirty rimaste
     const interval = setInterval(() => {
       if (navigator.onLine && !cancelled) doSync();
     }, 5 * 60 * 1000);
@@ -307,31 +313,65 @@ export default function App() {
     setTimeout(checkAndShowPendingScheda, 400);
   }
 
-  // Realtime + polling fallback: avviso nuova scheda cliente da confermare
+  // Realtime + polling: avviso nuova scheda cliente da confermare
   useEffect(() => {
     if (!user) return;
 
-    // All'avvio mostra subito eventuali schede pendenti non ancora viste
+    let channelRef: ReturnType<typeof supabase.channel> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
+
+    function setupChannel() {
+      if (destroyed) return;
+      if (channelRef) {
+        supabase.removeChannel(channelRef);
+        channelRef = null;
+      }
+
+      channelRef = supabase
+        .channel(`nuova_scheda_${Date.now()}`) // nome univoco per evitare conflitti
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'schede_clienti_da_confermare',
+        }, (payload) => {
+          const row = payload.new as { id?: string; nome?: string; cognome?: string };
+          if (row.id) {
+            const dismissed = getSchedeDismissed();
+            if (!dismissed.has(row.id)) {
+              mostraSchedaBanner(row.id, row.nome ?? '', row.cognome ?? '');
+            }
+          }
+        })
+        .on('system', {}, (status) => {
+          // Se il canale si chiude inaspettatamente, riconnetti dopo 5 secondi
+          if ((status as unknown as { status: string })?.status === 'CHANNEL_ERROR' ||
+              (status as unknown as { status: string })?.status === 'TIMED_OUT') {
+            if (!destroyed) {
+              reconnectTimer = setTimeout(setupChannel, 5000);
+            }
+          }
+        })
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            if (!destroyed) reconnectTimer = setTimeout(setupChannel, 5000);
+          }
+        });
+    }
+
+    // All'avvio: mostra subito eventuali schede pendenti non ancora viste
     checkAndShowPendingScheda();
 
-    // Realtime: ogni INSERT mostra subito il banner
-    const ch = supabase
-      .channel('nuova_scheda_da_confermare')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'schede_clienti_da_confermare',
-      }, (payload) => {
-        const row = payload.new as { id?: string; nome?: string; cognome?: string };
-        if (row.id) mostraSchedaBanner(row.id, row.nome ?? '', row.cognome ?? '');
-      })
-      .subscribe();
+    // Avvia il canale realtime
+    setupChannel();
 
-    // Polling ogni 30 secondi come fallback
-    const interval = setInterval(checkAndShowPendingScheda, 30_000);
+    // Polling ogni 10 secondi — piu' aggressivo per non perdere nulla
+    const interval = setInterval(checkAndShowPendingScheda, 10_000);
 
     return () => {
-      supabase.removeChannel(ch);
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (channelRef) supabase.removeChannel(channelRef);
       clearInterval(interval);
     };
   }, [user]);

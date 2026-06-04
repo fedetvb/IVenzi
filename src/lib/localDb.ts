@@ -1,15 +1,20 @@
 /**
  * Database adapter unificato.
  *
- * - In Electron (window.electronAPI.db disponibile): usa SQLite locale via IPC.
- *   Ogni scrittura viene marcata _dirty=1 e sincronizzata verso Supabase quando online.
- * - In browser / web app: usa Supabase direttamente (comportamento invariato).
- *
- * L'API pubblica imita quella del Supabase JS client per minimizzare le modifiche
- * nelle pagine: ogni funzione ritorna { data, error, count }.
+ * - In Electron: usa SQLite locale via IPC. Ogni scrittura viene inviata
+ *   immediatamente a Supabase in background (fire-and-forget). Se offline,
+ *   resta dirty e viene ripresa dal sync periodico.
+ * - In browser: usa Supabase direttamente (comportamento invariato).
  */
 
 import { supabase } from './supabase';
+
+// Importazione lazy per evitare dipendenza circolare (sync.ts importa localDb.ts)
+let _pushRowNow: ((table: string, row: Record<string, unknown>, userId: string) => Promise<void>) | null = null;
+
+export function registerPushRowNow(fn: typeof _pushRowNow) {
+  _pushRowNow = fn;
+}
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -36,13 +41,19 @@ export function isElectron(): boolean {
   return typeof window !== 'undefined' && !!window.electronAPI?.db;
 }
 
+// ID utente corrente (settato da App.tsx dopo il login)
+let _currentUserId: string | null = null;
+export function setCurrentUserId(id: string | null) { _currentUserId = id; }
+export function getCurrentUserId(): string | null { return _currentUserId; }
+
 // ─── Helper: converti booleans SQLite (0/1) in boolean JS ────────────────────
 
+const BOOL_FIELDS = new Set([
+  'attivo', 'convalidata', 'manuale', 'nominativa', 'attiva', 'usa_e_getta',
+  'ricorrente', 'is_default', '_dirty',
+]);
+
 function boolCols(row: Record<string, unknown>): Record<string, unknown> {
-  const BOOL_FIELDS = new Set([
-    'attivo', 'convalidata', 'manuale', 'nominativa', 'attiva', 'usa_e_getta',
-    'ricorrente', 'is_default', '_dirty',
-  ]);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
     out[k] = BOOL_FIELDS.has(k) && (v === 0 || v === 1) ? v === 1 : v;
@@ -53,6 +64,12 @@ function boolCols(row: Record<string, unknown>): Record<string, unknown> {
 function normRows<T>(rows: unknown): T[] {
   if (!Array.isArray(rows)) return [];
   return rows.map(r => boolCols(r as Record<string, unknown>)) as T[];
+}
+
+// Trigger del push immediato senza bloccare il chiamante
+function triggerPush(table: string, row: Record<string, unknown> | null) {
+  if (!_pushRowNow || !row || !_currentUserId) return;
+  _pushRowNow(table, row, _currentUserId).catch(() => {/* errore gestito dentro pushRowNow */});
 }
 
 // ─── SELECT ───────────────────────────────────────────────────────────────────
@@ -74,24 +91,25 @@ export async function dbSelect<T = Record<string, unknown>>(args: {
 
   // Browser: Supabase
   try {
-    let q = supabase.from(args.table).select(args.columns || '*');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from(args.table).select(args.columns || '*');
     for (const f of (args.filters || [])) {
-      if (f.op === 'is_null') { q = (q as ReturnType<typeof supabase.from>).is(f.col, null); }
-      else if (f.op === 'not_null') { q = (q as ReturnType<typeof supabase.from>).not(f.col, 'is', null); }
-      else if (f.op === 'in') { q = (q as ReturnType<typeof supabase.from>).in(f.col, f.val as unknown[]); }
-      else if (f.op === 'eq' || f.op === '=') { q = (q as ReturnType<typeof supabase.from>).eq(f.col, f.val); }
-      else if (f.op === 'neq' || f.op === '!=') { q = (q as ReturnType<typeof supabase.from>).neq(f.col, f.val); }
-      else if (f.op === 'gte' || f.op === '>=') { q = (q as ReturnType<typeof supabase.from>).gte(f.col, f.val); }
-      else if (f.op === 'lte' || f.op === '<=') { q = (q as ReturnType<typeof supabase.from>).lte(f.col, f.val); }
-      else if (f.op === '>') { q = (q as ReturnType<typeof supabase.from>).gt(f.col, f.val); }
-      else if (f.op === '<') { q = (q as ReturnType<typeof supabase.from>).lt(f.col, f.val); }
-      else if (f.op === 'like') { q = (q as ReturnType<typeof supabase.from>).like(f.col, f.val as string); }
+      if (f.op === 'is_null') { q = q.is(f.col, null); }
+      else if (f.op === 'not_null') { q = q.not(f.col, 'is', null); }
+      else if (f.op === 'in') { q = q.in(f.col, f.val as unknown[]); }
+      else if (f.op === 'eq' || f.op === '=') { q = q.eq(f.col, f.val); }
+      else if (f.op === 'neq' || f.op === '!=') { q = q.neq(f.col, f.val); }
+      else if (f.op === 'gte' || f.op === '>=') { q = q.gte(f.col, f.val); }
+      else if (f.op === 'lte' || f.op === '<=') { q = q.lte(f.col, f.val); }
+      else if (f.op === '>') { q = q.gt(f.col, f.val); }
+      else if (f.op === '<') { q = q.lt(f.col, f.val); }
+      else if (f.op === 'like') { q = q.like(f.col, f.val as string); }
     }
     for (const o of (args.orderBy || [])) {
-      q = (q as ReturnType<typeof supabase.from>).order(o.col, { ascending: o.asc !== false });
+      q = q.order(o.col, { ascending: o.asc !== false });
     }
     if (args.limit !== undefined && args.limit !== null) {
-      q = (q as ReturnType<typeof supabase.from>).limit(args.limit);
+      q = q.limit(args.limit);
     }
     const { data, error, count } = await q;
     return { data: (data as T[]) ?? null, error: error?.message ?? null, count: count ?? undefined };
@@ -106,12 +124,13 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
   table: string;
   data: Record<string, unknown>;
   userId?: string;
-  single?: boolean;
 }): Promise<DbResult<T>> {
   if (isElectron()) {
     const res = await window.electronAPI!.db!.insert(args);
     if (!res.ok) return { data: null, error: res.error ?? 'Errore DB' };
-    return { data: res.data ? boolCols(res.data as Record<string, unknown>) as T : null, error: null };
+    const row = res.data ? boolCols(res.data as Record<string, unknown>) as T : null;
+    if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
+    return { data: row, error: null };
   }
   try {
     const { data, error } = await supabase.from(args.table).insert(args.data).select();
@@ -133,7 +152,9 @@ export async function dbUpdate<T = Record<string, unknown>>(args: {
   if (isElectron()) {
     const res = await window.electronAPI!.db!.update(args);
     if (!res.ok) return { data: null, error: res.error ?? 'Errore DB' };
-    return { data: res.data ? boolCols(res.data as Record<string, unknown>) as T : null, error: null };
+    const row = res.data ? boolCols(res.data as Record<string, unknown>) as T : null;
+    if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
+    return { data: row, error: null };
   }
   try {
     const { data, error } = await supabase.from(args.table).update(args.data).eq('id', args.id).select();
@@ -157,10 +178,11 @@ export async function dbDelete(args: {
     return { data: null, error: null };
   }
   try {
-    let q = supabase.from(args.table).delete();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from(args.table).delete();
     for (const f of args.filters) {
-      if (f.op === 'eq' || f.op === '=') q = (q as ReturnType<typeof supabase.from>).eq(f.col, f.val);
-      else if (f.op === 'in') q = (q as ReturnType<typeof supabase.from>).in(f.col, f.val as unknown[]);
+      if (f.op === 'eq' || f.op === '=') q = q.eq(f.col, f.val);
+      else if (f.op === 'in') q = q.in(f.col, f.val as unknown[]);
     }
     const { error } = await q;
     return { data: null, error: error?.message ?? null };
@@ -180,11 +202,15 @@ export async function dbUpsert<T = Record<string, unknown>>(args: {
   if (isElectron()) {
     const res = await window.electronAPI!.db!.upsert(args);
     if (!res.ok) return { data: null, error: res.error ?? 'Errore DB' };
-    return { data: res.data ? boolCols(res.data as Record<string, unknown>) as T : null, error: null };
+    const row = res.data ? boolCols(res.data as Record<string, unknown>) as T : null;
+    if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
+    return { data: row, error: null };
   }
   try {
-    const q = supabase.from(args.table).upsert(args.data, args.onConflict ? { onConflict: args.onConflict } : undefined);
-    const { data, error } = await q.select();
+    const { data, error } = await supabase
+      .from(args.table)
+      .upsert(args.data, args.onConflict ? { onConflict: args.onConflict } : undefined)
+      .select();
     if (error) return { data: null, error: error.message };
     const row = Array.isArray(data) ? data[0] : data;
     return { data: row as T ?? null, error: null };
@@ -193,7 +219,7 @@ export async function dbUpsert<T = Record<string, unknown>>(args: {
   }
 }
 
-// ─── UPSERT multiplo (array) ──────────────────────────────────────────────────
+// ─── UPSERT multiplo ──────────────────────────────────────────────────────────
 
 export async function dbUpsertMany<T = Record<string, unknown>>(args: {
   table: string;
@@ -204,8 +230,14 @@ export async function dbUpsertMany<T = Record<string, unknown>>(args: {
   if (isElectron()) {
     const results: T[] = [];
     for (const row of args.rows) {
-      const res = await window.electronAPI!.db!.upsert({ table: args.table, data: row, onConflict: args.onConflict, userId: args.userId });
-      if (res.ok && res.data) results.push(boolCols(res.data as Record<string, unknown>) as T);
+      const res = await window.electronAPI!.db!.upsert({
+        table: args.table, data: row, onConflict: args.onConflict, userId: args.userId,
+      });
+      if (res.ok && res.data) {
+        const r = boolCols(res.data as Record<string, unknown>) as T;
+        results.push(r);
+        triggerPush(args.table, res.data as Record<string, unknown>);
+      }
     }
     return { data: results, error: null };
   }
@@ -233,16 +265,17 @@ export async function dbCount(args: {
     return typeof res.data === 'number' ? res.data : 0;
   }
   try {
-    let q = supabase.from(args.table).select('*', { count: 'exact', head: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from(args.table).select('*', { count: 'exact', head: true });
     for (const f of (args.filters || [])) {
-      if (f.op === 'is_null') q = (q as ReturnType<typeof supabase.from>).is(f.col, null);
-      else if (f.op === 'not_null') q = (q as ReturnType<typeof supabase.from>).not(f.col, 'is', null);
-      else if (f.op === 'eq' || f.op === '=') q = (q as ReturnType<typeof supabase.from>).eq(f.col, f.val);
-      else if (f.op === 'neq' || f.op === '!=') q = (q as ReturnType<typeof supabase.from>).neq(f.col, f.val);
-      else if (f.op === 'gte' || f.op === '>=') q = (q as ReturnType<typeof supabase.from>).gte(f.col, f.val);
-      else if (f.op === 'lte' || f.op === '<=') q = (q as ReturnType<typeof supabase.from>).lte(f.col, f.val);
-      else if (f.op === '>') q = (q as ReturnType<typeof supabase.from>).gt(f.col, f.val);
-      else if (f.op === '<') q = (q as ReturnType<typeof supabase.from>).lt(f.col, f.val);
+      if (f.op === 'is_null') q = q.is(f.col, null);
+      else if (f.op === 'not_null') q = q.not(f.col, 'is', null);
+      else if (f.op === 'eq' || f.op === '=') q = q.eq(f.col, f.val);
+      else if (f.op === 'neq' || f.op === '!=') q = q.neq(f.col, f.val);
+      else if (f.op === 'gte' || f.op === '>=') q = q.gte(f.col, f.val);
+      else if (f.op === 'lte' || f.op === '<=') q = q.lte(f.col, f.val);
+      else if (f.op === '>') q = q.gt(f.col, f.val);
+      else if (f.op === '<') q = q.lt(f.col, f.val);
     }
     const { count } = await q;
     return count ?? 0;
@@ -251,7 +284,7 @@ export async function dbCount(args: {
   }
 }
 
-// ─── IMPOSTAZIONE (helper specializzato per la tabella impostazioni) ───────────
+// ─── IMPOSTAZIONE ─────────────────────────────────────────────────────────────
 
 export async function getImpostazione(chiave: string, userId?: string): Promise<string | null> {
   if (isElectron()) {
@@ -260,8 +293,7 @@ export async function getImpostazione(chiave: string, userId?: string): Promise<
     const res = await dbSelect<{ valore: string }>({ table: 'impostazioni', columns: 'valore', filters });
     return res.data?.[0]?.valore ?? null;
   }
-  const q = supabase.from('impostazioni').select('valore').eq('chiave', chiave);
-  const { data } = await q.maybeSingle();
+  const { data } = await supabase.from('impostazioni').select('valore').eq('chiave', chiave).maybeSingle();
   return (data as { valore: string } | null)?.valore ?? null;
 }
 
@@ -273,35 +305,30 @@ export async function setImpostazione(chiave: string, valore: string, userId: st
   await supabase.from('impostazioni').upsert({ chiave, valore, user_id: userId }, { onConflict: 'chiave,user_id' });
 }
 
-// ─── RIPRISTINO BACKUP (supporta sia online che offline in Electron) ──────────
+// ─── BACKUP ───────────────────────────────────────────────────────────────────
 
 export async function restoreBackup(backupData: Record<string, unknown>): Promise<{ success: boolean; error?: string; results?: Record<string, unknown> }> {
-  // In Electron: usa il DB locale direttamente (funziona anche offline)
   if (isElectron()) {
     const res = await window.electronAPI!.db!.importBackup(backupData);
-    return res;
+    return res as { success: boolean; error?: string; results?: Record<string, unknown> };
   }
-
-  // Browser: usa la edge function Supabase (richiede internet)
   const { data: { session } } = await supabase.auth.getSession();
-  const supabaseUrl = (supabase as unknown as { supabaseUrl: string }).supabaseUrl || '';
-  const apiUrl = `${supabaseUrl}/functions/v1/backup-database`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any;
+  const apiUrl = `${sb.supabaseUrl}/functions/v1/backup-database`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'apikey': (supabase as unknown as { supabaseKey: string }).supabaseKey || '',
+    'apikey': sb.supabaseKey ?? '',
   };
   if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
   const res = await fetch(apiUrl, { method: 'POST', headers, body: JSON.stringify(backupData) });
   return await res.json();
 }
 
-// ─── EXPORT BACKUP (preferisce dati locali in Electron) ──────────────────────
-
 export async function exportBackup(): Promise<Record<string, unknown> | null> {
   if (isElectron()) {
     const res = await window.electronAPI!.db!.export();
-    return res.ok ? res.data : null;
+    return res.ok ? (res.data as Record<string, unknown>) : null;
   }
-  return null; // Il browser usa la edge function direttamente
+  return null;
 }

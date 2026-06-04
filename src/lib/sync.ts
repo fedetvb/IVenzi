@@ -1,68 +1,45 @@
 /**
  * Sincronizzazione bidirezionale SQLite locale <-> Supabase.
  *
- * Strategia "ultima scrittura vince" basata su updated_at / created_at:
  * - syncSupabaseToLocal: scarica tutto da Supabase e aggiorna il SQLite locale
- *   (le righe vengono marcate _dirty=0 perche' vengono da Supabase)
  * - syncLocalToSupabase: carica le righe con _dirty=1 e le scrive su Supabase
+ * - pushRowNow: push immediato di una singola riga dopo una scrittura locale
  */
 
 import { supabase } from './supabase';
 import { isElectron } from './localDb';
 
-// Tabelle da sincronizzare con le relative colonne select
-const SYNC_TABLES: Array<{ table: string; columns: string; softDelete?: boolean }> = [
-  { table: 'clienti', columns: '*', softDelete: true },
-  { table: 'parrucchieri', columns: '*' },
-  { table: 'trattamenti_catalogo', columns: '*' },
-  { table: 'appuntamenti', columns: '*', softDelete: true },
-  { table: 'appuntamento_trattamenti', columns: '*' },
-  { table: 'schede_colore', columns: '*', softDelete: true },
-  { table: 'fiches', columns: '*' },
-  { table: 'fiche_voci', columns: '*' },
-  { table: 'incassi', columns: '*' },
-  { table: 'carte_sconto', columns: '*', softDelete: true },
-  { table: 'utilizzi_carta_sconto', columns: '*' },
-  { table: 'carte_premium', columns: '*', softDelete: true },
-  { table: 'ricariche_carte_premium', columns: '*' },
-  { table: 'utilizzi_carta_premium', columns: '*' },
-  { table: 'prodotti_rivendita_catalogo', columns: '*', softDelete: true },
-  { table: 'rivendita_prodotti', columns: '*' },
-  { table: 'trattamenti_eseguiti', columns: '*' },
-  { table: 'impostazioni', columns: '*' },
-  { table: 'template_messaggi', columns: '*' },
-  { table: 'assenze_parrucchieri', columns: '*' },
-  { table: 'magazzino_prodotti', columns: '*', softDelete: true },
-  { table: 'magazzino_movimenti', columns: '*' },
-  { table: 'magazzino_schede_salvate', columns: '*' },
-  { table: 'spese_voci', columns: '*', softDelete: true },
-  { table: 'schede_clienti_da_confermare', columns: '*' },
-  { table: 'giorni_parrucchiere', columns: '*' },
-  { table: 'voci_extra_catalogo', columns: '*' },
+const SYNC_TABLES: string[] = [
+  'clienti', 'parrucchieri', 'trattamenti_catalogo', 'appuntamenti',
+  'appuntamento_trattamenti', 'schede_colore', 'fiches', 'fiche_voci',
+  'incassi', 'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium',
+  'ricariche_carte_premium', 'utilizzi_carta_premium', 'prodotti_rivendita_catalogo',
+  'rivendita_prodotti', 'trattamenti_eseguiti', 'impostazioni', 'template_messaggi',
+  'assenze_parrucchieri', 'magazzino_prodotti', 'magazzino_movimenti',
+  'magazzino_schede_salvate', 'spese_voci', 'schede_clienti_da_confermare',
+  'giorni_parrucchiere', 'voci_extra_catalogo',
 ];
 
-// ─── Supabase -> SQLite (download) ────────────────────────────────────────────
+// ─── Supabase -> SQLite (download completo) ───────────────────────────────────
 
 export async function syncSupabaseToLocal(userId: string): Promise<void> {
   if (!isElectron() || !window.electronAPI?.db) return;
 
-  for (const { table } of SYNC_TABLES) {
+  for (const table of SYNC_TABLES) {
     try {
       const { data, error } = await supabase
         .from(table)
         .select('*')
         .eq('user_id', userId);
 
-      if (error) {
-        console.warn(`[Sync] Errore lettura ${table} da Supabase:`, error.message);
+      if (error || !data || data.length === 0) {
+        if (error) console.warn(`[Sync] Errore lettura ${table}:`, error.message);
         continue;
       }
 
-      if (!data || data.length === 0) continue;
-
       await window.electronAPI.db.syncUpsert({ table, rows: data as Record<string, unknown>[] });
     } catch (e) {
-      console.warn(`[Sync] Errore sync download ${table}:`, e);
+      console.warn(`[Sync] Errore download ${table}:`, e);
     }
   }
 }
@@ -72,33 +49,77 @@ export async function syncSupabaseToLocal(userId: string): Promise<void> {
 export async function syncLocalToSupabase(userId: string): Promise<void> {
   if (!isElectron() || !window.electronAPI?.db) return;
 
-  for (const { table } of SYNC_TABLES) {
+  for (const table of SYNC_TABLES) {
     try {
       const res = await window.electronAPI.db.getDirty(table);
       if (!res.ok || !res.data || (res.data as unknown[]).length === 0) continue;
 
-      const dirtyRows = (res.data as Record<string, unknown>[]).map(row => {
-        // Rimuove le colonne solo-locali prima di mandare a Supabase
-        const { _dirty, synced_at, ...rest } = row;
-        void _dirty; void synced_at;
-        return { ...rest, user_id: userId };
-      });
-
-      const { error } = await supabase
-        .from(table)
-        .upsert(dirtyRows, { onConflict: 'id' });
-
-      if (error) {
-        console.warn(`[Sync] Errore upload ${table}:`, error.message);
-        continue;
-      }
-
-      const ids = dirtyRows.map(r => r.id as string).filter(Boolean);
-      if (ids.length > 0) {
-        await window.electronAPI.db.markSynced(table, ids);
-      }
+      await _pushDirtyRows(table, res.data as Record<string, unknown>[], userId);
     } catch (e) {
-      console.warn(`[Sync] Errore sync upload ${table}:`, e);
+      console.warn(`[Sync] Errore upload ${table}:`, e);
     }
+  }
+}
+
+// ─── Push immediato di una singola riga appena scritta ────────────────────────
+
+/**
+ * Chiamato subito dopo ogni INSERT/UPDATE/UPSERT in Electron.
+ * Fire-and-forget: se fallisce, la riga resta dirty e viene ripresa dal sync periodico.
+ */
+export async function pushRowNow(
+  table: string,
+  row: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  if (!isElectron() || !navigator.onLine) return;
+  try {
+    const { _dirty, synced_at, ...rest } = row as Record<string, unknown>;
+    void _dirty; void synced_at;
+    const rowToSync = { ...rest, user_id: userId };
+
+    const { error } = await supabase
+      .from(table)
+      .upsert(rowToSync, { onConflict: 'id' });
+
+    if (error) {
+      console.warn(`[Sync] Push immediato ${table} fallito:`, error.message);
+      return;
+    }
+
+    // Marca come sincronizzata
+    if (row.id && window.electronAPI?.db) {
+      await window.electronAPI.db.markSynced(table, [row.id as string]);
+    }
+  } catch (e) {
+    console.warn(`[Sync] Push immediato ${table} errore:`, e);
+  }
+}
+
+// ─── Push di piu' righe dirty ─────────────────────────────────────────────────
+
+async function _pushDirtyRows(
+  table: string,
+  dirtyRows: Record<string, unknown>[],
+  userId: string
+): Promise<void> {
+  const rows = dirtyRows.map(row => {
+    const { _dirty, synced_at, ...rest } = row;
+    void _dirty; void synced_at;
+    return { ...rest, user_id: userId };
+  });
+
+  const { error } = await supabase
+    .from(table)
+    .upsert(rows, { onConflict: 'id' });
+
+  if (error) {
+    console.warn(`[Sync] Errore push ${table}:`, error.message);
+    return;
+  }
+
+  const ids = rows.map(r => r.id as string).filter(Boolean);
+  if (ids.length > 0 && window.electronAPI?.db) {
+    await window.electronAPI.db.markSynced(table, ids);
   }
 }
