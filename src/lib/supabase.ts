@@ -6,9 +6,13 @@ const LS_URL_KEY = 'sb_custom_url';
 const LS_KEY_KEY = 'sb_custom_anon_key';
 
 const supabaseUrl =
-  localStorage.getItem(LS_URL_KEY) || import.meta.env.VITE_SUPABASE_URL;
+  localStorage.getItem(LS_URL_KEY) ||
+  import.meta.env.VITE_SUPABASE_URL ||
+  'https://cfsourwsjhhriytkdnuw.supabase.co';
 const supabaseAnonKey =
-  localStorage.getItem(LS_KEY_KEY) || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  localStorage.getItem(LS_KEY_KEY) ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmc291cndzamhocml5dGtkbnV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjEzMDksImV4cCI6MjA5NDQ5NzMwOX0.XXTX5NYTIYF-Dn9-iA-YgJQd8G4CVKPTedoBscD1OOI';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
