@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, Printer, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi } from 'lucide-react';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import StatisticheGate from '../components/StatisticheGate';
@@ -758,12 +758,33 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
 
 // ─── Pagina QR Code ───────────────────────────────────────────────────────────
 
+type QrLayout = 'con_frase' | 'solo_punti' | 'solo_qr';
+type QrFormato = 'a4' | 'a5' | 'a6' | 'cartolina';
+
+const BELLA_FRASE = 'Ogni capello racconta una storia.\nLasciaci essere parte della tua.';
+
+const FORMATO_LABELS: Record<QrFormato, string> = {
+  a4: 'A4 (210×297 mm)',
+  a5: 'A5 (148×210 mm)',
+  a6: 'A6 (105×148 mm)',
+  cartolina: 'Cartolina (100×150 mm)',
+};
+
+const FORMATO_MM: Record<QrFormato, [number, number]> = {
+  a4: [210, 297],
+  a5: [148, 210],
+  a6: [105, 148],
+  cartolina: [100, 150],
+};
+
 function PaginaQRCode({ onBack }: { onBack: () => void }) {
-  const printRef = useRef<HTMLDivElement>(null);
   const [registrazioneUrl, setRegistrazioneUrl] = useState('https://silver-kitsune-3a0339.netlify.app/');
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
   const [savingUrl, setSavingUrl] = useState(false);
+  const [layout, setLayout] = useState<QrLayout>('con_frase');
+  const [formato, setFormato] = useState<QrFormato>('a4');
+  const [generando, setGenerando] = useState(false);
 
   useEffect(() => {
     supabase.from('impostazioni').select('valore').eq('chiave', 'registrazione_url').maybeSingle().then(({ data }) => {
@@ -782,7 +803,200 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     setSavingUrl(false);
   }
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(registrazioneUrl)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&data=${encodeURIComponent(registrazioneUrl)}`;
+
+  async function handleDownloadPdf() {
+    setGenerando(true);
+    try {
+      const [w, h] = FORMATO_MM[formato];
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: h > w ? 'portrait' : 'landscape', unit: 'mm', format: [w, h] });
+
+      const cx = w / 2;
+      const margin = w * 0.08;
+
+      // sfondo bianco
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, w, h, 'F');
+
+      // carica QR come immagine
+      const qrSize = Math.min(w * 0.52, h * 0.40);
+
+      const qrImg = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d')!;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = reject;
+        img.src = qrUrl;
+      });
+
+      let y = margin;
+
+      if (layout === 'con_frase') {
+        // icona cerchio dorato
+        const r = Math.min(w * 0.055, 7);
+        doc.setFillColor(245, 158, 11);
+        doc.circle(cx, y + r, r, 'F');
+        y += r * 2 + 3;
+
+        // titolo
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(Math.max(14, w * 0.07));
+        doc.setTextColor(28, 25, 23);
+        doc.text('Benvenuta!', cx, y, { align: 'center' });
+        y += Math.max(6, w * 0.04);
+
+        // bella frase
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(Math.max(8, w * 0.038));
+        doc.setTextColor(120, 113, 108);
+        const fraseLines = doc.splitTextToSize(BELLA_FRASE.replace('\n', ' '), w - margin * 2);
+        doc.text(fraseLines, cx, y, { align: 'center' });
+        y += fraseLines.length * Math.max(5, w * 0.03) + Math.max(3, w * 0.02);
+
+        // sottotitolo
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(Math.max(7, w * 0.033));
+        doc.setTextColor(120, 113, 108);
+        const sub = doc.splitTextToSize('Scansiona il codice QR con il tuo smartphone per compilare la tua scheda cliente', w - margin * 2);
+        doc.text(sub, cx, y, { align: 'center' });
+        y += sub.length * Math.max(4, w * 0.025) + Math.max(3, w * 0.02);
+
+        // QR
+        const qrX = cx - qrSize / 2;
+        doc.setDrawColor(231, 229, 228);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(qrX - 2, y - 2, qrSize + 4, qrSize + 4, 3, 3, 'S');
+        doc.addImage(qrImg, 'PNG', qrX, y, qrSize, qrSize);
+        y += qrSize + Math.max(4, w * 0.025);
+
+        // 4 passi
+        y = _drawSteps(doc, y, w, h, margin, cx);
+
+        // privacy
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(Math.max(6, w * 0.028));
+        doc.setTextColor(168, 162, 158);
+        doc.text('I tuoi dati saranno trattati nel rispetto della privacy', cx, h - margin * 0.6, { align: 'center' });
+
+      } else if (layout === 'solo_punti') {
+        // solo QR + 4 punti (no bella frase, no titolo)
+        // piccolo logo
+        const r = Math.min(w * 0.045, 6);
+        doc.setFillColor(245, 158, 11);
+        doc.circle(cx, y + r, r, 'F');
+        y += r * 2 + 4;
+
+        // titolo compatto
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(Math.max(12, w * 0.06));
+        doc.setTextColor(28, 25, 23);
+        doc.text('Benvenuta!', cx, y, { align: 'center' });
+        y += Math.max(5, w * 0.035);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(Math.max(7, w * 0.032));
+        doc.setTextColor(120, 113, 108);
+        const sub2 = doc.splitTextToSize('Scansiona il codice QR per compilare la tua scheda cliente', w - margin * 2);
+        doc.text(sub2, cx, y, { align: 'center' });
+        y += sub2.length * Math.max(4, w * 0.025) + Math.max(3, w * 0.02);
+
+        // QR
+        const qrX2 = cx - qrSize / 2;
+        doc.setDrawColor(231, 229, 228);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(qrX2 - 2, y - 2, qrSize + 4, qrSize + 4, 3, 3, 'S');
+        doc.addImage(qrImg, 'PNG', qrX2, y, qrSize, qrSize);
+        y += qrSize + Math.max(4, w * 0.025);
+
+        y = _drawSteps(doc, y, w, h, margin, cx);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(Math.max(6, w * 0.028));
+        doc.setTextColor(168, 162, 158);
+        doc.text('I tuoi dati saranno trattati nel rispetto della privacy', cx, h - margin * 0.6, { align: 'center' });
+
+      } else {
+        // solo QR code centrato verticalmente
+        const qrSizeLg = Math.min(w * 0.65, h * 0.55);
+        const qrYLg = h / 2 - qrSizeLg / 2 - h * 0.03;
+        doc.setDrawColor(231, 229, 228);
+        doc.setLineWidth(0.4);
+        doc.roundedRect(cx - qrSizeLg / 2 - 3, qrYLg - 3, qrSizeLg + 6, qrSizeLg + 6, 4, 4, 'S');
+        doc.addImage(qrImg, 'PNG', cx - qrSizeLg / 2, qrYLg, qrSizeLg, qrSizeLg);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(Math.max(10, w * 0.055));
+        doc.setTextColor(28, 25, 23);
+        doc.text('Scansiona per registrarti', cx, qrYLg - margin * 0.5, { align: 'center' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(Math.max(6, w * 0.028));
+        doc.setTextColor(168, 162, 158);
+        doc.text('I tuoi dati saranno trattati nel rispetto della privacy', cx, h - margin * 0.6, { align: 'center' });
+      }
+
+      const formatoLabel = formato.toUpperCase();
+      doc.save(`qr-registrazione-${formatoLabel}.pdf`);
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  function _drawSteps(doc: InstanceType<typeof import('jspdf').jsPDF>, y: number, w: number, h: number, margin: number, cx: number): number {
+    const steps = [
+      'Apri la fotocamera del tuo smartphone',
+      'Inquadra il codice QR',
+      'Compila il modulo con i tuoi dati',
+      'Invia — lo staff creerà la tua scheda!',
+    ];
+    const boxPad = Math.max(3, w * 0.04);
+    const stepH = Math.max(6, w * 0.05);
+    const totalH = steps.length * stepH + boxPad * 2;
+    const bx = margin;
+    const bw = w - margin * 2;
+
+    // sfondo box
+    doc.setFillColor(250, 250, 249);
+    doc.setDrawColor(231, 229, 228);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(bx, y, bw, totalH, 3, 3, 'FD');
+
+    let sy = y + boxPad + stepH * 0.35;
+    const dotR = Math.max(2, w * 0.022);
+    const fontSize = Math.max(6.5, w * 0.032);
+
+    steps.forEach((step, i) => {
+      const dotX = bx + boxPad + dotR;
+      const dotY = sy - dotR * 0.2;
+
+      doc.setFillColor(245, 158, 11);
+      doc.circle(dotX, dotY, dotR, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(fontSize * 0.85);
+      doc.setTextColor(255, 255, 255);
+      doc.text(String(i + 1), dotX, dotY + dotR * 0.45, { align: 'center' });
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(fontSize);
+      doc.setTextColor(68, 64, 60);
+      doc.text(step, dotX + dotR + 2, sy, { maxWidth: bw - boxPad * 2 - dotR * 2 - 2 });
+
+      sy += stepH;
+    });
+
+    return y + totalH + Math.max(4, w * 0.025);
+  }
 
   async function handleDownloadHtml() {
     const SU = import.meta.env.VITE_SUPABASE_URL as string;
@@ -896,50 +1110,6 @@ document.getElementById("f").onsubmit=async function(e){
     URL.revokeObjectURL(url);
   }
 
-  function handlePrint() {
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8" />
-        <title>QR Code Registrazione Clienti</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Georgia, serif; background: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 40px; }
-          .card { border: 2px solid #d6d3d1; border-radius: 24px; padding: 48px 40px; text-align: center; max-width: 400px; width: 100%; }
-          h1 { font-size: 22px; font-weight: bold; color: #1c1917; margin-bottom: 6px; }
-          .subtitle { font-size: 14px; color: #78716c; margin-bottom: 32px; line-height: 1.5; }
-          .qr { width: 220px; height: 220px; margin: 0 auto 24px; border: 1px solid #e7e5e4; border-radius: 16px; padding: 12px; }
-          .steps { text-align: left; background: #fafaf9; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
-          .step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-          .step:last-child { margin-bottom: 0; }
-          .step-num { width: 24px; height: 24px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; line-height: 24px; text-align: center; }
-          .step-text { font-size: 13px; color: #44403c; line-height: 1.4; padding-top: 3px; }
-          .footer { font-size: 11px; color: #a8a29e; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <h1>Benvenuta!</h1>
-          <p class="subtitle">Scansiona il codice QR con il tuo smartphone per compilare la tua scheda cliente</p>
-          <img class="qr" src="${qrUrl}" alt="QR Code" />
-          <div class="steps">
-            <div class="step"><div class="step-num">1</div><div class="step-text">Apri la fotocamera del tuo smartphone</div></div>
-            <div class="step"><div class="step-num">2</div><div class="step-text">Inquadra il codice QR</div></div>
-            <div class="step"><div class="step-num">3</div><div class="step-text">Compila il modulo con i tuoi dati</div></div>
-            <div class="step"><div class="step-num">4</div><div class="step-text">Invia — lo staff creerà la tua scheda!</div></div>
-          </div>
-          <p class="footer">I tuoi dati saranno trattati nel rispetto della privacy</p>
-        </div>
-      </body>
-      </html>
-    `);
-    win.document.close();
-    win.onload = () => { win.print(); };
-  }
-
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -968,7 +1138,7 @@ document.getElementById("f").onsubmit=async function(e){
       </div>
 
       {/* Anteprima QR */}
-      <div ref={printRef} className="bg-white rounded-2xl border border-stone-200 p-10 text-center shadow-sm">
+      <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center shadow-sm">
         <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <QrCode size={22} className="text-white" />
         </div>
@@ -1059,21 +1229,81 @@ document.getElementById("f").onsubmit=async function(e){
         </div>
       </div>
 
-      {/* Bottoni azione */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Opzioni stampa PDF */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-5 shadow-sm">
+        <p className="text-sm font-bold text-stone-800">Opzioni PDF</p>
+
+        {/* Scelta layout */}
+        <div>
+          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Contenuto</p>
+          <div className="grid grid-cols-1 gap-2">
+            {([
+              ['con_frase', 'Con frase ad effetto', 'Logo · Frase ispirazionale · QR · 4 passi · Privacy'],
+              ['solo_punti', 'QR code e istruzioni', 'Logo · QR code · 4 passi · Privacy'],
+              ['solo_qr', 'Solo QR code', 'QR code · Privacy'],
+            ] as [QrLayout, string, string][]).map(([val, label, desc]) => (
+              <button
+                key={val}
+                onClick={() => setLayout(val)}
+                className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
+                  layout === val
+                    ? 'border-amber-400 bg-amber-50'
+                    : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50'
+                }`}
+              >
+                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 transition-all ${
+                  layout === val ? 'border-amber-500 bg-amber-500' : 'border-stone-300'
+                }`}>
+                  {layout === val && <div className="w-2 h-2 bg-white rounded-full m-auto mt-0.5" />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">{label}</p>
+                  <p className="text-xs text-stone-400 mt-0.5">{desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Scelta formato */}
+        <div>
+          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Formato</p>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(FORMATO_LABELS) as QrFormato[]).map(f => (
+              <button
+                key={f}
+                onClick={() => setFormato(f)}
+                className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-all text-left ${
+                  formato === f
+                    ? 'border-amber-400 bg-amber-50 text-amber-800'
+                    : 'border-stone-200 text-stone-600 hover:border-stone-300 hover:bg-stone-50'
+                }`}
+              >
+                {FORMATO_LABELS[f]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottone download */}
         <button
-          onClick={handlePrint}
-          className="flex items-center justify-center gap-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl transition-colors shadow-sm"
-        >
-          <Printer size={16} />
-          Stampa cartello
-        </button>
-        <button
-          onClick={handleDownloadHtml}
-          className="flex items-center justify-center gap-2 py-3.5 bg-stone-800 hover:bg-stone-900 text-white font-bold text-sm rounded-xl transition-colors shadow-sm"
+          onClick={handleDownloadPdf}
+          disabled={generando}
+          className="w-full flex items-center justify-center gap-2 py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold text-sm rounded-xl transition-colors shadow-sm"
         >
           <Download size={16} />
-          Scarica HTML
+          {generando ? 'Generazione in corso…' : `Scarica PDF (${formato.toUpperCase()})`}
+        </button>
+      </div>
+
+      {/* Scarica HTML */}
+      <div className="grid grid-cols-1 gap-3">
+        <button
+          onClick={handleDownloadHtml}
+          className="flex items-center justify-center gap-2 py-3 bg-stone-800 hover:bg-stone-900 text-white font-bold text-sm rounded-xl transition-colors shadow-sm"
+        >
+          <Download size={16} />
+          Scarica pagina HTML (form registrazione clienti)
         </button>
       </div>
 
