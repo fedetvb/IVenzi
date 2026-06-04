@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, ExternalLink, AlertCircle, Gift } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
-import AppuntamentoModal from '../components/AppuntamentoModal';
 import MultiBookModal from '../components/MultiBookModal';
 import AgendaGiorno from './AgendaGiorno';
 import BirthdayModal from '../components/BirthdayModal';
@@ -374,9 +373,9 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
       </div>
 
       {showModal && (
-        <AppuntamentoModal
+        <MultiBookModal
           appuntamentoId={editId}
-          dataIniziale={clickedDate}
+          dataIniziale={clickedDate ?? new Date()}
           onClose={() => setShowModal(false)}
           onSaved={() => { setShowModal(false); loadAppuntamenti(); }}
         />

@@ -15,6 +15,7 @@ interface ServizioRiga {
 interface Props {
   dataIniziale: Date;
   appuntamentoId?: string | null;
+  parrucchiereId?: string;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -32,7 +33,7 @@ function timeToDate(base: Date, time: string): Date {
   return d;
 }
 
-export default function MultiBookModal({ dataIniziale, appuntamentoId, onClose, onSaved }: Props) {
+export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchiereId, onClose, onSaved }: Props) {
   const { user } = useAuth();
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [catalogo, setCatalogo] = useState<TrattamentoCatalogo[]>([]);
@@ -59,7 +60,7 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, onClose, 
   const [stato, setStato] = useState<StatoAppuntamento>('confermato');
   const [note, setNote] = useState('');
   const [righe, setRighe] = useState<ServizioRiga[]>([
-    { parrucchiereId: '', trattamentoId: '', nomeTrattamento: '', prezzo: 0, durataMinuti: 30, orarioInizio: orarioBase },
+    { parrucchiereId: parrucchiereId ?? '', trattamentoId: '', nomeTrattamento: '', prezzo: 0, durataMinuti: 30, orarioInizio: orarioBase },
   ]);
 
   // openParr[i] = true => dropdown parrucchieri aperto per riga i

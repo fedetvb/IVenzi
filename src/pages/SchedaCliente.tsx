@@ -5,7 +5,7 @@ import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import ClienteModal from '../components/ClienteModal';
 import { useAuth } from '../lib/AuthContext';
 import SchedaColoreModal from '../components/SchedaColoreModal';
-import AppuntamentoModal from '../components/AppuntamentoModal';
+import MultiBookModal from '../components/MultiBookModal';
 import PasswordGateModal from '../components/PasswordGateModal';
 
 interface Props {
@@ -926,8 +926,9 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
       )}
 
       {appModal.open && (
-        <AppuntamentoModal
+        <MultiBookModal
           appuntamentoId={appModal.id}
+          dataIniziale={new Date()}
           onClose={() => setAppModal({ open: false })}
           onSaved={() => { setAppModal({ open: false }); load(); }}
         />

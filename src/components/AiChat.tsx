@@ -5,7 +5,7 @@ import { executeTool } from '../lib/geminiTools';
 import { parseQuery, formatToolResult } from '../lib/chatParser';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
-import AppuntamentoModal from './AppuntamentoModal';
+import MultiBookModal from './MultiBookModal';
 import PasswordGateModal from './PasswordGateModal';
 
 const STATS_TOOLS = new Set(['get_statistiche_incassi', 'get_statistiche_servizi', 'get_statistiche_parrucchieri']);
@@ -414,7 +414,7 @@ export default function AiChat() {
   return (
     <>
       {appModal && createPortal(
-        <AppuntamentoModal
+        <MultiBookModal
           dataIniziale={new Date(`${appModal.data}T${appModal.ora}:00`)}
           parrucchiereId={appModal.parrucchiereId}
           onClose={() => setAppModal(null)}
