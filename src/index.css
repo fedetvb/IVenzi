@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes slideDownFade {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.animate-bounce-once {
+  animation: slideDownFade 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

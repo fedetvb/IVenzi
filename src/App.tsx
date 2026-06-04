@@ -23,7 +23,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
-import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw } from 'lucide-react';
+import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw, ClipboardList } from 'lucide-react';
 import AiChat from './components/AiChat';
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
@@ -69,6 +69,10 @@ export default function App() {
   // Modal compleanni
   const [birthdayClienti, setBirthdayClienti] = useState<ClienteCompleanno[]>([]);
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
+
+  // Banner nuova scheda cliente da confermare
+  const [showNuovaSchedaBanner, setShowNuovaSchedaBanner] = useState(false);
+  const [nuovaSchedaNome, setNuovaSchedaNome] = useState('');
 
   // Popup ping automatico keepalive
   const [showKeepAlivePopup, setShowKeepAlivePopup] = useState(false);
@@ -232,6 +236,25 @@ export default function App() {
     };
   }, []);
 
+  // Realtime: avviso nuova scheda cliente da confermare
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase
+      .channel('nuova_scheda_da_confermare')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'schede_clienti_da_confermare',
+      }, (payload) => {
+        const row = payload.new as { nome?: string; cognome?: string };
+        const nome = [row.nome, row.cognome].filter(Boolean).join(' ') || 'Una cliente';
+        setNuovaSchedaNome(nome);
+        setShowNuovaSchedaBanner(true);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user]);
+
   // Deep link handler per reset password (Electron)
   useEffect(() => {
     if (!window.electronAPI?.onDeepLink) return;
@@ -287,6 +310,32 @@ export default function App() {
             <button
               onClick={() => setShowReminderBanner(false)}
               className="p-1 hover:bg-amber-100 rounded-lg transition-colors text-amber-500 hover:text-amber-700 flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner nuova scheda cliente da confermare */}
+      {showNuovaSchedaBanner && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[101] w-full max-w-md px-4 transition-all duration-300"
+          style={{ top: showReminderBanner ? '6rem' : '1rem' }}
+        >
+          <div className="bg-pink-50 border border-pink-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
+            <div className="w-9 h-9 rounded-xl bg-pink-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <ClipboardList size={16} className="text-pink-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-pink-900">Nuova scheda da confermare!</p>
+              <p className="text-xs text-pink-700 mt-0.5">
+                <span className="font-semibold">{nuovaSchedaNome}</span> ha inviato i suoi dati tramite il form. Vai su Clienti per confermarla.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowNuovaSchedaBanner(false)}
+              className="p-1 hover:bg-pink-100 rounded-lg transition-colors text-pink-400 hover:text-pink-600 flex-shrink-0"
             >
               <X size={15} />
             </button>
