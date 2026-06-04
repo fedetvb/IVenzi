@@ -101,10 +101,9 @@ export default function App() {
       const todayKey = romeStr.split(' ')[0]; // yyyy-mm-dd
 
       // 1. Banner "ricorda di inviare i messaggi appuntamento" — solo prima delle 11:00 ora italiana
-      const appBannerKey = `app_banner_dismissed_${todayKey}`;
       const romeTimePart = romeStr.split(' ')[1]; // HH:mm:ss
       const romeHour = parseInt(romeTimePart.split(':')[0], 10);
-      if (romeHour < 11 && !localStorage.getItem(appBannerKey)) {
+      if (romeHour < 11) {
         setShowAppBanner(true);
       }
 
@@ -360,11 +359,7 @@ export default function App() {
               <p className="text-xs text-sky-700 mt-0.5">Hai inviato i promemoria appuntamento alle clienti di oggi?</p>
             </div>
             <button
-              onClick={() => {
-                const todayIt = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
-                localStorage.setItem(`app_banner_dismissed_${todayIt}`, '1');
-                setShowAppBanner(false);
-              }}
+              onClick={() => setShowAppBanner(false)}
               className="p-1 hover:bg-sky-100 rounded-lg transition-colors text-sky-500 hover:text-sky-700 flex-shrink-0"
             >
               <X size={15} />
