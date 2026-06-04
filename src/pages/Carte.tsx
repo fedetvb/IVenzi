@@ -293,9 +293,13 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const prezzoCliente = form.importo_iniziale > 0 ? calcolaPrezzoRicarica(form.importo_iniziale) : 0;
+
   async function save() {
     if (!form.cliente_id) return;
     setSaving(true);
+    const cliente = clienti.find(c => c.id === form.cliente_id)!;
+    const clienteNome = cliente ? `${cliente.nome} ${cliente.cognome}`.trim() : '';
     const { data } = await supabase.from('carte_premium').insert({
       codice: form.codice,
       cliente_id: form.cliente_id,
@@ -311,9 +315,18 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
         tipo_ricarica: 'standard',
         user_id: user?.id,
       });
+      await supabase.from('incassi_giornalieri').insert({
+        data: localDateStr(),
+        fiche_id: null,
+        cliente_nome: clienteNome
+          ? `Creazione carta ${form.codice} - ${clienteNome}`
+          : `Creazione carta ${form.codice}`,
+        importo: prezzoCliente,
+        note: `Nuova carta premium: credito €${form.importo_iniziale}, pagato €${prezzoCliente}`,
+        user_id: user?.id,
+      });
     }
     setSaving(false);
-    const cliente = clienti.find(c => c.id === form.cliente_id)!;
     onSaved({ codice: form.codice, creditoIniziale: form.importo_iniziale, cliente });
   }
 
@@ -394,6 +407,19 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
             />
           </div>
 
+          {/* Riepilogo incasso */}
+          {form.importo_iniziale > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-amber-800">La cliente paga</span>
+                <span className="text-lg font-bold text-amber-700">€{prezzoCliente}</span>
+              </div>
+              <p className="text-xs text-amber-600 mt-0.5">
+                Credito sulla carta: €{form.importo_iniziale} · Incasso registrato: €{prezzoCliente}
+              </p>
+            </div>
+          )}
+
           {/* Note */}
           <div>
             <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Note</label>
@@ -408,7 +434,7 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
         <div className="flex gap-3 px-6 pb-6 flex-shrink-0">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Annulla</button>
           <button onClick={save} disabled={saving || !form.cliente_id} className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
-            {saving ? 'Salvataggio...' : 'Crea carta'}
+            {saving ? 'Salvataggio...' : `Crea carta · cliente paga €${prezzoCliente}`}
           </button>
         </div>
       </div>
