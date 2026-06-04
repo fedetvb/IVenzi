@@ -73,6 +73,7 @@ export default function App() {
   // Banner nuova scheda cliente da confermare
   const [showNuovaSchedaBanner, setShowNuovaSchedaBanner] = useState(false);
   const [nuovaSchedaNome, setNuovaSchedaNome] = useState('');
+  const [nuovaSchedaCurrentId, setNuovaSchedaCurrentId] = useState<string | null>(null);
 
   // Popup ping automatico keepalive
   const [showKeepAlivePopup, setShowKeepAlivePopup] = useState(false);
@@ -240,46 +241,51 @@ export default function App() {
     };
   }, []);
 
+  // Helpers localStorage per schede già mostrate
+  function getSchedeDismissed(): Set<string> {
+    try { return new Set(JSON.parse(localStorage.getItem('nuova_scheda_dismissed') || '[]')); }
+    catch { return new Set(); }
+  }
+  function markSchedaDismissed(id: string) {
+    const s = getSchedeDismissed();
+    s.add(id);
+    localStorage.setItem('nuova_scheda_dismissed', JSON.stringify([...s]));
+  }
+
+  function mostraSchedaBanner(id: string, nome: string, cognome: string) {
+    const n = [nome, cognome].filter(Boolean).join(' ') || 'Una cliente';
+    setNuovaSchedaCurrentId(id);
+    setNuovaSchedaNome(n);
+    setShowNuovaSchedaBanner(true);
+  }
+
+  async function checkAndShowPendingScheda() {
+    const dismissed = getSchedeDismissed();
+    const { data } = await supabase
+      .from('schede_clienti_da_confermare')
+      .select('id, nome, cognome')
+      .eq('stato', 'in_attesa')
+      .order('created_at', { ascending: false });
+    const unseen = (data || []).find(r => !dismissed.has(r.id));
+    if (unseen) mostraSchedaBanner(unseen.id, unseen.nome, unseen.cognome);
+  }
+
+  function dismissSchedaBanner() {
+    if (nuovaSchedaCurrentId) markSchedaDismissed(nuovaSchedaCurrentId);
+    setShowNuovaSchedaBanner(false);
+    setNuovaSchedaCurrentId(null);
+    // Controlla se ci sono altre schede pendenti non ancora viste
+    setTimeout(checkAndShowPendingScheda, 400);
+  }
+
   // Realtime + polling fallback: avviso nuova scheda cliente da confermare
   useEffect(() => {
     if (!user) return;
 
-    // Traccia l'ultima scheda vista per evitare duplicati nel polling
-    let lastSeenId: string | null = null;
+    // All'avvio mostra subito eventuali schede pendenti non ancora viste
+    checkAndShowPendingScheda();
 
-    async function checkNuoveSchede() {
-      const { data } = await supabase
-        .from('schede_clienti_da_confermare')
-        .select('id, nome, cognome')
-        .eq('stato', 'in_attesa')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data && data.id !== lastSeenId) {
-        const prev = lastSeenId;
-        lastSeenId = data.id;
-        // Mostra solo se non è la prima lettura (evita falso positivo all'avvio)
-        if (prev !== null) {
-          const nome = [data.nome, data.cognome].filter(Boolean).join(' ') || 'Una cliente';
-          setNuovaSchedaNome(nome);
-          setShowNuovaSchedaBanner(true);
-        }
-      }
-    }
-
-    // Inizializza lastSeenId senza mostrare il banner
-    (async () => {
-      const { data } = await supabase
-        .from('schede_clienti_da_confermare')
-        .select('id')
-        .eq('stato', 'in_attesa')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      lastSeenId = data?.id ?? '';
-    })();
-
-    // Realtime (funziona se REPLICA IDENTITY FULL è abilitato)
+    // Realtime: ogni INSERT mostra subito il banner
     const ch = supabase
       .channel('nuova_scheda_da_confermare')
       .on('postgres_changes', {
@@ -288,17 +294,12 @@ export default function App() {
         table: 'schede_clienti_da_confermare',
       }, (payload) => {
         const row = payload.new as { id?: string; nome?: string; cognome?: string };
-        if (row.id && row.id !== lastSeenId) {
-          lastSeenId = row.id;
-          const nome = [row.nome, row.cognome].filter(Boolean).join(' ') || 'Una cliente';
-          setNuovaSchedaNome(nome);
-          setShowNuovaSchedaBanner(true);
-        }
+        if (row.id) mostraSchedaBanner(row.id, row.nome ?? '', row.cognome ?? '');
       })
       .subscribe();
 
     // Polling ogni 30 secondi come fallback
-    const interval = setInterval(checkNuoveSchede, 30_000);
+    const interval = setInterval(checkAndShowPendingScheda, 30_000);
 
     return () => {
       supabase.removeChannel(ch);
@@ -385,7 +386,7 @@ export default function App() {
               </p>
             </div>
             <button
-              onClick={() => setShowNuovaSchedaBanner(false)}
+              onClick={dismissSchedaBanner}
               className="p-1 hover:bg-pink-100 rounded-lg transition-colors text-pink-400 hover:text-pink-600 flex-shrink-0"
             >
               <X size={15} />
