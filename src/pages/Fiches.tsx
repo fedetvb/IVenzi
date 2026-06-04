@@ -1090,7 +1090,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
         });
         const { data: full } = await supabase.from('carte_sconto').select('usa_e_getta').eq('id', cartaSconto.id).maybeSingle();
         if (full?.usa_e_getta) {
-          await supabase.from('carte_sconto').update({ attiva: false }).eq('id', cartaSconto.id);
+          await supabase.from('carte_sconto').update({ attiva: false, deleted_at: new Date().toISOString() }).eq('id', cartaSconto.id);
         }
       }
 
@@ -1200,7 +1200,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
       for (const uso of scUsi || []) {
         const { data: cs } = await supabase.from('carte_sconto').select('usa_e_getta, attiva').eq('id', uso.carta_sconto_id).maybeSingle();
         if (cs?.usa_e_getta && !cs.attiva) {
-          await supabase.from('carte_sconto').update({ attiva: true }).eq('id', uso.carta_sconto_id);
+          await supabase.from('carte_sconto').update({ attiva: true, deleted_at: null }).eq('id', uso.carta_sconto_id);
         }
         await supabase.from('utilizzi_carta_sconto').delete().eq('fiche_id', ficheId);
       }

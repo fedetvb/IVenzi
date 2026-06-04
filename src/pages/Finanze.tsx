@@ -515,7 +515,7 @@ export default function Finanze() {
       for (const uso of (scUsi || [])) {
         const { data: cs } = await supabase.from('carte_sconto').select('usa_e_getta, attiva').eq('id', uso.carta_sconto_id).maybeSingle();
         if (cs?.usa_e_getta && !cs.attiva) {
-          await supabase.from('carte_sconto').update({ attiva: true }).eq('id', uso.carta_sconto_id);
+          await supabase.from('carte_sconto').update({ attiva: true, deleted_at: null }).eq('id', uso.carta_sconto_id);
         }
       }
       await supabase.from('utilizzi_carta_sconto').delete().eq('fiche_id', ficheId);

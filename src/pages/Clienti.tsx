@@ -26,7 +26,7 @@ interface SchedaDaConfermare {
 export default function Clienti({ onSelectCliente }: Props) {
   const { user } = useAuth();
   const [clienti, setClienti] = useState<Cliente[]>([]);
-  const [clientiConCarte, setClientiConCarte] = useState<Set<string>>(new Set());
+  const [clientiCarteMap, setClientiCarteMap] = useState<Map<string, Set<string>>>(new Map());
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -42,15 +42,24 @@ export default function Clienti({ onSelectCliente }: Props) {
     setLoading(true);
     const [{ data }, { data: sc }, { data: pr }] = await Promise.all([
       supabase.from('clienti').select('*').is('deleted_at', null).order('cognome').order('nome'),
-      supabase.from('carte_sconto').select('cliente_id').not('cliente_id', 'is', null),
-      supabase.from('carte_premium').select('cliente_id').is('deleted_at', null),
+      supabase.from('carte_sconto').select('cliente_id, usa_e_getta').not('cliente_id', 'is', null).is('deleted_at', null).eq('attiva', true),
+      supabase.from('carte_premium').select('cliente_id, saldo, attiva').is('deleted_at', null),
     ]);
     setClienti((data || []) as Cliente[]);
-    const ids = new Set<string>();
-    for (const r of [...(sc || []), ...(pr || [])]) {
-      if (r.cliente_id) ids.add(r.cliente_id);
+    const carteMap = new Map<string, Set<string>>();
+    for (const r of (sc || []) as { cliente_id: string; usa_e_getta: boolean }[]) {
+      if (r.cliente_id) {
+        if (!carteMap.has(r.cliente_id)) carteMap.set(r.cliente_id, new Set());
+        carteMap.get(r.cliente_id)!.add(r.usa_e_getta ? 'ueg' : 'sconto');
+      }
     }
-    setClientiConCarte(ids);
+    for (const r of (pr || []) as { cliente_id: string; saldo: number; attiva: boolean }[]) {
+      if (r.cliente_id) {
+        if (!carteMap.has(r.cliente_id)) carteMap.set(r.cliente_id, new Set());
+        carteMap.get(r.cliente_id)!.add(r.saldo > 0 && r.attiva ? 'premium' : 'premium_vuota');
+      }
+    }
+    setClientiCarteMap(carteMap);
     setLoading(false);
   }, []);
 
@@ -587,9 +596,14 @@ export default function Clienti({ onSelectCliente }: Props) {
                             <p className="font-semibold text-stone-800 group-hover:text-amber-700 transition-colors">
                               {c.cognome} {c.nome}
                             </p>
-                            {clientiConCarte.has(c.id) && (
-                              <CreditCard size={13} className="text-amber-500 flex-shrink-0" title="Ha carte attive" />
-                            )}
+                            {clientiCarteMap.has(c.id) && (() => {
+                              const tipi = clientiCarteMap.get(c.id)!;
+                              if (tipi.has('premium')) return <CreditCard size={13} className="text-amber-500 flex-shrink-0" title="Carta premium attiva" />;
+                              if (tipi.has('premium_vuota')) return <CreditCard size={13} className="text-red-400 flex-shrink-0" title="Carta premium esaurita" />;
+                              if (tipi.has('sconto')) return <CreditCard size={13} className="text-teal-500 flex-shrink-0" title="Carta sconto" />;
+                              if (tipi.has('ueg')) return <CreditCard size={13} className="text-stone-600 flex-shrink-0" title="Carta usa e getta" />;
+                              return null;
+                            })()}
                           </div>
                           <div className="flex items-center gap-4 mt-0.5">
                             {c.telefono && (
