@@ -37,7 +37,7 @@ export default function Clienti({ onSelectCliente }: Props) {
   const [confermando, setConfermando] = useState<string | null>(null);
   const [eliminaGate, setEliminaGate] = useState<string | null>(null);
   const [eliminaClienteGate, setEliminaClienteGate] = useState<string | null>(null);
-  const [messaggioConferma, setMessaggioConferma] = useState<{ nome: string; testo: string } | null>(null);
+  const [messaggioConferma, setMessaggioConferma] = useState<{ nome: string; testo: string; clienteId: string } | null>(null);
   const [copiato, setCopiato] = useState(false);
 
   const loadClienti = useCallback(async () => {
@@ -138,8 +138,7 @@ export default function Clienti({ onSelectCliente }: Props) {
       setSchedaAperta(null);
       loadSchede();
       loadClienti();
-      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome) });
-      onSelectCliente(data.id);
+      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome), clienteId: data.id });
     }
     setConfermando(null);
   }
@@ -853,7 +852,7 @@ export default function Clienti({ onSelectCliente }: Props) {
                 <p className="text-xs text-stone-400 mt-0.5">Copia e invia a {messaggioConferma.nome}</p>
               </div>
               <button
-                onClick={() => { setMessaggioConferma(null); setCopiato(false); }}
+                onClick={() => { const id = messaggioConferma.clienteId; setMessaggioConferma(null); setCopiato(false); onSelectCliente(id); }}
                 className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 transition-colors"
               >
                 <X size={18} />
@@ -864,16 +863,22 @@ export default function Clienti({ onSelectCliente }: Props) {
                 {messaggioConferma.testo}
               </div>
             </div>
-            <div className="px-6 pb-5">
+            <div className="px-6 pb-5 flex gap-2">
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(messaggioConferma.testo);
                   setCopiato(true);
                   setTimeout(() => setCopiato(false), 2500);
                 }}
-                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${copiato ? 'bg-green-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${copiato ? 'bg-green-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
               >
                 {copiato ? <><CheckCheck size={16} /> Copiato!</> : <><Copy size={16} /> Copia messaggio</>}
+              </button>
+              <button
+                onClick={() => { const id = messaggioConferma.clienteId; setMessaggioConferma(null); setCopiato(false); onSelectCliente(id); }}
+                className="px-4 py-3 rounded-xl border border-stone-200 text-sm font-semibold text-stone-600 hover:bg-stone-50 transition-colors"
+              >
+                Vai alla scheda
               </button>
             </div>
           </div>

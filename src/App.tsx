@@ -240,9 +240,46 @@ export default function App() {
     };
   }, []);
 
-  // Realtime: avviso nuova scheda cliente da confermare
+  // Realtime + polling fallback: avviso nuova scheda cliente da confermare
   useEffect(() => {
     if (!user) return;
+
+    // Traccia l'ultima scheda vista per evitare duplicati nel polling
+    let lastSeenId: string | null = null;
+
+    async function checkNuoveSchede() {
+      const { data } = await supabase
+        .from('schede_clienti_da_confermare')
+        .select('id, nome, cognome')
+        .eq('stato', 'in_attesa')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data && data.id !== lastSeenId) {
+        const prev = lastSeenId;
+        lastSeenId = data.id;
+        // Mostra solo se non è la prima lettura (evita falso positivo all'avvio)
+        if (prev !== null) {
+          const nome = [data.nome, data.cognome].filter(Boolean).join(' ') || 'Una cliente';
+          setNuovaSchedaNome(nome);
+          setShowNuovaSchedaBanner(true);
+        }
+      }
+    }
+
+    // Inizializza lastSeenId senza mostrare il banner
+    (async () => {
+      const { data } = await supabase
+        .from('schede_clienti_da_confermare')
+        .select('id')
+        .eq('stato', 'in_attesa')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      lastSeenId = data?.id ?? '';
+    })();
+
+    // Realtime (funziona se REPLICA IDENTITY FULL è abilitato)
     const ch = supabase
       .channel('nuova_scheda_da_confermare')
       .on('postgres_changes', {
@@ -250,13 +287,23 @@ export default function App() {
         schema: 'public',
         table: 'schede_clienti_da_confermare',
       }, (payload) => {
-        const row = payload.new as { nome?: string; cognome?: string };
-        const nome = [row.nome, row.cognome].filter(Boolean).join(' ') || 'Una cliente';
-        setNuovaSchedaNome(nome);
-        setShowNuovaSchedaBanner(true);
+        const row = payload.new as { id?: string; nome?: string; cognome?: string };
+        if (row.id && row.id !== lastSeenId) {
+          lastSeenId = row.id;
+          const nome = [row.nome, row.cognome].filter(Boolean).join(' ') || 'Una cliente';
+          setNuovaSchedaNome(nome);
+          setShowNuovaSchedaBanner(true);
+        }
       })
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+
+    // Polling ogni 30 secondi come fallback
+    const interval = setInterval(checkNuoveSchede, 30_000);
+
+    return () => {
+      supabase.removeChannel(ch);
+      clearInterval(interval);
+    };
   }, [user]);
 
   // Deep link handler per reset password (Electron)
