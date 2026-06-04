@@ -116,8 +116,8 @@ export default function Clienti({ onSelectCliente }: Props) {
 
   function buildMessaggioConferma(nome: string): string {
     const benvenuto = genderBenvenuto(nome);
-    const cornice = '🌟🌸🌈🦋🌈🌸🌟';
-    return `${cornice}\n${benvenuto} ${nome}!\n\nGrazie mille per aver scelto il nostro salone. Siamo felicissimi di averti con noi!\n\nI tuoi dati sono trattati con la massima riservatezza e non verranno mai condivisi con terzi. La tua privacy è al sicuro.\n\nLa scheda che hai compilato ci permetterà di conoscerti al meglio e di offrirti un servizio personalizzato, sempre in linea con le tue esigenze e i tuoi desideri.\n\nNon vediamo l'ora di prenderci cura di te!\n${cornice}`;
+    const cornice = '🌟🌸🌈🦋🌸🦋🌈🌸🌟';
+    return `${cornice}\n\n${benvenuto} ${nome}! 🌸\n\nGrazie di cuore per aver scelto il nostro salone. Siamo davvero felici di averti con noi!\n\nI tuoi dati sono al sicuro: verranno trattati con la massima riservatezza e usati esclusivamente per offrirti il miglior servizio possibile. La tua privacy è una nostra priorità.\n\nLa scheda che hai compilato ci aiuterà a conoscerti meglio e a coccolarti con un servizio su misura, sempre vicino alle tue esigenze e ai tuoi desideri. ✨\n\nNon vediamo l'ora di vederti! 💛\n\n${cornice}`;
   }
 
   async function confermaScheda(scheda: SchedaDaConfermare) {
