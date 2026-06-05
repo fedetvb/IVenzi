@@ -30,7 +30,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   }, [clienteId]);
 
   async function loadCliente() {
-    const { data, error } = await dbSelect('clienti', [{ col: 'id', op: 'eq', val: clienteId }]);
+    const { data, error } = await dbSelect({ table: 'clienti', filters: [{ col: 'id', op: 'eq', val: clienteId }] });
     if (error || !data || data.length === 0) return;
     const c = (data[0] as Cliente);
     setForm({
@@ -63,9 +63,9 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
 
     let id = clienteId;
     if (id) {
-      await dbUpdate('clienti', payload, [{ col: 'id', op: 'eq', val: id }]);
+      await dbUpdate({ table: 'clienti', id: id as string, data: payload });
     } else {
-      const { data, error } = await dbInsert('clienti', { ...payload, user_id: user?.id });
+      const { data, error } = await dbInsert({ table: 'clienti', data: { ...payload, user_id: user?.id } });
       if (!error && data) id = (data as any).id;
     }
     setSaving(false);

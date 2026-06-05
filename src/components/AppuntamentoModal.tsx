@@ -94,9 +94,9 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
 
   async function loadOptions() {
     const [clRes, catRes, parrRes] = await Promise.all([
-      dbSelect('clienti', [], [{ col: 'cognome', asc: true }], ['id', 'nome', 'cognome']),
-      dbSelect('trattamenti_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
-      dbSelect('parrucchieri', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
+      dbSelect({ table: 'clienti', orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome' }),
+      dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
+      dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
     ]);
     setClienti((clRes.data || []) as Cliente[]);
     setCatalogo((catRes.data || []) as TrattamentoCatalogo[]);
@@ -104,7 +104,7 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
   }
 
   async function loadAppuntamento() {
-    const { data: appRes } = await dbSelect('appuntamenti', [{ col: 'id', op: 'eq', val: appuntamentoId }]);
+    const { data: appRes } = await dbSelect({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: appuntamentoId }] });
     const appData = appRes?.[0] as any;
     if (!appData) return;
     const d = new Date(appData.data_ora);
@@ -113,7 +113,7 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     const cl = clienti.find(c => c.id === appData.cliente_id);
     if (cl) setClienteSearch(`${cl.cognome} ${cl.nome}`);
 
-    const { data: trattRes } = await dbSelect('appuntamento_trattamenti', [{ col: 'appuntamento_id', op: 'eq', val: appuntamentoId }]);
+    const { data: trattRes } = await dbSelect({ table: 'appuntamento_trattamenti', filters: [{ col: 'appuntamento_id', op: 'eq', val: appuntamentoId }] });
     const trattamenti = (trattRes || []) as { trattamento_id: string; nome_trattamento: string; prezzo: number }[];
     const parrId = appData.parrucchiere_id ?? '';
 
@@ -216,23 +216,23 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
 
     let appId = appuntamentoId;
     if (appId) {
-      await dbUpdate('appuntamenti', payload, [{ col: 'id', op: 'eq', val: appId }]);
-      await dbDelete('appuntamento_trattamenti', [{ col: 'appuntamento_id', op: 'eq', val: appId }]);
+      await dbUpdate({ table: 'appuntamenti', id: appId as string, data: payload });
+      await dbDelete({ table: 'appuntamento_trattamenti', filters: [{ col: 'appuntamento_id', op: 'eq', val: appId }] });
     } else {
-      const { data } = await dbInsert('appuntamenti', { ...payload, user_id: user?.id });
+      const { data } = await dbInsert({ table: 'appuntamenti', data: { ...payload, user_id: user?.id } });
       if (data) appId = (data as any).id;
     }
 
     const serviziConNome = form.servizi.filter(s => s.nome_trattamento);
     if (appId && serviziConNome.length > 0) {
       for (const s of serviziConNome) {
-        await dbInsert('appuntamento_trattamenti', {
+        await dbInsert({ table: 'appuntamento_trattamenti', data: {
           appuntamento_id: appId,
           trattamento_id: s.trattamento_id || null,
           nome_trattamento: s.nome_trattamento,
           prezzo: s.prezzo,
           user_id: user?.id,
-        });
+        } });
       }
     }
 

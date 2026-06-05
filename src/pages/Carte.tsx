@@ -310,7 +310,7 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
     }});
     const cartaId = (data as any)?.id;
     if (cartaId && form.importo_iniziale > 0) {
-      await dbInsert({ table: 'ricariche_carte_premium', data: {
+      await dbInsert({ table: 'ricariche_carta_premium', data: {
         carta_premium_id: cartaId,
         importo: form.importo_iniziale,
         note: 'Carica iniziale',
@@ -476,7 +476,7 @@ function RicaricaModal({ carta, onClose, onSaved }: {
     setSaving(true);
     const oggi = localDateStr();
     const clienteNome = carta.clienti ? `${carta.clienti.nome} ${carta.clienti.cognome}`.trim() : '';
-    await dbInsert({ table: 'ricariche_carte_premium', data: {
+    await dbInsert({ table: 'ricariche_carta_premium', data: {
       carta_premium_id: carta.id, importo, note, tipo_ricarica: tipo, user_id: user?.id,
     }});
     await dbUpdate({ table: 'carte_premium', id: carta.id, data: { saldo: carta.saldo + importo, attiva: true } });
@@ -755,7 +755,7 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
   }
 
   async function openStorico(carta: CartaSconto) {
-    const { data } = await dbSelect('utilizzi_carta_sconto', [{ col: 'carta_sconto_id', op: 'eq', val: carta.id }], [{ col: 'created_at', asc: false }]);
+    const { data } = await dbSelect({ table: 'utilizzi_carta_sconto', filters: [{ col: 'carta_sconto_id', op: 'eq', val: carta.id }], orderBy: [{ col: 'created_at', asc: false }] });
     setStoricoCarta({ carta, utilizzi: (data || []) as UtilizzoCarta[] });
   }
 
@@ -990,8 +990,8 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
 
   async function openStorico(carta: CartaPremium) {
     const [uRes, rRes] = await Promise.all([
-      dbSelect('utilizzi_carta_premium', [{ col: 'carta_premium_id', op: 'eq', val: carta.id }], [{ col: 'created_at', asc: false }]),
-      dbSelect('ricariche_carta_premium', [{ col: 'carta_premium_id', op: 'eq', val: carta.id }], [{ col: 'created_at', asc: false }]),
+      dbSelect({ table: 'utilizzi_carta_premium', filters: [{ col: 'carta_premium_id', op: 'eq', val: carta.id }], orderBy: [{ col: 'created_at', asc: false }] }),
+      dbSelect({ table: 'ricariche_carta_premium', filters: [{ col: 'carta_premium_id', op: 'eq', val: carta.id }], orderBy: [{ col: 'created_at', asc: false }] }),
     ]);
     setStoricoCarta({ carta, utilizzi: (uRes.data || []) as UtilizzoCarta[], ricariche: (rRes.data || []) as RicaricaPremium[] });
   }
@@ -1177,7 +1177,7 @@ export default function Carte() {
   const [clienti, setClienti] = useState<Cliente[]>([]);
 
   useEffect(() => {
-    dbSelect('clienti', [], [{ col: 'nome', asc: true }], ['id', 'nome', 'cognome', 'telefono']).then(({ data }) => {
+    dbSelect({ table: 'clienti', orderBy: [{ col: 'nome', asc: true }], columns: 'id, nome, cognome, telefono' }).then(({ data }) => {
       setClienti((data || []) as Cliente[]);
     });
   }, []);

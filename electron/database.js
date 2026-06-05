@@ -46,6 +46,7 @@ export function initDatabase() {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
+  runMigrations();
   createSchema();
   console.log('[DB] Database SQLite inizializzato:', dbPath);
   return true;
@@ -53,6 +54,18 @@ export function initDatabase() {
 
 export function getDb() {
   return db;
+}
+
+function runMigrations() {
+  // Rename ricariche_carte_premium → ricariche_carta_premium to match Supabase
+  const oldExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ricariche_carte_premium'").get();
+  if (oldExists) {
+    const newExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ricariche_carta_premium'").get();
+    if (!newExists) {
+      db.exec('ALTER TABLE ricariche_carte_premium RENAME TO ricariche_carta_premium');
+      console.log('[DB] Migrazione: ricariche_carte_premium → ricariche_carta_premium');
+    }
+  }
 }
 
 function createSchema() {
@@ -248,7 +261,7 @@ function createSchema() {
       _dirty INTEGER NOT NULL DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS ricariche_carte_premium (
+    CREATE TABLE IF NOT EXISTS ricariche_carta_premium (
       id TEXT PRIMARY KEY,
       carta_premium_id TEXT NOT NULL,
       importo REAL NOT NULL DEFAULT 0,
@@ -749,7 +762,7 @@ export function importBackup(backupData) {
     carte_sconto: 'carte_sconto',
     utilizzi_carta_sconto: 'utilizzi_carta_sconto',
     carte_premium: 'carte_premium',
-    ricariche_carte_premium: 'ricariche_carte_premium',
+    ricariche_carta_premium: 'ricariche_carta_premium',
     utilizzi_carta_premium: 'utilizzi_carta_premium',
     prodotti_rivendita_catalogo: 'prodotti_rivendita_catalogo',
     rivendita_prodotti: 'rivendita_prodotti',
@@ -795,7 +808,7 @@ export function exportLocalData() {
     'clienti', 'parrucchieri', 'trattamenti_catalogo', 'appuntamenti',
     'appuntamento_trattamenti', 'schede_colore', 'fiches', 'fiche_voci',
     'incassi', 'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium',
-    'ricariche_carte_premium', 'utilizzi_carta_premium', 'prodotti_rivendita_catalogo',
+    'ricariche_carta_premium', 'utilizzi_carta_premium', 'prodotti_rivendita_catalogo',
     'rivendita_prodotti', 'trattamenti_eseguiti', 'impostazioni', 'template_messaggi',
     'assenze_parrucchieri', 'magazzino_prodotti', 'magazzino_movimenti',
     'magazzino_schede_salvate', 'spese_voci', 'schede_clienti_da_confermare',

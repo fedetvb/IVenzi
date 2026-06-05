@@ -158,14 +158,14 @@ function FichesTab() {
     const end   = `${selectedDate}T23:59:59${tz}`;
 
     const [appsRes, voceExtraRes, parrRes, serviziRes] = await Promise.all([
-      dbSelect('appuntamenti', [
+      dbSelect({ table: 'appuntamenti', filters: [
         { col: 'data_ora', op: 'gte', val: start },
         { col: 'data_ora', op: 'lte', val: end },
         { col: 'stato', op: 'neq', val: 'cancellato' },
-      ], [{ col: 'data_ora', asc: true }]),
-      dbSelect('voci_extra_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
-      dbSelect('parrucchieri', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
-      dbSelect('trattamenti_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
+      ], orderBy: [{ col: 'data_ora', asc: true }] }),
+      dbSelect({ table: 'voci_extra_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
+      dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
+      dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
     ]);
     const apps = appsRes.data;
     const voceExtra = voceExtraRes.data;
@@ -177,10 +177,10 @@ function FichesTab() {
 
     let ficheMap: Record<string, FicheData> = {};
     if (appIds.length > 0) {
-      const { data: ficheData } = await dbSelect('fiches', [{ col: 'appuntamento_id', op: 'in', val: appIds }]);
+      const { data: ficheData } = await dbSelect({ table: 'fiches', filters: [{ col: 'appuntamento_id', op: 'in', val: appIds }] });
       for (const f of ficheData || []) {
         const appId = (f as any).appuntamento_id;
-        const { data: voceData } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: (f as any).id }], [{ col: 'ordine', asc: true }]);
+        const { data: voceData } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: (f as any).id }], orderBy: [{ col: 'ordine', asc: true }] });
         ficheMap[appId] = {
           id: (f as any).id,
           appuntamento_id: appId,
@@ -222,14 +222,14 @@ function FichesTab() {
     }
 
     // Carica fiche manuali per questa data (filtro diretto su data_riferimento, nessun problema di timezone)
-    const { data: ficheManualiRaw } = await dbSelect('fiches', [
+    const { data: ficheManualiRaw } = await dbSelect({ table: 'fiches', filters: [
       { col: 'manuale', op: 'eq', val: true },
       { col: 'data_riferimento', op: 'eq', val: selectedDate },
-    ]);
+    ] });
     const ficheManuali: any[] = [];
     for (const f of ficheManualiRaw || []) {
-      const { data: voceData } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: (f as any).id }]);
-      const { data: clientData } = await dbSelect('clienti', [{ col: 'id', op: 'eq', val: (f as any).cliente_id }]);
+      const { data: voceData } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: (f as any).id }] });
+      const { data: clientData } = await dbSelect({ table: 'clienti', filters: [{ col: 'id', op: 'eq', val: (f as any).cliente_id }] });
       ficheManuali.push({
         ...f,
         fiche_voci: voceData || [],
@@ -283,11 +283,11 @@ function FichesTab() {
     const carteMap = new Map<string, { hasPremium: boolean; hasPremiumEsaurita: boolean; hasSconto: boolean }>();
     if (allClienteIds.length > 0) {
       const [scRes, prRes] = await Promise.all([
-        dbSelect('carte_sconto', [{ col: 'cliente_id', op: 'in', val: allClienteIds }]),
-        dbSelect('carte_premium', [
+        dbSelect({ table: 'carte_sconto', filters: [{ col: 'cliente_id', op: 'in', val: allClienteIds }] }),
+        dbSelect({ table: 'carte_premium', filters: [
           { col: 'cliente_id', op: 'in', val: allClienteIds },
           { col: 'deleted_at', op: 'is_null' },
-        ]),
+        ] }),
       ]);
       const scData = scRes.data || [];
       const prData = prRes.data || [];
@@ -334,20 +334,20 @@ function FichesTab() {
       const totale = g.voci.reduce((s, v) => s + v.prezzo, 0);
       const clienteNome = `${g.clienteNome} ${g.clienteCognome}`.trim();
       for (const ficheId of g.ficheIds) {
-        await dbUpdate('fiches', {
+        await dbUpdate({ table: 'fiches', id: ficheId, data: {
           convalidata: true,
           convalidata_at: now,
           importo_convalidato: totale,
-        }, [{ col: 'id', op: 'eq', val: ficheId }]);
-        await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
-        await dbInsert('incassi_giornalieri', {
+        } });
+        await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+        await dbInsert({ table: 'incassi_giornalieri', data: {
           data: selectedDate,
           fiche_id: ficheId,
           cliente_nome: clienteNome,
           importo: totale,
           note: '',
           user_id: user?.id,
-        });
+        } });
 
         // Registra voci rivendita e scala stock catalogo
         const vociRivendita = g.voci.filter(v => v.nome_voce.toLowerCase().includes('rivendita'));
@@ -356,7 +356,7 @@ function FichesTab() {
             const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
             const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
-            await dbInsert('rivendita_prodotti', {
+            await dbInsert({ table: 'rivendita_prodotti', data: {
               fiche_id: ficheId,
               parrucchiere_id: v.parrucchiere_id,
               nome_prodotto: v.nome_voce,
@@ -365,16 +365,16 @@ function FichesTab() {
               data_vendita: selectedDate,
               note: catalogoId ? '' : (v.note || ''),
               user_id: user?.id,
-            });
+            } });
 
             if (catalogoId) {
-              const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+              const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
               if (prod && prod.length > 0) {
                 const prodData = prod[0] as any;
-                await dbUpdate('prodotti_rivendita_catalogo', {
+                await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
                   quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
                   quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
-                }, [{ col: 'id', op: 'eq', val: catalogoId }]);
+                } });
               }
             }
           }
@@ -384,7 +384,7 @@ function FichesTab() {
         const vociTrattamenti = g.voci.filter(v => !v.nome_voce.toLowerCase().includes('rivendita'));
         for (const v of vociTrattamenti) {
           if (v.parrucchiere_id) {
-            await dbInsert('trattamenti_eseguiti', {
+            await dbInsert({ table: 'trattamenti_eseguiti', data: {
               fiche_id: ficheId,
               parrucchiere_id: v.parrucchiere_id,
               nome_trattamento: v.nome_voce,
@@ -392,7 +392,7 @@ function FichesTab() {
               data_esecuzione: selectedDate,
               note: '',
               user_id: user?.id,
-            });
+            } });
           }
         }
       }
@@ -594,7 +594,7 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
   const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    dbSelect('clienti', [], [{ col: 'cognome', asc: true }], ['id', 'nome', 'cognome']).then(({ data }) => {
+    dbSelect({ table: 'clienti', filters: [], orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome' }).then(({ data }) => {
       setClienti((data || []) as { id: string; nome: string; cognome: string }[]);
     });
   }, []);
@@ -641,14 +641,14 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
       const isPhone = parts.length >= 3 && /^[+\d]{6,15}$/.test(lastPart);
       const cognome = isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' ');
       const telefono = isPhone ? lastPart : undefined;
-      const { data: nc } = await dbInsert('clienti', { nome, cognome, ...(telefono ? { telefono } : {}), user_id: user?.id });
+      const { data: nc } = await dbInsert({ table: 'clienti', data: { nome, cognome, ...(telefono ? { telefono } : {}), user_id: user?.id } });
       if (nc) { resolvedId = (nc as any).id; clienteNome = (nc as any).nome; clienteCognome = (nc as any).cognome; }
     } else if (clienteId) {
       const c = clienti.find(x => x.id === clienteId);
       if (c) { clienteNome = c.nome; clienteCognome = c.cognome; }
     }
 
-    const { data: newFiche } = await dbInsert('fiches', { manuale: true, cliente_id: resolvedId, note: '', data_riferimento: selectedDate, user_id: user?.id });
+    const { data: newFiche } = await dbInsert({ table: 'fiches', data: { manuale: true, cliente_id: resolvedId, note: '', data_riferimento: selectedDate, user_id: user?.id } });
     setSaving(false);
     if (!newFiche) return;
 
@@ -663,6 +663,7 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
       importoConvalidato: 0,
       voci: [],
       noteEsistenti: '',
+      createdAt: (newFiche as any).created_at ?? '',
     });
   }
 
@@ -854,24 +855,24 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
     const isValidUuid = clienteId ? /^[0-9a-f-]{36}$/i.test(clienteId) : false;
     const realClienteId = isValidUuid ? clienteId : null;
     if (realClienteId) {
-      dbSelect('clienti', [{ col: 'id', op: 'eq', val: realClienteId }], [], ['telefono']).then(({ data }) => { if (data?.[0]?.telefono) setClienteTelefono((data[0] as any).telefono); });
+      dbSelect({ table: 'clienti', filters: [{ col: 'id', op: 'eq', val: realClienteId }], orderBy: [], columns: 'telefono' }).then(({ data }) => { if (data?.[0]?.telefono) setClienteTelefono((data[0] as any).telefono); });
     }
 
     // Carica carte disponibili per questo cliente e auto-seleziona
     (async () => {
-      const { data: sc } = await dbSelect('carte_sconto', [{ col: 'attiva', op: 'eq', val: true }]);
+      const { data: sc } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'attiva', op: 'eq', val: true }] });
       const scontoList = (sc || []) as CartaScontoSimple[];
       setCarteSconto(scontoList);
 
       // Auto-seleziona la carta sconto intestata al cliente (priorità)
       if (realClienteId && scontoList.length > 0) {
-        const { data: scCliente } = await dbSelect('carte_sconto', [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'attiva', op: 'eq', val: true }]);
+        const { data: scCliente } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'attiva', op: 'eq', val: true }] });
         if (scCliente && scCliente.length > 0) setCartaScontoId((scCliente[0] as any).id);
         else if (scontoList.length === 1) setCartaScontoId(scontoList[0].id);
       }
 
       if (realClienteId) {
-        const { data: pr } = await dbSelect('carte_premium', [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'deleted_at', op: 'is_null' }]);
+        const { data: pr } = await dbSelect({ table: 'carte_premium', filters: [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'deleted_at', op: 'is_null' }] });
         const premiumList = (pr || []) as CartaPremiumSimple[];
         setCartePremium(premiumList);
         // Auto-seleziona la prima carta premium attiva con saldo disponibile
@@ -909,7 +910,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   async function openRivenditaPicker() {
     setShowRivenditaPicker(true);
     setLoadingProdotti(true);
-    const { data } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'categoria', asc: true }, { col: 'nome', asc: true }]);
+    const { data } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'categoria', asc: true }, { col: 'nome', asc: true }] });
     setProdottiRivendita((data || []) as ProdottoRivenditaCatalogo[]);
     setLoadingProdotti(false);
   }
@@ -1006,26 +1007,26 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
     if (ficheId) {
       // Aggiorna la fiche esistente preservando l'ID e tutti i riferimenti FK
-      await dbUpdate('fiches', ficheFields, [{ col: 'id', op: 'eq', val: ficheId }]);
+      await dbUpdate({ table: 'fiches', id: ficheId, data: ficheFields });
       // Elimina le voci esistenti e reinserisce quelle aggiornate
-      await dbDelete('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      await dbDelete({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       // Elimina le fiche extra se ce ne sono più di una (raro, ma possibile)
       for (const fid of gruppo.ficheIds.slice(1)) {
-        await dbDelete('fiches', [{ col: 'id', op: 'eq', val: fid }]);
+        await dbDelete({ table: 'fiches', filters: [{ col: 'id', op: 'eq', val: fid }] });
       }
     } else {
       // Crea una nuova fiche (primo salvataggio)
-      const { data: newFiche } = await dbInsert('fiches', { ...ficheFields, user_id: user?.id });
+      const { data: newFiche } = await dbInsert({ table: 'fiches', data: { ...ficheFields, user_id: user?.id } });
       ficheId = (newFiche as any)?.id ?? null;
     }
 
     if (ficheId && voci.length > 0) {
       for (const [i, v] of voci.entries()) {
-        await dbInsert('fiche_voci', {
+        await dbInsert({ table: 'fiche_voci', data: {
           fiche_id: ficheId, tipo: v.tipo, nome_voce: v.nome_voce,
           parrucchiere_id: v.parrucchiere_id, nome_parrucchiere: v.nome_parrucchiere,
           prezzo: v.prezzo, note: v.note, ordine: i, user_id: user?.id,
-        });
+        } });
       }
     }
     return ficheId;
@@ -1061,19 +1062,19 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
     if (ficheId) {
       const clienteNome = `${gruppo.clienteNome} ${gruppo.clienteCognome}`.trim();
-      await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
-      await dbInsert('incassi_giornalieri', {
+      await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      await dbInsert({ table: 'incassi_giornalieri', data: {
         data: selectedDate,
         fiche_id: ficheId,
         cliente_nome: clienteNome,
         importo: totale,
         note: note || '',
         user_id: user?.id,
-      });
+      } });
 
       // Registra utilizzo carta sconto (skip se nominativa e cliente non corrisponde)
       if (scontoValido && cartaSconto) {
-        await dbInsert('utilizzi_carta_sconto', {
+        await dbInsert({ table: 'utilizzi_carta_sconto', data: {
           carta_sconto_id: cartaSconto.id,
           fiche_id: ficheId,
           importo_originale: totaleBase,
@@ -1081,10 +1082,10 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
           importo_finale: totaleDopoSconto,
           cliente_id: clienteGruppoIdValid,
           user_id: user?.id,
-        });
-        const { data: full } = await dbSelect('carte_sconto', [{ col: 'id', op: 'eq', val: cartaSconto.id }]);
+        } });
+        const { data: full } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'id', op: 'eq', val: cartaSconto.id }] });
         if (full && full.length > 0 && (full[0] as any)?.usa_e_getta) {
-          await dbUpdate('carte_sconto', { attiva: false, deleted_at: new Date().toISOString() }, [{ col: 'id', op: 'eq', val: cartaSconto.id }]);
+          await dbUpdate({ table: 'carte_sconto', id: cartaSconto.id, data: { attiva: false, deleted_at: new Date().toISOString() } });
         }
       }
 
@@ -1096,7 +1097,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
           const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
           const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
-          await dbInsert('rivendita_prodotti', {
+          await dbInsert({ table: 'rivendita_prodotti', data: {
             fiche_id: ficheId,
             parrucchiere_id: v.parrucchiere_id,
             nome_prodotto: v.nome_voce,
@@ -1105,17 +1106,17 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             data_vendita: selectedDate,
             note: catalogoId ? '' : (v.note || ''),
             user_id: user?.id,
-          });
+          } });
 
           // Scale down stock in catalog
           if (catalogoId) {
-            const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+            const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
             if (prod && prod.length > 0) {
               const prodData = prod[0] as any;
-              await dbUpdate('prodotti_rivendita_catalogo', {
+              await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
                 quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
                 quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
-              }, [{ col: 'id', op: 'eq', val: catalogoId }]);
+              } });
             }
           }
         }
@@ -1125,7 +1126,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
       const vociTrattamenti = voci.filter(v => v.nome_voce.toLowerCase().includes('trattamento'));
       for (const v of vociTrattamenti) {
         if (v.parrucchiere_id) {
-          await dbInsert('trattamenti_eseguiti', {
+          await dbInsert({ table: 'trattamenti_eseguiti', data: {
             fiche_id: ficheId,
             parrucchiere_id: v.parrucchiere_id,
             nome_trattamento: v.nome_voce,
@@ -1133,23 +1134,23 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             data_esecuzione: selectedDate,
             note: v.note || '',
             user_id: user?.id,
-          });
+          } });
         }
       }
 
       // Registra utilizzo e scala saldo carta premium
       if (cartaPremium && creditoPremium > 0) {
-        await dbInsert('utilizzi_carta_premium', {
+        await dbInsert({ table: 'utilizzi_carta_premium', data: {
           carta_premium_id: cartaPremium.id,
           fiche_id: ficheId,
           importo_detratto: creditoPremium,
           user_id: user?.id,
-        });
+        } });
         const nuovoSaldoPremium = cartaPremium.saldo - creditoPremium;
-        await dbUpdate('carte_premium', {
+        await dbUpdate({ table: 'carte_premium', id: cartaPremium.id, data: {
           saldo: nuovoSaldoPremium,
           ...(nuovoSaldoPremium <= 0 ? { attiva: false } : {}),
-        }, [{ col: 'id', op: 'eq', val: cartaPremium.id }]);
+        } });
       }
     }
 
@@ -1184,62 +1185,62 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
     for (const ficheId of gruppo.ficheIds) {
       // Ripristina utilizzi carta sconto
-      const { data: scUsi } = await dbSelect('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      const { data: scUsi } = await dbSelect({ table: 'utilizzi_carta_sconto', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       for (const uso of scUsi || []) {
-        const { data: cs } = await dbSelect('carte_sconto', [{ col: 'id', op: 'eq', val: (uso as any).carta_sconto_id }]);
+        const { data: cs } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'id', op: 'eq', val: (uso as any).carta_sconto_id }] });
         if (cs && cs.length > 0) {
           const csData = cs[0] as any;
           if (csData?.usa_e_getta && !csData.attiva) {
-            await dbUpdate('carte_sconto', { attiva: true, deleted_at: null }, [{ col: 'id', op: 'eq', val: csData.id }]);
+            await dbUpdate({ table: 'carte_sconto', id: csData.id, data: { attiva: true, deleted_at: null } });
           }
         }
-        await dbDelete('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+        await dbDelete({ table: 'utilizzi_carta_sconto', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       }
 
       // Ripristina utilizzi carta premium
-      const { data: prUsi } = await dbSelect('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      const { data: prUsi } = await dbSelect({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       for (const uso of prUsi || []) {
-        const { data: cp } = await dbSelect('carte_premium', [{ col: 'id', op: 'eq', val: (uso as any).carta_premium_id }]);
+        const { data: cp } = await dbSelect({ table: 'carte_premium', filters: [{ col: 'id', op: 'eq', val: (uso as any).carta_premium_id }] });
         if (cp && cp.length > 0) {
           const cpData = cp[0] as any;
           const nuovoSaldo = cpData.saldo + (uso as any).importo_detratto;
-          await dbUpdate('carte_premium', { saldo: nuovoSaldo, attiva: true }, [{ col: 'id', op: 'eq', val: cpData.id }]);
+          await dbUpdate({ table: 'carte_premium', id: cpData.id, data: { saldo: nuovoSaldo, attiva: true } });
           smsRipristino = {
             codiceOverride: cpData.codice,
             azione: { tipo: 'ripristino_credito', importoRipristinato: (uso as any).importo_detratto, nuovoSaldo },
           };
         }
-        await dbDelete('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+        await dbDelete({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       }
 
       // Ripristina stock catalogo per ogni voce rivendita collegata
-      const { data: vociFiche } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      const { data: vociFiche } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       for (const vf of vociFiche || []) {
         if (!(vf as any).nome_voce?.toLowerCase().includes('rivendita')) continue;
         const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
         if (!catalogoMatch) continue;
         const catalogoId = catalogoMatch[1];
-        const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+        const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
         if (prod && prod.length > 0) {
           const prodData = prod[0] as any;
-          await dbUpdate('prodotti_rivendita_catalogo', {
+          await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
             quantita_stock: (prodData.quantita_stock ?? 0) + 1,
             quantita_venduta: Math.max(0, (prodData.quantita_venduta ?? 0) - 1),
-          }, [{ col: 'id', op: 'eq', val: catalogoId }]);
+          } });
         }
       }
 
       // Rimuovi voci rivendita generate dalla fiche
-      await dbDelete('rivendita_prodotti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
 
       // Rimuovi trattamenti generati dalla fiche
-      await dbDelete('trattamenti_eseguiti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      await dbDelete({ table: 'trattamenti_eseguiti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
 
       // Rimuovi incasso giornaliero
-      await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
 
       // Riporta fiche a non-convalidata
-      await dbUpdate('fiches', { convalidata: false, convalidata_at: null, importo_convalidato: 0 }, [{ col: 'id', op: 'eq', val: ficheId }]);
+      await dbUpdate({ table: 'fiches', id: ficheId, data: { convalidata: false, convalidata_at: null, importo_convalidato: 0 } });
     }
 
     setConvalidando(false);
@@ -1261,57 +1262,57 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
         // Se convalidata, esegui l'iter completo di annullamento prima di eliminare
         if (gruppo.ficheConvalidata) {
           // Ripristina utilizzi carta sconto
-          const { data: scUsi } = await dbSelect('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+          const { data: scUsi } = await dbSelect({ table: 'utilizzi_carta_sconto', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           for (const uso of scUsi || []) {
-            const { data: cs } = await dbSelect('carte_sconto', [{ col: 'id', op: 'eq', val: (uso as any).carta_sconto_id }]);
+            const { data: cs } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'id', op: 'eq', val: (uso as any).carta_sconto_id }] });
             if (cs && cs.length > 0) {
               const csData = cs[0] as any;
               if (csData?.usa_e_getta && !csData.attiva) {
-                await dbUpdate('carte_sconto', { attiva: true }, [{ col: 'id', op: 'eq', val: csData.id }]);
+                await dbUpdate({ table: 'carte_sconto', id: csData.id, data: { attiva: true } });
               }
             }
-            await dbDelete('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+            await dbDelete({ table: 'utilizzi_carta_sconto', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           }
 
           // Ripristina utilizzi carta premium
-          const { data: prUsi } = await dbSelect('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+          const { data: prUsi } = await dbSelect({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           for (const uso of prUsi || []) {
-            const { data: cp } = await dbSelect('carte_premium', [{ col: 'id', op: 'eq', val: (uso as any).carta_premium_id }]);
+            const { data: cp } = await dbSelect({ table: 'carte_premium', filters: [{ col: 'id', op: 'eq', val: (uso as any).carta_premium_id }] });
             if (cp && cp.length > 0) {
               const cpData = cp[0] as any;
-              await dbUpdate('carte_premium', { saldo: cpData.saldo + (uso as any).importo_detratto, attiva: true }, [{ col: 'id', op: 'eq', val: cpData.id }]);
+              await dbUpdate({ table: 'carte_premium', id: cpData.id, data: { saldo: cpData.saldo + (uso as any).importo_detratto, attiva: true } });
             }
-            await dbDelete('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+            await dbDelete({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           }
 
           // Ripristina stock catalogo per voci rivendita
-          const { data: vociFiche } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+          const { data: vociFiche } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           for (const vf of vociFiche || []) {
             if (!(vf as any).nome_voce?.toLowerCase().includes('rivendita')) continue;
             const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
             if (!catalogoMatch) continue;
             const catalogoId = catalogoMatch[1];
-            const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+            const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
             if (prod && prod.length > 0) {
               const prodData = prod[0] as any;
-              await dbUpdate('prodotti_rivendita_catalogo', {
+              await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
                 quantita_stock: (prodData.quantita_stock ?? 0) + 1,
                 quantita_venduta: Math.max(0, (prodData.quantita_venduta ?? 0) - 1),
-              }, [{ col: 'id', op: 'eq', val: catalogoId }]);
+              } });
             }
           }
 
           // Rimuovi voci rivendita e trattamenti generati
-          await dbDelete('rivendita_prodotti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
-          await dbDelete('trattamenti_eseguiti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+          await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          await dbDelete({ table: 'trattamenti_eseguiti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
 
           // Rimuovi incasso giornaliero
-          await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+          await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
         }
 
         // Elimina fiche_voci prima (per sicurezza) poi la fiche
-        await dbDelete('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
-        const delRes = await dbDelete('fiches', [{ col: 'id', op: 'eq', val: ficheId }]);
+        await dbDelete({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+        const delRes = await dbDelete({ table: 'fiches', filters: [{ col: 'id', op: 'eq', val: ficheId }] });
         if (delRes.error) throw new Error(`Errore eliminazione fiche: ${delRes.error}`);
       }
 
@@ -2014,19 +2015,19 @@ function FicheRicaricaModal({ carta, selectedDate, onClose, onSaved }: {
   async function save() {
     setSaving(true);
     const nuovoSaldo = carta.saldo + importo;
-    await dbInsert('ricariche_carta_premium', {
+    await dbInsert({ table: 'ricariche_carta_premium', data: {
       carta_premium_id: carta.id, importo, note: noteR, tipo_ricarica: tipo, user_id: user?.id,
-    });
-    await dbUpdate('carte_premium', { saldo: nuovoSaldo, attiva: true }, [{ col: 'id', op: 'eq', val: carta.id }]);
+    } });
+    await dbUpdate({ table: 'carte_premium', id: carta.id, data: { saldo: nuovoSaldo, attiva: true } });
     if (tipo === 'standard') {
-      await dbInsert('incassi_giornalieri', {
+      await dbInsert({ table: 'incassi_giornalieri', data: {
         data: selectedDate,
         fiche_id: null,
         cliente_nome: `Ricarica carta ${carta.codice}`,
         importo: prezzoCliente,
         note: `Ricarica carta premium: credito €${importo}, pagato €${prezzoCliente}`,
         user_id: user?.id,
-      });
+      } });
     }
     setSaving(false);
     onSaved(nuovoSaldo, importo, prezzoCliente, tipo);
@@ -2517,7 +2518,7 @@ function VociExtraTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await dbSelect('voci_extra_catalogo', [], [{ col: 'nome', asc: true }]);
+    const { data } = await dbSelect({ table: 'voci_extra_catalogo', filters: [], orderBy: [{ col: 'nome', asc: true }] });
     setVoci((data || []) as VoceExtra[]);
     setLoading(false);
   }, []);
@@ -2542,9 +2543,9 @@ function VociExtraTab() {
     setError('');
     const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), prezzo: form.prezzo, colore: form.colore, attivo: form.attivo };
     if (modal.id) {
-      await dbUpdate('voci_extra_catalogo', payload, [{ col: 'id', op: 'eq', val: modal.id }]);
+      await dbUpdate({ table: 'voci_extra_catalogo', id: modal.id, data: payload });
     } else {
-      await dbInsert('voci_extra_catalogo', { ...payload, user_id: user?.id });
+      await dbInsert({ table: 'voci_extra_catalogo', data: { ...payload, user_id: user?.id } });
     }
     setSaving(false);
     setModal({ open: false });
@@ -2553,12 +2554,12 @@ function VociExtraTab() {
 
   async function handleDelete(id: string) {
     if (!confirm('Eliminare questa voce?')) return;
-    await dbDelete('voci_extra_catalogo', [{ col: 'id', op: 'eq', val: id }]);
+    await dbDelete({ table: 'voci_extra_catalogo', filters: [{ col: 'id', op: 'eq', val: id }] });
     load();
   }
 
   async function toggleAttivo(v: VoceExtra) {
-    await dbUpdate('voci_extra_catalogo', { attivo: !v.attivo }, [{ col: 'id', op: 'eq', val: v.id }]);
+    await dbUpdate({ table: 'voci_extra_catalogo', id: v.id, data: { attivo: !v.attivo } });
     load();
   }
 
@@ -2709,8 +2710,8 @@ function ProdottiRivenditaTab() {
   const load = useCallback(async () => {
     setLoading(true);
     const [prodRes, parrRes] = await Promise.all([
-      dbSelect('prodotti_rivendita_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'categoria', asc: true }, { col: 'nome', asc: true }]),
-      dbSelect('parrucchieri', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
+      dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'categoria', asc: true }, { col: 'nome', asc: true }] }),
+      dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
     ]);
     setProdotti((prodRes.data || []) as ProdottoRivenditaCatalogo[]);
     setParrucchieri((parrRes.data || []) as ParrucchiereSimple[]);
@@ -2733,7 +2734,7 @@ function ProdottiRivenditaTab() {
     if (!vendita) return;
     setSaving(true);
     const parr = parrucchieri.find(p => p.id === vendita.parrId);
-    await dbInsert('rivendita_prodotti', {
+    await dbInsert({ table: 'rivendita_prodotti', data: {
       parrucchiere_id: vendita.parrId,
       nome_prodotto: vendita.prodotto.nome,
       quantita: vendita.quantita,
@@ -2741,14 +2742,14 @@ function ProdottiRivenditaTab() {
       data_vendita: vendita.data,
       note: vendita.prodotto.marca ? `Marca: ${vendita.prodotto.marca}` : '',
       user_id: user?.id,
-    });
+    } });
     const nuovoStock = Math.max(0, vendita.prodotto.quantita_stock - vendita.quantita);
     const nuovaVenduta = (vendita.prodotto.quantita_venduta || 0) + vendita.quantita;
-    await dbUpdate('prodotti_rivendita_catalogo', {
+    await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: vendita.prodotto.id, data: {
       quantita_stock: nuovoStock,
       quantita_venduta: nuovaVenduta,
       updated_at: new Date().toISOString(),
-    }, [{ col: 'id', op: 'eq', val: vendita.prodotto.id }]);
+    } });
     setSaving(false);
     setVendita(null);
     setFlash(`Vendita registrata${parr ? ` per ${parr.nome}` : ''}`);
