@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Plus, Trash2, X, Euro, ChevronDown, ChevronUp, FileText,
   Pencil, Check, BookOpen, Printer, Download, ShieldCheck, AlertCircle, UserPlus, Scissors, Eye, EyeOff, ShoppingBag, Search,
+  Banknote, CreditCard,
 } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import jsPDF from 'jspdf';
@@ -146,7 +147,9 @@ function FichesTab() {
   const [showPrint, setShowPrint] = useState(false);
   const [autoExportDate, setAutoExportDate] = useState<string | null>(null);
   const [showNuovaFiche, setShowNuovaFiche] = useState(false);
+  const [showBulkPagamentoModal, setShowBulkPagamentoModal] = useState(false);
   const [showBulkGate, setShowBulkGate] = useState(false);
+  const [bulkTipoPagamento, setBulkTipoPagamento] = useState<'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null>(null);
   const [bulkConvalidando, setBulkConvalidando] = useState(false);
   const [incassoVisible, setIncassoVisible] = useState(() => !!sessionStorage.getItem('incasso_unlocked'));
   const [showIncassoGate, setShowIncassoGate] = useState(false);
@@ -375,27 +378,32 @@ function FichesTab() {
   const daConvalidare = gruppi.filter(g => !g.ficheConvalidata && g.ficheIds.length > 0);
 
   async function handleBulkConvalida() {
+    if (!bulkTipoPagamento) return;
     setBulkConvalidando(true);
     setShowBulkGate(false);
     const now = new Date().toISOString();
     for (const g of daConvalidare) {
       const totale = g.voci.reduce((s, v) => s + v.prezzo, 0);
       const clienteNome = `${g.clienteNome} ${g.clienteCognome}`.trim();
+      const tipoPag = bulkTipoPagamento;
       for (const ficheId of g.ficheIds) {
         await dbUpdate({ table: 'fiches', id: ficheId, data: {
           convalidata: true,
           convalidata_at: now,
           importo_convalidato: totale,
+          tipo_pagamento: tipoPag,
         } });
         await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
-        await dbInsert({ table: 'incassi_giornalieri', data: {
-          data: selectedDate,
-          fiche_id: ficheId,
-          cliente_nome: clienteNome,
-          importo: totale,
-          note: '',
-          user_id: user?.id,
-        } });
+        if (tipoPag !== 'contanti_nero') {
+          await dbInsert({ table: 'incassi_giornalieri', data: {
+            data: selectedDate,
+            fiche_id: ficheId,
+            cliente_nome: clienteNome,
+            importo: totale,
+            note: '',
+            user_id: user?.id,
+          } });
+        }
 
         // Registra voci rivendita e scala stock catalogo
         const vociRivendita = g.voci.filter(v => v.nome_voce.toLowerCase().includes('rivendita'));
@@ -501,7 +509,7 @@ function FichesTab() {
         <div className="ml-auto flex items-center gap-2">
           {daConvalidare.length > 0 && (
             <button
-              onClick={() => setShowBulkGate(true)}
+              onClick={() => { setBulkTipoPagamento(null); setShowBulkPagamentoModal(true); }}
               disabled={bulkConvalidando}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
             >
@@ -594,10 +602,21 @@ function FichesTab() {
         />,
         document.body
       )}
+      {showBulkPagamentoModal && createPortal(
+        <BulkPagamentoModal
+          count={daConvalidare.length}
+          selectedDate={selectedDate}
+          selected={bulkTipoPagamento}
+          onSelect={tip => setBulkTipoPagamento(tip)}
+          onNext={() => { setShowBulkPagamentoModal(false); setShowBulkGate(true); }}
+          onClose={() => setShowBulkPagamentoModal(false)}
+        />,
+        document.body
+      )}
       {showBulkGate && createPortal(
         <PasswordGateModal
           titolo="Convalida tutte le fiches"
-          descrizione={`Convalida ${daConvalidare.length} fiche non ancora convalidate per il ${selectedDate}. Le carte sconto/premium non verranno applicate.`}
+          descrizione={`Convalida ${daConvalidare.length} fiche con metodo "${bulkTipoPagamento === 'cc_bancomat' ? 'CC/Bancomat' : bulkTipoPagamento === 'contanti_verde' ? 'Contanti (dichiarati)' : 'Contanti (non dichiarati)'}". Le carte sconto/premium non verranno applicate.`}
           chiavePassword="password_carte"
           onSuccess={handleBulkConvalida}
           onClose={() => setShowBulkGate(false)}
@@ -2492,6 +2511,105 @@ const LAYOUT_OPTIONS = [
 ] as const;
 
 type LayoutOption = typeof LAYOUT_OPTIONS[number];
+
+// ─── Bulk Pagamento Modal ─────────────────────────────────────────────────────
+
+interface BulkPagamentoModalProps {
+  count: number;
+  selectedDate: string;
+  selected: 'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null;
+  onSelect: (tip: 'cc_bancomat' | 'contanti_verde' | 'contanti_nero') => void;
+  onNext: () => void;
+  onClose: () => void;
+}
+
+function BulkPagamentoModal({ count, selectedDate, selected, onSelect, onNext, onClose }: BulkPagamentoModalProps) {
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+              <ShieldCheck size={15} className="text-emerald-600" />
+            </div>
+            <div>
+              <p className="font-bold text-stone-800 text-sm">Convalida tutte le fiches</p>
+              <p className="text-xs text-stone-400">{count} fiche · {selectedDate}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors">
+            <X size={15} className="text-stone-500" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-stone-500">
+            Seleziona il metodo di pagamento che verrà applicato a tutte le fiches non ancora convalidate.
+          </p>
+
+          <div className="space-y-2">
+            <button
+              onClick={() => onSelect('cc_bancomat')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${selected === 'cc_bancomat' ? 'border-blue-500 bg-blue-50' : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50'}`}
+            >
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${selected === 'cc_bancomat' ? 'bg-blue-100' : 'bg-stone-100'}`}>
+                <CreditCard size={16} className={selected === 'cc_bancomat' ? 'text-blue-600' : 'text-stone-500'} />
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${selected === 'cc_bancomat' ? 'text-blue-700' : 'text-stone-700'}`}>CC / Bancomat</p>
+                <p className="text-xs text-stone-400">Pagamento elettronico — registrato in Finanze</p>
+              </div>
+              {selected === 'cc_bancomat' && <div className="ml-auto w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-white" /></div>}
+            </button>
+
+            <button
+              onClick={() => onSelect('contanti_verde')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${selected === 'contanti_verde' ? 'border-emerald-500 bg-emerald-50' : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50'}`}
+            >
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${selected === 'contanti_verde' ? 'bg-emerald-100' : 'bg-stone-100'}`}>
+                <Banknote size={16} className={selected === 'contanti_verde' ? 'text-emerald-600' : 'text-stone-500'} />
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${selected === 'contanti_verde' ? 'text-emerald-700' : 'text-stone-700'}`}>Contanti dichiarati</p>
+                <p className="text-xs text-stone-400">Contanti regolari — registrati in Finanze</p>
+              </div>
+              {selected === 'contanti_verde' && <div className="ml-auto w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-white" /></div>}
+            </button>
+
+            <button
+              onClick={() => onSelect('contanti_nero')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${selected === 'contanti_nero' ? 'border-stone-700 bg-stone-800' : 'border-stone-200 hover:border-stone-400 hover:bg-stone-50'}`}
+            >
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${selected === 'contanti_nero' ? 'bg-stone-600' : 'bg-stone-100'}`}>
+                <Banknote size={16} className={selected === 'contanti_nero' ? 'text-stone-200' : 'text-stone-500'} />
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${selected === 'contanti_nero' ? 'text-stone-100' : 'text-stone-700'}`}>Contanti non dichiarati</p>
+                <p className={`text-xs ${selected === 'contanti_nero' ? 'text-stone-400' : 'text-stone-400'}`}>Non registrati in Finanze</p>
+              </div>
+              {selected === 'contanti_nero' && <div className="ml-auto w-4 h-4 rounded-full bg-stone-400 flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-stone-800" /></div>}
+            </button>
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+              Annulla
+            </button>
+            <button
+              onClick={onNext}
+              disabled={!selected}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-semibold transition-colors"
+            >
+              <ShieldCheck size={14} />
+              Continua
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Print Modal ──────────────────────────────────────────────────────────────
 
