@@ -66,6 +66,7 @@ interface ClienteGruppo {
   ficheIds: string[];
   ficheConvalidata: boolean;
   importoConvalidato: number;
+  convalidataAt: string | null;
   voci: FicheVoce[];
   noteEsistenti: string;
   createdAt: string;
@@ -209,7 +210,7 @@ function FichesTab() {
         gruppoMap[cid] = {
           clienteId: cid, clienteNome: nome, clienteCognome: cognome,
           appuntamenti: [], ficheIds: [], ficheConvalidata: false,
-          importoConvalidato: 0, voci: [], noteEsistenti: '', createdAt: '',
+          importoConvalidato: 0, convalidataAt: null, voci: [], noteEsistenti: '', createdAt: '',
         };
       }
       gruppoMap[cid].appuntamenti.push(app);
@@ -220,6 +221,7 @@ function FichesTab() {
         if (fiche.convalidata) {
           gruppoMap[cid].ficheConvalidata = true;
           gruppoMap[cid].importoConvalidato = fiche.importo_convalidato;
+          if (fiche.convalidata_at) gruppoMap[cid].convalidataAt = fiche.convalidata_at;
         }
         if (fiche.note) gruppoMap[cid].noteEsistenti += (gruppoMap[cid].noteEsistenti ? '\n' : '') + fiche.note;
         if (!gruppoMap[cid].createdAt || fiche.created_at > gruppoMap[cid].createdAt) {
@@ -246,7 +248,7 @@ function FichesTab() {
 
     for (const f of (ficheManuali || []) as Array<{
       id: string; cliente_id: string | null; note: string; convalidata: boolean; importo_convalidato: number;
-      created_at: string; tipo_fiche?: string; fiche_voci: FicheVoce[]; clienti: { id: string; nome: string; cognome: string } | null;
+      created_at: string; convalidata_at?: string | null; tipo_fiche?: string; fiche_voci: FicheVoce[]; clienti: { id: string; nome: string; cognome: string } | null;
     }>) {
       // Carta premium fiches always get their own card (separate even for same client)
       const isCartaPremium = f.tipo_fiche === 'carta_premium';
@@ -264,6 +266,7 @@ function FichesTab() {
           ficheIds: [],
           ficheConvalidata: false,
           importoConvalidato: 0,
+          convalidataAt: null,
           voci: [],
           noteEsistenti: '',
           createdAt: '',
@@ -275,6 +278,7 @@ function FichesTab() {
       if (f.convalidata) {
         g.ficheConvalidata = true;
         g.importoConvalidato += f.importo_convalidato;
+        if (f.convalidata_at) g.convalidataAt = f.convalidata_at;
       }
       if (f.note) g.noteEsistenti += (g.noteEsistenti ? '\n' : '') + f.note;
       if (!g.createdAt || f.created_at > g.createdAt) g.createdAt = f.created_at;
@@ -704,6 +708,7 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
       ficheIds: [(newFiche as any).id],
       ficheConvalidata: false,
       importoConvalidato: 0,
+      convalidataAt: null,
       voci: [],
       noteEsistenti: '',
       createdAt: (newFiche as any).created_at ?? '',
@@ -2525,11 +2530,20 @@ interface FichePreview {
   parrNomi: string;
 }
 
+function fmtConvalidataAt(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const data = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const ora = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  return `Convalidata il ${data} alle ${ora}`;
+}
+
 function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forPrint?: boolean }) {
   const { g, voci, totale, orari, parrNomi } = preview;
   const MAX_VOCI = 10;
   const visibleVoci = voci.slice(0, MAX_VOCI);
   const hidden = voci.length - visibleVoci.length;
+  const convalidataLabel = fmtConvalidataAt(g.convalidataAt ?? null);
 
   const isCartaPremiumPrint = g.clienteId.startsWith('__premium__');
 
@@ -2567,6 +2581,9 @@ function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forP
         {g.noteEsistenti && (
           <div style={{ marginTop: '1mm', color: '#666', fontSize: '6.5pt', fontStyle: 'italic', borderTop: '0.5px solid #eee', paddingTop: '1mm' }}>{g.noteEsistenti}</div>
         )}
+        {convalidataLabel && (
+          <div style={{ marginTop: '1mm', color: '#888', fontSize: '6pt', borderTop: '0.5px solid #eee', paddingTop: '1mm' }}>{convalidataLabel}</div>
+        )}
       </div>
     );
   }
@@ -2603,6 +2620,9 @@ function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forP
       </div>
       {g.noteEsistenti && (
         <div className="mt-0.5 text-stone-400 text-[8px] italic border-t border-stone-100 pt-0.5 truncate">{g.noteEsistenti}</div>
+      )}
+      {convalidataLabel && (
+        <div className="mt-0.5 text-stone-300 text-[7px] border-t border-stone-100 pt-0.5 truncate">{convalidataLabel}</div>
       )}
     </div>
   );
