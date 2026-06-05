@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TrendingUp, Calendar, ShieldCheck, ChevronDown, ChevronUp, Trash2, Euro, GitCompare } from 'lucide-react';
-import { supabase, localDateStr } from '../lib/supabase';
+import { localDateStr } from '../lib/supabase';
+import { dbSelect, dbUpdate, dbDelete } from '../lib/localDb';
 import { MonthlyBarChart } from './Statistiche';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 
@@ -420,14 +421,15 @@ export default function Finanze() {
 
   useEffect(() => {
     async function loadMesi() {
-      const { data } = await supabase
-        .from('incassi_giornalieri')
-        .select('data')
-        .order('data', { ascending: true });
+      const { data } = await dbSelect({
+        table: 'incassi_giornalieri',
+        columns: 'data',
+        orderBy: [{ col: 'data', asc: true }],
+      });
       if (!data) return;
       const anni = new Set<number>();
       const mesiPerAnno: Record<number, number[]> = {};
-      for (const row of data) {
+      for (const row of (data as any[])) {
         const d = new Date(row.data + 'T12:00:00');
         const y = d.getFullYear();
         const m = d.getMonth() + 1;
@@ -443,13 +445,18 @@ export default function Finanze() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('incassi_giornalieri')
-      .select('*')
-      .gte('data', rangeStart)
-      .lte('data', rangeEnd)
-      .order('data', { ascending: false })
-      .order('created_at', { ascending: false });
+    const { data } = await dbSelect({
+      table: 'incassi_giornalieri',
+      columns: '*',
+      filters: [
+        { col: 'data', op: 'gte', val: rangeStart },
+        { col: 'data', op: 'lte', val: rangeEnd },
+      ],
+      orderBy: [
+        { col: 'data', asc: false },
+        { col: 'created_at', asc: false },
+      ],
+    });
 
     const voci = (data || []) as IncassoVoce[];
     const map: Record<string, GiornoIncasso> = {};
@@ -471,64 +478,99 @@ export default function Finanze() {
 
     if (ficheId) {
       // Ripristina credito carta premium
-      const { data: prUsi } = await supabase
-        .from('utilizzi_carta_premium')
-        .select('carta_premium_id, importo_detratto')
-        .eq('fiche_id', ficheId);
+      const { data: prUsi } = await dbSelect({
+        table: 'utilizzi_carta_premium',
+        columns: 'carta_premium_id, importo_detratto',
+        filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }],
+      });
       for (const uso of (prUsi || [])) {
-        const { data: cp } = await supabase
-          .from('carte_premium')
-          .select('id, codice, saldo, cliente_id')
-          .eq('id', uso.carta_premium_id)
-          .maybeSingle();
+        const { data: cpData } = await dbSelect({
+          table: 'carte_premium',
+          columns: 'id, codice, saldo, cliente_id',
+          filters: [{ col: 'id', op: 'eq', val: (uso as any).carta_premium_id }],
+        });
+        const cp = (cpData && cpData.length > 0) ? cpData[0] : null;
         if (cp) {
-          const nuovoSaldo = cp.saldo + uso.importo_detratto;
-          await supabase.from('carte_premium').update({ saldo: nuovoSaldo, attiva: true }).eq('id', cp.id);
+          const nuovoSaldo = (cp as any).saldo + (uso as any).importo_detratto;
+          await dbUpdate({
+            table: 'carte_premium',
+            id: (cp as any).id,
+            data: { saldo: nuovoSaldo, attiva: true },
+          });
 
           // Recupera dati cliente per il messaggio WhatsApp
-          const { data: fiche } = await supabase.from('fiches').select('cliente_id').eq('id', ficheId).maybeSingle();
-          const clienteId = fiche?.cliente_id ?? cp.cliente_id;
+          const { data: ficheData } = await dbSelect({
+            table: 'fiches',
+            columns: 'cliente_id',
+            filters: [{ col: 'id', op: 'eq', val: ficheId }],
+          });
+          const fiche = ficheData && ficheData.length > 0 ? ficheData[0] : null;
+          const clienteId = (fiche as any)?.cliente_id ?? (cp as any).cliente_id;
           if (clienteId) {
-            const { data: cliente } = await supabase
-              .from('clienti')
-              .select('nome, cognome, telefono')
-              .eq('id', clienteId)
-              .maybeSingle();
+            const { data: clienteData } = await dbSelect({
+              table: 'clienti',
+              columns: 'nome, cognome, telefono',
+              filters: [{ col: 'id', op: 'eq', val: clienteId }],
+            });
+            const cliente = clienteData && clienteData.length > 0 ? clienteData[0] : null;
             if (cliente) {
               smsPayload = {
-                nominativo: `${cliente.nome} ${cliente.cognome}`.trim(),
-                codice: cp.codice,
-                telefono: cliente.telefono ?? '',
-                azione: { tipo: 'ripristino_credito', importoRipristinato: uso.importo_detratto, nuovoSaldo },
+                nominativo: `${(cliente as any).nome} ${(cliente as any).cognome}`.trim(),
+                codice: (cp as any).codice,
+                telefono: (cliente as any).telefono ?? '',
+                azione: { tipo: 'ripristino_credito', importoRipristinato: (uso as any).importo_detratto, nuovoSaldo },
               };
             }
           }
         }
       }
-      await supabase.from('utilizzi_carta_premium').delete().eq('fiche_id', ficheId);
+      await dbDelete({
+        table: 'utilizzi_carta_premium',
+        filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }],
+      });
 
       // Ripristina carta sconto (riattiva se usa-e-getta)
-      const { data: scUsi } = await supabase
-        .from('utilizzi_carta_sconto')
-        .select('carta_sconto_id')
-        .eq('fiche_id', ficheId);
+      const { data: scUsi } = await dbSelect({
+        table: 'utilizzi_carta_sconto',
+        columns: 'carta_sconto_id',
+        filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }],
+      });
       for (const uso of (scUsi || [])) {
-        const { data: cs } = await supabase.from('carte_sconto').select('usa_e_getta, attiva').eq('id', uso.carta_sconto_id).maybeSingle();
-        if (cs?.usa_e_getta && !cs.attiva) {
-          await supabase.from('carte_sconto').update({ attiva: true, deleted_at: null }).eq('id', uso.carta_sconto_id);
+        const { data: csData } = await dbSelect({
+          table: 'carte_sconto',
+          columns: 'usa_e_getta, attiva',
+          filters: [{ col: 'id', op: 'eq', val: (uso as any).carta_sconto_id }],
+        });
+        const cs = csData && csData.length > 0 ? csData[0] : null;
+        if ((cs as any)?.usa_e_getta && !(cs as any).attiva) {
+          await dbUpdate({
+            table: 'carte_sconto',
+            id: (uso as any).carta_sconto_id,
+            data: { attiva: true, deleted_at: null },
+          });
         }
       }
-      await supabase.from('utilizzi_carta_sconto').delete().eq('fiche_id', ficheId);
+      await dbDelete({
+        table: 'utilizzi_carta_sconto',
+        filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }],
+      });
 
       // Rimuovi voci rivendita collegate
-      await supabase.from('rivendita_prodotti').delete().eq('fiche_id', ficheId);
+      await dbDelete({
+        table: 'rivendita_prodotti',
+        filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }],
+      });
 
-      await supabase
-        .from('fiches')
-        .update({ convalidata: false, convalidata_at: null, importo_convalidato: 0 })
-        .eq('id', ficheId);
+      await dbUpdate({
+        table: 'fiches',
+        id: ficheId,
+        data: { convalidata: false, convalidata_at: null, importo_convalidato: 0 },
+      });
     }
-    await supabase.from('incassi_giornalieri').delete().eq('id', id);
+    await dbDelete({
+      table: 'incassi_giornalieri',
+      filters: [{ col: 'id', op: 'eq', val: id }],
+    });
     load();
 
     if (smsPayload) {
@@ -551,7 +593,10 @@ export default function Finanze() {
   // Calcola valori per confronto periodi personalizzato (usa tutte le voci caricate da DB)
   const [tutteVoci, setTutteVoci] = useState<{ data: string; importo: number }[]>([]);
   useEffect(() => {
-    supabase.from('incassi_giornalieri').select('data, importo').then(({ data }) => {
+    dbSelect({
+      table: 'incassi_giornalieri',
+      columns: 'data, importo',
+    }).then(({ data }) => {
       setTutteVoci((data || []) as { data: string; importo: number }[]);
     });
   }, []);

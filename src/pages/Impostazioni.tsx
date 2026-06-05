@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi } from 'lucide-react';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
-import { restoreBackup, exportBackup, isElectron as isElectronEnv } from '../lib/localDb';
+import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive';
@@ -799,9 +799,10 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const [generando, setGenerando] = useState(false);
 
   useEffect(() => {
-    supabase.from('impostazioni').select('valore').eq('chiave', 'registrazione_url').maybeSingle().then(({ data }) => {
-      if (data?.valore) setRegistrazioneUrl(data.valore);
-    });
+    (async () => {
+      const val = await getImpostazione('registrazione_url');
+      if (val) setRegistrazioneUrl(val);
+    })();
   }, []);
 
   async function handleSaveUrl() {
@@ -809,7 +810,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     if (!trimmed) return;
     setSavingUrl(true);
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('impostazioni').upsert({ chiave: 'registrazione_url', valore: trimmed, user_id: user?.id }, { onConflict: 'chiave,user_id' });
+    await setImpostazione('registrazione_url', trimmed, user?.id);
     setRegistrazioneUrl(trimmed);
     setEditingUrl(false);
     setSavingUrl(false);
@@ -1821,16 +1822,15 @@ function PaginaPromemoria({ onBack, onTestReminder }: { onBack: () => void; onTe
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('impostazioni').select('valore').eq('chiave', 'promemoria_convalida_giorni').maybeSingle(),
-      supabase.from('impostazioni').select('valore').eq('chiave', 'promemoria_convalida_orario').maybeSingle(),
-    ]).then(([g, o]) => {
-      if (g.data?.valore) {
-        try { setGiorni(JSON.parse(g.data.valore)); } catch { /* keep default */ }
+    (async () => {
+      const g = await getImpostazione('promemoria_convalida_giorni');
+      const o = await getImpostazione('promemoria_convalida_orario');
+      if (g) {
+        try { setGiorni(JSON.parse(g)); } catch { /* keep default */ }
       }
-      if (o.data?.valore) setOrario(o.data.valore);
+      if (o) setOrario(o);
       setLoading(false);
-    });
+    })();
   }, []);
 
   function toggleGiorno(v: number) {
@@ -1844,15 +1844,16 @@ function PaginaPromemoria({ onBack, onTestReminder }: { onBack: () => void; onTe
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const uid = user?.id;
-    const [r1, r2] = await Promise.all([
-      supabase.from('impostazioni').upsert({ chiave: 'promemoria_convalida_giorni', valore: JSON.stringify(giorni), user_id: uid }, { onConflict: 'chiave,user_id' }),
-      supabase.from('impostazioni').upsert({ chiave: 'promemoria_convalida_orario', valore: orario, user_id: uid }, { onConflict: 'chiave,user_id' }),
-    ]);
-    setSaving(false);
-    if (r1.error || r2.error) {
-      setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio' });
-    } else {
+    try {
+      await Promise.all([
+        setImpostazione('promemoria_convalida_giorni', JSON.stringify(giorni), uid),
+        setImpostazione('promemoria_convalida_orario', orario, uid),
+      ]);
+      setSaving(false);
       setFeedback({ tipo: 'ok', msg: 'Impostazioni salvate. Il promemoria apparirà all\'orario selezionato.' });
+    } catch (err) {
+      setSaving(false);
+      setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio' });
     }
   }
 
@@ -2224,14 +2225,13 @@ function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('impostazioni').select('valore').eq('chiave', 'messaggio_avviso_appuntamento').maybeSingle(),
-      supabase.from('impostazioni').select('valore').eq('chiave', 'avviso_appuntamento_indirizzo').maybeSingle(),
-    ]).then(([m, i]) => {
-      setMessaggio(m.data?.valore ?? DEFAULT_MESSAGGIO);
-      setIndirizzo(i.data?.valore ?? DEFAULT_INDIRIZZO);
+    (async () => {
+      const m = await getImpostazione('messaggio_avviso_appuntamento');
+      const i = await getImpostazione('avviso_appuntamento_indirizzo');
+      setMessaggio(m ?? DEFAULT_MESSAGGIO);
+      setIndirizzo(i ?? DEFAULT_INDIRIZZO);
       setLoading(false);
-    });
+    })();
   }, []);
 
   async function handleSalva(e: React.FormEvent) {
@@ -2244,15 +2244,16 @@ function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const uid = user?.id;
-    const [r1, r2] = await Promise.all([
-      supabase.from('impostazioni').upsert({ chiave: 'messaggio_avviso_appuntamento', valore: messaggio, user_id: uid }, { onConflict: 'chiave,user_id' }),
-      supabase.from('impostazioni').upsert({ chiave: 'avviso_appuntamento_indirizzo', valore: indirizzo, user_id: uid }, { onConflict: 'chiave,user_id' }),
-    ]);
-    setSaving(false);
-    if (r1.error || r2.error) {
-      setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio' });
-    } else {
+    try {
+      await Promise.all([
+        setImpostazione('messaggio_avviso_appuntamento', messaggio, uid),
+        setImpostazione('avviso_appuntamento_indirizzo', indirizzo, uid),
+      ]);
+      setSaving(false);
       setFeedback({ tipo: 'ok', msg: 'Messaggio salvato. Sarà usato al prossimo invio avviso.' });
+    } catch (err) {
+      setSaving(false);
+      setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio' });
     }
   }
 
@@ -2704,13 +2705,14 @@ function PasswordRow({ chiave, titolo, descrizione, feedbackMsg, onSaved, aperta
     if (!nuovaPassword.trim()) { setFeedback({ tipo: 'err', msg: 'La nuova password non può essere vuota' }); return; }
     if (nuovaPassword !== confermaPassword) { setFeedback({ tipo: 'err', msg: 'Le password non coincidono' }); return; }
     setLoading(true);
-    const { error } = await supabase.from('impostazioni').upsert({ chiave, valore: nuovaPassword, user_id: user?.id }, { onConflict: 'chiave,user_id' });
-    setLoading(false);
-    if (error) {
-      setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio' });
-    } else {
+    try {
+      await setImpostazione(chiave, nuovaPassword, user?.id);
+      setLoading(false);
       onSaved();
       setStep('done');
+    } catch (error) {
+      setLoading(false);
+      setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio' });
     }
   }
 
@@ -2762,13 +2764,14 @@ function PasswordRow({ chiave, titolo, descrizione, feedbackMsg, onSaved, aperta
       return;
     }
     // OTP valido: salva nuova password di sezione
-    const { error } = await supabase.from('impostazioni').upsert({ chiave, valore: otpNuova, user_id: user?.id }, { onConflict: 'chiave,user_id' });
-    setOtpVerifyLoading(false);
-    if (error) {
-      setOtpVerifyMsg({ tipo: 'err', msg: 'Errore durante il salvataggio.' });
-    } else {
+    try {
+      await setImpostazione(chiave, otpNuova, user?.id);
+      setOtpVerifyLoading(false);
       onSaved();
       setStep('done');
+    } catch (error) {
+      setOtpVerifyLoading(false);
+      setOtpVerifyMsg({ tipo: 'err', msg: 'Errore durante il salvataggio.' });
     }
   }
 
@@ -3258,12 +3261,10 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     async function load() {
-      const [{ data: pingData }, { data: tipoData }] = await Promise.all([
-        supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping').maybeSingle(),
-        supabase.from('impostazioni').select('valore').eq('chiave', 'keep_alive_last_ping_tipo').maybeSingle(),
-      ]);
-      setLastPing(pingData?.valore ?? null);
-      setLastPingTipo((tipoData?.valore as 'automatico' | 'manuale') ?? null);
+      const pingVal = await getImpostazione('keep_alive_last_ping');
+      const tipoVal = await getImpostazione('keep_alive_last_ping_tipo');
+      setLastPing(pingVal ?? null);
+      setLastPingTipo((tipoVal as 'automatico' | 'manuale') ?? null);
       setLoading(false);
     }
     load();

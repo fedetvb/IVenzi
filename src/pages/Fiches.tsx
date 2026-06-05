@@ -4,12 +4,13 @@ import {
   Plus, Trash2, X, Euro, ChevronDown, ChevronUp, FileText,
   Pencil, Check, BookOpen, Printer, Download, ShieldCheck, AlertCircle, UserPlus, Scissors, Eye, EyeOff, ShoppingBag, Search,
 } from 'lucide-react';
-import { supabase, localDateStr } from '../lib/supabase';
+import { localDateStr } from '../lib/supabase';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -156,37 +157,38 @@ function FichesTab() {
     const start = `${selectedDate}T00:00:00${tz}`;
     const end   = `${selectedDate}T23:59:59${tz}`;
 
-    const [{ data: apps }, { data: voceExtra }, { data: parr }, { data: servizi }] = await Promise.all([
-      supabase
-        .from('appuntamenti')
-        .select('id, data_ora, durata_minuti, stato, note, prezzo_totale, clienti(id, nome, cognome), parrucchieri(id, nome, colore), appuntamento_trattamenti(nome_trattamento, prezzo)')
-        .gte('data_ora', start)
-        .lte('data_ora', end)
-        .neq('stato', 'cancellato')
-        .order('data_ora'),
-      supabase.from('voci_extra_catalogo').select('*').eq('attivo', true).order('nome'),
-      supabase.from('parrucchieri').select('id, nome, colore').eq('attivo', true).order('nome'),
-      supabase.from('trattamenti_catalogo').select('id, nome, prezzo, colore').eq('attivo', true).order('nome'),
+    const [appsRes, voceExtraRes, parrRes, serviziRes] = await Promise.all([
+      dbSelect('appuntamenti', [
+        { col: 'data_ora', op: 'gte', val: start },
+        { col: 'data_ora', op: 'lte', val: end },
+        { col: 'stato', op: 'neq', val: 'cancellato' },
+      ], [{ col: 'data_ora', asc: true }]),
+      dbSelect('voci_extra_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
+      dbSelect('parrucchieri', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
+      dbSelect('trattamenti_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
     ]);
+    const apps = appsRes.data;
+    const voceExtra = voceExtraRes.data;
+    const parr = parrRes.data;
+    const servizi = serviziRes.data;
 
     const appList = (apps || []) as RawAppuntamento[];
     const appIds = appList.map(a => a.id);
 
     let ficheMap: Record<string, FicheData> = {};
     if (appIds.length > 0) {
-      const { data: ficheData } = await supabase
-        .from('fiches')
-        .select('id, appuntamento_id, note, convalidata, importo_convalidato, created_at, fiche_voci(id, tipo, nome_voce, parrucchiere_id, nome_parrucchiere, prezzo, note, ordine)')
-        .in('appuntamento_id', appIds);
+      const { data: ficheData } = await dbSelect('fiches', [{ col: 'appuntamento_id', op: 'in', val: appIds }]);
       for (const f of ficheData || []) {
-        ficheMap[f.appuntamento_id] = {
-          id: f.id,
-          appuntamento_id: f.appuntamento_id,
-          note: f.note,
-          convalidata: f.convalidata,
-          importo_convalidato: f.importo_convalidato,
-          created_at: f.created_at,
-          voci: (f.fiche_voci || []).sort((a: FicheVoce, b: FicheVoce) => a.ordine - b.ordine),
+        const appId = (f as any).appuntamento_id;
+        const { data: voceData } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: (f as any).id }], [{ col: 'ordine', asc: true }]);
+        ficheMap[appId] = {
+          id: (f as any).id,
+          appuntamento_id: appId,
+          note: (f as any).note,
+          convalidata: (f as any).convalidata,
+          importo_convalidato: (f as any).importo_convalidato,
+          created_at: (f as any).created_at,
+          voci: ((voceData || []) as FicheVoce[]).sort((a: FicheVoce, b: FicheVoce) => a.ordine - b.ordine),
         };
       }
     }
@@ -220,11 +222,20 @@ function FichesTab() {
     }
 
     // Carica fiche manuali per questa data (filtro diretto su data_riferimento, nessun problema di timezone)
-    const { data: ficheManuali } = await supabase
-      .from('fiches')
-      .select('id, cliente_id, note, convalidata, importo_convalidato, created_at, fiche_voci(id, tipo, nome_voce, parrucchiere_id, nome_parrucchiere, prezzo, note, ordine), clienti(id, nome, cognome)')
-      .eq('manuale', true)
-      .eq('data_riferimento', selectedDate);
+    const { data: ficheManualiRaw } = await dbSelect('fiches', [
+      { col: 'manuale', op: 'eq', val: true },
+      { col: 'data_riferimento', op: 'eq', val: selectedDate },
+    ]);
+    const ficheManuali: any[] = [];
+    for (const f of ficheManualiRaw || []) {
+      const { data: voceData } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: (f as any).id }]);
+      const { data: clientData } = await dbSelect('clienti', [{ col: 'id', op: 'eq', val: (f as any).cliente_id }]);
+      ficheManuali.push({
+        ...f,
+        fiche_voci: voceData || [],
+        clienti: clientData && clientData.length > 0 ? clientData[0] : null,
+      });
+    }
 
     for (const f of (ficheManuali || []) as Array<{
       id: string; cliente_id: string | null; note: string; convalidata: boolean; importo_convalidato: number;
@@ -271,25 +282,32 @@ function FichesTab() {
 
     const carteMap = new Map<string, { hasPremium: boolean; hasPremiumEsaurita: boolean; hasSconto: boolean }>();
     if (allClienteIds.length > 0) {
-      const [{ data: scData }, { data: prData }] = await Promise.all([
-        supabase.from('carte_sconto').select('cliente_id').in('cliente_id', allClienteIds),
-        supabase.from('carte_premium').select('cliente_id, saldo, attiva').in('cliente_id', allClienteIds).is('deleted_at', null),
+      const [scRes, prRes] = await Promise.all([
+        dbSelect('carte_sconto', [{ col: 'cliente_id', op: 'in', val: allClienteIds }]),
+        dbSelect('carte_premium', [
+          { col: 'cliente_id', op: 'in', val: allClienteIds },
+          { col: 'deleted_at', op: 'is_null' },
+        ]),
       ]);
+      const scData = scRes.data || [];
+      const prData = prRes.data || [];
       for (const id of allClienteIds) {
         carteMap.set(id, { hasPremium: false, hasPremiumEsaurita: false, hasSconto: false });
       }
-      for (const r of (scData || [])) {
-        if (r.cliente_id) {
-          const e = carteMap.get(r.cliente_id);
+      for (const r of scData) {
+        const cid = (r as any).cliente_id;
+        if (cid) {
+          const e = carteMap.get(cid);
           if (e) e.hasSconto = true;
         }
       }
-      for (const r of (prData || [])) {
-        if (r.cliente_id) {
-          const e = carteMap.get(r.cliente_id);
+      for (const r of prData) {
+        const cid = (r as any).cliente_id;
+        if (cid) {
+          const e = carteMap.get(cid);
           if (e) {
             e.hasPremium = true;
-            if (r.saldo <= 0 || !r.attiva) e.hasPremiumEsaurita = true;
+            if ((r as any).saldo <= 0 || !(r as any).attiva) e.hasPremiumEsaurita = true;
           }
         }
       }
@@ -316,13 +334,13 @@ function FichesTab() {
       const totale = g.voci.reduce((s, v) => s + v.prezzo, 0);
       const clienteNome = `${g.clienteNome} ${g.clienteCognome}`.trim();
       for (const ficheId of g.ficheIds) {
-        await supabase.from('fiches').update({
+        await dbUpdate('fiches', {
           convalidata: true,
           convalidata_at: now,
           importo_convalidato: totale,
-        }).eq('id', ficheId);
-        await supabase.from('incassi_giornalieri').delete().eq('fiche_id', ficheId);
-        await supabase.from('incassi_giornalieri').insert({
+        }, [{ col: 'id', op: 'eq', val: ficheId }]);
+        await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+        await dbInsert('incassi_giornalieri', {
           data: selectedDate,
           fiche_id: ficheId,
           cliente_nome: clienteNome,
@@ -338,7 +356,7 @@ function FichesTab() {
             const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
             const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
-            await supabase.from('rivendita_prodotti').insert({
+            await dbInsert('rivendita_prodotti', {
               fiche_id: ficheId,
               parrucchiere_id: v.parrucchiere_id,
               nome_prodotto: v.nome_voce,
@@ -350,16 +368,13 @@ function FichesTab() {
             });
 
             if (catalogoId) {
-              const { data: prod } = await supabase
-                .from('prodotti_rivendita_catalogo')
-                .select('quantita_stock, quantita_venduta')
-                .eq('id', catalogoId)
-                .maybeSingle();
-              if (prod) {
-                await supabase.from('prodotti_rivendita_catalogo').update({
-                  quantita_stock: Math.max(0, (prod.quantita_stock ?? 0) - 1),
-                  quantita_venduta: (prod.quantita_venduta ?? 0) + 1,
-                }).eq('id', catalogoId);
+              const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+              if (prod && prod.length > 0) {
+                const prodData = prod[0] as any;
+                await dbUpdate('prodotti_rivendita_catalogo', {
+                  quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
+                  quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
+                }, [{ col: 'id', op: 'eq', val: catalogoId }]);
               }
             }
           }
@@ -369,7 +384,7 @@ function FichesTab() {
         const vociTrattamenti = g.voci.filter(v => !v.nome_voce.toLowerCase().includes('rivendita'));
         for (const v of vociTrattamenti) {
           if (v.parrucchiere_id) {
-            await supabase.from('trattamenti_eseguiti').insert({
+            await dbInsert('trattamenti_eseguiti', {
               fiche_id: ficheId,
               parrucchiere_id: v.parrucchiere_id,
               nome_trattamento: v.nome_voce,
@@ -579,7 +594,7 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
   const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    supabase.from('clienti').select('id, nome, cognome').order('cognome').then(({ data }) => {
+    dbSelect('clienti', [], [{ col: 'cognome', asc: true }], ['id', 'nome', 'cognome']).then(({ data }) => {
       setClienti((data || []) as { id: string; nome: string; cognome: string }[]);
     });
   }, []);
@@ -626,32 +641,24 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
       const isPhone = parts.length >= 3 && /^[+\d]{6,15}$/.test(lastPart);
       const cognome = isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' ');
       const telefono = isPhone ? lastPart : undefined;
-      const { data: nc } = await supabase
-        .from('clienti')
-        .insert({ nome, cognome, ...(telefono ? { telefono } : {}), user_id: user?.id })
-        .select('id, nome, cognome')
-        .single();
-      if (nc) { resolvedId = nc.id; clienteNome = nc.nome; clienteCognome = nc.cognome; }
+      const { data: nc } = await dbInsert('clienti', { nome, cognome, ...(telefono ? { telefono } : {}), user_id: user?.id });
+      if (nc) { resolvedId = (nc as any).id; clienteNome = (nc as any).nome; clienteCognome = (nc as any).cognome; }
     } else if (clienteId) {
       const c = clienti.find(x => x.id === clienteId);
       if (c) { clienteNome = c.nome; clienteCognome = c.cognome; }
     }
 
-    const { data: newFiche } = await supabase
-      .from('fiches')
-      .insert({ manuale: true, cliente_id: resolvedId, note: '', data_riferimento: selectedDate, user_id: user?.id })
-      .select('id')
-      .single();
+    const { data: newFiche } = await dbInsert('fiches', { manuale: true, cliente_id: resolvedId, note: '', data_riferimento: selectedDate, user_id: user?.id });
     setSaving(false);
     if (!newFiche) return;
 
-    const cid = resolvedId ? `__manuale__${resolvedId}` : `__manuale__${newFiche.id}`;
+    const cid = resolvedId ? `__manuale__${resolvedId}` : `__manuale__${(newFiche as any).id}`;
     onCreated({
       clienteId: cid,
       clienteNome,
       clienteCognome,
       appuntamenti: [],
-      ficheIds: [newFiche.id],
+      ficheIds: [(newFiche as any).id],
       ficheConvalidata: false,
       importoConvalidato: 0,
       voci: [],
@@ -847,28 +854,24 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
     const isValidUuid = clienteId ? /^[0-9a-f-]{36}$/i.test(clienteId) : false;
     const realClienteId = isValidUuid ? clienteId : null;
     if (realClienteId) {
-      supabase.from('clienti').select('telefono').eq('id', realClienteId).maybeSingle()
-        .then(({ data }) => { if (data?.telefono) setClienteTelefono(data.telefono); });
+      dbSelect('clienti', [{ col: 'id', op: 'eq', val: realClienteId }], [], ['telefono']).then(({ data }) => { if (data?.[0]?.telefono) setClienteTelefono((data[0] as any).telefono); });
     }
 
     // Carica carte disponibili per questo cliente e auto-seleziona
     (async () => {
-      const scontoQuery = supabase.from('carte_sconto').select('id, codice, descrizione, tipo_sconto, valore_sconto, nominativa, cliente_id').eq('attiva', true);
-      const { data: sc } = realClienteId
-        ? await scontoQuery.or(`cliente_id.eq.${realClienteId},cliente_id.is.null`)
-        : await scontoQuery.is('cliente_id', null);
+      const { data: sc } = await dbSelect('carte_sconto', [{ col: 'attiva', op: 'eq', val: true }]);
       const scontoList = (sc || []) as CartaScontoSimple[];
       setCarteSconto(scontoList);
 
       // Auto-seleziona la carta sconto intestata al cliente (priorità)
       if (realClienteId && scontoList.length > 0) {
-        const { data: scCliente } = await supabase.from('carte_sconto').select('id').eq('cliente_id', realClienteId).eq('attiva', true).maybeSingle();
-        if (scCliente) setCartaScontoId(scCliente.id);
+        const { data: scCliente } = await dbSelect('carte_sconto', [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'attiva', op: 'eq', val: true }]);
+        if (scCliente && scCliente.length > 0) setCartaScontoId((scCliente[0] as any).id);
         else if (scontoList.length === 1) setCartaScontoId(scontoList[0].id);
       }
 
       if (realClienteId) {
-        const { data: pr } = await supabase.from('carte_premium').select('id, codice, saldo, attiva').eq('cliente_id', realClienteId).is('deleted_at', null);
+        const { data: pr } = await dbSelect('carte_premium', [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'deleted_at', op: 'is_null' }]);
         const premiumList = (pr || []) as CartaPremiumSimple[];
         setCartePremium(premiumList);
         // Auto-seleziona la prima carta premium attiva con saldo disponibile
@@ -906,12 +909,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   async function openRivenditaPicker() {
     setShowRivenditaPicker(true);
     setLoadingProdotti(true);
-    const { data } = await supabase
-      .from('prodotti_rivendita_catalogo')
-      .select('*')
-      .eq('attivo', true)
-      .order('categoria')
-      .order('nome');
+    const { data } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'categoria', asc: true }, { col: 'nome', asc: true }]);
     setProdottiRivendita((data || []) as ProdottoRivenditaCatalogo[]);
     setLoadingProdotti(false);
   }
@@ -1008,31 +1006,27 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
     if (ficheId) {
       // Aggiorna la fiche esistente preservando l'ID e tutti i riferimenti FK
-      await supabase.from('fiches').update(ficheFields).eq('id', ficheId);
+      await dbUpdate('fiches', ficheFields, [{ col: 'id', op: 'eq', val: ficheId }]);
       // Elimina le voci esistenti e reinserisce quelle aggiornate
-      await supabase.from('fiche_voci').delete().eq('fiche_id', ficheId);
+      await dbDelete('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
       // Elimina le fiche extra se ce ne sono più di una (raro, ma possibile)
       for (const fid of gruppo.ficheIds.slice(1)) {
-        await supabase.from('fiches').delete().eq('id', fid);
+        await dbDelete('fiches', [{ col: 'id', op: 'eq', val: fid }]);
       }
     } else {
       // Crea una nuova fiche (primo salvataggio)
-      const { data: newFiche } = await supabase
-        .from('fiches')
-        .insert({ ...ficheFields, user_id: user?.id })
-        .select('id')
-        .single();
-      ficheId = newFiche?.id ?? null;
+      const { data: newFiche } = await dbInsert('fiches', { ...ficheFields, user_id: user?.id });
+      ficheId = (newFiche as any)?.id ?? null;
     }
 
     if (ficheId && voci.length > 0) {
-      await supabase.from('fiche_voci').insert(
-        voci.map((v, i) => ({
+      for (const [i, v] of voci.entries()) {
+        await dbInsert('fiche_voci', {
           fiche_id: ficheId, tipo: v.tipo, nome_voce: v.nome_voce,
           parrucchiere_id: v.parrucchiere_id, nome_parrucchiere: v.nome_parrucchiere,
           prezzo: v.prezzo, note: v.note, ordine: i, user_id: user?.id,
-        }))
-      );
+        });
+      }
     }
     return ficheId;
   }
@@ -1067,8 +1061,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
     if (ficheId) {
       const clienteNome = `${gruppo.clienteNome} ${gruppo.clienteCognome}`.trim();
-      await supabase.from('incassi_giornalieri').delete().eq('fiche_id', ficheId);
-      await supabase.from('incassi_giornalieri').insert({
+      await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+      await dbInsert('incassi_giornalieri', {
         data: selectedDate,
         fiche_id: ficheId,
         cliente_nome: clienteNome,
@@ -1079,7 +1073,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
       // Registra utilizzo carta sconto (skip se nominativa e cliente non corrisponde)
       if (scontoValido && cartaSconto) {
-        await supabase.from('utilizzi_carta_sconto').insert({
+        await dbInsert('utilizzi_carta_sconto', {
           carta_sconto_id: cartaSconto.id,
           fiche_id: ficheId,
           importo_originale: totaleBase,
@@ -1088,9 +1082,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
           cliente_id: clienteGruppoIdValid,
           user_id: user?.id,
         });
-        const { data: full } = await supabase.from('carte_sconto').select('usa_e_getta').eq('id', cartaSconto.id).maybeSingle();
-        if (full?.usa_e_getta) {
-          await supabase.from('carte_sconto').update({ attiva: false, deleted_at: new Date().toISOString() }).eq('id', cartaSconto.id);
+        const { data: full } = await dbSelect('carte_sconto', [{ col: 'id', op: 'eq', val: cartaSconto.id }]);
+        if (full && full.length > 0 && (full[0] as any)?.usa_e_getta) {
+          await dbUpdate('carte_sconto', { attiva: false, deleted_at: new Date().toISOString() }, [{ col: 'id', op: 'eq', val: cartaSconto.id }]);
         }
       }
 
@@ -1102,7 +1096,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
           const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
           const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
-          await supabase.from('rivendita_prodotti').insert({
+          await dbInsert('rivendita_prodotti', {
             fiche_id: ficheId,
             parrucchiere_id: v.parrucchiere_id,
             nome_prodotto: v.nome_voce,
@@ -1115,16 +1109,13 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
           // Scale down stock in catalog
           if (catalogoId) {
-            const { data: prod } = await supabase
-              .from('prodotti_rivendita_catalogo')
-              .select('quantita_stock, quantita_venduta')
-              .eq('id', catalogoId)
-              .maybeSingle();
-            if (prod) {
-              await supabase.from('prodotti_rivendita_catalogo').update({
-                quantita_stock: Math.max(0, (prod.quantita_stock ?? 0) - 1),
-                quantita_venduta: (prod.quantita_venduta ?? 0) + 1,
-              }).eq('id', catalogoId);
+            const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+            if (prod && prod.length > 0) {
+              const prodData = prod[0] as any;
+              await dbUpdate('prodotti_rivendita_catalogo', {
+                quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
+                quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
+              }, [{ col: 'id', op: 'eq', val: catalogoId }]);
             }
           }
         }
@@ -1134,7 +1125,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
       const vociTrattamenti = voci.filter(v => v.nome_voce.toLowerCase().includes('trattamento'));
       for (const v of vociTrattamenti) {
         if (v.parrucchiere_id) {
-          await supabase.from('trattamenti_eseguiti').insert({
+          await dbInsert('trattamenti_eseguiti', {
             fiche_id: ficheId,
             parrucchiere_id: v.parrucchiere_id,
             nome_trattamento: v.nome_voce,
@@ -1148,17 +1139,17 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
       // Registra utilizzo e scala saldo carta premium
       if (cartaPremium && creditoPremium > 0) {
-        await supabase.from('utilizzi_carta_premium').insert({
+        await dbInsert('utilizzi_carta_premium', {
           carta_premium_id: cartaPremium.id,
           fiche_id: ficheId,
           importo_detratto: creditoPremium,
           user_id: user?.id,
         });
         const nuovoSaldoPremium = cartaPremium.saldo - creditoPremium;
-        await supabase.from('carte_premium').update({
+        await dbUpdate('carte_premium', {
           saldo: nuovoSaldoPremium,
           ...(nuovoSaldoPremium <= 0 ? { attiva: false } : {}),
-        }).eq('id', cartaPremium.id);
+        }, [{ col: 'id', op: 'eq', val: cartaPremium.id }]);
       }
     }
 
@@ -1193,70 +1184,62 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
     for (const ficheId of gruppo.ficheIds) {
       // Ripristina utilizzi carta sconto
-      const { data: scUsi } = await supabase
-        .from('utilizzi_carta_sconto')
-        .select('carta_sconto_id')
-        .eq('fiche_id', ficheId);
+      const { data: scUsi } = await dbSelect('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
       for (const uso of scUsi || []) {
-        const { data: cs } = await supabase.from('carte_sconto').select('usa_e_getta, attiva').eq('id', uso.carta_sconto_id).maybeSingle();
-        if (cs?.usa_e_getta && !cs.attiva) {
-          await supabase.from('carte_sconto').update({ attiva: true, deleted_at: null }).eq('id', uso.carta_sconto_id);
+        const { data: cs } = await dbSelect('carte_sconto', [{ col: 'id', op: 'eq', val: (uso as any).carta_sconto_id }]);
+        if (cs && cs.length > 0) {
+          const csData = cs[0] as any;
+          if (csData?.usa_e_getta && !csData.attiva) {
+            await dbUpdate('carte_sconto', { attiva: true, deleted_at: null }, [{ col: 'id', op: 'eq', val: csData.id }]);
+          }
         }
-        await supabase.from('utilizzi_carta_sconto').delete().eq('fiche_id', ficheId);
+        await dbDelete('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
       }
 
       // Ripristina utilizzi carta premium
-      const { data: prUsi } = await supabase
-        .from('utilizzi_carta_premium')
-        .select('carta_premium_id, importo_detratto')
-        .eq('fiche_id', ficheId);
+      const { data: prUsi } = await dbSelect('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
       for (const uso of prUsi || []) {
-        const { data: cp } = await supabase.from('carte_premium').select('id, codice, saldo').eq('id', uso.carta_premium_id).maybeSingle();
-        if (cp) {
-          const nuovoSaldo = cp.saldo + uso.importo_detratto;
-          await supabase.from('carte_premium').update({ saldo: nuovoSaldo, attiva: true }).eq('id', cp.id);
+        const { data: cp } = await dbSelect('carte_premium', [{ col: 'id', op: 'eq', val: (uso as any).carta_premium_id }]);
+        if (cp && cp.length > 0) {
+          const cpData = cp[0] as any;
+          const nuovoSaldo = cpData.saldo + (uso as any).importo_detratto;
+          await dbUpdate('carte_premium', { saldo: nuovoSaldo, attiva: true }, [{ col: 'id', op: 'eq', val: cpData.id }]);
           smsRipristino = {
-            codiceOverride: cp.codice,
-            azione: { tipo: 'ripristino_credito', importoRipristinato: uso.importo_detratto, nuovoSaldo },
+            codiceOverride: cpData.codice,
+            azione: { tipo: 'ripristino_credito', importoRipristinato: (uso as any).importo_detratto, nuovoSaldo },
           };
         }
-        await supabase.from('utilizzi_carta_premium').delete().eq('fiche_id', ficheId);
+        await dbDelete('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
       }
 
       // Ripristina stock catalogo per ogni voce rivendita collegata
-      const { data: vociFiche } = await supabase
-        .from('fiche_voci')
-        .select('nome_voce, note')
-        .eq('fiche_id', ficheId);
+      const { data: vociFiche } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
       for (const vf of vociFiche || []) {
-        if (!vf.nome_voce?.toLowerCase().includes('rivendita')) continue;
-        const catalogoMatch = vf.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+        if (!(vf as any).nome_voce?.toLowerCase().includes('rivendita')) continue;
+        const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
         if (!catalogoMatch) continue;
         const catalogoId = catalogoMatch[1];
-        const { data: prod } = await supabase
-          .from('prodotti_rivendita_catalogo')
-          .select('quantita_stock, quantita_venduta')
-          .eq('id', catalogoId)
-          .maybeSingle();
-        if (prod) {
-          await supabase.from('prodotti_rivendita_catalogo').update({
-            quantita_stock: (prod.quantita_stock ?? 0) + 1,
-            quantita_venduta: Math.max(0, (prod.quantita_venduta ?? 0) - 1),
-          }).eq('id', catalogoId);
+        const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+        if (prod && prod.length > 0) {
+          const prodData = prod[0] as any;
+          await dbUpdate('prodotti_rivendita_catalogo', {
+            quantita_stock: (prodData.quantita_stock ?? 0) + 1,
+            quantita_venduta: Math.max(0, (prodData.quantita_venduta ?? 0) - 1),
+          }, [{ col: 'id', op: 'eq', val: catalogoId }]);
         }
       }
 
       // Rimuovi voci rivendita generate dalla fiche
-      await supabase.from('rivendita_prodotti').delete().eq('fiche_id', ficheId);
+      await dbDelete('rivendita_prodotti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
 
       // Rimuovi trattamenti generati dalla fiche
-      await supabase.from('trattamenti_eseguiti').delete().eq('fiche_id', ficheId);
+      await dbDelete('trattamenti_eseguiti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
 
       // Rimuovi incasso giornaliero
-      await supabase.from('incassi_giornalieri').delete().eq('fiche_id', ficheId);
+      await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
 
       // Riporta fiche a non-convalidata
-      await supabase.from('fiches').update({ convalidata: false, convalidata_at: null, importo_convalidato: 0 }).eq('id', ficheId);
+      await dbUpdate('fiches', { convalidata: false, convalidata_at: null, importo_convalidato: 0 }, [{ col: 'id', op: 'eq', val: ficheId }]);
     }
 
     setConvalidando(false);
@@ -1278,66 +1261,58 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
         // Se convalidata, esegui l'iter completo di annullamento prima di eliminare
         if (gruppo.ficheConvalidata) {
           // Ripristina utilizzi carta sconto
-          const { data: scUsi } = await supabase
-            .from('utilizzi_carta_sconto')
-            .select('carta_sconto_id')
-            .eq('fiche_id', ficheId);
+          const { data: scUsi } = await dbSelect('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
           for (const uso of scUsi || []) {
-            const { data: cs } = await supabase.from('carte_sconto').select('usa_e_getta, attiva').eq('id', uso.carta_sconto_id).maybeSingle();
-            if (cs?.usa_e_getta && !cs.attiva) {
-              await supabase.from('carte_sconto').update({ attiva: true }).eq('id', uso.carta_sconto_id);
+            const { data: cs } = await dbSelect('carte_sconto', [{ col: 'id', op: 'eq', val: (uso as any).carta_sconto_id }]);
+            if (cs && cs.length > 0) {
+              const csData = cs[0] as any;
+              if (csData?.usa_e_getta && !csData.attiva) {
+                await dbUpdate('carte_sconto', { attiva: true }, [{ col: 'id', op: 'eq', val: csData.id }]);
+              }
             }
-            await supabase.from('utilizzi_carta_sconto').delete().eq('fiche_id', ficheId);
+            await dbDelete('utilizzi_carta_sconto', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
           }
 
           // Ripristina utilizzi carta premium
-          const { data: prUsi } = await supabase
-            .from('utilizzi_carta_premium')
-            .select('carta_premium_id, importo_detratto')
-            .eq('fiche_id', ficheId);
+          const { data: prUsi } = await dbSelect('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
           for (const uso of prUsi || []) {
-            const { data: cp } = await supabase.from('carte_premium').select('id, saldo').eq('id', uso.carta_premium_id).maybeSingle();
-            if (cp) {
-              await supabase.from('carte_premium').update({ saldo: cp.saldo + uso.importo_detratto, attiva: true }).eq('id', cp.id);
+            const { data: cp } = await dbSelect('carte_premium', [{ col: 'id', op: 'eq', val: (uso as any).carta_premium_id }]);
+            if (cp && cp.length > 0) {
+              const cpData = cp[0] as any;
+              await dbUpdate('carte_premium', { saldo: cpData.saldo + (uso as any).importo_detratto, attiva: true }, [{ col: 'id', op: 'eq', val: cpData.id }]);
             }
-            await supabase.from('utilizzi_carta_premium').delete().eq('fiche_id', ficheId);
+            await dbDelete('utilizzi_carta_premium', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
           }
 
           // Ripristina stock catalogo per voci rivendita
-          const { data: vociFiche } = await supabase
-            .from('fiche_voci')
-            .select('nome_voce, note')
-            .eq('fiche_id', ficheId);
+          const { data: vociFiche } = await dbSelect('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
           for (const vf of vociFiche || []) {
-            if (!vf.nome_voce?.toLowerCase().includes('rivendita')) continue;
-            const catalogoMatch = vf.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+            if (!(vf as any).nome_voce?.toLowerCase().includes('rivendita')) continue;
+            const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
             if (!catalogoMatch) continue;
             const catalogoId = catalogoMatch[1];
-            const { data: prod } = await supabase
-              .from('prodotti_rivendita_catalogo')
-              .select('quantita_stock, quantita_venduta')
-              .eq('id', catalogoId)
-              .maybeSingle();
-            if (prod) {
-              await supabase.from('prodotti_rivendita_catalogo').update({
-                quantita_stock: (prod.quantita_stock ?? 0) + 1,
-                quantita_venduta: Math.max(0, (prod.quantita_venduta ?? 0) - 1),
-              }).eq('id', catalogoId);
+            const { data: prod } = await dbSelect('prodotti_rivendita_catalogo', [{ col: 'id', op: 'eq', val: catalogoId }]);
+            if (prod && prod.length > 0) {
+              const prodData = prod[0] as any;
+              await dbUpdate('prodotti_rivendita_catalogo', {
+                quantita_stock: (prodData.quantita_stock ?? 0) + 1,
+                quantita_venduta: Math.max(0, (prodData.quantita_venduta ?? 0) - 1),
+              }, [{ col: 'id', op: 'eq', val: catalogoId }]);
             }
           }
 
           // Rimuovi voci rivendita e trattamenti generati
-          await supabase.from('rivendita_prodotti').delete().eq('fiche_id', ficheId);
-          await supabase.from('trattamenti_eseguiti').delete().eq('fiche_id', ficheId);
+          await dbDelete('rivendita_prodotti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+          await dbDelete('trattamenti_eseguiti', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
 
           // Rimuovi incasso giornaliero
-          await supabase.from('incassi_giornalieri').delete().eq('fiche_id', ficheId);
+          await dbDelete('incassi_giornalieri', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
         }
 
         // Elimina fiche_voci prima (per sicurezza) poi la fiche
-        await supabase.from('fiche_voci').delete().eq('fiche_id', ficheId);
-        const { error: ficheErr } = await supabase.from('fiches').delete().eq('id', ficheId);
-        if (ficheErr) throw new Error(`Errore eliminazione fiche: ${ficheErr.message}`);
+        await dbDelete('fiche_voci', [{ col: 'fiche_id', op: 'eq', val: ficheId }]);
+        const delRes = await dbDelete('fiches', [{ col: 'id', op: 'eq', val: ficheId }]);
+        if (delRes.error) throw new Error(`Errore eliminazione fiche: ${delRes.error}`);
       }
 
       onSaved();
@@ -2039,12 +2014,12 @@ function FicheRicaricaModal({ carta, selectedDate, onClose, onSaved }: {
   async function save() {
     setSaving(true);
     const nuovoSaldo = carta.saldo + importo;
-    await supabase.from('ricariche_carta_premium').insert({
+    await dbInsert('ricariche_carta_premium', {
       carta_premium_id: carta.id, importo, note: noteR, tipo_ricarica: tipo, user_id: user?.id,
     });
-    await supabase.from('carte_premium').update({ saldo: nuovoSaldo, attiva: true }).eq('id', carta.id);
+    await dbUpdate('carte_premium', { saldo: nuovoSaldo, attiva: true }, [{ col: 'id', op: 'eq', val: carta.id }]);
     if (tipo === 'standard') {
-      await supabase.from('incassi_giornalieri').insert({
+      await dbInsert('incassi_giornalieri', {
         data: selectedDate,
         fiche_id: null,
         cliente_nome: `Ricarica carta ${carta.codice}`,
@@ -2542,7 +2517,7 @@ function VociExtraTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('voci_extra_catalogo').select('*').order('nome');
+    const { data } = await dbSelect('voci_extra_catalogo', [], [{ col: 'nome', asc: true }]);
     setVoci((data || []) as VoceExtra[]);
     setLoading(false);
   }, []);
@@ -2567,9 +2542,9 @@ function VociExtraTab() {
     setError('');
     const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), prezzo: form.prezzo, colore: form.colore, attivo: form.attivo };
     if (modal.id) {
-      await supabase.from('voci_extra_catalogo').update(payload).eq('id', modal.id);
+      await dbUpdate('voci_extra_catalogo', payload, [{ col: 'id', op: 'eq', val: modal.id }]);
     } else {
-      await supabase.from('voci_extra_catalogo').insert({ ...payload, user_id: user?.id });
+      await dbInsert('voci_extra_catalogo', { ...payload, user_id: user?.id });
     }
     setSaving(false);
     setModal({ open: false });
@@ -2578,12 +2553,12 @@ function VociExtraTab() {
 
   async function handleDelete(id: string) {
     if (!confirm('Eliminare questa voce?')) return;
-    await supabase.from('voci_extra_catalogo').delete().eq('id', id);
+    await dbDelete('voci_extra_catalogo', [{ col: 'id', op: 'eq', val: id }]);
     load();
   }
 
   async function toggleAttivo(v: VoceExtra) {
-    await supabase.from('voci_extra_catalogo').update({ attivo: !v.attivo }).eq('id', v.id);
+    await dbUpdate('voci_extra_catalogo', { attivo: !v.attivo }, [{ col: 'id', op: 'eq', val: v.id }]);
     load();
   }
 
@@ -2733,12 +2708,12 @@ function ProdottiRivenditaTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: prod }, { data: parr }] = await Promise.all([
-      supabase.from('prodotti_rivendita_catalogo').select('*').eq('attivo', true).order('categoria').order('nome'),
-      supabase.from('parrucchieri').select('id, nome, colore').eq('attivo', true).order('nome'),
+    const [prodRes, parrRes] = await Promise.all([
+      dbSelect('prodotti_rivendita_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'categoria', asc: true }, { col: 'nome', asc: true }]),
+      dbSelect('parrucchieri', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
     ]);
-    setProdotti((prod || []) as ProdottoRivenditaCatalogo[]);
-    setParrucchieri((parr || []) as ParrucchiereSimple[]);
+    setProdotti((prodRes.data || []) as ProdottoRivenditaCatalogo[]);
+    setParrucchieri((parrRes.data || []) as ParrucchiereSimple[]);
     setLoading(false);
   }, []);
 
@@ -2758,7 +2733,7 @@ function ProdottiRivenditaTab() {
     if (!vendita) return;
     setSaving(true);
     const parr = parrucchieri.find(p => p.id === vendita.parrId);
-    await supabase.from('rivendita_prodotti').insert({
+    await dbInsert('rivendita_prodotti', {
       parrucchiere_id: vendita.parrId,
       nome_prodotto: vendita.prodotto.nome,
       quantita: vendita.quantita,
@@ -2769,11 +2744,11 @@ function ProdottiRivenditaTab() {
     });
     const nuovoStock = Math.max(0, vendita.prodotto.quantita_stock - vendita.quantita);
     const nuovaVenduta = (vendita.prodotto.quantita_venduta || 0) + vendita.quantita;
-    await supabase.from('prodotti_rivendita_catalogo').update({
+    await dbUpdate('prodotti_rivendita_catalogo', {
       quantita_stock: nuovoStock,
       quantita_venduta: nuovaVenduta,
       updated_at: new Date().toISOString(),
-    }).eq('id', vendita.prodotto.id);
+    }, [{ col: 'id', op: 'eq', val: vendita.prodotto.id }]);
     setSaving(false);
     setVendita(null);
     setFlash(`Vendita registrata${parr ? ` per ${parr.nome}` : ''}`);

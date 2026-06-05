@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { supabase, type Cliente } from '../lib/supabase';
+import { type Cliente } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import { dbSelect, dbInsert, dbUpdate } from '../lib/localDb';
 
 interface Props {
   clienteId?: string | null;
@@ -29,9 +30,9 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   }, [clienteId]);
 
   async function loadCliente() {
-    const { data } = await supabase.from('clienti').select('*').eq('id', clienteId).maybeSingle();
-    if (!data) return;
-    const c = data as Cliente;
+    const { data, error } = await dbSelect('clienti', [{ col: 'id', op: 'eq', val: clienteId }]);
+    if (error || !data || data.length === 0) return;
+    const c = (data[0] as Cliente);
     setForm({
       nome: c.nome,
       cognome: c.cognome,
@@ -62,10 +63,10 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
 
     let id = clienteId;
     if (id) {
-      await supabase.from('clienti').update(payload).eq('id', id);
+      await dbUpdate('clienti', payload, [{ col: 'id', op: 'eq', val: id }]);
     } else {
-      const { data } = await supabase.from('clienti').insert({ ...payload, user_id: user?.id }).select('id').single();
-      id = data?.id;
+      const { data, error } = await dbInsert('clienti', { ...payload, user_id: user?.id });
+      if (!error && data) id = (data as any).id;
     }
     setSaving(false);
     if (id) onSaved(id);

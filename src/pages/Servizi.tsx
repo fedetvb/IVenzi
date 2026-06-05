@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, CreditCard as Edit2, Trash2, X, Clock, Euro, BookOpen, Pencil, ShoppingBag, Check } from 'lucide-react';
 import { supabase, localDateStr, type TrattamentoCatalogo } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 
 interface ServiceForm {
@@ -98,8 +99,8 @@ function ServiziTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('trattamenti_catalogo').select('*').order('nome');
-    setServizi((data || []) as TrattamentoCatalogo[]);
+    const res = await dbSelect({ table: 'trattamenti_catalogo', columns: '*', orderBy: [{col:'nome'}] });
+    setServizi((res.data || []) as TrattamentoCatalogo[]);
     setLoading(false);
   }, []);
 
@@ -112,7 +113,8 @@ function ServiziTab() {
   }
 
   async function openEdit(id: string) {
-    const { data } = await supabase.from('trattamenti_catalogo').select('*').eq('id', id).maybeSingle();
+    const res = await dbSelect({ table: 'trattamenti_catalogo', columns: '*', filters: [{col:'id', op:'eq', val:id}] });
+    const data = res.data?.[0];
     if (!data) return;
     const s = data as TrattamentoCatalogo;
     setForm({ nome: s.nome, descrizione: s.descrizione ?? '', durata_minuti: s.durata_minuti, prezzo: s.prezzo, colore: s.colore, attivo: s.attivo });
@@ -126,9 +128,9 @@ function ServiziTab() {
     setError('');
     const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), durata_minuti: form.durata_minuti, prezzo: form.prezzo, colore: form.colore, attivo: form.attivo };
     if (modal.id) {
-      await supabase.from('trattamenti_catalogo').update(payload).eq('id', modal.id);
+      await dbUpdate({ table: 'trattamenti_catalogo', id: modal.id, data: payload });
     } else {
-      await supabase.from('trattamenti_catalogo').insert({ ...payload, user_id: user?.id });
+      await dbInsert({ table: 'trattamenti_catalogo', data: { ...payload, user_id: user?.id } });
     }
     setSaving(false);
     setModal({ open: false });
@@ -137,12 +139,12 @@ function ServiziTab() {
 
   async function deleteServizio(id: string) {
     if (!confirm('Eliminare questo servizio?')) return;
-    await supabase.from('trattamenti_catalogo').delete().eq('id', id);
+    await dbDelete({ table: 'trattamenti_catalogo', filters: [{col:'id', op:'eq', val:id}] });
     load();
   }
 
   async function toggleAttivo(s: TrattamentoCatalogo) {
-    await supabase.from('trattamenti_catalogo').update({ attivo: !s.attivo }).eq('id', s.id);
+    await dbUpdate({ table: 'trattamenti_catalogo', id: s.id, data: { attivo: !s.attivo } });
     load();
   }
 
@@ -309,8 +311,8 @@ function VociExtraTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('voci_extra_catalogo').select('*').order('nome');
-    setVoci((data || []) as VoceExtra[]);
+    const res = await dbSelect({ table: 'voci_extra_catalogo', columns: '*', orderBy: [{col:'nome'}] });
+    setVoci((res.data || []) as VoceExtra[]);
     setLoading(false);
   }, []);
 
@@ -334,9 +336,9 @@ function VociExtraTab() {
     setError('');
     const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), prezzo: form.prezzo, colore: form.colore, attivo: form.attivo };
     if (modal.id) {
-      await supabase.from('voci_extra_catalogo').update(payload).eq('id', modal.id);
+      await dbUpdate({ table: 'voci_extra_catalogo', id: modal.id, data: payload });
     } else {
-      await supabase.from('voci_extra_catalogo').insert({ ...payload, user_id: user?.id });
+      await dbInsert({ table: 'voci_extra_catalogo', data: { ...payload, user_id: user?.id } });
     }
     setSaving(false);
     setModal({ open: false });
@@ -345,12 +347,12 @@ function VociExtraTab() {
 
   async function handleDelete(id: string) {
     if (!confirm('Eliminare questa voce?')) return;
-    await supabase.from('voci_extra_catalogo').delete().eq('id', id);
+    await dbDelete({ table: 'voci_extra_catalogo', filters: [{col:'id', op:'eq', val:id}] });
     load();
   }
 
   async function toggleAttivo(v: VoceExtra) {
-    await supabase.from('voci_extra_catalogo').update({ attivo: !v.attivo }).eq('id', v.id);
+    await dbUpdate({ table: 'voci_extra_catalogo', id: v.id, data: { attivo: !v.attivo } });
     load();
   }
 
@@ -491,12 +493,12 @@ function ProdottiRivenditaTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: prod }, { data: parr }] = await Promise.all([
-      supabase.from('prodotti_rivendita_catalogo').select('*').eq('attivo', true).order('categoria').order('nome'),
-      supabase.from('parrucchieri').select('id, nome, colore').eq('attivo', true).order('nome'),
+    const [prodRes, parrRes] = await Promise.all([
+      dbSelect({ table: 'prodotti_rivendita_catalogo', columns: '*', filters: [{col:'attivo', op:'eq', val:true}], orderBy: [{col:'categoria'}, {col:'nome'}] }),
+      dbSelect({ table: 'parrucchieri', columns: 'id, nome, colore', filters: [{col:'attivo', op:'eq', val:true}], orderBy: [{col:'nome'}] }),
     ]);
-    setProdotti((prod || []) as ProdottoRivenditaCatalogo[]);
-    setParrucchieri((parr || []) as ParrucchiereSimple[]);
+    setProdotti((prodRes.data || []) as ProdottoRivenditaCatalogo[]);
+    setParrucchieri((parrRes.data || []) as ParrucchiereSimple[]);
     setLoading(false);
   }, []);
 
@@ -510,22 +512,29 @@ function ProdottiRivenditaTab() {
     if (!vendita) return;
     setSaving(true);
     const parr = parrucchieri.find(p => p.id === vendita.parrId);
-    await supabase.from('rivendita_prodotti').insert({
-      parrucchiere_id: vendita.parrId,
-      nome_prodotto: vendita.prodotto.nome,
-      quantita: vendita.quantita,
-      prezzo_unitario: vendita.prezzoUnitario,
-      data_vendita: vendita.data,
-      note: vendita.prodotto.marca ? `Marca: ${vendita.prodotto.marca}` : '',
-      user_id: user?.id,
+    await dbInsert({
+      table: 'rivendita_prodotti',
+      data: {
+        parrucchiere_id: vendita.parrId,
+        nome_prodotto: vendita.prodotto.nome,
+        quantita: vendita.quantita,
+        prezzo_unitario: vendita.prezzoUnitario,
+        data_vendita: vendita.data,
+        note: vendita.prodotto.marca ? `Marca: ${vendita.prodotto.marca}` : '',
+        user_id: user?.id,
+      }
     });
     const nuovoStock = Math.max(0, vendita.prodotto.quantita_stock - vendita.quantita);
     const nuovaVenduta = (vendita.prodotto.quantita_venduta || 0) + vendita.quantita;
-    await supabase.from('prodotti_rivendita_catalogo').update({
-      quantita_stock: nuovoStock,
-      quantita_venduta: nuovaVenduta,
-      updated_at: new Date().toISOString(),
-    }).eq('id', vendita.prodotto.id);
+    await dbUpdate({
+      table: 'prodotti_rivendita_catalogo',
+      id: vendita.prodotto.id,
+      data: {
+        quantita_stock: nuovoStock,
+        quantita_venduta: nuovaVenduta,
+        updated_at: new Date().toISOString(),
+      }
+    });
     setSaving(false);
     setVendita(null);
     setFlash(`Vendita registrata${parr ? ` per ${parr.nome}` : ''}`);
@@ -731,4 +740,3 @@ function ProdottiRivenditaTab() {
     </div>
   );
 }
-

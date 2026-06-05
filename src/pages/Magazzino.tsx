@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, CreditCard as Edit2, Check, X, ChevronDown, ChevronRight, AlertTriangle, Download, Printer, Package, Tag, Search, ArrowUpDown, FileText, Save, BookOpen, Clock, Euro, ShoppingBag, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -99,11 +100,19 @@ function InventarioView() {
   const [saving, setSaving] = useState(false);
 
   async function load() {
-    const [{ data: cats }, { data: prods }, { data: riv }] = await Promise.all([
-      supabase.from('magazzino_categorie').select('*').order('ordine'),
-      supabase.from('magazzino_prodotti').select('*').order('ordine'),
-      supabase.from('prodotti_rivendita_catalogo').select('*').eq('attivo', true).order('categoria').order('nome'),
-    ]);
+    const { data: cats } = dbSelect<Categoria>({
+      table: 'magazzino_categorie',
+      orderBy: [{ col: 'ordine' }],
+    });
+    const { data: prods } = dbSelect<Prodotto>({
+      table: 'magazzino_prodotti',
+      orderBy: [{ col: 'ordine' }],
+    });
+    const { data: riv } = dbSelect<ProdottoRivendita>({
+      table: 'prodotti_rivendita_catalogo',
+      filters: [{ col: 'attivo', op: 'eq', val: true }],
+      orderBy: [{ col: 'categoria' }, { col: 'nome' }],
+    });
     setCategorie((cats || []) as Categoria[]);
     setProdotti((prods || []) as Prodotto[]);
     setRivendita((riv || []) as ProdottoRivendita[]);
@@ -134,17 +143,24 @@ function InventarioView() {
     setSaving(true);
     if (editingCat.isNew) {
       const maxOrd = categorie.reduce((m, c) => Math.max(m, c.ordine), 0);
-      await supabase.from('magazzino_categorie').insert({
-        nome: editingCat.nome.trim(),
-        colore: editingCat.colore ?? '#F59E0B',
-        ordine: maxOrd + 1,
-        user_id: user?.id,
+      dbInsert({
+        table: 'magazzino_categorie',
+        data: {
+          nome: editingCat.nome.trim(),
+          colore: editingCat.colore ?? '#F59E0B',
+          ordine: maxOrd + 1,
+          user_id: user?.id,
+        },
       });
     } else {
-      await supabase.from('magazzino_categorie').update({
-        nome: editingCat.nome.trim(),
-        colore: editingCat.colore,
-      }).eq('id', editingCat.id!);
+      dbUpdate({
+        table: 'magazzino_categorie',
+        id: editingCat.id!,
+        data: {
+          nome: editingCat.nome.trim(),
+          colore: editingCat.colore,
+        },
+      });
     }
     setSaving(false);
     setEditingCat(null);
@@ -154,7 +170,10 @@ function InventarioView() {
   async function deleteCategoria(id: string) {
     const count = prodotti.filter(p => p.categoria_id === id).length;
     if (!confirm(`Eliminare questa categoria e tutti i ${count} prodotti al suo interno?`)) return;
-    await supabase.from('magazzino_categorie').delete().eq('id', id);
+    dbDelete({
+      table: 'magazzino_categorie',
+      filters: [{ col: 'id', op: 'eq', val: id }],
+    });
     load();
   }
 
@@ -175,9 +194,16 @@ function InventarioView() {
     };
     if (editingProd.isNew) {
       const maxOrd = prodotti.filter(p => p.categoria_id === payload.categoria_id).reduce((m, p) => Math.max(m, p.ordine), 0);
-      await supabase.from('magazzino_prodotti').insert({ ...payload, ordine: maxOrd + 1, user_id: user?.id });
+      dbInsert({
+        table: 'magazzino_prodotti',
+        data: { ...payload, ordine: maxOrd + 1, user_id: user?.id },
+      });
     } else {
-      await supabase.from('magazzino_prodotti').update(payload).eq('id', editingProd.id!);
+      dbUpdate({
+        table: 'magazzino_prodotti',
+        id: editingProd.id!,
+        data: payload,
+      });
     }
     setSaving(false);
     setEditingProd(null);
@@ -186,7 +212,10 @@ function InventarioView() {
 
   async function deleteProdotto(id: string) {
     if (!confirm('Eliminare questo prodotto?')) return;
-    await supabase.from('magazzino_prodotti').delete().eq('id', id);
+    dbDelete({
+      table: 'magazzino_prodotti',
+      filters: [{ col: 'id', op: 'eq', val: id }],
+    });
     load();
   }
 
@@ -530,11 +559,19 @@ function MagazzinoView() {
   const [savedMsg, setSavedMsg] = useState(false);
 
   async function load() {
-    const [{ data: cats }, { data: prods }, { data: riv }] = await Promise.all([
-      supabase.from('magazzino_categorie').select('*').order('ordine'),
-      supabase.from('magazzino_prodotti').select('*').order('ordine'),
-      supabase.from('prodotti_rivendita_catalogo').select('*').eq('attivo', true).order('categoria').order('nome'),
-    ]);
+    const { data: cats } = dbSelect<Categoria>({
+      table: 'magazzino_categorie',
+      orderBy: [{ col: 'ordine' }],
+    });
+    const { data: prods } = dbSelect<Prodotto>({
+      table: 'magazzino_prodotti',
+      orderBy: [{ col: 'ordine' }],
+    });
+    const { data: riv } = dbSelect<ProdottoRivendita>({
+      table: 'prodotti_rivendita_catalogo',
+      filters: [{ col: 'attivo', op: 'eq', val: true }],
+      orderBy: [{ col: 'categoria' }, { col: 'nome' }],
+    });
     setCategorie((cats || []) as Categoria[]);
     setProdotti((prods || []) as Prodotto[]);
     setRivendita((riv || []) as ProdottoRivendita[]);
@@ -582,14 +619,17 @@ function MagazzinoView() {
   async function handleSalvaScheda() {
     setSavingScheda(true);
     const nome = `Inventario ${dataStr}${filterCat !== 'all' ? ` — ${catNome(filterCat)}` : ''}${onlyScarse ? ' — Scorte scarse' : ''}`;
-    await supabase.from('magazzino_schede_salvate').insert({
-      nome,
-      filtro_categoria: filterCat !== 'all' ? filterCat : null,
-      solo_scarse: onlyScarse,
-      snapshot: prodottiFiltrati,
-      totale_valore: totaleValore,
-      num_prodotti: prodottiFiltrati.length,
-      user_id: user?.id,
+    dbInsert({
+      table: 'magazzino_schede_salvate',
+      data: {
+        nome,
+        filtro_categoria: filterCat !== 'all' ? filterCat : null,
+        solo_scarse: onlyScarse,
+        snapshot: prodottiFiltrati,
+        totale_valore: totaleValore,
+        num_prodotti: prodottiFiltrati.length,
+        user_id: user?.id,
+      },
     });
     setSavingScheda(false);
     setSavedMsg(true);
@@ -754,7 +794,10 @@ function SchedeSalvateView() {
 
   async function handleDelete(id: string) {
     if (!confirm('Eliminare questa scheda salvata?')) return;
-    await supabase.from('magazzino_schede_salvate').delete().eq('id', id);
+    dbDelete({
+      table: 'magazzino_schede_salvate',
+      filters: [{ col: 'id', op: 'eq', val: id }],
+    });
     if (selected?.id === id) setSelected(null);
     load();
   }
@@ -1068,12 +1111,10 @@ function ProdottiRivenditaView() {
   const [adjusting, setAdjusting] = useState<Set<string>>(new Set());
 
   async function load() {
-    const { data } = await supabase
-      .from('prodotti_rivendita_catalogo')
-      .select('*')
-      .order('categoria')
-      .order('ordine')
-      .order('nome');
+    const { data } = dbSelect<ProdottoRivendita>({
+      table: 'prodotti_rivendita_catalogo',
+      orderBy: [{ col: 'categoria' }, { col: 'ordine' }, { col: 'nome' }],
+    });
     setProdotti((data || []) as ProdottoRivendita[]);
     setLoading(false);
   }
@@ -1097,9 +1138,16 @@ function ProdottiRivenditaView() {
     };
     if (editing.isNew) {
       const maxOrd = prodotti.filter(p => p.categoria === payload.categoria).reduce((m, p) => Math.max(m, p.ordine), 0);
-      await supabase.from('prodotti_rivendita_catalogo').insert({ ...payload, ordine: maxOrd + 1, user_id: user?.id });
+      dbInsert({
+        table: 'prodotti_rivendita_catalogo',
+        data: { ...payload, ordine: maxOrd + 1, user_id: user?.id },
+      });
     } else {
-      await supabase.from('prodotti_rivendita_catalogo').update(payload).eq('id', editing.id!);
+      dbUpdate({
+        table: 'prodotti_rivendita_catalogo',
+        id: editing.id!,
+        data: payload,
+      });
     }
     setSaving(false);
     setEditing(null);
@@ -1108,7 +1156,10 @@ function ProdottiRivenditaView() {
 
   async function handleDelete(id: string) {
     if (!confirm('Eliminare questo prodotto?')) return;
-    await supabase.from('prodotti_rivendita_catalogo').delete().eq('id', id);
+    dbDelete({
+      table: 'prodotti_rivendita_catalogo',
+      filters: [{ col: 'id', op: 'eq', val: id }],
+    });
     load();
   }
 
@@ -1118,9 +1169,11 @@ function ProdottiRivenditaView() {
     const nuovaVenduta = delta < 0 ? (p.quantita_venduta || 0) + Math.abs(delta) : (p.quantita_venduta || 0);
     setAdjusting(prev => new Set(prev).add(p.id));
     setProdotti(prev => prev.map(x => x.id === p.id ? { ...x, quantita_stock: nuova, quantita_venduta: nuovaVenduta } : x));
-    await supabase.from('prodotti_rivendita_catalogo')
-      .update({ quantita_stock: nuova, quantita_venduta: nuovaVenduta, updated_at: new Date().toISOString() })
-      .eq('id', p.id);
+    dbUpdate({
+      table: 'prodotti_rivendita_catalogo',
+      id: p.id,
+      data: { quantita_stock: nuova, quantita_venduta: nuovaVenduta, updated_at: new Date().toISOString() },
+    });
     setAdjusting(prev => { const s = new Set(prev); s.delete(p.id); return s; });
   }
 

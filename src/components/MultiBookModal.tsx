@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Trash2, ChevronDown, User } from 'lucide-react';
-import { supabase, localDateStr, type Cliente, type TrattamentoCatalogo, type Parrucchiere, type StatoAppuntamento } from '../lib/supabase';
+import { localDateStr, type Cliente, type TrattamentoCatalogo, type Parrucchiere, type StatoAppuntamento } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 
 interface ServizioRiga {
@@ -69,21 +70,38 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
 
   useEffect(() => {
     async function load() {
-      const [{ data: parr }, { data: cat }, { data: cl }] = await Promise.all([
-        supabase.from('parrucchieri').select('*').eq('attivo', true).order('nome'),
-        supabase.from('trattamenti_catalogo').select('*').eq('attivo', true).order('nome'),
-        supabase.from('clienti').select('id, nome, cognome').order('cognome'),
+      const [parrRes, catRes, clRes] = await Promise.all([
+        dbSelect<Parrucchiere>({
+          table: 'parrucchieri',
+          filters: [{ col: 'attivo', op: 'eq', val: true }],
+          orderBy: [{ col: 'nome' }],
+        }),
+        dbSelect<TrattamentoCatalogo>({
+          table: 'trattamenti_catalogo',
+          filters: [{ col: 'attivo', op: 'eq', val: true }],
+          orderBy: [{ col: 'nome' }],
+        }),
+        dbSelect<Cliente>({
+          table: 'clienti',
+          columns: 'id, nome, cognome',
+          orderBy: [{ col: 'cognome' }],
+        }),
       ]);
-      setParrucchieri((parr || []) as Parrucchiere[]);
-      setCatalogo((cat || []) as TrattamentoCatalogo[]);
-      setClienti((cl || []) as Cliente[]);
+      setParrucchieri(parrRes.data || []);
+      setCatalogo(catRes.data || []);
+      setClienti(clRes.data || []);
 
       if (appuntamentoId) {
-        const { data: app } = await supabase
-          .from('appuntamenti')
-          .select('*, clienti(id, nome, cognome), appuntamento_trattamenti(*)')
-          .eq('id', appuntamentoId)
-          .maybeSingle();
+        const appRes = await dbSelectWithRelated<any>({
+          table: 'appuntamenti',
+          filters: [{ col: 'id', op: 'eq', val: appuntamentoId }],
+          relations: [
+            { key: 'clienti', table: 'clienti', fk: 'cliente_id' },
+            { key: 'appuntamento_trattamenti', table: 'appuntamento_trattamenti', fk: 'appuntamento_id', many: true },
+          ],
+          supabaseSelect: '*, clienti(id, nome, cognome), appuntamento_trattamenti(*)',
+        });
+        const app = appRes.data?.[0];
         if (app) {
           const d = new Date(app.data_ora);
           const dataStr = localDateStr(d);
@@ -102,7 +120,7 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
           }[];
           if (tratt.length > 0) {
             // Per ogni trattamento, recupera durata dal catalogo
-            const catData = (cat || []) as TrattamentoCatalogo[];
+            const catData = catRes.data || [];
             let cursor = oraStr;
             const rows: ServizioRiga[] = tratt.map(t => {
               const catItem = catData.find(c => c.id === t.trattamento_id);
@@ -237,17 +255,16 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
       const isPhone = parts.length >= 3 && /^[+\d]{6,15}$/.test(lastPart);
       const cognome = isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' ');
       const telefono = isPhone ? lastPart : undefined;
-      const { data: nuovoCliente } = await supabase
-        .from('clienti')
-        .insert({ nome, cognome, ...(telefono ? { telefono } : {}), user_id: user?.id })
-        .select('id')
-        .single();
-      if (!nuovoCliente?.id) {
+      const nuovoClienteRes = await dbInsert<any>({
+        table: 'clienti',
+        data: { nome, cognome, ...(telefono ? { telefono } : {}), user_id: user?.id },
+      });
+      if (!nuovoClienteRes.data?.id) {
         setError('Errore nella creazione del cliente');
         setSaving(false);
         return;
       }
-      resolvedClienteId = nuovoCliente.id;
+      resolvedClienteId = nuovoClienteRes.data.id;
     }
 
     if (appuntamentoId) {
@@ -257,26 +274,36 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
       const data_ora = timeToDate(baseDate, firstRow.orarioInizio).toISOString();
       const durata_totale = righe.reduce((s, r) => s + r.durataMinuti, 0);
       const prezzo_totale = righe.reduce((s, r) => s + r.prezzo, 0);
-      await supabase.from('appuntamenti').update({
-        cliente_id: resolvedClienteId,
-        parrucchiere_id: righe[0]?.parrucchiereId || null,
-        data_ora,
-        durata_minuti: durata_totale,
-        stato,
-        note,
-        prezzo_totale,
-        updated_at: new Date().toISOString(),
-      }).eq('id', appuntamentoId);
-      await supabase.from('appuntamento_trattamenti').delete().eq('appuntamento_id', appuntamentoId);
-      await supabase.from('appuntamento_trattamenti').insert(
-        righe.map(r => ({
-          appuntamento_id: appuntamentoId,
-          trattamento_id: r.trattamentoId || null,
-          nome_trattamento: r.nomeTrattamento,
-          prezzo: r.prezzo,
-          user_id: user?.id,
-        }))
-      );
+      await dbUpdate({
+        table: 'appuntamenti',
+        id: appuntamentoId,
+        data: {
+          cliente_id: resolvedClienteId,
+          parrucchiere_id: righe[0]?.parrucchiereId || null,
+          data_ora,
+          durata_minuti: durata_totale,
+          stato,
+          note,
+          prezzo_totale,
+          updated_at: new Date().toISOString(),
+        },
+      });
+      await dbDelete({
+        table: 'appuntamento_trattamenti',
+        filters: [{ col: 'appuntamento_id', op: 'eq', val: appuntamentoId }],
+      });
+      for (const r of righe) {
+        await dbInsert({
+          table: 'appuntamento_trattamenti',
+          data: {
+            appuntamento_id: appuntamentoId,
+            trattamento_id: r.trattamentoId || null,
+            nome_trattamento: r.nomeTrattamento,
+            prezzo: r.prezzo,
+            user_id: user?.id,
+          },
+        });
+      }
     } else {
       // NUOVO: raggruppa per parrucchiere
       const byParr: Record<string, ServizioRiga[]> = {};
@@ -290,26 +317,32 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
         const data_ora = timeToDate(baseDate, firstRow.orarioInizio).toISOString();
         const durata_totale = rows.reduce((s, r) => s + r.durataMinuti, 0);
         const prezzo_totale = rows.reduce((s, r) => s + r.prezzo, 0);
-        const { data: app } = await supabase.from('appuntamenti').insert({
-          cliente_id: resolvedClienteId,
-          parrucchiere_id: parrId,
-          data_ora,
-          durata_minuti: durata_totale,
-          stato,
-          note,
-          prezzo_totale,
-          user_id: user?.id,
-        }).select('id').single();
-        if (app?.id) {
-          await supabase.from('appuntamento_trattamenti').insert(
-            rows.map(r => ({
-              appuntamento_id: app.id,
-              trattamento_id: r.trattamentoId,
-              nome_trattamento: r.nomeTrattamento,
-              prezzo: r.prezzo,
-              user_id: user?.id,
-            }))
-          );
+        const appRes = await dbInsert<any>({
+          table: 'appuntamenti',
+          data: {
+            cliente_id: resolvedClienteId,
+            parrucchiere_id: parrId,
+            data_ora,
+            durata_minuti: durata_totale,
+            stato,
+            note,
+            prezzo_totale,
+            user_id: user?.id,
+          },
+        });
+        if (appRes.data?.id) {
+          for (const r of rows) {
+            await dbInsert({
+              table: 'appuntamento_trattamenti',
+              data: {
+                appuntamento_id: appRes.data.id,
+                trattamento_id: r.trattamentoId,
+                nome_trattamento: r.nomeTrattamento,
+                prezzo: r.prezzo,
+                user_id: user?.id,
+              },
+            });
+          }
         }
       }
     }

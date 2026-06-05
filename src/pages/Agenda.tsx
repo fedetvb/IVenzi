@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, ExternalLink, AlertCircle, Gift } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
+import { dbSelect, dbSelectWithRelated, dbDelete } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
 import AgendaGiorno from './AgendaGiorno';
 import BirthdayModal from '../components/BirthdayModal';
@@ -83,17 +84,31 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     const end = new Date(domaniKey + 'T23:59:59').toISOString();
     const dataLabel = domani.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Rome' });
 
-    const [{ data }, { data: tmplData }, { data: indirizzoData }] = await Promise.all([
-      supabase.from('appuntamenti').select('data_ora, clienti(id, nome, telefono)').gte('data_ora', start).lte('data_ora', end).neq('stato', 'cancellato').is('deleted_at', null).order('data_ora'),
-      supabase.from('impostazioni').select('valore').eq('chiave', 'messaggio_avviso_appuntamento').maybeSingle(),
-      supabase.from('impostazioni').select('valore').eq('chiave', 'avviso_appuntamento_indirizzo').maybeSingle(),
+    const [appRes, tmplRes, indirizzoRes] = await Promise.all([
+      dbSelectWithRelated({
+        table: 'appuntamenti',
+        columns: 'id, data_ora, stato, cliente_id, deleted_at',
+        filters: [
+          { col: 'data_ora', op: 'gte', val: start },
+          { col: 'data_ora', op: 'lte', val: end },
+          { col: 'stato', op: 'neq', val: 'cancellato' },
+          { col: 'deleted_at', op: 'is_null' }
+        ],
+        orderBy: [{ col: 'data_ora' }],
+        relations: [
+          { key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, telefono' }
+        ],
+        supabaseSelect: 'data_ora, clienti(id, nome, telefono)'
+      }),
+      dbSelect({ table: 'impostazioni', columns: 'valore', filters: [{ col: 'chiave', op: 'eq', val: 'messaggio_avviso_appuntamento' }] }),
+      dbSelect({ table: 'impostazioni', columns: 'valore', filters: [{ col: 'chiave', op: 'eq', val: 'avviso_appuntamento_indirizzo' }] })
     ]);
 
-    const template = tmplData?.valore ?? `Ciao {nome} ti ricordiamo l'appuntamento di domani {data} alle ore {ora} presso il nostro salone in via Palermo 15 Roma, ti aspettiamo!\n\nI Venzi.`;
-    const indirizzo = indirizzoData?.valore ?? 'via Palermo 15, Roma';
+    const template = tmplRes.data?.[0]?.valore ?? `Ciao {nome} ti ricordiamo l'appuntamento di domani {data} alle ore {ora} presso il nostro salone in via Palermo 15 Roma, ti aspettiamo!\n\nI Venzi.`;
+    const indirizzo = indirizzoRes.data?.[0]?.valore ?? 'via Palermo 15, Roma';
 
     const clientiMap: Record<string, { nome: string; telefono: string; ora: string; data: string }> = {};
-    for (const app of data || []) {
+    for (const app of appRes.data || []) {
       const c = app.clienti as { id: string; nome: string; telefono?: string } | null;
       if (!c || !c.telefono?.trim()) continue;
       if (clientiMap[c.id]) continue;
@@ -114,14 +129,27 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     setLoading(true);
     const from = weekStart.toISOString();
     const to = addDays(weekStart, 7).toISOString();
-    const [{ data }, { data: sc }, { data: pr }] = await Promise.all([
-      supabase.from('appuntamenti').select('*, clienti(nome, cognome, id)').gte('data_ora', from).lt('data_ora', to).is('deleted_at', null).order('data_ora'),
-      supabase.from('carte_sconto').select('cliente_id').not('cliente_id', 'is', null),
-      supabase.from('carte_premium').select('cliente_id'),
+    const [appRes, scRes, prRes] = await Promise.all([
+      dbSelectWithRelated({
+        table: 'appuntamenti',
+        columns: '*',
+        filters: [
+          { col: 'data_ora', op: 'gte', val: from },
+          { col: 'data_ora', op: '<', val: to },
+          { col: 'deleted_at', op: 'is_null' }
+        ],
+        orderBy: [{ col: 'data_ora' }],
+        relations: [
+          { key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, cognome' }
+        ],
+        supabaseSelect: '*, clienti(nome, cognome, id)'
+      }),
+      dbSelect({ table: 'carte_sconto', columns: 'cliente_id', filters: [{ col: 'cliente_id', op: 'not_null' }] }),
+      dbSelect({ table: 'carte_premium', columns: 'cliente_id' })
     ]);
-    setAppuntamenti((data || []) as Appuntamento[]);
+    setAppuntamenti((appRes.data || []) as Appuntamento[]);
     const ids = new Set<string>();
-    for (const r of [...(sc || []), ...(pr || [])]) {
+    for (const r of [...(scRes.data || []), ...(prRes.data || [])]) {
       if (r.cliente_id) ids.add(r.cliente_id);
     }
     setClientiConCarte(ids);
@@ -134,19 +162,22 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     const today = new Date();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
-    supabase.from('clienti').select('id, nome, cognome, telefono, data_nascita').not('data_nascita', 'is', null)
-      .then(({ data }) => {
-        const nati = ((data || []) as { id: string; nome: string; cognome: string; telefono: string | null; data_nascita: string }[])
-          .filter(c => {
-            const [, m, d] = c.data_nascita.split('-');
-            return m === mm && d === dd;
-          });
-        setBirthdayClienti(nati);
-      });
+    dbSelect({
+      table: 'clienti',
+      columns: 'id, nome, cognome, telefono, data_nascita',
+      filters: [{ col: 'data_nascita', op: 'not_null' }]
+    }).then((res) => {
+      const nati = ((res.data || []) as { id: string; nome: string; cognome: string; telefono: string | null; data_nascita: string }[])
+        .filter(c => {
+          const [, m, d] = c.data_nascita.split('-');
+          return m === mm && d === dd;
+        });
+      setBirthdayClienti(nati);
+    });
   }, []);
 
   async function deleteAppuntamento(id: string) {
-    await supabase.from('appuntamenti').delete().eq('id', id);
+    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
     setConfirmDelete(null);
     loadAppuntamenti();
   }

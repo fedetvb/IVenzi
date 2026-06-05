@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { dbSelect } from '../lib/localDb';
 import {
   BarChart2, TrendingUp, Euro, Trophy, ChevronDown, Scissors,
   ThumbsUp, ThumbsDown, Users, ArrowLeft, Calendar, Store, Hash, Star, X, UserX, Download, GitCompare,
@@ -2494,18 +2494,20 @@ export default function Statistiche({ onSelectCliente }: Props) {
     async function load() {
       setLoading(true);
       const [{ data: cl }, { data: parr }, { data: ap }, { data: fiche }, { data: voci }, { data: ass }] = await Promise.all([
-        supabase.from('clienti').select('id, nome, cognome').order('cognome'),
-        supabase.from('parrucchieri').select('id, nome, colore').order('nome'),
-        supabase.from('appuntamenti').select('id, data_ora, stato, cliente_id, parrucchiere_id').order('data_ora', { ascending: false }),
-        supabase
-          .from('fiches')
-          .select('id, importo_convalidato, convalidata_at, appuntamento_id, cliente_id, appuntamenti(id, data_ora, cliente_id, parrucchiere_id)')
-          .eq('convalidata', true),
-        supabase
-          .from('fiche_voci')
-          .select('parrucchiere_id, prezzo, fiche_id, nome_voce, tipo, fiches!inner(convalidata, convalidata_at, appuntamento_id, cliente_id, appuntamenti(data_ora, cliente_id, parrucchiere_id))')
-          .eq('fiches.convalidata', true),
-        supabase.from('assenze_parrucchieri').select('id, parrucchiere_id, data_inizio, data_fine, ora_inizio, note').order('data_inizio', { ascending: false }),
+        dbSelect({ table: 'clienti', columns: 'id, nome, cognome', orderBy: [{ col: 'cognome', asc: true }] }),
+        dbSelect({ table: 'parrucchieri', columns: 'id, nome, colore', orderBy: [{ col: 'nome', asc: true }] }),
+        dbSelect({ table: 'appuntamenti', columns: 'id, data_ora, stato, cliente_id, parrucchiere_id', orderBy: [{ col: 'data_ora', asc: false }] }),
+        dbSelect({
+          table: 'fiches',
+          columns: 'id, importo_convalidato, convalidata_at, appuntamento_id, cliente_id, appuntamenti(id, data_ora, cliente_id, parrucchiere_id)',
+          filters: [{ col: 'convalidata', op: 'eq', val: true }],
+        }),
+        dbSelect({
+          table: 'fiche_voci',
+          columns: 'parrucchiere_id, prezzo, fiche_id, nome_voce, tipo, fiches!inner(convalidata, convalidata_at, appuntamento_id, cliente_id, appuntamenti(data_ora, cliente_id, parrucchiere_id))',
+          filters: [{ col: 'fiches.convalidata', op: 'eq', val: true }],
+        }),
+        dbSelect({ table: 'assenze_parrucchieri', columns: 'id, parrucchiere_id, data_inizio, data_fine, ora_inizio, note', orderBy: [{ col: 'data_inizio', asc: false }] }),
       ]);
       setClienti((cl as Cliente[]) || []);
       setParrucchieri((parr as Parrucchiere[]) || []);

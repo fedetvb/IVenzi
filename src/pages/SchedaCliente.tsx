@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock } from 'lucide-react';
-import { supabase, localDateStr, type Cliente, type SchedaColore, type Appuntamento } from '../lib/supabase';
+import { localDateStr, type Cliente, type SchedaColore, type Appuntamento } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated } from '../lib/localDb';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import ClienteModal from '../components/ClienteModal';
 import { useAuth } from '../lib/AuthContext';
@@ -71,18 +72,32 @@ function RicaricaCartaModal({ carta, onClose, onSaved }: {
   async function save() {
     setSaving(true);
     const oggi = localDateStr();
-    await supabase.from('ricariche_carta_premium').insert({
-      carta_premium_id: carta.id, importo, note, tipo_ricarica: tipo, user_id: user?.id,
-    });
-    await supabase.from('carte_premium').update({ saldo: carta.saldo + importo }).eq('id', carta.id);
-    if (tipo === 'standard') {
-      await supabase.from('incassi_giornalieri').insert({
-        data: oggi,
-        fiche_id: null,
-        cliente_nome: `Ricarica carta ${carta.codice}`,
-        importo: prezzoCliente,
-        note: `Ricarica carta premium: credito €${importo}, pagato €${prezzoCliente}`,
+    await dbInsert({
+      table: 'ricariche_carta_premium',
+      data: {
+        carta_premium_id: carta.id,
+        importo,
+        note,
+        tipo_ricarica: tipo,
         user_id: user?.id,
+      },
+    });
+    await dbUpdate({
+      table: 'carte_premium',
+      id: carta.id,
+      data: { saldo: carta.saldo + importo },
+    });
+    if (tipo === 'standard') {
+      await dbInsert({
+        table: 'incassi_giornalieri',
+        data: {
+          data: oggi,
+          fiche_id: null,
+          cliente_nome: `Ricarica carta ${carta.codice}`,
+          importo: prezzoCliente,
+          note: `Ricarica carta premium: credito €${importo}, pagato €${prezzoCliente}`,
+          user_id: user?.id,
+        },
       });
     }
     setSaving(false);
@@ -415,42 +430,89 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
   const [showGrafico, setShowGrafico] = useState(false);
 
   const load = useCallback(async () => {
-    const [{ data: cl }, { data: sc }, { data: app }, { data: csc }, { data: cpr }] = await Promise.all([
-      supabase.from('clienti').select('*').eq('id', clienteId).maybeSingle(),
-      supabase.from('schede_colore').select('*').eq('cliente_id', clienteId).is('deleted_at', null).order('data_trattamento', { ascending: false }),
-      supabase.from('appuntamenti').select('*, appuntamento_trattamenti(nome_trattamento, prezzo)').eq('cliente_id', clienteId).is('deleted_at', null).order('data_ora', { ascending: false }),
-      supabase.from('carte_sconto').select('id, codice, descrizione, tipo_sconto, valore_sconto, attiva, usa_e_getta').eq('cliente_id', clienteId).is('deleted_at', null).order('created_at', { ascending: false }),
-      supabase.from('carte_premium').select('id, codice, saldo, note, attiva').eq('cliente_id', clienteId).is('deleted_at', null).order('created_at', { ascending: false }),
+    const [clRes, scRes, appRes, cscRes, cprRes] = await Promise.all([
+      dbSelect<Cliente>({
+        table: 'clienti',
+        filters: [{ col: 'id', op: 'eq', val: clienteId }],
+        limit: 1,
+      }),
+      dbSelect<SchedaColore>({
+        table: 'schede_colore',
+        filters: [
+          { col: 'cliente_id', op: 'eq', val: clienteId },
+          { col: 'deleted_at', op: 'is_null', val: true },
+        ],
+        orderBy: [{ col: 'data_trattamento', asc: false }],
+      }),
+      dbSelectWithRelated<Appuntamento>({
+        table: 'appuntamenti',
+        filters: [
+          { col: 'cliente_id', op: 'eq', val: clienteId },
+          { col: 'deleted_at', op: 'is_null', val: true },
+        ],
+        orderBy: [{ col: 'data_ora', asc: false }],
+        relations: [
+          { key: 'appuntamento_trattamenti', table: 'appuntamento_trattamenti', fk: 'appuntamento_id', many: true },
+        ],
+        supabaseSelect: '*, appuntamento_trattamenti(nome_trattamento, prezzo)',
+      }),
+      dbSelect<CartaScontoCliente>({
+        table: 'carte_sconto',
+        columns: 'id, codice, descrizione, tipo_sconto, valore_sconto, attiva, usa_e_getta',
+        filters: [
+          { col: 'cliente_id', op: 'eq', val: clienteId },
+          { col: 'deleted_at', op: 'is_null', val: true },
+        ],
+        orderBy: [{ col: 'created_at', asc: false }],
+      }),
+      dbSelect<CartaPremiumCliente>({
+        table: 'carte_premium',
+        columns: 'id, codice, saldo, note, attiva',
+        filters: [
+          { col: 'cliente_id', op: 'eq', val: clienteId },
+          { col: 'deleted_at', op: 'is_null', val: true },
+        ],
+        orderBy: [{ col: 'created_at', asc: false }],
+      }),
     ]);
-    if (cl) setCliente(cl as Cliente);
-    setSchede((sc || []) as SchedaColore[]);
-    setAppuntamenti((app || []) as Appuntamento[]);
-    setCarteSconto((csc || []) as CartaScontoCliente[]);
-    const premiumList = (cpr || []) as CartaPremiumCliente[];
+    if (clRes.data?.[0]) setCliente(clRes.data[0]);
+    setSchede(scRes.data || []);
+    setAppuntamenti(appRes.data || []);
+    setCarteSconto(cscRes.data || []);
+    const premiumList = cprRes.data || [];
     setCartePremium(premiumList);
 
     // Carica voci fiche del cliente:
     // Caso 1 – fiches legate ad appuntamento del cliente (cliente_id su appuntamenti)
     // Caso 2 – fiches manuali con cliente_id direttamente su fiches
-    const appIds = (app || []).map(a => (a as { id: string }).id);
-    const [{ data: vociViaApp }, { data: vociManuali }] = await Promise.all([
+    const appIds = (appRes.data || []).map(a => a.id);
+    const [vociViaAppRes, vociManualiRes] = await Promise.all([
       appIds.length > 0
-        ? supabase
-            .from('fiche_voci')
-            .select('fiche_id, nome_voce, tipo, prezzo, fiches!inner(convalidata, appuntamento_id, appuntamenti!inner(data_ora, cliente_id))')
-            .eq('fiches.convalidata', true)
-            .in('fiches.appuntamento_id', appIds)
-        : Promise.resolve({ data: [] }),
-      supabase
-        .from('fiche_voci')
-        .select('fiche_id, nome_voce, tipo, prezzo, fiches!inner(convalidata, cliente_id, data_riferimento)')
-        .eq('fiches.convalidata', true)
-        .eq('fiches.cliente_id', clienteId),
+        ? dbSelectWithRelated<any>({
+            table: 'fiche_voci',
+            filters: [{ col: 'fiches.appuntamento_id', op: 'in', val: appIds }],
+            relations: [
+              { key: 'fiches', table: 'fiches', fk: 'fiche_id' },
+            ],
+            supabaseSelect: 'fiche_id, nome_voce, tipo, prezzo, fiches!inner(convalidata, appuntamento_id, appuntamenti!inner(data_ora, cliente_id))',
+          })
+        : Promise.resolve({ data: [] } as any),
+      dbSelectWithRelated<any>({
+        table: 'fiche_voci',
+        filters: [
+          { col: 'fiches.convalidata', op: 'eq', val: true },
+          { col: 'fiches.cliente_id', op: 'eq', val: clienteId },
+        ],
+        relations: [
+          { key: 'fiches', table: 'fiches', fk: 'fiche_id' },
+        ],
+        supabaseSelect: 'fiche_id, nome_voce, tipo, prezzo, fiches!inner(convalidata, cliente_id, data_riferimento)',
+      }),
     ]);
 
     const vociFlat: FicheVoceCliente[] = [];
 
-    for (const v of (vociViaApp || []) as Array<{
+    for (const v of (vociViaAppRes.data || []) as Array<{
       fiche_id: string; nome_voce: string; tipo: string; prezzo: number;
       fiches: { convalidata: boolean; appuntamento_id: string; appuntamenti: { data_ora: string; cliente_id: string } | null } | null;
     }>) {
@@ -459,7 +521,7 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
       vociFlat.push({ fiche_id: v.fiche_id, nome_voce: v.nome_voce ?? '', tipo: v.tipo ?? 'servizio', prezzo: v.prezzo, data_ora: dataOra });
     }
 
-    for (const v of (vociManuali || []) as Array<{
+    for (const v of (vociManualiRes.data || []) as Array<{
       fiche_id: string; nome_voce: string; tipo: string; prezzo: number;
       fiches: { convalidata: boolean; cliente_id: string | null; data_riferimento: string | null } | null;
     }>) {
@@ -475,12 +537,12 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
     // Carica storico ricariche per tutte le carte premium del cliente
     if (premiumList.length > 0) {
       const ids = premiumList.map(c => c.id);
-      const { data: ric } = await supabase
-        .from('ricariche_carta_premium')
-        .select('*')
-        .in('carta_premium_id', ids)
-        .order('created_at', { ascending: false });
-      setRicaricheStorico((ric || []) as RicaricaRecord[]);
+      const ricRes = await dbSelect<RicaricaRecord>({
+        table: 'ricariche_carta_premium',
+        filters: [{ col: 'carta_premium_id', op: 'in', val: ids }],
+        orderBy: [{ col: 'created_at', asc: false }],
+      });
+      setRicaricheStorico(ricRes.data || []);
     } else {
       setRicaricheStorico([]);
     }
@@ -490,13 +552,21 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
 
   async function deleteScheda(id: string) {
     if (!confirm('Eliminare questa scheda colore?')) return;
-    await supabase.from('schede_colore').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await dbUpdate({
+      table: 'schede_colore',
+      id,
+      data: { deleted_at: new Date().toISOString() },
+    });
     load();
   }
 
   async function deleteApp(id: string) {
     if (!confirm('Eliminare questo appuntamento?')) return;
-    await supabase.from('appuntamenti').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await dbUpdate({
+      table: 'appuntamenti',
+      id,
+      data: { deleted_at: new Date().toISOString() },
+    });
     load();
   }
 

@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { supabase, localDateStr, type Cliente, type TrattamentoCatalogo, type StatoAppuntamento, type Parrucchiere } from '../lib/supabase';
+import { localDateStr, type Cliente, type TrattamentoCatalogo, type StatoAppuntamento, type Parrucchiere } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 
 interface ServizioRow {
   parrucchiere_id: string;
@@ -92,38 +93,36 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
   }, []);
 
   async function loadOptions() {
-    const [{ data: cl }, { data: cat }, { data: parr }] = await Promise.all([
-      supabase.from('clienti').select('id, nome, cognome').order('cognome'),
-      supabase.from('trattamenti_catalogo').select('*').eq('attivo', true).order('nome'),
-      supabase.from('parrucchieri').select('*').eq('attivo', true).order('nome'),
+    const [clRes, catRes, parrRes] = await Promise.all([
+      dbSelect('clienti', [], [{ col: 'cognome', asc: true }], ['id', 'nome', 'cognome']),
+      dbSelect('trattamenti_catalogo', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
+      dbSelect('parrucchieri', [{ col: 'attivo', op: 'eq', val: true }], [{ col: 'nome', asc: true }]),
     ]);
-    setClienti((cl || []) as Cliente[]);
-    setCatalogo((cat || []) as TrattamentoCatalogo[]);
-    setParrucchieri((parr || []) as Parrucchiere[]);
+    setClienti((clRes.data || []) as Cliente[]);
+    setCatalogo((catRes.data || []) as TrattamentoCatalogo[]);
+    setParrucchieri((parrRes.data || []) as Parrucchiere[]);
   }
 
   async function loadAppuntamento() {
-    const { data } = await supabase
-      .from('appuntamenti')
-      .select('*, appuntamento_trattamenti(*)')
-      .eq('id', appuntamentoId)
-      .maybeSingle();
-    if (!data) return;
-    const d = new Date(data.data_ora);
+    const { data: appRes } = await dbSelect('appuntamenti', [{ col: 'id', op: 'eq', val: appuntamentoId }]);
+    const appData = appRes?.[0] as any;
+    if (!appData) return;
+    const d = new Date(appData.data_ora);
 
     // find cliente name for search field
-    const cl = clienti.find(c => c.id === data.cliente_id);
+    const cl = clienti.find(c => c.id === appData.cliente_id);
     if (cl) setClienteSearch(`${cl.cognome} ${cl.nome}`);
 
-    const trattamenti = (data.appuntamento_trattamenti || []) as { trattamento_id: string; nome_trattamento: string; prezzo: number }[];
-    const parrId = data.parrucchiere_id ?? '';
+    const { data: trattRes } = await dbSelect('appuntamento_trattamenti', [{ col: 'appuntamento_id', op: 'eq', val: appuntamentoId }]);
+    const trattamenti = (trattRes || []) as { trattamento_id: string; nome_trattamento: string; prezzo: number }[];
+    const parrId = appData.parrucchiere_id ?? '';
 
     setForm({
-      cliente_id: data.cliente_id ?? '',
+      cliente_id: appData.cliente_id ?? '',
       data: toDateInput(d),
       ora: toTimeInput(d),
-      stato: data.stato,
-      note: data.note ?? '',
+      stato: appData.stato,
+      note: appData.note ?? '',
       servizi: trattamenti.length > 0
         ? trattamenti.map(t => ({
             parrucchiere_id: parrId,
@@ -217,24 +216,24 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
 
     let appId = appuntamentoId;
     if (appId) {
-      await supabase.from('appuntamenti').update(payload).eq('id', appId);
-      await supabase.from('appuntamento_trattamenti').delete().eq('appuntamento_id', appId);
+      await dbUpdate('appuntamenti', payload, [{ col: 'id', op: 'eq', val: appId }]);
+      await dbDelete('appuntamento_trattamenti', [{ col: 'appuntamento_id', op: 'eq', val: appId }]);
     } else {
-      const { data } = await supabase.from('appuntamenti').insert({ ...payload, user_id: user?.id }).select('id').single();
-      appId = data?.id;
+      const { data } = await dbInsert('appuntamenti', { ...payload, user_id: user?.id });
+      if (data) appId = (data as any).id;
     }
 
     const serviziConNome = form.servizi.filter(s => s.nome_trattamento);
     if (appId && serviziConNome.length > 0) {
-      await supabase.from('appuntamento_trattamenti').insert(
-        serviziConNome.map(s => ({
+      for (const s of serviziConNome) {
+        await dbInsert('appuntamento_trattamenti', {
           appuntamento_id: appId,
           trattamento_id: s.trattamento_id || null,
           nome_trattamento: s.nome_trattamento,
           prezzo: s.prezzo,
           user_id: user?.id,
-        }))
-      );
+        });
+      }
     }
 
     setSaving(false);

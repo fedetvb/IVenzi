@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { supabase, localDateStr, type SchedaColore } from '../lib/supabase';
+import { localDateStr, type SchedaColore } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 
 interface Props {
@@ -46,9 +47,13 @@ export default function SchedaColoreModal({ clienteId, schedaId, onClose, onSave
   }, [schedaId]);
 
   async function loadScheda() {
-    const { data } = await supabase.from('schede_colore').select('*').eq('id', schedaId).maybeSingle();
-    if (!data) return;
-    const s = data as SchedaColore;
+    const { data } = await dbSelect<SchedaColore>({
+      table: 'schede_colore',
+      filters: [{ col: 'id', op: 'eq', val: schedaId }],
+      limit: 1,
+    });
+    const s = data?.[0];
+    if (!s) return;
     setForm({
       data_trattamento: s.data_trattamento,
       colore_base: s.colore_base ?? '',
@@ -84,9 +89,16 @@ export default function SchedaColoreModal({ clienteId, schedaId, onClose, onSave
     };
 
     if (schedaId) {
-      await supabase.from('schede_colore').update(payload).eq('id', schedaId);
+      await dbUpdate({
+        table: 'schede_colore',
+        id: schedaId,
+        data: payload,
+      });
     } else {
-      await supabase.from('schede_colore').insert({ ...payload, user_id: user?.id });
+      await dbInsert({
+        table: 'schede_colore',
+        data: { ...payload, user_id: user?.id },
+      });
     }
 
     setSaving(false);

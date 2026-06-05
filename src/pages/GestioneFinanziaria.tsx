@@ -5,7 +5,8 @@ import {
   ChevronLeft, ChevronRight,
   Trash2, Pencil, TrendingDown, TrendingUp, Clock, Target, Info, Users,
 } from 'lucide-react';
-import { supabase, localDateStr } from '../lib/supabase';
+import { localDateStr } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -712,12 +713,12 @@ export default function GestioneFinanziaria() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: sp }, { data: tx }, { data: fiches }, { data: riv }, { data: parr }, { data: ficheVociParr }] = await Promise.all([
-      supabase.from('spese').select('*').is('deleted_at', null).order('data', { ascending: false }),
-      supabase.from('impostazioni_tasse').select('*').limit(1),
-      supabase.from('fiches').select('data_riferimento, importo_convalidato, appuntamenti(data_ora)').eq('convalidata', true).is('deleted_at', null),
-      supabase.from('rivendita_prodotti').select('data_vendita, totale'),
-      supabase.from('parrucchieri').select('id, nome, colore').eq('attivo', true).order('nome'),
-      supabase.from('fiche_voci').select('parrucchiere_id, prezzo, fiches!inner(data_riferimento, convalidata, deleted_at, appuntamenti(data_ora))').eq('fiches.convalidata', true).is('fiches.deleted_at', null),
+      dbSelect({ table: 'spese', columns: '*', filters: [{ col: 'deleted_at', op: 'is_null' }], orderBy: [{ col: 'data', asc: false }] }),
+      dbSelect({ table: 'impostazioni_tasse', columns: '*', limit: 1 }),
+      dbSelect({ table: 'fiches', columns: 'data_riferimento, importo_convalidato, appuntamenti(data_ora)', filters: [{ col: 'convalidata', op: 'eq', val: true }, { col: 'deleted_at', op: 'is_null' }] }),
+      dbSelect({ table: 'rivendita_prodotti', columns: 'data_vendita, totale' }),
+      dbSelect({ table: 'parrucchieri', columns: 'id, nome, colore', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
+      dbSelect({ table: 'fiche_voci', columns: 'parrucchiere_id, prezzo, fiches!inner(data_riferimento, convalidata, deleted_at, appuntamenti(data_ora))', filters: [{ col: 'fiches.convalidata', op: 'eq', val: true }, { col: 'fiches.deleted_at', op: 'is_null' }] }),
     ]);
     setSpese((sp || []) as Spesa[]);
     if (tx && tx.length > 0) setTasse(tx[0] as ImpostazioneTasse);
@@ -771,9 +772,9 @@ export default function GestioneFinanziaria() {
 
   async function salvaSpesa(s: Omit<Spesa, 'id' | 'created_at'>) {
     if (editSpesa?.id) {
-      await supabase.from('spese').update(s).eq('id', editSpesa.id);
+      await dbUpdate({ table: 'spese', id: editSpesa.id, data: s });
     } else {
-      await supabase.from('spese').insert({ ...s, user_id: user?.id });
+      await dbInsert({ table: 'spese', data: { ...s, user_id: user?.id } });
     }
     await load();
     setShowSpesaModal(false);
@@ -782,15 +783,15 @@ export default function GestioneFinanziaria() {
 
   async function eliminaSpesa(id: string) {
     if (!confirm('Eliminare questa voce?')) return;
-    await supabase.from('spese').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await dbUpdate({ table: 'spese', id, data: { deleted_at: new Date().toISOString() } });
     await load();
   }
 
   async function salvaTasse(c: Omit<ImpostazioneTasse, 'id'>) {
     if (tasse?.id) {
-      await supabase.from('impostazioni_tasse').update({ ...c, updated_at: new Date().toISOString() }).eq('id', tasse.id);
+      await dbUpdate({ table: 'impostazioni_tasse', id: tasse.id, data: { ...c, updated_at: new Date().toISOString() } });
     } else {
-      await supabase.from('impostazioni_tasse').insert({ ...c, user_id: user?.id });
+      await dbInsert({ table: 'impostazioni_tasse', data: { ...c, user_id: user?.id } });
     }
     await load();
     setShowTasseModal(false);

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { dbSelect, dbDelete, dbUpdate } from '../lib/localDb';
 import {
   Trash2, RotateCcw, Users, Calendar, CreditCard, Scissors, ShoppingBag,
   TrendingDown, AlertTriangle, ChevronDown, ChevronUp, Loader2, X,
@@ -52,8 +52,13 @@ const sezioni: SezioneConfig[] = [
 async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
   switch (id) {
     case 'clienti': {
-      const { data } = await supabase.from('clienti').select('id, nome, cognome, telefono, deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
-      return (data || []).map(r => ({
+      const { data } = await dbSelect({
+        table: 'clienti',
+        columns: 'id, nome, cognome, telefono, deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
+      return (data || []).map((r: any) => ({
         id: r.id,
         label: `${r.nome} ${r.cognome}`,
         sublabel: r.telefono || undefined,
@@ -61,7 +66,12 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'appuntamenti': {
-      const { data } = await supabase.from('appuntamenti').select('id, data_ora, stato, clienti(nome, cognome), deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+      const { data } = await dbSelect({
+        table: 'appuntamenti',
+        columns: 'id, data_ora, stato, clienti(nome, cognome), deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: `${new Date(r.data_ora).toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
@@ -70,7 +80,12 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'schede_colore': {
-      const { data } = await supabase.from('schede_colore').select('id, data_trattamento, formula_colore, tecnica, clienti(nome, cognome), deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+      const { data } = await dbSelect({
+        table: 'schede_colore',
+        columns: 'id, data_trattamento, formula_colore, tecnica, clienti(nome, cognome), deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: `Scheda colore ${fmtDataSemplice(r.data_trattamento)}`,
@@ -79,16 +94,26 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'parrucchieri': {
-      const { data } = await supabase.from('parrucchieri').select('id, nome, colore, deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
-      return (data || []).map(r => ({
+      const { data } = await dbSelect({
+        table: 'parrucchieri',
+        columns: 'id, nome, colore, deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
+      return (data || []).map((r: any) => ({
         id: r.id,
         label: r.nome,
         deleted_at: r.deleted_at,
       }));
     }
     case 'carte_sconto': {
-      const { data } = await supabase.from('carte_sconto').select('id, codice, descrizione, tipo_sconto, valore_sconto, deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
-      return (data || []).map(r => ({
+      const { data } = await dbSelect({
+        table: 'carte_sconto',
+        columns: 'id, codice, descrizione, tipo_sconto, valore_sconto, deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
+      return (data || []).map((r: any) => ({
         id: r.id,
         label: r.codice,
         sublabel: r.descrizione || `${r.tipo_sconto === 'percentuale' ? r.valore_sconto + '%' : '€' + fmtEuro(r.valore_sconto)}`,
@@ -96,7 +121,12 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'carte_premium': {
-      const { data } = await supabase.from('carte_premium').select('id, codice, saldo, clienti(nome, cognome), deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+      const { data } = await dbSelect({
+        table: 'carte_premium',
+        columns: 'id, codice, saldo, clienti(nome, cognome), deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: r.codice,
@@ -105,7 +135,12 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'rivendita_prodotti': {
-      const { data } = await supabase.from('rivendita_prodotti').select('id, nome_prodotto, totale, data_vendita, parrucchieri(nome), deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+      const { data } = await dbSelect({
+        table: 'rivendita_prodotti',
+        columns: 'id, nome_prodotto, totale, data_vendita, parrucchieri(nome), deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: r.nome_prodotto,
@@ -114,8 +149,13 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'spese': {
-      const { data } = await supabase.from('spese').select('id, descrizione, categoria, importo, data, deleted_at').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
-      return (data || []).map(r => ({
+      const { data } = await dbSelect({
+        table: 'spese',
+        columns: 'id, descrizione, categoria, importo, data, deleted_at',
+        filters: [{ col: 'deleted_at', op: 'not_null' }],
+        orderBy: [{ col: 'deleted_at', asc: false }],
+      });
+      return (data || []).map((r: any) => ({
         id: r.id,
         label: r.descrizione || r.categoria,
         sublabel: `${fmtDataSemplice(r.data)} · €${fmtEuro(r.importo)}${r.categoria ? ' · ' + r.categoria : ''}`,
@@ -128,18 +168,34 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
 }
 
 async function ripristinaItem(sezione: Sezione, id: string) {
-  await supabase.from(sezione).update({ deleted_at: null }).eq('id', id);
+  await dbUpdate({
+    table: sezione,
+    id,
+    data: { deleted_at: null },
+  });
 }
 
 async function eliminaDefinitivamente(sezione: Sezione, id: string) {
-  await supabase.from(sezione).delete().eq('id', id);
+  await dbDelete({
+    table: sezione,
+    filters: [{ col: 'id', op: 'eq', val: id }],
+  });
 }
 
 async function svuotaSezione(sezione: Sezione) {
-  const { data } = await supabase.from(sezione).select('id').not('deleted_at', 'is', null);
+  const { data } = await dbSelect({
+    table: sezione,
+    columns: 'id',
+    filters: [{ col: 'deleted_at', op: 'not_null' }],
+  });
   if (!data || data.length === 0) return;
-  const ids = data.map((r: { id: string }) => r.id);
-  await supabase.from(sezione).delete().in('id', ids);
+  const ids = (data as any[]).map((r: { id: string }) => r.id);
+  for (const id of ids) {
+    await dbDelete({
+      table: sezione,
+      filters: [{ col: 'id', op: 'eq', val: id }],
+    });
+  }
 }
 
 interface CestinoSezioneProps {

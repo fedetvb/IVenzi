@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle } from 'lucide-react';
+import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import ClienteModal from '../components/ClienteModal';
 import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
@@ -41,20 +42,20 @@ export default function Clienti({ onSelectCliente }: Props) {
 
   const loadClienti = useCallback(async () => {
     setLoading(true);
-    const [{ data }, { data: sc }, { data: pr }] = await Promise.all([
-      supabase.from('clienti').select('*').is('deleted_at', null).order('cognome').order('nome'),
-      supabase.from('carte_sconto').select('cliente_id, usa_e_getta').not('cliente_id', 'is', null).is('deleted_at', null).eq('attiva', true),
-      supabase.from('carte_premium').select('cliente_id, saldo, attiva').is('deleted_at', null),
+    const [clientiRes, carteScRes, cartePreRes] = await Promise.all([
+      dbSelect({ table: 'clienti', columns: '*', filters: [{col:'deleted_at', op:'is_null'}], orderBy: [{col:'cognome'}, {col:'nome'}] }),
+      dbSelect({ table: 'carte_sconto', columns: 'cliente_id, usa_e_getta', filters: [{col:'cliente_id', op:'not_null'}, {col:'deleted_at', op:'is_null'}, {col:'attiva', op:'eq', val:true}] }),
+      dbSelect({ table: 'carte_premium', columns: 'cliente_id, saldo, attiva', filters: [{col:'deleted_at', op:'is_null'}] }),
     ]);
-    setClienti((data || []) as Cliente[]);
+    setClienti((clientiRes.data || []) as Cliente[]);
     const carteMap = new Map<string, Set<string>>();
-    for (const r of (sc || []) as { cliente_id: string; usa_e_getta: boolean }[]) {
+    for (const r of (carteScRes.data || []) as { cliente_id: string; usa_e_gatta: boolean }[]) {
       if (r.cliente_id) {
         if (!carteMap.has(r.cliente_id)) carteMap.set(r.cliente_id, new Set());
-        carteMap.get(r.cliente_id)!.add(r.usa_e_getta ? 'ueg' : 'sconto');
+        carteMap.get(r.cliente_id)!.add(r.usa_e_gatta ? 'ueg' : 'sconto');
       }
     }
-    for (const r of (pr || []) as { cliente_id: string; saldo: number; attiva: boolean }[]) {
+    for (const r of (cartePreRes.data || []) as { cliente_id: string; saldo: number; attiva: boolean }[]) {
       if (r.cliente_id) {
         if (!carteMap.has(r.cliente_id)) carteMap.set(r.cliente_id, new Set());
         carteMap.get(r.cliente_id)!.add(r.saldo > 0 && r.attiva ? 'premium' : 'premium_vuota');
@@ -66,12 +67,8 @@ export default function Clienti({ onSelectCliente }: Props) {
 
   const loadSchede = useCallback(async () => {
     setSchedeLoading(true);
-    const { data } = await supabase
-      .from('schede_clienti_da_confermare')
-      .select('*')
-      .eq('stato', 'in_attesa')
-      .order('created_at', { ascending: false });
-    setSchede((data || []) as SchedaDaConfermare[]);
+    const res = await dbSelect({ table: 'schede_clienti_da_confermare', columns: '*', filters: [{col:'stato', op:'eq', val:'in_attesa'}], orderBy: [{col:'created_at', asc:false}] });
+    setSchede((res.data || []) as SchedaDaConfermare[]);
     setSchedeLoading(false);
   }, []);
 
@@ -100,7 +97,7 @@ export default function Clienti({ onSelectCliente }: Props) {
   }
 
   async function eseguiEliminaCliente(id: string) {
-    await supabase.from('clienti').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await dbUpdate({ table: 'clienti', id, data: { deleted_at: new Date().toISOString() } });
     setEliminaClienteGate(null);
     loadClienti();
   }
@@ -121,29 +118,32 @@ export default function Clienti({ onSelectCliente }: Props) {
 
   async function confermaScheda(scheda: SchedaDaConfermare) {
     setConfermando(scheda.id);
-    const { data, error } = await supabase.from('clienti').insert({
-      nome: scheda.nome,
-      cognome: scheda.cognome,
-      telefono: scheda.telefono || '',
-      email: scheda.email || '',
-      data_nascita: scheda.data_nascita || null,
-      note: scheda.note || '',
-      foto_url: '',
-      user_id: user?.id,
-    }).select('id').maybeSingle();
+    const clienteRes = await dbInsert({
+      table: 'clienti',
+      data: {
+        nome: scheda.nome,
+        cognome: scheda.cognome,
+        telefono: scheda.telefono || '',
+        email: scheda.email || '',
+        data_nascita: scheda.data_nascita || null,
+        note: scheda.note || '',
+        foto_url: '',
+        user_id: user?.id,
+      }
+    });
 
-    if (!error && data) {
-      await supabase.from('schede_clienti_da_confermare').update({ stato: 'confermato' }).eq('id', scheda.id);
+    if (!clienteRes.error && clienteRes.data?.id) {
+      await dbUpdate({ table: 'schede_clienti_da_confermare', id: scheda.id, data: { stato: 'confermato' } });
       setSchedaAperta(null);
       loadSchede();
       loadClienti();
-      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome), clienteId: data.id, telefono: scheda.telefono || '' });
+      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome), clienteId: clienteRes.data.id, telefono: scheda.telefono || '' });
     }
     setConfermando(null);
   }
 
   async function eliminaScheda(id: string) {
-    await supabase.from('schede_clienti_da_confermare').delete().eq('id', id);
+    await dbDelete({ table: 'schede_clienti_da_confermare', filters: [{col:'id', op:'eq', val:id}] });
     setEliminaGate(null);
     setSchedaAperta(null);
     loadSchede();
@@ -204,12 +204,8 @@ export default function Clienti({ onSelectCliente }: Props) {
     setExporting(true);
     setExportOpen(false);
     const mappaClienti = Object.fromEntries(clienti.map(c => [c.id, c]));
-    const { data } = await supabase
-      .from('schede_colore')
-      .select('*')
-      .is('deleted_at', null)
-      .order('data_trattamento', { ascending: false });
-    const rows = (data || []).map(s => {
+    const res = await dbSelect({ table: 'schede_colore', columns: '*', filters: [{col:'deleted_at', op:'is_null'}], orderBy: [{col:'data_trattamento', asc:false}] });
+    const rows = (res.data || []).map(s => {
       const c = mappaClienti[s.cliente_id];
       return [
         c ? `${c.cognome} ${c.nome}` : '',
@@ -265,7 +261,7 @@ export default function Clienti({ onSelectCliente }: Props) {
       .select('*, clienti(nome, cognome, telefono)')
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
-    const rows = (data || []).map((cs: { codice: string; descrizione: string; tipo_sconto: string; valore_sconto: number; attiva: boolean; usa_e_getta: boolean; nominativa: boolean; created_at: string; clienti?: { cognome?: string; nome?: string; telefono?: string } | null }) => [
+    const rows = (data || []).map((cs: { codice: string; descrizione: string; tipo_sconto: string; valore_sconto: number; attiva: boolean; usa_e_gatta: boolean; nominativa: boolean; created_at: string; clienti?: { cognome?: string; nome?: string; telefono?: string } | null }) => [
       cs.clienti ? `${cs.clienti.cognome ?? ''} ${cs.clienti.nome ?? ''}`.trim() : '(Generica)',
       cs.clienti?.telefono ?? '',
       cs.codice ?? '',
@@ -273,12 +269,12 @@ export default function Clienti({ onSelectCliente }: Props) {
       cs.tipo_sconto === 'percentuale' ? `${cs.valore_sconto}%` : `€${Number(cs.valore_sconto).toFixed(2).replace('.', ',')}`,
       cs.attiva ? 'Attiva' : 'Disattiva',
       cs.nominativa ? 'Si' : 'No',
-      cs.usa_e_getta ? 'Si' : 'No',
+      cs.usa_e_gatta ? 'Si' : 'No',
       formatDataIT(cs.created_at?.slice(0, 10)),
     ]);
     scaricaCsv(
       `carte-sconto-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.csv`,
-      ['Cliente', 'Telefono', 'Codice', 'Descrizione', 'Sconto', 'Stato', 'Nominativa', 'Usa e getta', 'Data creazione'],
+      ['Cliente', 'Telefono', 'Codice', 'Descrizione', 'Sconto', 'Stato', 'Nominativa', 'Usa e gatta', 'Data creazione'],
       rows
     );
     setExporting(false);
@@ -288,10 +284,10 @@ export default function Clienti({ onSelectCliente }: Props) {
     setExporting(true);
     setExportOpen(false);
 
-    const [{ data: schedeColore }, { data: cartePremiumData }, { data: carteScontoData }] = await Promise.all([
-      supabase.from('schede_colore').select('*').is('deleted_at', null).order('data_trattamento', { ascending: false }),
-      supabase.from('carte_premium').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-      supabase.from('carte_sconto').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+    const [schedeColoreRes, cartePremiumRes, carteScontoRes] = await Promise.all([
+      dbSelect({ table: 'schede_colore', columns: '*', filters: [{col:'deleted_at', op:'is_null'}], orderBy: [{col:'data_trattamento', asc:false}] }),
+      dbSelect({ table: 'carte_premium', columns: '*', filters: [{col:'deleted_at', op:'is_null'}], orderBy: [{col:'created_at', asc:false}] }),
+      dbSelect({ table: 'carte_sconto', columns: '*', filters: [{col:'deleted_at', op:'is_null'}], orderBy: [{col:'created_at', asc:false}] }),
     ]);
 
     const mappaClienti = Object.fromEntries(clienti.map(c => [c.id, c]));
@@ -333,13 +329,13 @@ export default function Clienti({ onSelectCliente }: Props) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120);
-    doc.text(`${(schedeColore || []).length} schede — esportato il ${dateStr}`, 14, 22);
+    doc.text(`${(schedeColoreRes.data || []).length} schede — esportato il ${dateStr}`, 14, 22);
     doc.setTextColor(0);
 
     autoTable(doc, {
       startY: 28,
       head: [['Cliente', 'Telefono', 'Data', 'Tecnica', 'Colore base', 'Colore target', 'Formula', 'Ossidante', 'Posa', 'Note']],
-      body: (schedeColore || []).map(s => {
+      body: (schedeColoreRes.data || []).map(s => {
         const c = mappaClienti[s.cliente_id];
         return [
           c ? `${c.cognome} ${c.nome}` : '',
@@ -368,13 +364,13 @@ export default function Clienti({ onSelectCliente }: Props) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120);
-    doc.text(`${(cartePremiumData || []).length} carte — esportato il ${dateStr}`, 14, 22);
+    doc.text(`${(cartePremiumRes.data || []).length} carte — esportato il ${dateStr}`, 14, 22);
     doc.setTextColor(0);
 
     autoTable(doc, {
       startY: 28,
       head: [['Cliente', 'Telefono', 'Codice carta', 'Stato', 'Saldo', 'Note', 'Data creazione']],
-      body: (cartePremiumData || []).map(cp => {
+      body: (cartePremiumRes.data || []).map(cp => {
         const c = mappaClienti[cp.cliente_id];
         return [
           c ? `${c.cognome} ${c.nome}` : '',
@@ -400,13 +396,13 @@ export default function Clienti({ onSelectCliente }: Props) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120);
-    doc.text(`${(carteScontoData || []).length} carte — esportato il ${dateStr}`, 14, 22);
+    doc.text(`${(carteScontoRes.data || []).length} carte — esportato il ${dateStr}`, 14, 22);
     doc.setTextColor(0);
 
     autoTable(doc, {
       startY: 28,
-      head: [['Cliente', 'Telefono', 'Codice', 'Descrizione', 'Sconto', 'Stato', 'Nominativa', 'Usa e getta', 'Data creazione']],
-      body: (carteScontoData || []).map(cs => {
+      head: [['Cliente', 'Telefono', 'Codice', 'Descrizione', 'Sconto', 'Stato', 'Nominativa', 'Usa e gatta', 'Data creazione']],
+      body: (carteScontoRes.data || []).map(cs => {
         const c = cs.cliente_id ? mappaClienti[cs.cliente_id] : null;
         return [
           c ? `${c.cognome} ${c.nome}` : '(Generica)',
@@ -416,7 +412,7 @@ export default function Clienti({ onSelectCliente }: Props) {
           cs.tipo_sconto === 'percentuale' ? `${cs.valore_sconto}%` : `€${Number(cs.valore_sconto).toFixed(2).replace('.', ',')}`,
           cs.attiva ? 'Attiva' : 'Disattiva',
           cs.nominativa ? 'Si' : 'No',
-          cs.usa_e_getta ? 'Si' : 'No',
+          cs.usa_e_gatta ? 'Si' : 'No',
           formatDataIT(cs.created_at?.slice(0, 10)),
         ];
       }),
@@ -616,7 +612,7 @@ export default function Clienti({ onSelectCliente }: Props) {
                               if (tipi.has('premium')) return <CreditCard size={13} className="text-amber-500 flex-shrink-0" title="Carta premium attiva" />;
                               if (tipi.has('premium_vuota')) return <CreditCard size={13} className="text-red-400 flex-shrink-0" title="Carta premium esaurita" />;
                               if (tipi.has('sconto')) return <CreditCard size={13} className="text-teal-500 flex-shrink-0" title="Carta sconto" />;
-                              if (tipi.has('ueg')) return <CreditCard size={13} className="text-stone-600 flex-shrink-0" title="Carta usa e getta" />;
+                              if (tipi.has('ueg')) return <CreditCard size={13} className="text-stone-600 flex-shrink-0" title="Carta usa e gatta" />;
                               return null;
                             })()}
                           </div>

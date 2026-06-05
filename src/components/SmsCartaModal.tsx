@@ -1,6 +1,6 @@
 import { Copy, Check, X, MessageSquare, Send, ChevronDown, CreditCard as Edit3, Loader } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { dbSelect } from '../lib/localDb';
 
 export type AzioneCarta =
   | { tipo: 'creazione'; credito: number }
@@ -112,25 +112,35 @@ function ScontoCreazionePart({
   useEffect(() => {
     // Se c'e' un override dal flusso compleanno, non carichiamo il template ma solo l'indirizzo
     if (messaggioOverride) {
-      supabase.from('impostazioni').select('valore').eq('chiave', 'avviso_appuntamento_indirizzo').maybeSingle()
-        .then(({ data: ind }) => {
-          if (ind?.valore) setIndirizzoMappa(ind.valore);
-          setLoadingTemplates(false);
-        });
+      dbSelect<{ valore: string }>({
+        table: 'impostazioni',
+        filters: [{ col: 'chiave', op: 'eq', val: 'avviso_appuntamento_indirizzo' }],
+        limit: 1,
+      }).then(({ data }) => {
+        if (data?.[0]?.valore) setIndirizzoMappa(data[0].valore);
+        setLoadingTemplates(false);
+      });
       return;
     }
     Promise.all([
-      supabase.from('template_messaggi_carta_sconto').select('id, nome, testo, is_default, ordine').order('ordine'),
-      supabase.from('impostazioni').select('valore').eq('chiave', 'avviso_appuntamento_indirizzo').maybeSingle(),
-    ]).then(([{ data }, { data: ind }]) => {
-      const list = (data || []) as Template[];
+      dbSelect<Template>({
+        table: 'template_messaggi_carta_sconto',
+        orderBy: [{ col: 'ordine', asc: true }],
+      }),
+      dbSelect<{ valore: string }>({
+        table: 'impostazioni',
+        filters: [{ col: 'chiave', op: 'eq', val: 'avviso_appuntamento_indirizzo' }],
+        limit: 1,
+      }),
+    ]).then(([templ, ind]) => {
+      const list = (templ.data || []) as Template[];
       setTemplates(list);
       const def = list.find(t => t.is_default) ?? list[0];
       if (def) {
         setSelectedId(def.id);
         setMessaggio(conCornice(applyTemplate(def.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: '' })));
       }
-      if (ind?.valore) setIndirizzoMappa(ind.valore);
+      if (ind.data?.[0]?.valore) setIndirizzoMappa(ind.data[0].valore);
       setLoadingTemplates(false);
     });
   }, []);

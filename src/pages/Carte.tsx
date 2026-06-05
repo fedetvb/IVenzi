@@ -3,10 +3,11 @@ import {
   CreditCard, Plus, Trash2, X, ChevronDown, Search, Tag, Star,
   RefreshCw, Check, Copy, AlertCircle, Wallet, History, Percent, Euro,
 } from 'lucide-react';
-import { supabase, localDateStr } from '../lib/supabase';
+import { localDateStr } from '../lib/supabase';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
+import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
 
   async function save() {
     setSaving(true);
-    await supabase.from('carte_sconto').insert({
+    await dbInsert('carte_sconto', {
       codice: form.codice,
       descrizione: form.descrizione,
       tipo_sconto: form.tipo_sconto,
@@ -300,22 +301,23 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
     setSaving(true);
     const cliente = clienti.find(c => c.id === form.cliente_id)!;
     const clienteNome = cliente ? `${cliente.nome} ${cliente.cognome}`.trim() : '';
-    const { data } = await supabase.from('carte_premium').insert({
+    const { data } = await dbInsert('carte_premium', {
       codice: form.codice,
       cliente_id: form.cliente_id,
       saldo: form.importo_iniziale,
       note: form.note,
       user_id: user?.id,
-    }).select('id').maybeSingle();
-    if (data && form.importo_iniziale > 0) {
-      await supabase.from('ricariche_carta_premium').insert({
-        carta_premium_id: data.id,
+    });
+    const cartaId = (data as any)?.id;
+    if (cartaId && form.importo_iniziale > 0) {
+      await dbInsert('ricariche_carta_premium', {
+        carta_premium_id: cartaId,
         importo: form.importo_iniziale,
         note: 'Carica iniziale',
         tipo_ricarica: 'standard',
         user_id: user?.id,
       });
-      await supabase.from('incassi_giornalieri').insert({
+      await dbInsert('incassi_giornalieri', {
         data: localDateStr(),
         fiche_id: null,
         cliente_nome: clienteNome
@@ -462,12 +464,12 @@ function RicaricaModal({ carta, onClose, onSaved }: {
     setSaving(true);
     const oggi = localDateStr();
     const clienteNome = carta.clienti ? `${carta.clienti.nome} ${carta.clienti.cognome}`.trim() : '';
-    await supabase.from('ricariche_carta_premium').insert({
+    await dbInsert('ricariche_carta_premium', {
       carta_premium_id: carta.id, importo, note, tipo_ricarica: tipo, user_id: user?.id,
     });
-    await supabase.from('carte_premium').update({ saldo: carta.saldo + importo, attiva: true }).eq('id', carta.id);
+    await dbUpdate('carte_premium', { saldo: carta.saldo + importo, attiva: true }, [{ col: 'id', op: 'eq', val: carta.id }]);
     if (tipo === 'standard') {
-      await supabase.from('incassi_giornalieri').insert({
+      await dbInsert('incassi_giornalieri', {
         data: oggi,
         fiche_id: null,
         cliente_nome: clienteNome ? `Ricarica carta ${carta.codice} - ${clienteNome}` : `Ricarica carta ${carta.codice}`,
@@ -697,11 +699,13 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('carte_sconto')
-      .select('*, clienti(nome, cognome, telefono)')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+    const { data } = await dbSelectWithRelated({
+      table: 'carte_sconto',
+      filters: [{ col: 'deleted_at', op: 'is_null' }],
+      orderBy: [{ col: 'created_at', asc: false }],
+      relations: [{ key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, cognome, telefono' }],
+      supabaseSelect: '*, clienti(nome, cognome, telefono)',
+    });
     setCarte((data || []) as CartaSconto[]);
     setLoading(false);
   }, []);
@@ -709,12 +713,12 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
   useEffect(() => { load(); }, [load]);
 
   async function toggleAttiva(carta: CartaSconto) {
-    await supabase.from('carte_sconto').update({ attiva: !carta.attiva }).eq('id', carta.id);
+    await dbUpdate('carte_sconto', { attiva: !carta.attiva }, [{ col: 'id', op: 'eq', val: carta.id }]);
     load();
   }
 
   async function confirmDeleteCarta(id: string) {
-    await supabase.from('carte_sconto').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await dbUpdate('carte_sconto', { deleted_at: new Date().toISOString() }, [{ col: 'id', op: 'eq', val: id }]);
     setPendingDeleteId(null);
     load();
   }
@@ -725,7 +729,7 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
   }
 
   async function openStorico(carta: CartaSconto) {
-    const { data } = await supabase.from('utilizzi_carta_sconto').select('*').eq('carta_sconto_id', carta.id).order('created_at', { ascending: false });
+    const { data } = await dbSelect('utilizzi_carta_sconto', [{ col: 'carta_sconto_id', op: 'eq', val: carta.id }], [{ col: 'created_at', asc: false }]);
     setStoricoCarta({ carta, utilizzi: (data || []) as UtilizzoCarta[] });
   }
 
@@ -929,11 +933,13 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('carte_premium')
-      .select('*, clienti(nome, cognome, telefono)')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+    const { data } = await dbSelectWithRelated({
+      table: 'carte_premium',
+      filters: [{ col: 'deleted_at', op: 'is_null' }],
+      orderBy: [{ col: 'created_at', asc: false }],
+      relations: [{ key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, cognome, telefono' }],
+      supabaseSelect: '*, clienti(nome, cognome, telefono)',
+    });
     setCarte((data || []) as CartaPremium[]);
     setLoading(false);
   }, []);
@@ -941,12 +947,12 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
   useEffect(() => { load(); }, [load]);
 
   async function toggleAttiva(carta: CartaPremium) {
-    await supabase.from('carte_premium').update({ attiva: !carta.attiva }).eq('id', carta.id);
+    await dbUpdate('carte_premium', { attiva: !carta.attiva }, [{ col: 'id', op: 'eq', val: carta.id }]);
     load();
   }
 
   async function confirmDeleteCarta(id: string) {
-    await supabase.from('carte_premium').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await dbUpdate('carte_premium', { deleted_at: new Date().toISOString() }, [{ col: 'id', op: 'eq', val: id }]);
     setPendingDeleteId(null);
     load();
   }
@@ -957,11 +963,11 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
   }
 
   async function openStorico(carta: CartaPremium) {
-    const [{ data: utilizzi }, { data: ricariche }] = await Promise.all([
-      supabase.from('utilizzi_carta_premium').select('*').eq('carta_premium_id', carta.id).order('created_at', { ascending: false }),
-      supabase.from('ricariche_carta_premium').select('*').eq('carta_premium_id', carta.id).order('created_at', { ascending: false }),
+    const [uRes, rRes] = await Promise.all([
+      dbSelect('utilizzi_carta_premium', [{ col: 'carta_premium_id', op: 'eq', val: carta.id }], [{ col: 'created_at', asc: false }]),
+      dbSelect('ricariche_carta_premium', [{ col: 'carta_premium_id', op: 'eq', val: carta.id }], [{ col: 'created_at', asc: false }]),
     ]);
-    setStoricoCarta({ carta, utilizzi: (utilizzi || []) as UtilizzoCarta[], ricariche: (ricariche || []) as RicaricaPremium[] });
+    setStoricoCarta({ carta, utilizzi: (uRes.data || []) as UtilizzoCarta[], ricariche: (rRes.data || []) as RicaricaPremium[] });
   }
 
   function copyCodice(codice: string) {
@@ -1145,7 +1151,7 @@ export default function Carte() {
   const [clienti, setClienti] = useState<Cliente[]>([]);
 
   useEffect(() => {
-    supabase.from('clienti').select('id, nome, cognome, telefono').order('nome').then(({ data }) => {
+    dbSelect('clienti', [], [{ col: 'nome', asc: true }], ['id', 'nome', 'cognome', 'telefono']).then(({ data }) => {
       setClienti((data || []) as Cliente[]);
     });
   }, []);

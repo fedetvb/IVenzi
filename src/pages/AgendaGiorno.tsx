@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check, Settings, ZoomIn, ZoomOut, Type } from 'lucide-react';
 import { supabase, type Appuntamento, type Parrucchiere } from '../lib/supabase';
+import { dbSelect, dbSelectWithRelated, dbUpdate, dbDelete, dbUpsert, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
 
 const SLOT_DURATION = 15;
@@ -117,41 +118,49 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-    const [{ data: parr }, { data: app }, { data: impost }, { data: sc }, { data: pr }, { data: ass }] = await Promise.all([
-      supabase.from('parrucchieri').select('*').eq('attivo', true).order('nome'),
-      supabase.from('appuntamenti')
-        .select('*, clienti(id, nome, cognome, data_nascita, telefono), parrucchieri(*), appuntamento_trattamenti(nome_trattamento, prezzo)')
-        .gte('data_ora', startOfDay.toISOString())
-        .lte('data_ora', endOfDay.toISOString())
-        .is('deleted_at', null)
-        .order('data_ora'),
-      supabase.from('impostazioni').select('valore').eq('chiave', 'messaggio_auguri').maybeSingle(),
-      supabase.from('carte_sconto').select('cliente_id, usa_e_getta, attiva').not('cliente_id', 'is', null).eq('attiva', true),
-      supabase.from('carte_premium').select('cliente_id, saldo, attiva').is('deleted_at', null),
-      supabase.from('assenze_parrucchieri').select('parrucchiere_id, data_inizio, data_fine, ora_inizio')
-        .lte('data_inizio', dateStr)
-        .gte('data_fine', dateStr),
+    const [parrRes, appRes, impostRes, scRes, prRes, assRes] = await Promise.all([
+      dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome' }] }),
+      dbSelectWithRelated({
+        table: 'appuntamenti',
+        columns: '*',
+        filters: [
+          { col: 'data_ora', op: 'gte', val: startOfDay.toISOString() },
+          { col: 'data_ora', op: 'lte', val: endOfDay.toISOString() },
+          { col: 'deleted_at', op: 'is_null' }
+        ],
+        orderBy: [{ col: 'data_ora' }],
+        relations: [
+          { key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, cognome, data_nascita, telefono' },
+          { key: 'parrucchieri', table: 'parrucchieri', fk: 'parrucchiere_id', columns: '*' },
+          { key: 'appuntamento_trattamenti', table: 'appuntamento_trattamenti', fk: 'id', many: true, manyFk: 'appuntamento_id', columns: 'nome_trattamento, prezzo' }
+        ],
+        supabaseSelect: '*, clienti(id, nome, cognome, data_nascita, telefono), parrucchieri(*), appuntamento_trattamenti(nome_trattamento, prezzo)'
+      }),
+      getImpostazione('messaggio_auguri'),
+      dbSelect({ table: 'carte_sconto', columns: 'cliente_id, usa_e_getta, attiva', filters: [{ col: 'cliente_id', op: 'not_null' }, { col: 'attiva', op: 'eq', val: true }] }),
+      dbSelect({ table: 'carte_premium', columns: 'cliente_id, saldo, attiva', filters: [{ col: 'deleted_at', op: 'is_null' }] }),
+      dbSelect({ table: 'assenze_parrucchieri', columns: 'parrucchiere_id, data_inizio, data_fine, ora_inizio', filters: [{ col: 'data_inizio', op: 'lte', val: dateStr }, { col: 'data_fine', op: 'gte', val: dateStr }] })
     ]);
 
-    if (impost?.valore) setMessaggioAuguri(impost.valore);
-    setParrucchieri((parr || []) as Parrucchiere[]);
-    setAppuntamenti((app || []) as Appuntamento[]);
+    if (impostRes) setMessaggioAuguri(impostRes);
+    setParrucchieri((parrRes.data || []) as Parrucchiere[]);
+    setAppuntamenti((appRes.data || []) as Appuntamento[]);
 
     const carteMap = new Map<string, Set<string>>();
     const addCarta = (clienteId: string, tipo: string) => {
       if (!carteMap.has(clienteId)) carteMap.set(clienteId, new Set());
       carteMap.get(clienteId)!.add(tipo);
     };
-    for (const r of (sc || []) as { cliente_id: string; usa_e_getta: boolean }[]) {
+    for (const r of (scRes.data || []) as { cliente_id: string; usa_e_getta: boolean }[]) {
       if (r.cliente_id) addCarta(r.cliente_id, r.usa_e_getta ? 'sconto_ueg' : 'sconto_normale');
     }
-    for (const r of (pr || []) as { cliente_id: string; saldo: number; attiva: boolean }[]) {
+    for (const r of (prRes.data || []) as { cliente_id: string; saldo: number; attiva: boolean }[]) {
       if (r.cliente_id) addCarta(r.cliente_id, (r.saldo <= 0 || !r.attiva) ? 'premium_vuota' : 'premium');
     }
     setClientiCarte(carteMap);
 
     const aMap = new Map<string, string | null>();
-    for (const a of (ass || []) as Assenza[]) {
+    for (const a of (assRes.data || []) as Assenza[]) {
       const ora = a.ora_inizio ? a.ora_inizio.substring(0, 5) : null;
       if (!aMap.has(a.parrucchiere_id) || aMap.get(a.parrucchiere_id) !== null) {
         aMap.set(a.parrucchiere_id, ora);
@@ -161,12 +170,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
     const dayMM = String(date.getMonth() + 1).padStart(2, '0');
     const dayDD = String(date.getDate()).padStart(2, '0');
-    const { data: tuttiClienti } = await supabase
-      .from('clienti')
-      .select('id, nome, cognome, telefono, data_nascita')
-      .not('data_nascita', 'is', null);
+    const tuttiClientiRes = await dbSelect({
+      table: 'clienti',
+      columns: 'id, nome, cognome, telefono, data_nascita',
+      filters: [{ col: 'data_nascita', op: 'not_null' }]
+    });
     const uniciBirthday = new Map<string, { nome: string; cognome: string; telefono?: string }>();
-    for (const c of (tuttiClienti || []) as { id: string; nome: string; cognome: string; telefono?: string; data_nascita: string }[]) {
+    for (const c of (tuttiClientiRes.data || []) as { id: string; nome: string; cognome: string; telefono?: string; data_nascita: string }[]) {
       const [, mm, dd] = c.data_nascita.split('-');
       if (mm === dayMM && dd === dayDD) uniciBirthday.set(c.id, { nome: c.nome, cognome: c.cognome, telefono: c.telefono || undefined });
     }
@@ -179,7 +189,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   async function saveMessaggio() {
     setSavingMsg(true);
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('impostazioni').upsert({ chiave: 'messaggio_auguri', valore: msgDraft, updated_at: new Date().toISOString(), user_id: user?.id }, { onConflict: 'chiave,user_id' });
+    await setImpostazione('messaggio_auguri', msgDraft, user?.id);
     setMessaggioAuguri(msgDraft);
     setSavingMsg(false);
     setEditingMsg(false);
@@ -241,14 +251,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   }
 
   async function deleteAppuntamento(id: string) {
-    await supabase.from('appuntamenti').delete().eq('id', id);
+    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
     setConfirmDelete(null);
     load();
   }
 
   async function updateParrName() {
     if (!editingParr.id || !editingParr.nome.trim()) return;
-    await supabase.from('parrucchieri').update({ nome: editingParr.nome.trim(), colore: editingParr.colore }).eq('id', editingParr.id);
+    await dbUpdate({ table: 'parrucchieri', id: editingParr.id, data: { nome: editingParr.nome.trim(), colore: editingParr.colore } });
     setEditingParr({ open: false, nome: '', colore: '' });
     load();
   }
@@ -356,10 +366,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
     cancelDrag();
 
-    await supabase.from('appuntamenti').update({
-      data_ora: newTime.toISOString(),
-      parrucchiere_id: currentParrId,
-    }).eq('id', appId);
+    await dbUpdate({
+      table: 'appuntamenti',
+      id: appId,
+      data: {
+        data_ora: newTime.toISOString(),
+        parrucchiere_id: currentParrId
+      }
+    });
 
     savingDrag.current = false;
     load();

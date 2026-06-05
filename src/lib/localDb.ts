@@ -253,6 +253,116 @@ export async function dbUpsertMany<T = Record<string, unknown>>(args: {
   }
 }
 
+// ─── SELECT WITH RELATED (JOIN) ───────────────────────────────────────────────
+
+export interface DbRelation {
+  key: string;       // key in result object (e.g. "clienti")
+  table: string;     // related table name
+  fk: string;        // FK column in primary row (e.g. "cliente_id") — for many-to-one
+  pk?: string;       // PK in related table (default "id")
+  columns?: string;  // columns to fetch from related table (default "*")
+  many?: boolean;    // true = one-to-many: FK is in related table pointing back
+  manyFk?: string;   // FK column in related table (used when many=true, e.g. "appuntamento_id")
+}
+
+/**
+ * Fetches the primary table and attaches related records.
+ * Electron: two separate queries + JS merge (avoids raw SQL complexity).
+ * Browser: builds Supabase nested select via supabaseSelect string.
+ */
+export async function dbSelectWithRelated<T = Record<string, unknown>>(args: {
+  table: string;
+  columns?: string;
+  filters?: DbFilter[];
+  orderBy?: DbOrder[];
+  relations: DbRelation[];
+  supabaseSelect: string; // used in browser/Supabase mode, e.g. "*, clienti(nome, cognome)"
+}): Promise<DbResult<T[]>> {
+  if (isElectron()) {
+    // Step 1: fetch primary rows
+    const primaryRes = await dbSelect<Record<string, unknown>>({
+      table: args.table,
+      columns: args.columns,
+      filters: args.filters,
+      orderBy: args.orderBy,
+    });
+    if (primaryRes.error || !primaryRes.data) return { data: null, error: primaryRes.error };
+    const rows = primaryRes.data as Record<string, unknown>[];
+
+    // Step 2: for each relation, fetch related rows and attach
+    for (const rel of args.relations) {
+      const pk = rel.pk ?? 'id';
+
+      if (!rel.many) {
+        // Many-to-one: FK in primary row
+        const fkValues = [...new Set(rows.map(r => r[rel.fk]).filter(Boolean))] as unknown[];
+        if (fkValues.length === 0) {
+          for (const r of rows) r[rel.key] = null;
+          continue;
+        }
+        const relRes = await dbSelect<Record<string, unknown>>({
+          table: rel.table,
+          columns: rel.columns,
+          filters: [{ col: pk, op: 'in', val: fkValues }],
+        });
+        const relMap = new Map((relRes.data ?? []).map(r => [r[pk], r]));
+        for (const r of rows) {
+          r[rel.key] = relMap.get(r[rel.fk]) ?? null;
+        }
+      } else {
+        // One-to-many: FK is in related table
+        const manyFk = rel.manyFk ?? `${args.table.replace(/s$/, '')}_id`;
+        const primaryIds = rows.map(r => r.id).filter(Boolean) as unknown[];
+        if (primaryIds.length === 0) {
+          for (const r of rows) r[rel.key] = [];
+          continue;
+        }
+        const relRes = await dbSelect<Record<string, unknown>>({
+          table: rel.table,
+          columns: rel.columns,
+          filters: [{ col: manyFk, op: 'in', val: primaryIds }],
+        });
+        const relMap = new Map<unknown, Record<string, unknown>[]>();
+        for (const rel2 of (relRes.data ?? [])) {
+          const parentId = rel2[manyFk];
+          if (!relMap.has(parentId)) relMap.set(parentId, []);
+          relMap.get(parentId)!.push(rel2);
+        }
+        for (const r of rows) {
+          r[rel.key] = relMap.get(r.id) ?? [];
+        }
+      }
+    }
+
+    return { data: rows as T[], error: null };
+  }
+
+  // Browser: Supabase with nested select
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from(args.table).select(args.supabaseSelect);
+    for (const f of (args.filters || [])) {
+      if (f.op === 'is_null') { q = q.is(f.col, null); }
+      else if (f.op === 'not_null') { q = q.not(f.col, 'is', null); }
+      else if (f.op === 'in') { q = q.in(f.col, f.val as unknown[]); }
+      else if (f.op === 'eq' || f.op === '=') { q = q.eq(f.col, f.val); }
+      else if (f.op === 'neq' || f.op === '!=') { q = q.neq(f.col, f.val); }
+      else if (f.op === 'gte' || f.op === '>=') { q = q.gte(f.col, f.val); }
+      else if (f.op === 'lte' || f.op === '<=') { q = q.lte(f.col, f.val); }
+      else if (f.op === '>') { q = q.gt(f.col, f.val); }
+      else if (f.op === '<') { q = q.lt(f.col, f.val); }
+      else if (f.op === 'like') { q = q.like(f.col, f.val as string); }
+    }
+    for (const o of (args.orderBy || [])) {
+      q = q.order(o.col, { ascending: o.asc !== false });
+    }
+    const { data, error } = await q;
+    return { data: (data as T[]) ?? null, error: error?.message ?? null };
+  } catch (e) {
+    return { data: null, error: String(e) };
+  }
+}
+
 // ─── COUNT ────────────────────────────────────────────────────────────────────
 
 export async function dbCount(args: {

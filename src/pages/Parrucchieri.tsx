@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, CreditCard as Edit2, Trash2, X, Check, Calendar, UserX } from 'lucide-react';
 import { supabase, type Parrucchiere } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
 
@@ -40,15 +41,15 @@ export default function Parrucchieri() {
 
   const loadParrucchieri = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('parrucchieri').select('*').is('deleted_at', null).order('nome');
-    setParrucchieri((data || []) as Parrucchiere[]);
+    const res = await dbSelect({ table: 'parrucchieri', columns: '*', filters: [{col:'deleted_at', op:'is_null'}], orderBy: [{col:'nome'}] });
+    setParrucchieri((res.data || []) as Parrucchiere[]);
     setLoading(false);
   }, []);
 
   async function loadAssenze() {
     setAssenzeLoading(true);
-    const { data } = await supabase.from('assenze_parrucchieri').select('*').order('data_inizio', { ascending: false });
-    setAssenze((data || []) as Assenza[]);
+    const res = await dbSelect({ table: 'assenze_parrucchieri', columns: '*', orderBy: [{col:'data_inizio', asc:false}] });
+    setAssenze((res.data || []) as Assenza[]);
     setAssenzeLoading(false);
   }
 
@@ -75,9 +76,9 @@ export default function Parrucchieri() {
     setError('');
     const payload = { nome: form.nome.trim(), colore: form.colore };
     if (modal.id) {
-      await supabase.from('parrucchieri').update(payload).eq('id', modal.id);
+      await dbUpdate({ table: 'parrucchieri', id: modal.id, data: payload });
     } else {
-      await supabase.from('parrucchieri').insert({ ...payload, attivo: true, user_id: user?.id });
+      await dbInsert({ table: 'parrucchieri', data: { ...payload, attivo: true, user_id: user?.id } });
     }
     setSaving(false);
     setModal({ open: false });
@@ -85,7 +86,7 @@ export default function Parrucchieri() {
   }
 
   async function toggleAttivo(p: Parrucchiere) {
-    await supabase.from('parrucchieri').update({ attivo: !p.attivo }).eq('id', p.id);
+    await dbUpdate({ table: 'parrucchieri', id: p.id, data: { attivo: !p.attivo } });
     loadParrucchieri();
   }
 
@@ -94,7 +95,7 @@ export default function Parrucchieri() {
   }
 
   async function eseguiEliminaParr(id: string) {
-    await supabase.from('parrucchieri').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await dbUpdate({ table: 'parrucchieri', id, data: { deleted_at: new Date().toISOString() } });
     setEliminaParrGate(null);
     loadParrucchieri();
   }
@@ -110,16 +111,19 @@ export default function Parrucchieri() {
       return;
     }
     setSavingAssenza(true);
-    const { error: e } = await supabase.from('assenze_parrucchieri').insert({
-      parrucchiere_id: assenzaForm.parrucchiere_id,
-      data_inizio: assenzaForm.data_inizio,
-      data_fine: assenzaForm.data_fine,
-      ora_inizio: assenzaForm.ora_inizio || null,
-      note: assenzaForm.note,
-      user_id: user?.id,
+    const res = await dbInsert({
+      table: 'assenze_parrucchieri',
+      data: {
+        parrucchiere_id: assenzaForm.parrucchiere_id,
+        data_inizio: assenzaForm.data_inizio,
+        data_fine: assenzaForm.data_fine,
+        ora_inizio: assenzaForm.ora_inizio || null,
+        note: assenzaForm.note,
+        user_id: user?.id,
+      }
     });
     setSavingAssenza(false);
-    if (e) { setAssenzaError(e.message); return; }
+    if (res.error) { setAssenzaError(res.error); return; }
     setShowAssenzaForm(false);
     setAssenzaForm({ parrucchiere_id: '', data_inizio: '', data_fine: '', ora_inizio: '', note: '' });
     loadAssenze();
@@ -127,7 +131,7 @@ export default function Parrucchieri() {
 
   async function eliminaAssenza(id: string) {
     if (!confirm('Eliminare questa assenza?')) return;
-    await supabase.from('assenze_parrucchieri').delete().eq('id', id);
+    await dbDelete({ table: 'assenze_parrucchieri', filters: [{col:'id', op:'eq', val:id}] });
     loadAssenze();
   }
 

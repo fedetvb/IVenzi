@@ -4,6 +4,7 @@ import {
   Euro, Package, BarChart2, Check, Download, GitCompare, Scissors,
 } from 'lucide-react';
 import { supabase, localDateStr } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -614,12 +615,13 @@ function NuovaVenditaModal({ parrucchieri, parrucchierePreselezionato, onClose, 
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    supabase.from('prodotti_rivendita_catalogo')
-      .select('id, nome, marca, categoria, prezzo_acquisto, prezzo_vendita')
-      .eq('attivo', true)
-      .order('categoria')
-      .order('nome')
-      .then(({ data }) => setCatalogo((data || []) as ProdottoCatalogo[]));
+    const { data } = dbSelect<ProdottoCatalogo>({
+      table: 'prodotti_rivendita_catalogo',
+      columns: ['id', 'nome', 'marca', 'categoria', 'prezzo_acquisto', 'prezzo_vendita'],
+      filters: [{ col: 'attivo', op: 'eq', val: true }],
+      orderBy: [{ col: 'categoria' }, { col: 'nome' }],
+    });
+    setCatalogo((data || []) as ProdottoCatalogo[]);
   }, []);
 
   useEffect(() => {
@@ -651,15 +653,18 @@ function NuovaVenditaModal({ parrucchieri, parrucchierePreselezionato, onClose, 
   async function save() {
     if (!form.nome_prodotto || !form.parrucchiere_id) return;
     setSaving(true);
-    await supabase.from('rivendita_prodotti').insert({
-      parrucchiere_id: form.parrucchiere_id,
-      nome_prodotto: form.nome_prodotto,
-      quantita: form.quantita,
-      prezzo_unitario: form.prezzo_unitario,
-      costo_unitario: form.costo_unitario,
-      data_vendita: form.data_vendita,
-      note: form.note,
-      user_id: user?.id,
+    dbInsert({
+      table: 'rivendita_prodotti',
+      data: {
+        parrucchiere_id: form.parrucchiere_id,
+        nome_prodotto: form.nome_prodotto,
+        quantita: form.quantita,
+        prezzo_unitario: form.prezzo_unitario,
+        costo_unitario: form.costo_unitario,
+        data_vendita: form.data_vendita,
+        note: form.note,
+        user_id: user?.id,
+      },
     });
     setSaving(false);
     onSaved();
@@ -1375,11 +1380,20 @@ export default function Rivendita() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: parr }, { data: vend }, { data: tratt }] = await Promise.all([
-      supabase.from('parrucchieri').select('*').eq('attivo', true).order('nome'),
-      supabase.from('rivendita_prodotti').select('*').is('deleted_at', null).order('data_vendita', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('trattamenti_eseguiti').select('*').order('data_esecuzione', { ascending: false }).order('created_at', { ascending: false }),
-    ]);
+    const { data: parr } = dbSelect<Parrucchiere>({
+      table: 'parrucchieri',
+      filters: [{ col: 'attivo', op: 'eq', val: true }],
+      orderBy: [{ col: 'nome' }],
+    });
+    const { data: vend } = dbSelect<Vendita>({
+      table: 'rivendita_prodotti',
+      filters: [{ col: 'deleted_at', op: 'is_null' }],
+      orderBy: [{ col: 'data_vendita', asc: false }, { col: 'created_at', asc: false }],
+    });
+    const { data: tratt } = dbSelect<Trattamento>({
+      table: 'trattamenti_eseguiti',
+      orderBy: [{ col: 'data_esecuzione', asc: false }, { col: 'created_at', asc: false }],
+    });
     const parrList = (parr || []) as Parrucchiere[];
     const vendList = (vend || []) as Vendita[];
     const trattList = (tratt || []) as Trattamento[];
@@ -1433,7 +1447,11 @@ export default function Rivendita() {
 
   async function deleteVendita(id: string) {
     if (!confirm('Eliminare questa vendita?')) return;
-    await supabase.from('rivendita_prodotti').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    dbUpdate({
+      table: 'rivendita_prodotti',
+      id,
+      data: { deleted_at: new Date().toISOString() },
+    });
     load();
   }
 

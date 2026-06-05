@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Search, Send, CheckSquare, Square, MessageSquare, Users, Phone, List, X, BookOpen, ChevronDown } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { dbSelect } from '../lib/localDb';
 
 interface Cliente {
   id: string;
@@ -38,8 +38,20 @@ export default function Comunicazioni() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from('clienti').select('id, nome, cognome, telefono').not('telefono', 'is', null).neq('telefono', '').order('cognome'),
-      supabase.from('template_messaggi_comunicazioni').select('id, nome, testo, is_default, ordine').order('ordine'),
+      dbSelect({
+        table: 'clienti',
+        columns: 'id, nome, cognome, telefono',
+        filters: [
+          { col: 'telefono', op: 'not_null' },
+          { col: 'telefono', op: 'neq', val: '' }
+        ],
+        orderBy: [{ col: 'cognome', asc: true }],
+      }),
+      dbSelect({
+        table: 'template_messaggi_comunicazioni',
+        columns: 'id, nome, testo, is_default, ordine',
+        orderBy: [{ col: 'ordine', asc: true }],
+      }),
     ]).then(([{ data: c }, { data: t }]) => {
       setClienti((c || []) as Cliente[]);
       setTemplates((t || []) as TemplateComunicazione[]);

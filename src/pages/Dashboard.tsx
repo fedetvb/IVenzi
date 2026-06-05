@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Users, Clock, ChevronRight } from 'lucide-react';
 import { supabase, type Appuntamento, type Cliente } from '../lib/supabase';
+import { dbSelect, dbSelectWithRelated } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
 
 function useItalianTime() {
@@ -43,19 +44,54 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     const inizioSettimana = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - giornoSettimana).toISOString();
     const fineSettimana = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - giornoSettimana + 6, 23, 59, 59).toISOString();
 
-    const [{ count: countOggi }, { count: countSettimana }, { count: countClienti }, { data: appOggi }] = await Promise.all([
-      supabase.from('appuntamenti').select('*', { count: 'exact', head: true }).gte('data_ora', inizioOggi).lte('data_ora', fineOggi).neq('stato', 'cancellato'),
-      supabase.from('appuntamenti').select('*', { count: 'exact', head: true }).gte('data_ora', inizioSettimana).lte('data_ora', fineSettimana).neq('stato', 'cancellato'),
-      supabase.from('clienti').select('*', { count: 'exact', head: true }),
-      supabase.from('appuntamenti').select('*, clienti(nome, cognome)').gte('data_ora', inizioOggi).lte('data_ora', fineOggi).neq('stato', 'cancellato').order('data_ora'),
-    ]);
+    const { data: appOggiData } = dbSelect<Appuntamento>({
+      table: 'appuntamenti',
+      filters: [
+        { col: 'data_ora', op: 'gte', val: inizioOggi },
+        { col: 'data_ora', op: 'lte', val: fineOggi },
+        { col: 'stato', op: 'neq', val: 'cancellato' },
+      ],
+      orderBy: [{ col: 'data_ora' }],
+    });
+
+    const { data: appSettimanaData } = dbSelect<Appuntamento>({
+      table: 'appuntamenti',
+      filters: [
+        { col: 'data_ora', op: 'gte', val: inizioSettimana },
+        { col: 'data_ora', op: 'lte', val: fineSettimana },
+        { col: 'stato', op: 'neq', val: 'cancellato' },
+      ],
+    });
+
+    const { data: clientiData } = dbSelect({
+      table: 'clienti',
+    });
+
+    const countOggi = appOggiData?.length || 0;
+    const countSettimana = appSettimanaData?.length || 0;
+    const countClienti = clientiData?.length || 0;
+
+    // Fetch cliente data for appuntamenti with relations
+    const appOggiWithClienti: (Appuntamento & { clienti?: Cliente })[] = [];
+    if (appOggiData) {
+      for (const app of appOggiData) {
+        const { data: clienteData } = dbSelect<Cliente>({
+          table: 'clienti',
+          filters: [{ col: 'id', op: 'eq', val: app.cliente_id }],
+        });
+        appOggiWithClienti.push({
+          ...app,
+          clienti: clienteData?.[0],
+        });
+      }
+    }
 
     setStats({
-      appuntamentiOggi: countOggi || 0,
-      appuntamentiSettimana: countSettimana || 0,
-      totaleClienti: countClienti || 0,
+      appuntamentiOggi: countOggi,
+      appuntamentiSettimana: countSettimana,
+      totaleClienti: countClienti,
     });
-    setAppuntamentiOggi((appOggi || []) as Appuntamento[]);
+    setAppuntamentiOggi(appOggiWithClienti);
     setLoading(false);
   }
 
