@@ -853,22 +853,6 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                         return `linear-gradient(to bottom, ${baseColor} ${safeStart}px, ${hexToRgba(baseColor, 0.28)} ${safeStart}px, ${hexToRgba(baseColor, 0.28)} ${safeEnd}px, ${baseColor} ${safeEnd}px)`;
                       })();
 
-                      // Compute content zone: pick the largest solid region (before or after posa)
-                      const contentZone: React.CSSProperties = (() => {
-                        if (!posaCfg) return {};
-                        const h = app.heightPx - 2;
-                        const safeStart = Math.max(0, Math.min(posaCfg.inizio_posa * pxPerMin, h));
-                        const safeEnd = Math.max(safeStart, Math.min((posaCfg.inizio_posa + posaCfg.durata_posa) * pxPerMin, h));
-                        const zone1 = safeStart;
-                        const zone2 = h - safeEnd;
-                        if (zone1 >= zone2) {
-                          return { position: 'absolute', top: 0, left: 0, right: 0, height: zone1 };
-                        } else {
-                          return { position: 'absolute', bottom: 0, left: 0, right: 0, height: zone2 };
-                        }
-                      })();
-                      const hasContentZone = Object.keys(contentZone).length > 0;
-
                       return (
                         <div
                           key={app.id}
@@ -918,13 +902,10 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                             <div className="absolute inset-0 pointer-events-none opacity-0 group-hover/app:opacity-100 transition-opacity" style={{ boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.5)' }} />
                           )}
 
-                          <div
-                            className={`z-10 px-2 py-1 overflow-hidden flex flex-col justify-between ${hasContentZone ? '' : 'relative h-full'}`}
-                            style={hasContentZone ? contentZone : undefined}
-                          >
+                          <div className="relative z-10 px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-1 min-w-0">
-                                <p className={`font-semibold leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100)}rem` }}>
+                                <p className={`font-semibold leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100)}rem`, textShadow: posaCfg ? '0 1px 3px rgba(0,0,0,0.45)' : undefined }}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                 </p>
                                 {carteTipi && carteTipi.size > 0 && (
@@ -955,13 +936,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 )}
                               </div>
                               {!shortBlock && tratt.length > 0 && (
-                                <p className="text-white/75 truncate leading-tight mt-0.5" style={{ fontSize: `${0.64 * (fontSize / 100)}rem` }}>
+                                <p className="text-white/75 truncate leading-tight mt-0.5" style={{ fontSize: `${0.64 * (fontSize / 100)}rem`, textShadow: posaCfg ? '0 1px 3px rgba(0,0,0,0.45)' : undefined }}>
                                   {tratt.map(t => t.nome_trattamento).join(', ')}
                                 </p>
                               )}
                             </div>
                             {!shortBlock && (
-                              <p className="text-white/60 leading-none" style={{ fontSize: `${0.62 * (fontSize / 100)}rem` }}>
+                              <p className="text-white/60 leading-none" style={{ fontSize: `${0.62 * (fontSize / 100)}rem`, textShadow: posaCfg ? '0 1px 3px rgba(0,0,0,0.45)' : undefined }}>
                                 {new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · {app.durata_minuti}min
                               </p>
                             )}
