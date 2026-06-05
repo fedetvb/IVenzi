@@ -168,6 +168,15 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione schede_colore colonne:', e.message); }
 
+  // Add tipo column to trattamenti_catalogo if missing
+  try {
+    const tratCols = db.prepare("PRAGMA table_info(trattamenti_catalogo)").all().map(c => c.name);
+    if (!tratCols.includes('tipo')) {
+      db.exec("ALTER TABLE trattamenti_catalogo ADD COLUMN tipo TEXT NOT NULL DEFAULT 'servizio'");
+      console.log('[DB] Migrazione: aggiunta colonna tipo a trattamenti_catalogo');
+    }
+  } catch(e) { console.warn('[DB] migrazione trattamenti_catalogo tipo:', e.message); }
+
   // Create incassi_giornalieri table if missing (was previously named 'incassi')
   try {
     const igExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='incassi_giornalieri'").get();
@@ -207,7 +216,8 @@ function createSchema() {
     CREATE TABLE IF NOT EXISTS trattamenti_catalogo (
       id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', descrizione TEXT DEFAULT '',
       durata_minuti INTEGER NOT NULL DEFAULT 60, prezzo REAL NOT NULL DEFAULT 0,
-      colore TEXT NOT NULL DEFAULT '#888888', attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT,
+      colore TEXT NOT NULL DEFAULT '#888888', attivo INTEGER NOT NULL DEFAULT 1,
+      tipo TEXT NOT NULL DEFAULT 'servizio', user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );

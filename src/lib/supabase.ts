@@ -52,6 +52,7 @@ export interface TrattamentoCatalogo {
   prezzo: number;
   colore: string;
   attivo: boolean;
+  tipo: 'servizio' | 'trattamento';
   created_at: string;
 }
 

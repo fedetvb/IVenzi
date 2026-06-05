@@ -140,6 +140,7 @@ function FichesTab() {
   const [gruppi, setGruppi] = useState<ClienteGruppo[]>([]);
   const [voceExtraCatalogo, setVoceExtraCatalogo] = useState<VoceExtra[]>([]);
   const [serviziCatalogo, setServiziCatalogo] = useState<ServizioSemplice[]>([]);
+  const [trattamentiCatalogo, setTrattamentiCatalogo] = useState<ServizioSemplice[]>([]);
   const [parrucchieri, setParrucchieri] = useState<ParrucchiereSimple[]>([]);
   const [loading, setLoading] = useState(true);
   const [openCard, setOpenCard] = useState<string | null>(null);
@@ -163,7 +164,7 @@ function FichesTab() {
     const start = startLocal.toISOString();
     const end   = endLocal.toISOString();
 
-    const [appsRes, voceExtraRes, parrRes, serviziRes] = await Promise.all([
+    const [appsRes, voceExtraRes, parrRes, serviziRes, trattamentiRes] = await Promise.all([
       dbSelectWithRelated<RawAppuntamento>({
         table: 'appuntamenti',
         filters: [
@@ -181,12 +182,14 @@ function FichesTab() {
       }),
       dbSelect({ table: 'voci_extra_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
       dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
-      dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
+      dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }, { col: 'tipo', op: 'eq', val: 'servizio' }], orderBy: [{ col: 'nome', asc: true }] }),
+      dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }, { col: 'tipo', op: 'eq', val: 'trattamento' }], orderBy: [{ col: 'nome', asc: true }] }),
     ]);
     const apps = appsRes.data;
     const voceExtra = voceExtraRes.data;
     const parr = parrRes.data;
     const servizi = serviziRes.data;
+    const trattamenti = trattamentiRes.data;
 
     const appList = (apps || []) as RawAppuntamento[];
     const appIds = appList.map(a => a.id);
@@ -307,6 +310,7 @@ function FichesTab() {
     }));
     setVoceExtraCatalogo((voceExtra || []) as VoceExtra[]);
     setServiziCatalogo((servizi || []) as ServizioSemplice[]);
+    setTrattamentiCatalogo((trattamenti || []) as ServizioSemplice[]);
     setParrucchieri((parr || []) as ParrucchiereSimple[]);
 
     // Carica mappa carte per i clienti del giorno
@@ -562,6 +566,7 @@ function FichesTab() {
             selectedDate={selectedDate}
             voceExtraCatalogo={voceExtraCatalogo}
             serviziCatalogo={serviziCatalogo}
+            trattamentiCatalogo={trattamentiCatalogo}
             parrucchieri={parrucchieri}
             isOpen={openCard === g.clienteId}
             onToggle={() => setOpenCard(prev => prev === g.clienteId ? null : g.clienteId)}
@@ -842,6 +847,7 @@ interface FicheCardProps {
   selectedDate: string;
   voceExtraCatalogo: VoceExtra[];
   serviziCatalogo: ServizioSemplice[];
+  trattamentiCatalogo: ServizioSemplice[];
   parrucchieri: ParrucchiereSimple[];
   isOpen: boolean;
   showImporti: boolean;
@@ -860,7 +866,7 @@ interface CartaPremiumSimple {
   id: string; codice: string; saldo: number; attiva?: boolean;
 }
 
-function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, parrucchieri, isOpen, onToggle, onSaved, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
+function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, trattamentiCatalogo, parrucchieri, isOpen, onToggle, onSaved, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
   const { user } = useAuth();
   const [voci, setVoci] = useState<FicheVoce[]>([]);
   const [note, setNote] = useState('');
@@ -1613,21 +1619,41 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Aggiungi al conto</p>
 
             {/* Servizi e Prodotti */}
-            <div>
-              <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Servizi e Prodotti</p>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => { setShowServiziPicker(true); setCercaServizio(''); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-stone-300 bg-stone-50 text-stone-700 hover:bg-stone-100 hover:border-stone-400 transition-all hover:shadow-sm active:scale-95"
-                >
-                  <Scissors size={10} />
-                  Trattamenti
-                </button>
-                <button type="button" onClick={() => openRivenditaPicker()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-orange-300 bg-orange-50 text-orange-600 hover:bg-orange-100 hover:border-orange-400 transition-all hover:shadow-sm active:scale-95"
-                >
-                  <ShoppingBag size={10} />
-                  Prodotti Rivendita
-                </button>
+            <div className="space-y-2">
+              {/* Servizi inline */}
+              {serviziCatalogo.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Servizi</p>
+                  <div className="flex flex-wrap gap-2">
+                    {serviziCatalogo.map(s => (
+                      <button key={s.id} type="button" onClick={() => addVoceServizio(s)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:shadow-sm active:scale-95"
+                        style={{ borderColor: s.colore, backgroundColor: `${s.colore}15`, color: s.colore }}
+                      >
+                        <Plus size={10} />
+                        {s.nome}{s.prezzo > 0 && <span className="opacity-70"> €{s.prezzo.toFixed(0)}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Trattamenti e Prodotti → modale */}
+              <div>
+                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Trattamenti e prodotti</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => { setShowServiziPicker(true); setCercaServizio(''); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-stone-300 bg-stone-50 text-stone-700 hover:bg-stone-100 hover:border-stone-400 transition-all hover:shadow-sm active:scale-95"
+                  >
+                    <Scissors size={10} />
+                    Trattamenti
+                  </button>
+                  <button type="button" onClick={() => openRivenditaPicker()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-orange-300 bg-orange-50 text-orange-600 hover:bg-orange-100 hover:border-orange-400 transition-all hover:shadow-sm active:scale-95"
+                  >
+                    <ShoppingBag size={10} />
+                    Prodotti Rivendita
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1710,7 +1736,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
                   </div>
                   <div className="px-5 pb-5 overflow-y-auto">
                     <div className="flex flex-wrap gap-2">
-                      {serviziCatalogo.filter(s => {
+                      {trattamentiCatalogo.filter(s => {
                         if (!cercaServizio.trim()) return true;
                         return s.nome.toLowerCase().includes(cercaServizio.toLowerCase());
                       }).map(s => (
@@ -1724,7 +1750,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
                           {s.prezzo > 0 && <span className="opacity-70 font-bold">€{s.prezzo.toFixed(0)}</span>}
                         </button>
                       ))}
-                      {serviziCatalogo.filter(s => !cercaServizio.trim() || s.nome.toLowerCase().includes(cercaServizio.toLowerCase())).length === 0 && (
+                      {trattamentiCatalogo.filter(s => !cercaServizio.trim() || s.nome.toLowerCase().includes(cercaServizio.toLowerCase())).length === 0 && (
                         <p className="text-sm text-stone-400 italic py-2">Nessun trattamento trovato</p>
                       )}
                     </div>

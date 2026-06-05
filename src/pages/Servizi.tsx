@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, CreditCard as Edit2, Trash2, X, Clock, Euro, BookOpen, Pencil, ShoppingBag, Check } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, X, Clock, Euro, BookOpen, Pencil, ShoppingBag, Check, Scissors } from 'lucide-react';
 import { supabase, localDateStr, type TrattamentoCatalogo } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
@@ -32,7 +32,7 @@ interface VoceExtraForm {
 
 const PRESET_COLORS = ['#EC4899', '#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#F97316', '#06B6D4', '#6B7280'];
 
-type TabView = 'servizi' | 'voci_extra' | 'prodotti_rivendita';
+type TabView = 'servizi' | 'trattamenti' | 'voci_extra' | 'prodotti_rivendita';
 
 interface ProdottoRivenditaCatalogo {
   id: string;
@@ -58,12 +58,19 @@ export default function Servizi() {
 
   return (
     <div className="p-6">
-      <div className="flex gap-1 bg-stone-100 p-1 rounded-xl mb-6 w-fit">
+      <div className="flex gap-1 bg-stone-100 p-1 rounded-xl mb-6 w-fit flex-wrap">
         <button
           onClick={() => setTab('servizi')}
           className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'servizi' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
         >
           Servizi
+        </button>
+        <button
+          onClick={() => setTab('trattamenti')}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${tab === 'trattamenti' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+        >
+          <Scissors size={14} />
+          Trattamenti
         </button>
         <button
           onClick={() => setTab('voci_extra')}
@@ -81,14 +88,15 @@ export default function Servizi() {
         </button>
       </div>
 
-      {tab === 'servizi' && <ServiziTab />}
+      {tab === 'servizi' && <ServiziTab tipo="servizio" />}
+      {tab === 'trattamenti' && <ServiziTab tipo="trattamento" />}
       {tab === 'voci_extra' && <VociExtraTab />}
       {tab === 'prodotti_rivendita' && <ProdottiRivenditaTab />}
     </div>
   );
 }
 
-function ServiziTab() {
+function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
   const { user } = useAuth();
   const [servizi, setServizi] = useState<TrattamentoCatalogo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,12 +105,15 @@ function ServiziTab() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const labelSingolo = tipo === 'trattamento' ? 'trattamento' : 'servizio';
+  const labelPlurale = tipo === 'trattamento' ? 'trattamenti' : 'servizi';
+
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await dbSelect({ table: 'trattamenti_catalogo', columns: '*', orderBy: [{col:'nome'}] });
+    const res = await dbSelect({ table: 'trattamenti_catalogo', columns: '*', filters: [{col:'tipo', op:'eq', val:tipo}], orderBy: [{col:'nome'}] });
     setServizi((res.data || []) as TrattamentoCatalogo[]);
     setLoading(false);
-  }, []);
+  }, [tipo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -126,7 +137,7 @@ function ServiziTab() {
     if (!form.nome.trim()) { setError('Il nome del servizio è obbligatorio'); return; }
     setSaving(true);
     setError('');
-    const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), durata_minuti: form.durata_minuti, prezzo: form.prezzo, colore: form.colore, attivo: form.attivo };
+    const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), durata_minuti: form.durata_minuti, prezzo: form.prezzo, colore: form.colore, attivo: form.attivo, tipo };
     if (modal.id) {
       await dbUpdate({ table: 'trattamenti_catalogo', id: modal.id, data: payload });
     } else {
@@ -151,12 +162,12 @@ function ServiziTab() {
   return (
     <>
       <div className="flex items-center justify-between mb-5">
-        <p className="text-sm text-stone-500">{servizi.length} servizi nel catalogo</p>
+        <p className="text-sm text-stone-500">{servizi.length} {labelPlurale} nel catalogo</p>
         <button
           onClick={openNew}
           className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors"
         >
-          <Plus size={16} /> Nuovo servizio
+          <Plus size={16} /> Nuovo {labelSingolo}
         </button>
       </div>
 
@@ -209,7 +220,7 @@ function ServiziTab() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
               <h2 className="font-bold text-stone-800 text-lg">
-                {modal.id ? 'Modifica Servizio' : 'Nuovo Servizio'}
+                {modal.id ? `Modifica ${labelSingolo}` : `Nuovo ${labelSingolo}`}
               </h2>
               <button onClick={() => setModal({ open: false })} className="text-stone-400 hover:text-stone-700">
                 <X size={20} />
@@ -218,12 +229,12 @@ function ServiziTab() {
             <div className="overflow-auto px-6 py-5 space-y-4 flex-1">
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
               <div>
-                <label className="block text-xs font-semibold text-stone-600 mb-1.5 uppercase tracking-wide">Nome servizio *</label>
+                <label className="block text-xs font-semibold text-stone-600 mb-1.5 uppercase tracking-wide">Nome {labelSingolo} *</label>
                 <input
                   value={form.nome}
                   onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
                   className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  placeholder="es. Taglio donna"
+                  placeholder={tipo === 'trattamento' ? 'es. Colorazione' : 'es. Taglio donna'}
                 />
               </div>
               <div>
@@ -278,7 +289,7 @@ function ServiziTab() {
                   onChange={e => setForm(f => ({ ...f, attivo: e.target.checked }))}
                   className="w-4 h-4 accent-amber-500"
                 />
-                <label htmlFor="attivo-s" className="text-sm text-stone-700">Servizio attivo (visibile nella prenotazione)</label>
+                <label htmlFor="attivo-s" className="text-sm text-stone-700">{tipo === 'trattamento' ? 'Trattamento attivo' : 'Servizio attivo'} (visibile nelle fiches)</label>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-stone-100 flex gap-3 justify-end">
