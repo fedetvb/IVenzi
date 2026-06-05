@@ -144,8 +144,8 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
         ],
         supabaseSelect: '*, clienti(nome, cognome, id)'
       }),
-      dbSelect({ table: 'carte_sconto', columns: 'cliente_id', filters: [{ col: 'cliente_id', op: 'not_null' }] }),
-      dbSelect({ table: 'carte_premium', columns: 'cliente_id' })
+      dbSelect({ table: 'carte_sconto', columns: 'cliente_id', filters: [{ col: 'cliente_id', op: 'not_null' }, { col: 'attiva', op: 'eq', val: true }, { col: 'deleted_at', op: 'is_null' }] }),
+      dbSelect({ table: 'carte_premium', columns: 'cliente_id', filters: [{ col: 'deleted_at', op: 'is_null' }, { col: 'attiva', op: 'eq', val: true }] })
     ]);
     setAppuntamenti((appRes.data || []) as Appuntamento[]);
     const ids = new Set<string>();

@@ -104,7 +104,7 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
 
   async function save() {
     setSaving(true);
-    await dbInsert('carte_sconto', {
+    await dbInsert({ table: 'carte_sconto', data: {
       codice: form.codice,
       descrizione: form.descrizione,
       tipo_sconto: form.tipo_sconto,
@@ -114,7 +114,7 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
       telefono_override: form.telefono_override.trim(),
       nominativa: isNominativa,
       user_id: user?.id,
-    });
+    }});
     setSaving(false);
     onSaved({
       codice: form.codice,
@@ -301,32 +301,44 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
     setSaving(true);
     const cliente = clienti.find(c => c.id === form.cliente_id)!;
     const clienteNome = cliente ? `${cliente.nome} ${cliente.cognome}`.trim() : '';
-    const { data } = await dbInsert('carte_premium', {
+    const { data } = await dbInsert({ table: 'carte_premium', data: {
       codice: form.codice,
       cliente_id: form.cliente_id,
       saldo: form.importo_iniziale,
       note: form.note,
       user_id: user?.id,
-    });
+    }});
     const cartaId = (data as any)?.id;
     if (cartaId && form.importo_iniziale > 0) {
-      await dbInsert('ricariche_carta_premium', {
+      await dbInsert({ table: 'ricariche_carte_premium', data: {
         carta_premium_id: cartaId,
         importo: form.importo_iniziale,
         note: 'Carica iniziale',
         tipo_ricarica: 'standard',
         user_id: user?.id,
-      });
-      await dbInsert('incassi_giornalieri', {
-        data: localDateStr(),
-        fiche_id: null,
-        cliente_nome: clienteNome
-          ? `Creazione carta ${form.codice} - ${clienteNome}`
-          : `Creazione carta ${form.codice}`,
-        importo: prezzoCliente,
-        note: `Nuova carta premium: credito €${form.importo_iniziale}, pagato €${prezzoCliente}`,
+      }});
+      // Fiche automatica già convalidata
+      const ficheRes = await dbInsert({ table: 'fiches', data: {
+        cliente_id: form.cliente_id,
+        convalidata: true,
+        convalidata_at: new Date().toISOString(),
+        importo_convalidato: prezzoCliente,
+        manuale: true,
+        data_riferimento: localDateStr(),
+        note: `Carta premium ${form.codice} - carica iniziale`,
         user_id: user?.id,
-      });
+      }});
+      const ficheId = (ficheRes.data as any)?.id;
+      if (ficheId) {
+        await dbInsert({ table: 'fiche_voci', data: {
+          fiche_id: ficheId,
+          tipo: 'servizio',
+          nome_voce: `Carta premium ${form.codice}`,
+          prezzo: prezzoCliente,
+          ordine: 0,
+          user_id: user?.id,
+        }});
+      }
     }
     setSaving(false);
     onSaved({ codice: form.codice, creditoIniziale: form.importo_iniziale, cliente });
@@ -464,19 +476,33 @@ function RicaricaModal({ carta, onClose, onSaved }: {
     setSaving(true);
     const oggi = localDateStr();
     const clienteNome = carta.clienti ? `${carta.clienti.nome} ${carta.clienti.cognome}`.trim() : '';
-    await dbInsert('ricariche_carta_premium', {
+    await dbInsert({ table: 'ricariche_carte_premium', data: {
       carta_premium_id: carta.id, importo, note, tipo_ricarica: tipo, user_id: user?.id,
-    });
-    await dbUpdate('carte_premium', { saldo: carta.saldo + importo, attiva: true }, [{ col: 'id', op: 'eq', val: carta.id }]);
+    }});
+    await dbUpdate({ table: 'carte_premium', id: carta.id, data: { saldo: carta.saldo + importo, attiva: true } });
     if (tipo === 'standard') {
-      await dbInsert('incassi_giornalieri', {
-        data: oggi,
-        fiche_id: null,
-        cliente_nome: clienteNome ? `Ricarica carta ${carta.codice} - ${clienteNome}` : `Ricarica carta ${carta.codice}`,
-        importo: prezzoCliente,
-        note: `Ricarica carta premium: credito €${importo}, pagato €${prezzoCliente}`,
+      // Fiche automatica già convalidata
+      const ficheRes = await dbInsert({ table: 'fiches', data: {
+        cliente_id: carta.cliente_id,
+        convalidata: true,
+        convalidata_at: new Date().toISOString(),
+        importo_convalidato: prezzoCliente,
+        manuale: true,
+        data_riferimento: oggi,
+        note: `Ricarica carta premium ${carta.codice}`,
         user_id: user?.id,
-      });
+      }});
+      const ficheId = (ficheRes.data as any)?.id;
+      if (ficheId) {
+        await dbInsert({ table: 'fiche_voci', data: {
+          fiche_id: ficheId,
+          tipo: 'servizio',
+          nome_voce: `Ricarica carta premium ${carta.codice}${clienteNome ? ` - ${clienteNome}` : ''}`,
+          prezzo: prezzoCliente,
+          ordine: 0,
+          user_id: user?.id,
+        }});
+      }
     }
     setSaving(false);
     onSaved({ importo, prezzoCliente, nuovoSaldo: carta.saldo + importo, tipo });
@@ -713,12 +739,12 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
   useEffect(() => { load(); }, [load]);
 
   async function toggleAttiva(carta: CartaSconto) {
-    await dbUpdate('carte_sconto', { attiva: !carta.attiva }, [{ col: 'id', op: 'eq', val: carta.id }]);
+    await dbUpdate({ table: 'carte_sconto', id: carta.id, data: { attiva: !carta.attiva } });
     load();
   }
 
   async function confirmDeleteCarta(id: string) {
-    await dbUpdate('carte_sconto', { deleted_at: new Date().toISOString() }, [{ col: 'id', op: 'eq', val: id }]);
+    await dbUpdate({ table: 'carte_sconto', id, data: { deleted_at: new Date().toISOString() } });
     setPendingDeleteId(null);
     load();
   }
@@ -947,12 +973,12 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
   useEffect(() => { load(); }, [load]);
 
   async function toggleAttiva(carta: CartaPremium) {
-    await dbUpdate('carte_premium', { attiva: !carta.attiva }, [{ col: 'id', op: 'eq', val: carta.id }]);
+    await dbUpdate({ table: 'carte_premium', id: carta.id, data: { attiva: !carta.attiva } });
     load();
   }
 
   async function confirmDeleteCarta(id: string) {
-    await dbUpdate('carte_premium', { deleted_at: new Date().toISOString() }, [{ col: 'id', op: 'eq', val: id }]);
+    await dbUpdate({ table: 'carte_premium', id, data: { deleted_at: new Date().toISOString() } });
     setPendingDeleteId(null);
     load();
   }

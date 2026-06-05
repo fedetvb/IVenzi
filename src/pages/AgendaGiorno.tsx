@@ -137,8 +137,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
         supabaseSelect: '*, clienti(id, nome, cognome, data_nascita, telefono), parrucchieri(*), appuntamento_trattamenti(nome_trattamento, prezzo)'
       }),
       getImpostazione('messaggio_auguri'),
-      dbSelect({ table: 'carte_sconto', columns: 'cliente_id, usa_e_getta, attiva', filters: [{ col: 'cliente_id', op: 'not_null' }, { col: 'attiva', op: 'eq', val: true }] }),
-      dbSelect({ table: 'carte_premium', columns: 'cliente_id, saldo, attiva', filters: [{ col: 'deleted_at', op: 'is_null' }] }),
+      dbSelect({ table: 'carte_sconto', columns: 'cliente_id, usa_e_getta, attiva', filters: [{ col: 'cliente_id', op: 'not_null' }, { col: 'attiva', op: 'eq', val: true }, { col: 'deleted_at', op: 'is_null' }] }),
+      dbSelect({ table: 'carte_premium', columns: 'cliente_id, saldo, attiva', filters: [{ col: 'deleted_at', op: 'is_null' }, { col: 'attiva', op: 'eq', val: true }] }),
       dbSelect({ table: 'assenze_parrucchieri', columns: 'parrucchiere_id, data_inizio, data_fine, ora_inizio', filters: [{ col: 'data_inizio', op: 'lte', val: dateStr }, { col: 'data_fine', op: 'gte', val: dateStr }] })
     ]);
 
