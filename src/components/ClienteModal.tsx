@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, Trash2, ShieldOff, ShieldCheck } from 'lucide-react';
 import { type Cliente } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -18,11 +18,13 @@ interface ClienteForm {
   email: string;
   data_nascita: string;
   note: string;
+  in_blacklist: boolean;
+  motivo_blacklist: string;
 }
 
 export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   const { user } = useAuth();
-  const [form, setForm] = useState<ClienteForm>({ nome: '', cognome: '', telefono: '', email: '', data_nascita: '', note: '' });
+  const [form, setForm] = useState<ClienteForm>({ nome: '', cognome: '', telefono: '', email: '', data_nascita: '', note: '', in_blacklist: false, motivo_blacklist: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
@@ -46,6 +48,8 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       email: c.email ?? '',
       data_nascita: c.data_nascita ?? '',
       note: c.note ?? '',
+      in_blacklist: !!c.in_blacklist,
+      motivo_blacklist: c.motivo_blacklist ?? '',
     });
     // Prefer local base64 for preview (works offline)
     setFotoUrl(c.foto_base64 || c.foto_url || '');
@@ -99,6 +103,8 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
           telefono: form.telefono.trim(), email: form.email.trim(),
           data_nascita: form.data_nascita || null, note: form.note.trim(),
           foto_url: '', user_id: user?.id,
+          in_blacklist: form.in_blacklist,
+          motivo_blacklist: form.motivo_blacklist.trim(),
           updated_at: new Date().toISOString(),
         }
       });
@@ -125,6 +131,8 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       telefono: form.telefono.trim(), email: form.email.trim(),
       data_nascita: form.data_nascita || null, note: form.note.trim(),
       foto_url: newFotoUrl,
+      in_blacklist: form.in_blacklist,
+      motivo_blacklist: form.in_blacklist ? form.motivo_blacklist.trim() : '',
       updated_at: new Date().toISOString(),
     };
     if (isElectron() && fotoBase64) {
@@ -260,6 +268,40 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
               className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
               placeholder="Allergie, preferenze, note generali..."
             />
+          </div>
+
+          {/* Blacklist */}
+          <div className={`rounded-xl border p-4 transition-colors ${form.in_blacklist ? 'border-red-300 bg-red-50' : 'border-stone-200'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {form.in_blacklist ? (
+                  <ShieldOff size={16} className="text-red-500" />
+                ) : (
+                  <ShieldCheck size={16} className="text-stone-400" />
+                )}
+                <span className={`text-sm font-semibold ${form.in_blacklist ? 'text-red-700' : 'text-stone-600'}`}>
+                  Lista nera
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setField('in_blacklist', !form.in_blacklist)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${form.in_blacklist ? 'bg-red-500' : 'bg-stone-200'}`}
+              >
+                <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${form.in_blacklist ? 'translate-x-4' : 'translate-x-1'}`} />
+              </button>
+            </div>
+            {form.in_blacklist && (
+              <div className="mt-3">
+                <label className="block text-xs font-semibold text-red-600 mb-1.5 uppercase tracking-wide">Motivo</label>
+                <input
+                  value={form.motivo_blacklist}
+                  onChange={e => setField('motivo_blacklist', e.target.value)}
+                  className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white placeholder:text-red-300"
+                  placeholder="Es: comportamento scorretto, crediti non pagati..."
+                />
+              </div>
+            )}
           </div>
         </div>
 

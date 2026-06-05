@@ -1,0 +1,3 @@
+ALTER TABLE clienti
+  ADD COLUMN IF NOT EXISTS in_blacklist BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS motivo_blacklist TEXT DEFAULT '';

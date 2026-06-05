@@ -79,6 +79,19 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione fiches colonne:', e.message); }
 
+  // Add blacklist columns to clienti
+  try {
+    const clientiColsCheck = db.prepare("PRAGMA table_info(clienti)").all().map(c => c.name);
+    if (!clientiColsCheck.includes('in_blacklist')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN in_blacklist INTEGER NOT NULL DEFAULT 0");
+      console.log('[DB] Migrazione: aggiunta colonna in_blacklist a clienti');
+    }
+    if (!clientiColsCheck.includes('motivo_blacklist')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN motivo_blacklist TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna motivo_blacklist a clienti');
+    }
+  } catch(e) { console.warn('[DB] migrazione clienti blacklist:', e.message); }
+
   // Add foto_base64 and foto_base64_pendente to clienti for offline photo storage
   try {
     const clientiCols = db.prepare("PRAGMA table_info(clienti)").all().map(c => c.name);
@@ -119,6 +132,8 @@ function createSchema() {
       foto_url TEXT DEFAULT '',
       foto_base64 TEXT DEFAULT '',
       foto_base64_pendente TEXT DEFAULT '',
+      in_blacklist INTEGER NOT NULL DEFAULT 0,
+      motivo_blacklist TEXT DEFAULT '',
       user_id TEXT,
       deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),

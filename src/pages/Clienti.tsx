@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar } from 'lucide-react';
+import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar, ShieldOff } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import ClienteModal from '../components/ClienteModal';
@@ -584,18 +584,27 @@ export default function Clienti({ onSelectCliente }: Props) {
                       <div
                         key={c.id}
                         onClick={() => onSelectCliente(c.id)}
-                        className="bg-white rounded-xl border border-stone-200 px-5 py-4 flex items-center gap-4 cursor-pointer hover:border-amber-300 hover:shadow-sm transition-all group"
+                        className={`bg-white rounded-xl border px-5 py-4 flex items-center gap-4 cursor-pointer hover:shadow-sm transition-all group ${c.in_blacklist ? 'border-red-200 bg-red-50/30 hover:border-red-400' : 'border-stone-200 hover:border-amber-300'}`}
                       >
-                        <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-bold text-amber-700">
-                            {c.nome[0]?.toUpperCase()}{c.cognome[0]?.toUpperCase()}
-                          </span>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${c.in_blacklist ? 'bg-red-100' : 'bg-amber-100'}`}>
+                          {c.in_blacklist ? (
+                            <ShieldOff size={16} className="text-red-500" />
+                          ) : (
+                            <span className="text-sm font-bold text-amber-700">
+                              {c.nome[0]?.toUpperCase()}{c.cognome[0]?.toUpperCase()}
+                            </span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="font-semibold text-stone-800 group-hover:text-amber-700 transition-colors">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className={`font-semibold transition-colors ${c.in_blacklist ? 'text-red-700 group-hover:text-red-800' : 'text-stone-800 group-hover:text-amber-700'}`}>
                               {c.cognome} {c.nome}
                             </p>
+                            {c.in_blacklist && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-full uppercase tracking-wide">
+                                <ShieldOff size={9} /> Blacklist
+                              </span>
+                            )}
                             {clientiCarteMap.has(c.id) && (() => {
                               const tipi = clientiCarteMap.get(c.id)!;
                               if (tipi.has('premium')) return <CreditCard size={13} className="text-amber-500 flex-shrink-0" title="Carta premium attiva" />;

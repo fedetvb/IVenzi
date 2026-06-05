@@ -38,6 +38,8 @@ export interface Cliente {
   data_nascita: string | null;
   note: string;
   foto_url: string;
+  in_blacklist: boolean;
+  motivo_blacklist: string | null;
   created_at: string;
   updated_at: string;
 }

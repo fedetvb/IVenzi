@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, ShieldOff, AlertTriangle } from 'lucide-react';
 import { localDateStr, type Cliente, type TrattamentoCatalogo, type StatoAppuntamento, type Parrucchiere } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
@@ -56,6 +56,7 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [blacklistWarning, setBlacklistWarning] = useState<{ motivo: string } | null>(null);
 
   const [clienteSearch, setClienteSearch] = useState('');
   const [clienteDropdown, setClienteDropdown] = useState(false);
@@ -94,7 +95,7 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
 
   async function loadOptions() {
     const [clRes, catRes, parrRes] = await Promise.all([
-      dbSelect({ table: 'clienti', orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome' }),
+      dbSelect({ table: 'clienti', orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome, in_blacklist, motivo_blacklist' }),
       dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
       dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
     ]);
@@ -147,6 +148,11 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     setForm(f => ({ ...f, cliente_id: c.id }));
     setClienteSearch(`${c.cognome} ${c.nome}`);
     setClienteDropdown(false);
+    if (c.in_blacklist) {
+      setBlacklistWarning({ motivo: c.motivo_blacklist || '' });
+    } else {
+      setBlacklistWarning(null);
+    }
   }
 
   const clientiFiltrati = clienteSearch.trim().length > 0
@@ -276,6 +282,22 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
         <div className="overflow-auto px-6 py-4 space-y-5 flex-1 min-h-0">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
+          {/* Avviso blacklist */}
+          {blacklistWarning && (
+            <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 flex gap-3">
+              <ShieldOff size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-red-700">Cliente in lista nera</p>
+                {blacklistWarning.motivo && (
+                  <p className="text-xs text-red-600 mt-0.5">{blacklistWarning.motivo}</p>
+                )}
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertTriangle size={11} /> Puoi comunque procedere con la prenotazione.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Cliente */}
           <div>
             <label className="block text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wide">Cliente *</label>
@@ -300,9 +322,10 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
                       key={c.id}
                       type="button"
                       onMouseDown={e => { e.preventDefault(); selectCliente(c); }}
-                      className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-amber-50 hover:text-amber-700 transition-colors first:rounded-t-xl last:rounded-b-xl"
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors first:rounded-t-xl last:rounded-b-xl flex items-center gap-2 ${c.in_blacklist ? 'text-red-700 hover:bg-red-50' : 'text-stone-700 hover:bg-amber-50 hover:text-amber-700'}`}
                     >
-                      {c.cognome} {c.nome}
+                      <span className="flex-1">{c.cognome} {c.nome}</span>
+                      {c.in_blacklist && <ShieldOff size={12} className="text-red-500 flex-shrink-0" />}
                     </button>
                   ))}
                 </div>
