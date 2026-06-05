@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Plus, Trash2, ChevronDown, User } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, User, ShieldOff, AlertTriangle } from 'lucide-react';
 import { localDateStr, type Cliente, type TrattamentoCatalogo, type Parrucchiere, type StatoAppuntamento } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
@@ -41,6 +41,7 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [blacklistWarning, setBlacklistWarning] = useState<{ motivo: string } | null>(null);
 
   // Data e ora selezionabili dall'utente
   const [dataSelezionata, setDataSelezionata] = useState(
@@ -83,7 +84,7 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
         }),
         dbSelect<Cliente>({
           table: 'clienti',
-          columns: 'id, nome, cognome',
+          columns: 'id, nome, cognome, in_blacklist, motivo_blacklist',
           orderBy: [{ col: 'cognome' }],
         }),
       ]);
@@ -233,10 +234,23 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
     setClienteDropOpen(true);
   }
 
-  function selectCliente(c: Cliente) {
+  async function selectCliente(c: Cliente) {
     setClienteId(c.id);
     setClienteInput(`${c.nome} ${c.cognome}`);
     setClienteDropOpen(false);
+    // Verifica blacklist fresca dal DB (fallback ai dati in memoria se offline)
+    const { data } = await dbSelect<Cliente>({
+      table: 'clienti',
+      columns: 'in_blacklist, motivo_blacklist',
+      filters: [{ col: 'id', op: 'eq', val: c.id }],
+      limit: 1,
+    });
+    const checked = data?.[0] ?? c;
+    if (checked.in_blacklist) {
+      setBlacklistWarning({ motivo: checked.motivo_blacklist || '' });
+    } else {
+      setBlacklistWarning(null);
+    }
   }
 
   async function handleSave() {
@@ -387,6 +401,22 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
         <div className="overflow-auto flex-1 px-6 py-5 space-y-5">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
+          {/* Avviso blacklist */}
+          {blacklistWarning && (
+            <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 flex gap-3">
+              <ShieldOff size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-red-700">Cliente in lista nera</p>
+                {blacklistWarning.motivo && (
+                  <p className="text-xs text-red-600 mt-0.5">{blacklistWarning.motivo}</p>
+                )}
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertTriangle size={11} /> Puoi comunque procedere con la prenotazione.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Cliente */}
           <div ref={clienteRef} className="relative">
             <label className="block text-xs font-semibold text-stone-600 mb-1.5 uppercase tracking-wide">Cliente *</label>
@@ -419,16 +449,20 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
                     key={c.id}
                     type="button"
                     onMouseDown={e => { e.preventDefault(); selectCliente(c); }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-amber-50 transition-colors text-left"
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left ${c.in_blacklist ? 'hover:bg-red-50' : 'hover:bg-amber-50'}`}
                   >
-                    <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[10px] font-bold text-amber-700">
-                        {c.nome[0]}{c.cognome[0]}
-                      </span>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${c.in_blacklist ? 'bg-red-100' : 'bg-amber-100'}`}>
+                      {c.in_blacklist ? (
+                        <ShieldOff size={12} className="text-red-500" />
+                      ) : (
+                        <span className="text-[10px] font-bold text-amber-700">
+                          {c.nome[0]}{c.cognome[0]}
+                        </span>
+                      )}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-stone-800">{c.nome} {c.cognome}</p>
-                      <p className="text-[10px] text-stone-400">Archivio clienti</p>
+                      <p className={`text-sm font-medium ${c.in_blacklist ? 'text-red-700' : 'text-stone-800'}`}>{c.nome} {c.cognome}</p>
+                      <p className="text-[10px] text-stone-400">{c.in_blacklist ? 'Lista nera' : 'Archivio clienti'}</p>
                     </div>
                   </button>
                 ))}
