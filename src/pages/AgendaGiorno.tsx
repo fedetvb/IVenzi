@@ -905,7 +905,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                           <div className="relative z-10 px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-1 min-w-0">
-                                <p className={`font-semibold leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100)}rem`, textShadow: posaCfg ? '0 1px 3px rgba(0,0,0,0.45)' : undefined }}>
+                                <p className={`font-semibold leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' }}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                 </p>
                                 {carteTipi && carteTipi.size > 0 && (
