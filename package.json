@@ -16,6 +16,7 @@
     "electron:dev": "concurrently \"vite\" \"electron .\"",
     "electron:build": "cross-env ELECTRON=true vite build && electron-builder",
     "electron:build:win": "cross-env ELECTRON=true vite build && electron-builder --win",
+    "electron:rebuild": "npx electron-rebuild -f -w better-sqlite3",
     "electron:build:win:cmd": "set ELECTRON=true && npx vite build && npx electron-builder --win",
     "electron:build:mac": "cross-env ELECTRON=true vite build && electron-builder --mac",
     "electron:build:linux": "cross-env ELECTRON=true vite build && electron-builder --linux"
