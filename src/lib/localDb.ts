@@ -9,6 +9,38 @@
 
 import { supabase } from './supabase';
 
+// ─── Compressione immagini ─────────────────────────────────────────────────────
+
+const IMG_MAX_PX = 800;
+const IMG_QUALITY = 0.72;
+
+/** Ridimensiona e comprime un'immagine. Restituisce un Blob JPEG <= ~80 KB. */
+export async function compressImage(source: File | Blob | string): Promise<Blob> {
+  const src = typeof source === 'string' ? source : URL.createObjectURL(source as Blob);
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = src;
+  });
+  if (typeof source !== 'string') URL.revokeObjectURL(src);
+
+  let { naturalWidth: w, naturalHeight: h } = img;
+  if (w > IMG_MAX_PX || h > IMG_MAX_PX) {
+    if (w >= h) { h = Math.round((h / w) * IMG_MAX_PX); w = IMG_MAX_PX; }
+    else { w = Math.round((w / h) * IMG_MAX_PX); h = IMG_MAX_PX; }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+
+  return new Promise<Blob>((res, rej) =>
+    canvas.toBlob(b => b ? res(b) : rej(new Error('canvas toBlob failed')), 'image/jpeg', IMG_QUALITY)
+  );
+}
+
 // Importazione lazy per evitare dipendenza circolare (sync.ts importa localDb.ts)
 let _pushRowNow: ((table: string, row: Record<string, unknown>, userId: string) => Promise<void>) | null = null;
 

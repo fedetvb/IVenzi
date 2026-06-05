@@ -7,7 +7,7 @@
  */
 
 import { supabase } from './supabase';
-import { isElectron } from './localDb';
+import { isElectron, compressImage } from './localDb';
 
 const SYNC_TABLES: string[] = [
   'clienti', 'parrucchieri', 'trattamenti_catalogo', 'appuntamenti',
@@ -157,19 +157,13 @@ async function _uploadPendingPhotos(userId: string): Promise<void> {
     for (const row of rows) {
       try {
         const base64 = row.foto_base64_pendente as string;
-        // Converti data URI in Blob
-        const [header, b64data] = base64.split(',');
-        const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
-        const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
-        const binary = atob(b64data);
-        const arr = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-        const blob = new Blob([arr], { type: mime });
+        // Comprimi prima di uploadare
+        const compressed = await compressImage(base64);
 
-        const filename = `clienti/${row.id}.${ext}`;
+        const filename = `clienti/${row.id}.jpg`;
         const { error: uploadErr } = await supabase.storage
           .from('foto-clienti')
-          .upload(filename, blob, { contentType: mime, upsert: true });
+          .upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
 
         if (uploadErr) {
           console.warn(`[Sync] Upload foto pendente fallito per cliente ${row.id}:`, uploadErr.message);

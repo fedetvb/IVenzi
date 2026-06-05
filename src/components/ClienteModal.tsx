@@ -3,7 +3,7 @@ import { X, Camera, Image as ImageIcon, Trash2, ShieldOff, ShieldCheck } from 'l
 import { type Cliente } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
-import { dbSelect, dbInsert, dbUpdate, isElectron } from '../lib/localDb';
+import { dbSelect, dbInsert, dbUpdate, isElectron, compressImage } from '../lib/localDb';
 
 interface Props {
   clienteId?: string | null;
@@ -55,13 +55,14 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
     setFotoUrl(c.foto_base64 || c.foto_url || '');
   }
 
-  function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { setError('La foto non deve superare 5 MB.'); return; }
-    setFotoFile(file);
-    setFotoPreview(URL.createObjectURL(file));
+    if (file.size > 15 * 1024 * 1024) { setError('La foto non deve superare 15 MB.'); return; }
     setError('');
+    const compressed = await compressImage(file);
+    setFotoFile(new File([compressed], 'foto.jpg', { type: 'image/jpeg' }));
+    setFotoPreview(URL.createObjectURL(compressed));
   }
 
   function removeFoto() {
@@ -74,11 +75,10 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   async function uploadFoto(id: string): Promise<{ url: string; uploaded: boolean }> {
     if (!fotoFile) return { url: fotoUrl, uploaded: false };
     setUploadingFoto(true);
-    const ext = fotoFile.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
-    const filename = `clienti/${id}.${ext}`;
+    const filename = `clienti/${id}.jpg`;
     const { error: uploadErr } = await supabase.storage
       .from('foto-clienti')
-      .upload(filename, fotoFile, { contentType: fotoFile.type, upsert: true });
+      .upload(filename, fotoFile, { contentType: 'image/jpeg', upsert: true });
     setUploadingFoto(false);
     if (uploadErr) return { url: fotoUrl, uploaded: false };
     const { data } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
