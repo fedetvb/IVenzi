@@ -2468,6 +2468,7 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <h2 className="font-bold text-stone-800 whitespace-nowrap">Anteprima stampa</h2>
           <span className="text-sm text-stone-400 whitespace-nowrap">{previews.length} convalidat{previews.length === 1 ? 'a' : 'e'} · {pages.length} pag.</span>
+          <span className="text-sm font-semibold text-emerald-600 whitespace-nowrap">Totale: €{previews.reduce((s, p) => s + p.totale, 0).toFixed(2)}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-stone-500 whitespace-nowrap">Fiches per pagina:</span>
