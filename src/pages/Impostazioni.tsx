@@ -858,7 +858,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     setSavingUrl(false);
   }
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&data=${encodeURIComponent(registrazioneUrl)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(registrazioneUrl)}`;
 
   useEffect(() => {
     setQrComposite(null);
