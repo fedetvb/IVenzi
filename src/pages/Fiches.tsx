@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus, Trash2, X, Euro, ChevronDown, ChevronUp, FileText,
@@ -147,6 +147,7 @@ function FichesTab() {
   const [showPrint, setShowPrint] = useState(false);
   const [autoExportDate, setAutoExportDate] = useState<string | null>(null);
   const [showNuovaFiche, setShowNuovaFiche] = useState(false);
+  const [showStampaGate, setShowStampaGate] = useState(false);
   const [showBulkPagamentoModal, setShowBulkPagamentoModal] = useState(false);
   const [showBulkGate, setShowBulkGate] = useState(false);
   const [bulkTipoPagamento, setBulkTipoPagamento] = useState<'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null>(null);
@@ -525,7 +526,7 @@ function FichesTab() {
             Nuova Fiche
           </button>
           <button
-            onClick={() => setShowPrint(true)}
+            onClick={() => setShowStampaGate(true)}
             className="flex items-center gap-2 px-4 py-2 bg-stone-800 hover:bg-stone-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
           >
             <Printer size={14} />
@@ -599,6 +600,16 @@ function FichesTab() {
             setShowIncassoGate(false);
           }}
           onClose={() => setShowIncassoGate(false)}
+        />,
+        document.body
+      )}
+      {showStampaGate && createPortal(
+        <PasswordGateModal
+          titolo="Stampa fiches"
+          descrizione="Inserisci la password per accedere alla stampa delle fiches."
+          chiavePassword="password_stampa_fiches"
+          onSuccess={() => { setShowStampaGate(false); setShowPrint(true); }}
+          onClose={() => setShowStampaGate(false)}
         />,
         document.body
       )}
@@ -1756,82 +1767,31 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             )}
 
             {/* Selezione parrucchiere per servizio in sospeso */}
-            {pendingServizio && (
-              <div className="bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 space-y-2">
-                <p className="text-xs font-semibold text-stone-700">
-                  Seleziona parrucchiere per <span className="font-bold">{pendingServizio.servizio.nome}</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {parrucchieri.map(p => (
-                    <button key={p.id} type="button"
-                      onClick={() => setPendingServizio(prev => prev ? { ...prev, parrId: p.id } : null)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${pendingServizio.parrId === p.id ? 'text-white border-transparent' : 'text-stone-700 border-stone-200 hover:bg-stone-100'}`}
-                      style={pendingServizio.parrId === p.id ? { backgroundColor: p.colore, borderColor: p.colore } : {}}
-                    >
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.colore }} />
-                      {p.nome}
-                    </button>
-                  ))}
-                  <button type="button"
-                    onClick={() => setPendingServizio(prev => prev ? { ...prev, parrId: '' } : null)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${pendingServizio.parrId === '' ? 'bg-stone-700 text-white border-stone-700' : 'text-stone-500 border-stone-200 hover:bg-stone-100'}`}
-                  >
-                    Nessuno
-                  </button>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => setPendingServizio(null)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-500 border border-stone-200 hover:bg-stone-100">
-                    Annulla
-                  </button>
-                  <button type="button" onClick={confirmPendingServizio}
-                    className="px-4 py-1.5 rounded-lg text-xs font-medium bg-stone-700 text-white hover:bg-stone-800">
-                    <Check size={11} className="inline mr-1" />
-                    Aggiungi servizio
-                  </button>
-                </div>
-              </div>
+            {pendingServizio && createPortal(
+              <SelezioneParrucchiereModal
+                titolo={<>Seleziona parrucchiere per <span className="font-bold">{pendingServizio.servizio.nome}</span></>}
+                parrucchieri={parrucchieri}
+                selectedParrId={pendingServizio.parrId}
+                onSelectParr={id => setPendingServizio(prev => prev ? { ...prev, parrId: id } : null)}
+                onAnnulla={() => setPendingServizio(null)}
+                onConferma={confirmPendingServizio}
+                labelConferma="Aggiungi servizio"
+                accentColor="stone"
+              />,
+              document.body
             )}
-
-            {/* Selezione parrucchiere per voce extra in sospeso */}
-            {pendingExtra && (
-              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-2">
-                <p className="text-xs font-semibold text-amber-800">
-                  Seleziona parrucchiere per <span className="font-bold">{pendingExtra.voce.nome}</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {parrucchieri.map(p => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setPendingExtra(prev => prev ? { ...prev, parrId: p.id } : null)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${pendingExtra.parrId === p.id ? 'text-white border-transparent' : 'text-stone-700 border-stone-200 hover:bg-stone-100'}`}
-                      style={pendingExtra.parrId === p.id ? { backgroundColor: p.colore, borderColor: p.colore } : {}}
-                    >
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.colore }} />
-                      {p.nome}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setPendingExtra(prev => prev ? { ...prev, parrId: '' } : null)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${pendingExtra.parrId === '' ? 'bg-stone-700 text-white border-stone-700' : 'text-stone-500 border-stone-200 hover:bg-stone-100'}`}
-                  >
-                    Nessuno
-                  </button>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => setPendingExtra(null)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-500 border border-stone-200 hover:bg-stone-100">
-                    Annulla
-                  </button>
-                  <button type="button" onClick={confirmPendingExtra}
-                    className="px-4 py-1.5 rounded-lg text-xs font-medium bg-amber-500 text-white hover:bg-amber-600">
-                    <Check size={11} className="inline mr-1" />
-                    Aggiungi voce
-                  </button>
-                </div>
-              </div>
+            {pendingExtra && createPortal(
+              <SelezioneParrucchiereModal
+                titolo={<>Seleziona parrucchiere per <span className="font-bold">{pendingExtra.voce.nome}</span></>}
+                parrucchieri={parrucchieri}
+                selectedParrId={pendingExtra.parrId}
+                onSelectParr={id => setPendingExtra(prev => prev ? { ...prev, parrId: id } : null)}
+                onAnnulla={() => setPendingExtra(null)}
+                onConferma={confirmPendingExtra}
+                labelConferma="Aggiungi voce"
+                accentColor="amber"
+              />,
+              document.body
             )}
           </div>
 
@@ -2511,6 +2471,69 @@ const LAYOUT_OPTIONS = [
 ] as const;
 
 type LayoutOption = typeof LAYOUT_OPTIONS[number];
+
+// ─── Selezione Parrucchiere Modal ─────────────────────────────────────────────
+
+interface SelezioneParrucchiereModalProps {
+  titolo: ReactNode;
+  parrucchieri: ParrucchiereSimple[];
+  selectedParrId: string;
+  onSelectParr: (id: string) => void;
+  onAnnulla: () => void;
+  onConferma: () => void;
+  labelConferma: string;
+  accentColor: 'stone' | 'amber';
+}
+
+function SelezioneParrucchiereModal({ titolo, parrucchieri, selectedParrId, onSelectParr, onAnnulla, onConferma, labelConferma, accentColor }: SelezioneParrucchiereModalProps) {
+  const confirmCls = accentColor === 'amber'
+    ? 'bg-amber-500 hover:bg-amber-600 text-white'
+    : 'bg-stone-700 hover:bg-stone-800 text-white';
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={onAnnulla}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-stone-100"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-5 pt-5 pb-4 space-y-4">
+          <p className="text-sm text-stone-700">{titolo}</p>
+
+          <div className="flex flex-wrap gap-2">
+            {parrucchieri.map(p => (
+              <button key={p.id} type="button"
+                onClick={() => onSelectParr(p.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border transition-all ${selectedParrId === p.id ? 'text-white border-transparent' : 'text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+                style={selectedParrId === p.id ? { backgroundColor: p.colore, borderColor: p.colore } : {}}
+              >
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.colore }} />
+                {p.nome}
+              </button>
+            ))}
+            <button type="button"
+              onClick={() => onSelectParr('')}
+              className={`px-3 py-2 rounded-full text-sm font-medium border transition-all ${selectedParrId === '' ? 'bg-stone-700 text-white border-stone-700' : 'text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+            >
+              Nessuno
+            </button>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onAnnulla}
+              className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+              Annulla
+            </button>
+            <button type="button" onClick={onConferma}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${confirmCls}`}>
+              <Check size={13} />
+              {labelConferma}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Bulk Pagamento Modal ─────────────────────────────────────────────────────
 

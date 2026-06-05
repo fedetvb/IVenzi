@@ -1312,6 +1312,7 @@ const PASSWORD_VOCI = [
   { chiave: 'password_elimina_clienti', titolo: 'Elimina Cliente / Scheda', descrizione: "Eliminazione definitiva di un cliente o scheda da confermare", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima eliminazione.", onSaved: () => {} },
   { chiave: 'password_elimina_parrucchieri', titolo: 'Elimina Parrucchiere', descrizione: "Eliminazione definitiva di un parrucchiere", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima eliminazione.", onSaved: () => {} },
   { chiave: 'password_chat_stats', titolo: 'Chat — Incassi, Servizi, Parrucchieri', descrizione: "Accesso alle statistiche di incassi, servizi e parrucchieri nella chat assistente", feedbackMsg: "Password aggiornata. Sarà richiesta al prossimo accesso alle statistiche nella chat.", onSaved: () => sessionStorage.removeItem('chat_stats_unlocked') },
+  { chiave: 'password_stampa_fiches', titolo: 'Stampa Fiches', descrizione: "Accesso alla stampa/esportazione PDF delle fiches giornaliere", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima stampa delle fiches.", onSaved: () => {} },
 ];
 
 // ─── PaginaAccount ────────────────────────────────────────────────────────────
