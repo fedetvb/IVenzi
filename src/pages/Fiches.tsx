@@ -247,18 +247,29 @@ function FichesTab() {
     }>) {
       const cid = f.clienti?.id ? `__manuale__${f.clienti.id}` : `__manuale__${f.id}`;
       const voci = (f.fiche_voci || []).sort((a: FicheVoce, b: FicheVoce) => a.ordine - b.ordine);
-      gruppoMap[cid] = {
-        clienteId: cid,
-        clienteNome: f.clienti?.nome ?? '—',
-        clienteCognome: f.clienti?.cognome ?? '',
-        appuntamenti: [],
-        ficheIds: [f.id],
-        ficheConvalidata: f.convalidata,
-        importoConvalidato: f.importo_convalidato,
-        voci,
-        noteEsistenti: f.note || '',
-        createdAt: f.created_at,
-      };
+      if (!gruppoMap[cid]) {
+        gruppoMap[cid] = {
+          clienteId: cid,
+          clienteNome: f.clienti?.nome ?? '—',
+          clienteCognome: f.clienti?.cognome ?? '',
+          appuntamenti: [],
+          ficheIds: [],
+          ficheConvalidata: false,
+          importoConvalidato: 0,
+          voci: [],
+          noteEsistenti: '',
+          createdAt: '',
+        };
+      }
+      const g = gruppoMap[cid];
+      g.ficheIds.push(f.id);
+      g.voci.push(...voci);
+      if (f.convalidata) {
+        g.ficheConvalidata = true;
+        g.importoConvalidato += f.importo_convalidato;
+      }
+      if (f.note) g.noteEsistenti += (g.noteEsistenti ? '\n' : '') + f.note;
+      if (!g.createdAt || f.created_at > g.createdAt) g.createdAt = f.created_at;
     }
 
     setGruppi(Object.values(gruppoMap).sort((a, b) => {
