@@ -133,6 +133,57 @@ function runMigrations() {
       console.log('[DB] Migrazione: aggiunta colonna tipo_pagamento a fiches');
     }
   } catch(e) { console.warn('[DB] migrazione fiches colonne:', e.message); }
+
+  // Add blacklist columns to clienti if missing
+  try {
+    const clientiCols = db.prepare("PRAGMA table_info(clienti)").all().map(c => c.name);
+    if (!clientiCols.includes('in_blacklist')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN in_blacklist INTEGER NOT NULL DEFAULT 0");
+      console.log('[DB] Migrazione: aggiunta colonna in_blacklist a clienti');
+    }
+    if (!clientiCols.includes('motivo_blacklist')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN motivo_blacklist TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna motivo_blacklist a clienti');
+    }
+    if (!clientiCols.includes('foto_base64')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN foto_base64 TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_base64 a clienti');
+    }
+    if (!clientiCols.includes('foto_base64_pendente')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN foto_base64_pendente TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_base64_pendente a clienti');
+    }
+  } catch(e) { console.warn('[DB] migrazione clienti colonne:', e.message); }
+
+  // Add foto_base64 columns to schede_colore if missing
+  try {
+    const schedeCols = db.prepare("PRAGMA table_info(schede_colore)").all().map(c => c.name);
+    if (!schedeCols.includes('foto_prima_base64')) {
+      db.exec("ALTER TABLE schede_colore ADD COLUMN foto_prima_base64 TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_prima_base64 a schede_colore');
+    }
+    if (!schedeCols.includes('foto_dopo_base64')) {
+      db.exec("ALTER TABLE schede_colore ADD COLUMN foto_dopo_base64 TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_dopo_base64 a schede_colore');
+    }
+  } catch(e) { console.warn('[DB] migrazione schede_colore colonne:', e.message); }
+
+  // Create incassi_giornalieri table if missing (was previously named 'incassi')
+  try {
+    const igExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='incassi_giornalieri'").get();
+    if (!igExists) {
+      db.exec(`
+        CREATE TABLE incassi_giornalieri (
+          id TEXT PRIMARY KEY, data TEXT NOT NULL, fiche_id TEXT, cliente_nome TEXT NOT NULL DEFAULT '',
+          importo REAL NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', user_id TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_incassi_giornalieri_data ON incassi_giornalieri(data);
+        CREATE INDEX IF NOT EXISTS idx_incassi_giornalieri_fiche ON incassi_giornalieri(fiche_id);
+      `);
+      console.log('[DB] Migrazione: creata tabella incassi_giornalieri');
+    }
+  } catch(e) { console.warn('[DB] migrazione incassi_giornalieri:', e.message); }
 }
 
 function createSchema() {
@@ -140,7 +191,10 @@ function createSchema() {
     CREATE TABLE IF NOT EXISTS clienti (
       id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', cognome TEXT NOT NULL DEFAULT '',
       telefono TEXT DEFAULT '', email TEXT DEFAULT '', data_nascita TEXT,
-      note TEXT DEFAULT '', foto_url TEXT DEFAULT '', user_id TEXT, deleted_at TEXT,
+      note TEXT DEFAULT '', foto_url TEXT DEFAULT '',
+      foto_base64 TEXT DEFAULT '', foto_base64_pendente TEXT DEFAULT '',
+      in_blacklist INTEGER NOT NULL DEFAULT 0, motivo_blacklist TEXT DEFAULT '',
+      user_id TEXT, deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
@@ -175,6 +229,7 @@ function createSchema() {
       formula_colore TEXT DEFAULT '', ossidante TEXT DEFAULT '', tempo_posa INTEGER DEFAULT 0,
       note TEXT DEFAULT '', colore_base TEXT DEFAULT '', colore_target TEXT DEFAULT '',
       tecnica TEXT DEFAULT '', foto_prima_url TEXT DEFAULT '', foto_dopo_url TEXT DEFAULT '',
+      foto_prima_base64 TEXT DEFAULT '', foto_dopo_base64 TEXT DEFAULT '',
       user_id TEXT, deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
@@ -198,6 +253,13 @@ function createSchema() {
       importo REAL NOT NULL DEFAULT 0, note TEXT DEFAULT '', user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS incassi_giornalieri (
+      id TEXT PRIMARY KEY, data TEXT NOT NULL, fiche_id TEXT, cliente_nome TEXT NOT NULL DEFAULT '',
+      importo REAL NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS idx_incassi_giornalieri_data ON incassi_giornalieri(data);
+    CREATE INDEX IF NOT EXISTS idx_incassi_giornalieri_fiche ON incassi_giornalieri(fiche_id);
     CREATE TABLE IF NOT EXISTS carte_sconto (
       id TEXT PRIMARY KEY, codice TEXT NOT NULL DEFAULT '', descrizione TEXT DEFAULT '',
       tipo_sconto TEXT NOT NULL DEFAULT 'percentuale', valore_sconto REAL NOT NULL DEFAULT 0,
@@ -434,7 +496,7 @@ function markSynced(table, ids) {
 
 const ALL_TABLES = [
   'clienti','parrucchieri','trattamenti_catalogo','appuntamenti','appuntamento_trattamenti',
-  'schede_colore','fiches','fiche_voci','incassi','carte_sconto','utilizzi_carta_sconto',
+  'schede_colore','fiches','fiche_voci','incassi_giornalieri','carte_sconto','utilizzi_carta_sconto',
   'carte_premium','ricariche_carta_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
   'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
   'assenze_parrucchieri','magazzino_prodotti','magazzino_movimenti','magazzino_schede_salvate',
