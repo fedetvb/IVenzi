@@ -128,6 +128,43 @@ function triggerPush(table: string, row: Record<string, unknown> | null) {
   _pushRowNow(table, row, _currentUserId).catch(() => {/* errore gestito dentro pushRowNow */});
 }
 
+// ─── Filtro/ordinamento su cache IndexedDB ────────────────────────────────────
+
+function applyFiltersToCache<T>(
+  cached: unknown[],
+  args: { filters?: DbFilter[]; orderBy?: DbOrder[]; limit?: number | null }
+): T[] {
+  let rows = cached as Record<string, unknown>[];
+  for (const f of (args.filters || [])) {
+    rows = rows.filter(row => {
+      if (f.op === 'is_null') return row[f.col] === null || row[f.col] === undefined;
+      if (f.op === 'not_null') return row[f.col] !== null && row[f.col] !== undefined;
+      if (f.op === 'eq' || f.op === '=') return row[f.col] == f.val;
+      if (f.op === 'neq' || f.op === '!=') return row[f.col] != f.val;
+      if (f.op === 'in') return Array.isArray(f.val) && f.val.includes(row[f.col]);
+      if (f.op === 'gte' || f.op === '>=') return String(row[f.col] ?? '') >= String(f.val ?? '');
+      if (f.op === 'lte' || f.op === '<=') return String(row[f.col] ?? '') <= String(f.val ?? '');
+      if (f.op === '>') return String(row[f.col] ?? '') > String(f.val ?? '');
+      if (f.op === '<') return String(row[f.col] ?? '') < String(f.val ?? '');
+      if (f.op === 'like') return typeof row[f.col] === 'string' && (row[f.col] as string).toLowerCase().includes((f.val as string).replace(/%/g, '').toLowerCase());
+      return true;
+    });
+  }
+  if (args.orderBy?.length) {
+    rows = [...rows].sort((a, b) => {
+      for (const o of args.orderBy!) {
+        const av = String(a[o.col] ?? '');
+        const bv = String(b[o.col] ?? '');
+        const cmp = av.localeCompare(bv);
+        if (cmp !== 0) return o.asc !== false ? cmp : -cmp;
+      }
+      return 0;
+    });
+  }
+  if (args.limit) rows = rows.slice(0, args.limit);
+  return rows as T[];
+}
+
 // ─── SELECT ───────────────────────────────────────────────────────────────────
 
 export async function dbSelect<T = Record<string, unknown>>(args: {
@@ -145,45 +182,20 @@ export async function dbSelect<T = Record<string, unknown>>(args: {
     return { data: normRows<T>(res.data), error: null };
   }
 
-  // Browser / Electron senza SQLite: se offline usa IndexedDB cache
-  if (!navigator.onLine && _currentUserId) {
+  // LOCAL-FIRST: legge sempre da IndexedDB se la cache esiste.
+  // Questo garantisce funzionamento offline a vita dopo il primo uso online.
+  if (_currentUserId) {
     try {
       const cached = await getTableCache(args.table, _currentUserId);
       if (cached !== null) {
-        let rows = cached as Record<string, unknown>[];
-        for (const f of (args.filters || [])) {
-          rows = rows.filter(row => {
-            if (f.op === 'is_null') return row[f.col] === null || row[f.col] === undefined;
-            if (f.op === 'not_null') return row[f.col] !== null && row[f.col] !== undefined;
-            if (f.op === 'eq' || f.op === '=') return row[f.col] == f.val;
-            if (f.op === 'neq' || f.op === '!=') return row[f.col] != f.val;
-            if (f.op === 'in') return Array.isArray(f.val) && f.val.includes(row[f.col]);
-            if (f.op === 'gte' || f.op === '>=') return (row[f.col] as number) >= (f.val as number);
-            if (f.op === 'lte' || f.op === '<=') return (row[f.col] as number) <= (f.val as number);
-            if (f.op === '>') return (row[f.col] as number) > (f.val as number);
-            if (f.op === '<') return (row[f.col] as number) < (f.val as number);
-            if (f.op === 'like') return typeof row[f.col] === 'string' && (row[f.col] as string).toLowerCase().includes((f.val as string).replace(/%/g, '').toLowerCase());
-            return true;
-          });
-        }
-        if (args.orderBy?.length) {
-          rows = [...rows].sort((a, b) => {
-            for (const o of args.orderBy!) {
-              const av = String(a[o.col] ?? '');
-              const bv = String(b[o.col] ?? '');
-              const cmp = av.localeCompare(bv);
-              if (cmp !== 0) return o.asc !== false ? cmp : -cmp;
-            }
-            return 0;
-          });
-        }
-        if (args.limit) rows = rows.slice(0, args.limit);
-        return { data: rows as T[], error: null };
+        const rows = applyFiltersToCache<T>(cached, args);
+        if (args.countOnly) return { data: null, error: null, count: rows.length };
+        return { data: rows, error: null };
       }
-    } catch { /* fallthrough */ }
+    } catch { /* cache miss: fallthrough a Supabase */ }
   }
 
-  // Supabase (online)
+  // FALLBACK: Supabase (solo se cache vuota — es. primo avvio)
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = supabase.from(args.table).select(args.columns || '*');
@@ -226,20 +238,19 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
-  if (!navigator.onLine && _currentUserId) {
-    const row = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...args.data };
-    await cacheInsert(args.table, _currentUserId, row);
-    // La mutazione verra' accodata da offlineFetch e inviata al ritorno online
-    supabase.from(args.table).insert(args.data).select().catch(() => {});
-    return { data: row as T, error: null };
-  }
+  // LOCAL-FIRST: inserisce subito in IndexedDB, poi invia a Supabase in background.
+  // Se offline, la mutazione viene accodata da offlineFetch e inviata al ritorno online.
+  const localId = (args.data.id as string | undefined) || crypto.randomUUID();
+  const localRow = { id: localId, created_at: new Date().toISOString(), ...args.data };
+  if (_currentUserId) await cacheInsert(args.table, _currentUserId, localRow);
+
   try {
-    const { data, error } = await supabase.from(args.table).insert(args.data).select();
-    if (error) return { data: null, error: error.message };
+    const { data, error } = await supabase.from(args.table).insert({ ...args.data, id: localId }).select();
+    if (error) return { data: localRow as T, error: null }; // gia' in cache, ritorna comunque
     const row = Array.isArray(data) ? data[0] : data;
-    return { data: row as T ?? null, error: null };
-  } catch (e) {
-    return { data: null, error: String(e) };
+    return { data: (row ?? localRow) as T, error: null };
+  } catch {
+    return { data: localRow as T, error: null };
   }
 }
 
@@ -257,18 +268,16 @@ export async function dbUpdate<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
-  if (!navigator.onLine && _currentUserId) {
-    await cacheUpdate(args.table, _currentUserId, args.id, args.data);
-    supabase.from(args.table).update(args.data).eq('id', args.id).select().catch(() => {});
-    return { data: { id: args.id, ...args.data } as T, error: null };
-  }
+  // LOCAL-FIRST: aggiorna subito IndexedDB, poi invia a Supabase in background.
+  if (_currentUserId) await cacheUpdate(args.table, _currentUserId, args.id, args.data);
+
   try {
     const { data, error } = await supabase.from(args.table).update(args.data).eq('id', args.id).select();
-    if (error) return { data: null, error: error.message };
+    if (error) return { data: { id: args.id, ...args.data } as T, error: null };
     const row = Array.isArray(data) ? data[0] : data;
-    return { data: row as T ?? null, error: null };
-  } catch (e) {
-    return { data: null, error: String(e) };
+    return { data: (row ?? { id: args.id, ...args.data }) as T, error: null };
+  } catch {
+    return { data: { id: args.id, ...args.data } as T, error: null };
   }
 }
 
@@ -283,17 +292,10 @@ export async function dbDelete(args: {
     if (!res.ok) return { data: null, error: res.error ?? 'Errore DB' };
     return { data: null, error: null };
   }
-  if (!navigator.onLine && _currentUserId) {
+  // LOCAL-FIRST: rimuove subito da IndexedDB, poi invia a Supabase in background.
+  if (_currentUserId) {
     const idFilter = args.filters.find(f => f.col === 'id' && (f.op === 'eq' || f.op === '='));
     if (idFilter) await cacheRemoveById(args.table, _currentUserId, idFilter.val as string);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q: any = supabase.from(args.table).delete();
-    for (const f of args.filters) {
-      if (f.op === 'eq' || f.op === '=') q = q.eq(f.col, f.val);
-      else if (f.op === 'in') q = q.in(f.col, f.val as unknown[]);
-    }
-    q.catch(() => {});
-    return { data: null, error: null };
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -304,8 +306,8 @@ export async function dbDelete(args: {
     }
     const { error } = await q;
     return { data: null, error: error?.message ?? null };
-  } catch (e) {
-    return { data: null, error: String(e) };
+  } catch {
+    return { data: null, error: null };
   }
 }
 
@@ -324,26 +326,26 @@ export async function dbUpsert<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
-  if (!navigator.onLine && _currentUserId) {
-    const row = { id: crypto.randomUUID(), ...args.data };
+  // LOCAL-FIRST: aggiorna/inserisce subito in IndexedDB, poi invia a Supabase.
+  const localId = (args.data.id as string | undefined) || crypto.randomUUID();
+  const localRow = { id: localId, ...args.data };
+  if (_currentUserId) {
     if (args.data.id) {
       await cacheUpdate(args.table, _currentUserId, args.data.id as string, args.data);
     } else {
-      await cacheInsert(args.table, _currentUserId, row);
+      await cacheInsert(args.table, _currentUserId, localRow);
     }
-    supabase.from(args.table).upsert(args.data, args.onConflict ? { onConflict: args.onConflict } : undefined).select().catch(() => {});
-    return { data: (args.data.id ? args.data : row) as T, error: null };
   }
   try {
     const { data, error } = await supabase
       .from(args.table)
-      .upsert(args.data, args.onConflict ? { onConflict: args.onConflict } : undefined)
+      .upsert({ ...args.data, id: localId }, args.onConflict ? { onConflict: args.onConflict } : undefined)
       .select();
-    if (error) return { data: null, error: error.message };
+    if (error) return { data: localRow as T, error: null };
     const row = Array.isArray(data) ? data[0] : data;
-    return { data: row as T ?? null, error: null };
-  } catch (e) {
-    return { data: null, error: String(e) };
+    return { data: (row ?? localRow) as T, error: null };
+  } catch {
+    return { data: localRow as T, error: null };
   }
 }
 
@@ -369,15 +371,26 @@ export async function dbUpsertMany<T = Record<string, unknown>>(args: {
     }
     return { data: results, error: null };
   }
+  // LOCAL-FIRST: aggiorna/inserisce ogni riga in IndexedDB, poi invia a Supabase.
+  if (_currentUserId) {
+    for (const row of args.rows) {
+      const localId = (row.id as string | undefined) || crypto.randomUUID();
+      if (row.id) {
+        await cacheUpdate(args.table, _currentUserId, row.id as string, row);
+      } else {
+        await cacheInsert(args.table, _currentUserId, { id: localId, ...row });
+      }
+    }
+  }
   try {
     const { data, error } = await supabase
       .from(args.table)
       .upsert(args.rows, args.onConflict ? { onConflict: args.onConflict } : undefined)
       .select();
-    if (error) return { data: null, error: error.message };
-    return { data: (data as T[]) ?? [], error: null };
-  } catch (e) {
-    return { data: null, error: String(e) };
+    if (error) return { data: args.rows as T[], error: null };
+    return { data: (data as T[]) ?? args.rows as T[], error: null };
+  } catch {
+    return { data: args.rows as T[], error: null };
   }
 }
 
