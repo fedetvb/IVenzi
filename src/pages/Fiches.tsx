@@ -2178,6 +2178,7 @@ function FicheRicaricaModal({ carta, selectedDate, onClose, onSaved }: {
   const [importo, setImporto] = useState(100);
   const [noteR, setNoteR] = useState('');
   const [tipo, setTipo] = useState<'standard' | 'gratuito'>('standard');
+  const [tipoPagamento, setTipoPagamento] = useState<TipoPagamento>(null);
   const [saving, setSaving] = useState(false);
 
   const prezzoCliente = tipo === 'standard' ? Math.floor(importo * (250 / 300) / 10) * 10 : 0;
@@ -2189,7 +2190,7 @@ function FicheRicaricaModal({ carta, selectedDate, onClose, onSaved }: {
       carta_premium_id: carta.id, importo, note: noteR, tipo_ricarica: tipo, user_id: user?.id,
     } });
     await dbUpdate({ table: 'carte_premium', id: carta.id, data: { saldo: nuovoSaldo, attiva: true } });
-    if (tipo === 'standard') {
+    if (tipo === 'standard' && tipoPagamento !== 'contanti_nero') {
       await dbInsert({ table: 'incassi_giornalieri', data: {
         data: selectedDate,
         fiche_id: null,
@@ -2239,6 +2240,28 @@ function FicheRicaricaModal({ carta, selectedDate, onClose, onSaved }: {
               Credito bonus: nessun incasso registrato e nessuna detrazione applicata.
             </p>
           )}
+          {tipo === 'standard' && (
+            <div>
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Metodo di pagamento</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button onClick={() => setTipoPagamento('cc_bancomat')}
+                  className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border text-xs font-semibold transition-colors ${tipoPagamento === 'cc_bancomat' ? 'bg-blue-500 text-white border-blue-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                  <CreditCard size={12} />
+                  CC/Bancomat
+                </button>
+                <button onClick={() => setTipoPagamento('contanti_verde')}
+                  className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border text-xs font-semibold transition-colors ${tipoPagamento === 'contanti_verde' ? 'bg-emerald-500 text-white border-emerald-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                  <span className={`w-2.5 h-2.5 rounded-full ${tipoPagamento === 'contanti_verde' ? 'bg-white' : 'bg-emerald-500'}`} />
+                  Contanti
+                </button>
+                <button onClick={() => setTipoPagamento('contanti_nero')}
+                  className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border text-xs font-semibold transition-colors ${tipoPagamento === 'contanti_nero' ? 'bg-stone-800 text-white border-stone-800' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                  <span className={`w-2.5 h-2.5 rounded-full ${tipoPagamento === 'contanti_nero' ? 'bg-white' : 'bg-stone-800'}`} />
+                  Contanti
+                </button>
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Credito da aggiungere alla carta (€)</label>
             <div className="flex flex-wrap gap-2 mb-2">
@@ -2276,9 +2299,9 @@ function FicheRicaricaModal({ carta, selectedDate, onClose, onSaved }: {
         </div>
         <div className="flex gap-3 px-5 pb-5 flex-shrink-0">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50">Annulla</button>
-          <button onClick={save} disabled={saving || importo <= 0}
+          <button onClick={save} disabled={saving || importo <= 0 || (tipo === 'standard' && !tipoPagamento)}
             className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 ${tipo === 'gratuito' ? 'bg-sky-500 hover:bg-sky-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
-            {saving ? 'Ricarica…' : tipo === 'gratuito' ? `Aggiungi credito +€${importo}` : `Ricarica · paga €${prezzoCliente}`}
+            {saving ? 'Ricarica…' : tipo === 'gratuito' ? `Aggiungi credito +€${importo}` : tipoPagamento ? `Ricarica · paga €${prezzoCliente}` : 'Seleziona pagamento'}
           </button>
         </div>
       </div>
@@ -2759,6 +2782,11 @@ function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forP
         <div style={{ borderTop: '1px solid #333', paddingTop: '2mm', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '9pt' }}>
           <span>TOTALE</span><span>€{totale.toFixed(2)}</span>
         </div>
+        {g.tipoPagamento && (
+          <div style={{ marginTop: '1mm', color: '#555', fontSize: '6.5pt', borderTop: '0.5px solid #eee', paddingTop: '1mm' }}>
+            Pagamento: {g.tipoPagamento === 'cc_bancomat' ? 'CC/Bancomat' : 'Contanti'}
+          </div>
+        )}
         {g.noteEsistenti && (
           <div style={{ marginTop: '1mm', color: '#666', fontSize: '6.5pt', fontStyle: 'italic', borderTop: '0.5px solid #eee', paddingTop: '1mm' }}>{g.noteEsistenti}</div>
         )}
@@ -2799,6 +2827,11 @@ function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forP
       <div className="border-t border-stone-800 pt-1 mt-1 flex justify-between font-bold text-stone-800 text-[10px]">
         <span>TOTALE</span><span>€{totale.toFixed(2)}</span>
       </div>
+      {g.tipoPagamento && (
+        <div className="mt-0.5 text-stone-500 text-[8px] border-t border-stone-100 pt-0.5">
+          Pagamento: {g.tipoPagamento === 'cc_bancomat' ? 'CC/Bancomat' : 'Contanti'}
+        </div>
+      )}
       {g.noteEsistenti && (
         <div className="mt-0.5 text-stone-400 text-[8px] italic border-t border-stone-100 pt-0.5 truncate">{g.noteEsistenti}</div>
       )}
