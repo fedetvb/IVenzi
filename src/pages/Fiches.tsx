@@ -376,10 +376,10 @@ function FichesTab() {
         // Registra voci rivendita e scala stock catalogo
         const vociRivendita = g.voci.filter(v => v.nome_voce.toLowerCase().includes('rivendita'));
         for (const v of vociRivendita) {
-          if (v.parrucchiere_id) {
-            const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
-            const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
+          const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+          const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
+          if (v.parrucchiere_id) {
             await dbInsert({ table: 'rivendita_prodotti', data: {
               fiche_id: ficheId,
               parrucchiere_id: v.parrucchiere_id,
@@ -390,16 +390,17 @@ function FichesTab() {
               note: catalogoId ? '' : (v.note || ''),
               user_id: user?.id,
             } });
+          }
 
-            if (catalogoId) {
-              const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
-              if (prod && prod.length > 0) {
-                const prodData = prod[0] as any;
-                await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
-                  quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
-                  quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
-                } });
-              }
+          // Scala sempre lo stock dal catalogo, indipendentemente dal parrucchiere
+          if (catalogoId) {
+            const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
+            if (prod && prod.length > 0) {
+              const prodData = prod[0] as any;
+              await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
+                quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
+                quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
+              } });
             }
           }
         }
@@ -1116,14 +1117,13 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
         }
       }
 
-      // Registra voci rivendita (solo se il nome contiene "rivendita")
+      // Registra voci rivendita
       const vociRivendita = voci.filter(v => v.nome_voce.toLowerCase().includes('rivendita'));
       for (const v of vociRivendita) {
-        if (v.parrucchiere_id) {
-          // Extract catalog product ID from note field if present
-          const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
-          const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
+        const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
+        const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
+        if (v.parrucchiere_id) {
           await dbInsert({ table: 'rivendita_prodotti', data: {
             fiche_id: ficheId,
             parrucchiere_id: v.parrucchiere_id,
@@ -1134,17 +1134,17 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             note: catalogoId ? '' : (v.note || ''),
             user_id: user?.id,
           } });
+        }
 
-          // Scale down stock in catalog
-          if (catalogoId) {
-            const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
-            if (prod && prod.length > 0) {
-              const prodData = prod[0] as any;
-              await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
-                quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
-                quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
-              } });
-            }
+        // Scala sempre lo stock dal catalogo, indipendentemente dal parrucchiere
+        if (catalogoId) {
+          const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
+          if (prod && prod.length > 0) {
+            const prodData = prod[0] as any;
+            await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
+              quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
+              quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
+            } });
           }
         }
       }
@@ -1240,10 +1240,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
         await dbDelete({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       }
 
-      // Ripristina stock catalogo per ogni voce rivendita collegata
+      // Ripristina stock catalogo per ogni voce con __catalogo_id__ nel note
       const { data: vociFiche } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       for (const vf of vociFiche || []) {
-        if (!(vf as any).nome_voce?.toLowerCase().includes('rivendita')) continue;
         const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
         if (!catalogoMatch) continue;
         const catalogoId = catalogoMatch[1];
@@ -1312,10 +1311,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             await dbDelete({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           }
 
-          // Ripristina stock catalogo per voci rivendita
+          // Ripristina stock catalogo per voci con __catalogo_id__ nel note
           const { data: vociFiche } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           for (const vf of vociFiche || []) {
-            if (!(vf as any).nome_voce?.toLowerCase().includes('rivendita')) continue;
             const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
             if (!catalogoMatch) continue;
             const catalogoId = catalogoMatch[1];
