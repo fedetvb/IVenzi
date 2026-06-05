@@ -12,14 +12,14 @@ files:
   - electron/main.js
   - electron/preload.cjs
   - package.json
-
-# Estrai dist dall'asar per poterla caricare con loadFile
-asarUnpack:
-  - "dist/**"
+  - node_modules/better-sqlite3/**/*
 
 # Punto di ingresso
 extraMetadata:
   main: electron/main.js
+
+# Non usare il formato asar: i file restano su disco e loadFile funziona correttamente
+asar: false
 
 # Icona condivisa (electron-builder converte automaticamente in .ico / .icns)
 icon: public/icons/icon-512x512.png
@@ -54,9 +54,3 @@ linux:
     - target: AppImage
       arch: [x64]
   category: Office
-
-# ── Auto-update (opzionale, configurare in futuro) ────────────────────────────
-# publish:
-#   provider: github
-#   owner: tuo-username
-#   repo: gestionale-salone

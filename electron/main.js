@@ -77,8 +77,8 @@ function initDatabase() {
   let Database;
   try {
     if (app.isPackaged) {
-      const unpackedBase = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'better-sqlite3');
-      Database = require(existsSync(unpackedBase) ? unpackedBase : 'better-sqlite3');
+      const packedBase = join(app.getAppPath(), 'node_modules', 'better-sqlite3');
+      Database = require(existsSync(packedBase) ? packedBase : 'better-sqlite3');
     } else {
       Database = require('better-sqlite3');
     }
@@ -570,7 +570,7 @@ function createWindow() {
     autoHideMenuBar: true,
   });
   if (isDev) { mainWindow.loadURL('http://localhost:5173'); }
-  else { mainWindow.loadFile(join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'index.html')); }
+  else { mainWindow.loadFile(join(app.getAppPath(), 'dist', 'index.html')); }
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
