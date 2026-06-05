@@ -9,8 +9,21 @@ import StatisticheGate from '../components/StatisticheGate';
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
+  const { user } = useAuth();
   const [sub, setSub] = useState<SubPage>(null);
   const [msgOpen, setMsgOpen] = useState(false);
+  const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+
+  useEffect(() => {
+    getImpostazione('whatsapp_avviso_disabilitato').then(v => {
+      setWhatsappDisabilitato(v === 'true');
+    });
+  }, []);
+
+  async function toggleWhatsapp(val: boolean) {
+    setWhatsappDisabilitato(val);
+    await setImpostazione('whatsapp_avviso_disabilitato', val ? 'true' : 'false', user?.id);
+  }
 
   if (sub === 'account') return (
     <StatisticheGate isActive={sub === 'account'} chiave="password_account" sezione="account e credenziali" sessionKey="account_unlocked">
@@ -99,6 +112,25 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
 
           {msgOpen && (
             <div className="border-t border-stone-100 divide-y divide-stone-50 bg-stone-50/60">
+              {/* Toggle WhatsApp avvisi */}
+              <div className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5">
+                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${whatsappDisabilitato ? 'bg-white border-stone-200' : 'bg-white border-emerald-200'}`}>
+                  <MessageCircle size={15} className={whatsappDisabilitato ? 'text-stone-300' : 'text-emerald-500'} />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-stone-700">Messaggi WhatsApp automatici</p>
+                  <p className="text-xs text-stone-400 mt-0.5">
+                    {whatsappDisabilitato ? 'Pulsante avviso clienti nascosto nell\'agenda' : 'Pulsante avviso clienti visibile nell\'agenda'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => toggleWhatsapp(!whatsappDisabilitato)}
+                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${whatsappDisabilitato ? 'bg-stone-200' : 'bg-emerald-500'}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${whatsappDisabilitato ? 'translate-x-0.5' : 'translate-x-5'}`} />
+                </button>
+              </div>
+
               <button
                 onClick={() => setSub('messaggio_avviso')}
                 className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"

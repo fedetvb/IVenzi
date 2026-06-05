@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, ExternalLink, AlertCircle, Gift } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
-import { dbSelect, dbSelectWithRelated, dbDelete } from '../lib/localDb';
+import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
 import AgendaGiorno from './AgendaGiorno';
 import BirthdayModal from '../components/BirthdayModal';
@@ -74,6 +74,11 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [avvisoLoading, setAvvisoLoading] = useState(false);
   const [birthdayClienti, setBirthdayClienti] = useState<{ id: string; nome: string; cognome: string; telefono: string | null }[]>([]);
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
+  const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+
+  useEffect(() => {
+    getImpostazione('whatsapp_avviso_disabilitato').then(v => setWhatsappDisabilitato(v === 'true'));
+  }, []);
 
   async function loadAvvisoClienti() {
     setAvvisoLoading(true);
@@ -212,7 +217,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-4 bg-white border-b border-stone-200 flex-shrink-0 gap-2">
+      <div className="flex items-center justify-between px-3 sm:px-6 py-1.5 sm:py-2 bg-white border-b border-stone-200 flex-shrink-0 gap-2">
         <div className="flex items-center gap-1.5 sm:gap-3">
           <button onClick={() => setWeekStart(w => startOfWeek(addDays(w, -7)))} className="p-1.5 rounded-lg hover:bg-stone-100 transition-colors">
             <ChevronLeft size={18} />
@@ -237,14 +242,16 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
             <Clock size={14} />
             <span className="text-sm font-semibold tabular-nums">{oraItaliana}</span>
           </div>
-          <button
-            onClick={loadAvvisoClienti}
-            disabled={avvisoLoading}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
-          >
-            <Bell size={15} />
-            <span className="hidden sm:inline">Avviso appuntamento clienti</span>
-          </button>
+          {!whatsappDisabilitato && (
+            <button
+              onClick={loadAvvisoClienti}
+              disabled={avvisoLoading}
+              className="flex items-center gap-2 bg-emerald-600 text-white px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
+            >
+              <Bell size={15} />
+              <span className="hidden sm:inline">Avviso appuntamento clienti</span>
+            </button>
+          )}
           <button
             onClick={() => setMultiModal(true)}
             className="flex items-center gap-2 bg-amber-500 text-white px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
