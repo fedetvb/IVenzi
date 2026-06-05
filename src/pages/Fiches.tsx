@@ -47,12 +47,15 @@ interface FicheVoce {
   ordine: number;
 }
 
+type TipoPagamento = 'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null;
+
 interface FicheData {
   id: string;
   appuntamento_id: string;
   note: string;
   convalidata: boolean;
   importo_convalidato: number;
+  tipo_pagamento: TipoPagamento;
   voci: FicheVoce[];
   created_at: string;
 }
@@ -67,6 +70,7 @@ interface ClienteGruppo {
   ficheConvalidata: boolean;
   importoConvalidato: number;
   convalidataAt: string | null;
+  tipoPagamento: TipoPagamento;
   voci: FicheVoce[];
   noteEsistenti: string;
   createdAt: string;
@@ -195,6 +199,7 @@ function FichesTab() {
           note: (f as any).note,
           convalidata: (f as any).convalidata,
           importo_convalidato: (f as any).importo_convalidato,
+          tipo_pagamento: ((f as any).tipo_pagamento ?? null) as TipoPagamento,
           created_at: (f as any).created_at,
           voci: ((voceData || []) as FicheVoce[]).sort((a: FicheVoce, b: FicheVoce) => a.ordine - b.ordine),
         };
@@ -210,7 +215,7 @@ function FichesTab() {
         gruppoMap[cid] = {
           clienteId: cid, clienteNome: nome, clienteCognome: cognome,
           appuntamenti: [], ficheIds: [], ficheConvalidata: false,
-          importoConvalidato: 0, convalidataAt: null, voci: [], noteEsistenti: '', createdAt: '',
+          importoConvalidato: 0, convalidataAt: null, tipoPagamento: null, voci: [], noteEsistenti: '', createdAt: '',
         };
       }
       gruppoMap[cid].appuntamenti.push(app);
@@ -218,6 +223,7 @@ function FichesTab() {
       if (fiche) {
         gruppoMap[cid].ficheIds.push(fiche.id);
         gruppoMap[cid].voci.push(...fiche.voci);
+        if (fiche.tipo_pagamento) gruppoMap[cid].tipoPagamento = fiche.tipo_pagamento;
         if (fiche.convalidata) {
           gruppoMap[cid].ficheConvalidata = true;
           gruppoMap[cid].importoConvalidato = fiche.importo_convalidato;
@@ -267,6 +273,7 @@ function FichesTab() {
           ficheConvalidata: false,
           importoConvalidato: 0,
           convalidataAt: null,
+          tipoPagamento: null,
           voci: [],
           noteEsistenti: '',
           createdAt: '',
@@ -275,6 +282,7 @@ function FichesTab() {
       const g = gruppoMap[cid];
       g.ficheIds.push(f.id);
       g.voci.push(...voci);
+      if ((f as any).tipo_pagamento) g.tipoPagamento = (f as any).tipo_pagamento as TipoPagamento;
       if (f.convalidata) {
         g.ficheConvalidata = true;
         g.importoConvalidato += f.importo_convalidato;
@@ -709,6 +717,7 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
       ficheConvalidata: false,
       importoConvalidato: 0,
       convalidataAt: null,
+      tipoPagamento: null,
       voci: [],
       noteEsistenti: '',
       createdAt: (newFiche as any).created_at ?? '',
@@ -832,6 +841,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   const [showEliminaConfirm, setShowEliminaConfirm] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [eliminaError, setEliminaError] = useState<string | null>(null);
+  const [tipoPagamento, setTipoPagamento] = useState<TipoPagamento>(null);
+  const [showPagamentoModal, setShowPagamentoModal] = useState(false);
 
   // Carte
   const [carteSconto, setCarteSconto] = useState<CartaScontoSimple[]>([]);
@@ -875,6 +886,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
   useEffect(() => {
     if (!isOpen || initialized) return;
+    setTipoPagamento(gruppo.tipoPagamento ?? null);
     if (gruppo.voci.length > 0) {
       setVoci(gruppo.voci);
       setNote(gruppo.noteEsistenti);
@@ -1042,7 +1054,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
       ? strippedId
       : null;
 
-    const ficheFields: Record<string, unknown> = { note, updated_at: new Date().toISOString(), ...extraFields };
+    const ficheFields: Record<string, unknown> = { note, tipo_pagamento: tipoPagamento, updated_at: new Date().toISOString(), ...extraFields };
     if (isManuale) {
       ficheFields.manuale = true;
       ficheFields.cliente_id = realClienteId;
@@ -1087,6 +1099,32 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
     onSaved();
   }
 
+  async function handleChangeTipoPagamento(nuovoTipo: TipoPagamento) {
+    setTipoPagamento(nuovoTipo);
+    for (const ficheId of gruppo.ficheIds) {
+      await dbUpdate({ table: 'fiches', id: ficheId, data: { tipo_pagamento: nuovoTipo } });
+    }
+    // If fiche is already validated, adjust incassi accordingly
+    if (gruppo.ficheConvalidata) {
+      for (const ficheId of gruppo.ficheIds) {
+        if (nuovoTipo === 'contanti_nero') {
+          await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+        } else {
+          const clienteNome = `${gruppo.clienteNome} ${gruppo.clienteCognome}`.trim();
+          await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          await dbInsert({ table: 'incassi_giornalieri', data: {
+            data: selectedDate,
+            fiche_id: ficheId,
+            cliente_nome: clienteNome,
+            importo: gruppo.importoConvalidato,
+            note: '',
+            user_id: user?.id,
+          } });
+        }
+      }
+    }
+  }
+
   async function handleConvalida() {
     setConvalidando(true);
     setShowConvalidaConfirm(false);
@@ -1111,15 +1149,18 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
     if (ficheId) {
       const clienteNome = `${gruppo.clienteNome} ${gruppo.clienteCognome}`.trim();
-      await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
-      await dbInsert({ table: 'incassi_giornalieri', data: {
-        data: selectedDate,
-        fiche_id: ficheId,
-        cliente_nome: clienteNome,
-        importo: totale,
-        note: note || '',
-        user_id: user?.id,
-      } });
+      // Registra incasso solo se NON è contanti_nero
+      if (tipoPagamento !== 'contanti_nero') {
+        await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+        await dbInsert({ table: 'incassi_giornalieri', data: {
+          data: selectedDate,
+          fiche_id: ficheId,
+          cliente_nome: clienteNome,
+          importo: totale,
+          note: note || '',
+          user_id: user?.id,
+        } });
+      }
 
       // Registra utilizzo carta sconto (skip se nominativa e cliente non corrisponde)
       if (scontoValido && cartaSconto) {
@@ -1452,10 +1493,15 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             <span className="text-xs bg-stone-100 text-stone-600 font-medium px-2 py-0.5 rounded-full">{gruppo.appuntamenti.length} servizi</span>
           )}
           {isConvalidata ? (
-            <span className="flex items-center gap-1 text-xs bg-emerald-100 text-emerald-700 font-medium px-2 py-0.5 rounded-full">
-              <ShieldCheck size={11} />
-              {showImporti ? `€${gruppo.importoConvalidato.toFixed(2)}` : '€•••'}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1 text-xs bg-emerald-100 text-emerald-700 font-medium px-2 py-0.5 rounded-full">
+                <ShieldCheck size={11} />
+                {showImporti ? `€${gruppo.importoConvalidato.toFixed(2)}` : '€•••'}
+              </span>
+              {gruppo.tipoPagamento === 'cc_bancomat' && <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 font-medium px-1.5 py-0.5 rounded-full">CC</span>}
+              {gruppo.tipoPagamento === 'contanti_verde' && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#22c55e' }} title="Contanti" />}
+              {gruppo.tipoPagamento === 'contanti_nero' && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-stone-300" style={{ backgroundColor: '#1c1917' }} title="Contanti (non registrati)" />}
+            </div>
           ) : gruppo.ficheIds.length > 0 ? (
             <span className="text-xs bg-amber-100 text-amber-700 font-medium px-2 py-0.5 rounded-full">Fiche</span>
           ) : null}
@@ -1840,6 +1886,33 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             </div>
           )}
 
+          {/* Tipo pagamento */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Metodo di pagamento</label>
+            <div className="flex gap-2 flex-wrap">
+              {([
+                { val: 'cc_bancomat' as TipoPagamento, label: 'CC / Bancomat', dot: null },
+                { val: 'contanti_verde' as TipoPagamento, label: 'Contanti', dot: '#22c55e' },
+                { val: 'contanti_nero' as TipoPagamento, label: 'Contanti', dot: '#1c1917' },
+              ] as { val: TipoPagamento; label: string; dot: string | null }[]).map(opt => {
+                const selected = tipoPagamento === opt.val;
+                return (
+                  <button key={opt.val!} type="button"
+                    onClick={() => isConvalidata ? handleChangeTipoPagamento(opt.val) : setTipoPagamento(opt.val)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${selected ? 'border-amber-400 bg-amber-50 text-stone-800 shadow-sm' : 'border-stone-200 text-stone-500 hover:border-stone-300 hover:text-stone-700'}`}
+                  >
+                    {opt.dot
+                      ? <span className="w-3 h-3 rounded-full flex-shrink-0 border border-stone-300/50" style={{ backgroundColor: opt.dot }} />
+                      : <span className="text-base leading-none">💳</span>
+                    }
+                    {opt.label}
+                    {selected && <Check size={12} className="text-amber-600 ml-0.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Note fiche</label>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
@@ -1890,18 +1963,59 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             </div>
           )}
 
+          {/* Seleziona tipo pagamento (obbligatorio prima della convalida) */}
+          {showPagamentoModal && (
+            <div className="bg-white border-2 border-amber-300 rounded-xl px-4 py-4 space-y-3 shadow-sm">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">Seleziona il metodo di pagamento</p>
+                  <p className="text-xs text-stone-500 mt-0.5">Necessario prima di convalidare la fiche.</p>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { val: 'cc_bancomat' as TipoPagamento, label: 'CC / Bancomat', dot: null },
+                  { val: 'contanti_verde' as TipoPagamento, label: 'Contanti', dot: '#22c55e' },
+                  { val: 'contanti_nero' as TipoPagamento, label: 'Contanti', dot: '#1c1917' },
+                ] as { val: TipoPagamento; label: string; dot: string | null }[]).map(opt => (
+                  <button key={opt.val!} type="button"
+                    onClick={() => {
+                      setTipoPagamento(opt.val);
+                      setShowPagamentoModal(false);
+                      if (saldoInsufficient) setShowRicaricaAlert(true);
+                      else setShowConvalidaConfirm(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-stone-200 hover:border-amber-400 hover:bg-amber-50 text-sm font-medium text-stone-700 transition-all"
+                  >
+                    {opt.dot ? <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: opt.dot }} /> : <span className="text-xs">💳</span>}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setShowPagamentoModal(false)} className="text-xs text-stone-400 hover:text-stone-600 transition-colors">Annulla</button>
+            </div>
+          )}
+
           {/* Convalida confirm inline */}
           {showConvalidaConfirm && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 space-y-3">
+            <div className={`border rounded-xl px-4 py-4 space-y-3 ${tipoPagamento === 'contanti_nero' ? 'bg-stone-50 border-stone-300' : 'bg-amber-50 border-amber-200'}`}>
               <div className="flex items-start gap-3">
-                <AlertCircle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle size={18} className={`flex-shrink-0 mt-0.5 ${tipoPagamento === 'contanti_nero' ? 'text-stone-500' : 'text-amber-600'}`} />
                 <div>
-                  <p className="text-sm font-semibold text-amber-800">Convalidare la fiche?</p>
-                  <p className="text-xs text-amber-700 mt-0.5">
-                    Verrà registrato un incasso di <strong>€{totale.toFixed(2)}</strong> nella sezione Finanze per la data {selectedDate}.
-                    {scontoAmt > 0 && <span className="block mt-0.5">Sconto carta applicato: -€{scontoAmt.toFixed(2)}</span>}
-                    {creditoPremium > 0 && <span className="block mt-0.5">Credito premium scalato: -€{creditoPremium.toFixed(2)}</span>}
-                  </p>
+                  <p className={`text-sm font-semibold ${tipoPagamento === 'contanti_nero' ? 'text-stone-700' : 'text-amber-800'}`}>Convalidare la fiche?</p>
+                  {tipoPagamento === 'contanti_nero' ? (
+                    <p className="text-xs text-stone-600 mt-0.5">
+                      <strong>Contanti (non registrati):</strong> l'incasso di €{totale.toFixed(2)} <strong>NON</strong> verrà registrato in Finanze.
+                      I prodotti rivendita verranno scalati dal magazzino e i dati inviati alle statistiche normalmente.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Verrà registrato un incasso di <strong>€{totale.toFixed(2)}</strong> nella sezione Finanze per la data {selectedDate}.
+                      {scontoAmt > 0 && <span className="block mt-0.5">Sconto carta applicato: -€{scontoAmt.toFixed(2)}</span>}
+                      {creditoPremium > 0 && <span className="block mt-0.5">Credito premium scalato: -€{creditoPremium.toFixed(2)}</span>}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
@@ -1984,10 +2098,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
                     <Check size={14} />
                     {saving ? 'Salvataggio…' : 'Salva bozza'}
                   </button>
-                  {!showConvalidaConfirm && !showRicaricaAlert && !showRicaricaModal && !showPasswordGate && (
+                  {!showConvalidaConfirm && !showRicaricaAlert && !showRicaricaModal && !showPasswordGate && !showPagamentoModal && (
                     <button
                       onClick={() => {
-                        if (saldoInsufficient) {
+                        if (!tipoPagamento) {
+                          setShowPagamentoModal(true);
+                        } else if (saldoInsufficient) {
                           setShowRicaricaAlert(true);
                         } else {
                           setShowConvalidaConfirm(true);
@@ -2391,7 +2507,68 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
 
   useEffect(() => {
     if (!autoExportDate) return;
-    const timer = setTimeout(() => { doSavePdf(autoExportDate).then(onClose); }, 800);
+    const timer = setTimeout(async () => {
+      if (!printPagesRef.current) { onClose(); return; }
+      setGeneratingPdf(true);
+      try {
+        const dateLabel = autoExportDate;
+        const normali = previews.filter(p => p.g.tipoPagamento !== 'contanti_nero');
+        const neri = previews.filter(p => p.g.tipoPagamento === 'contanti_nero');
+
+        // Helper: build PDF from a subset of previews using a fresh jsPDF
+        const buildSplitPdf = async (subset: typeof previews) => {
+          const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+          const allPageEls = printPagesRef.current!.querySelectorAll<HTMLElement>('[data-print-page]');
+          for (let i = 0; i < allPageEls.length; i++) {
+            const canvas = await html2canvas(allPageEls[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+            if (i > 0) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+          }
+          const incassoTotale = subset.reduce((sum, p) => sum + p.totale, 0);
+          pdf.addPage();
+          pdf.setFont('helvetica', 'bold'); pdf.setFontSize(16); pdf.setTextColor(28, 25, 23);
+          pdf.text('Riepilogo incasso', 14, 24);
+          pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor(120, 113, 108);
+          pdf.text(dateLabel, 14, 31);
+          pdf.setDrawColor(231, 229, 228); pdf.line(14, 34, 196, 34);
+          let y = 42; pdf.setFontSize(9);
+          for (const p of subset) {
+            const nome = p.g.clienteId.startsWith('__premium__')
+              ? `Carta Premium — ${`${p.g.clienteNome} ${p.g.clienteCognome}`.trim()}`
+              : `${p.g.clienteNome} ${p.g.clienteCognome}`.trim() || 'Sconosciuto';
+            pdf.setTextColor(28, 25, 23); pdf.text(nome, 14, y);
+            pdf.setTextColor(28, 100, 58); pdf.text(`€${p.totale.toFixed(2)}`, 180, y, { align: 'right' });
+            y += 6; if (y > 270) { pdf.addPage(); y = 20; }
+          }
+          pdf.setDrawColor(231, 229, 228); pdf.line(14, y, 196, y); y += 6;
+          pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(28, 25, 23);
+          pdf.text('Totale incasso', 14, y);
+          pdf.setTextColor(22, 163, 74); pdf.text(`€${incassoTotale.toFixed(2)}`, 180, y, { align: 'right' });
+          return pdf;
+        };
+
+        if (normali.length > 0) {
+          const pdf = await buildSplitPdf(normali);
+          const filename = `fiches_${dateLabel.replace(/\s/g, '-')}.pdf`;
+          await saveFile('fiches', filename, pdf.output('blob'));
+        }
+        if (neri.length > 0) {
+          const pdf = await buildSplitPdf(neri);
+          const filename = `fiches_contanti_${dateLabel.replace(/\s/g, '-')}.pdf`;
+          await saveFile('fiches_nero', filename, pdf.output('blob'));
+        }
+        if (normali.length === 0 && neri.length === 0) {
+          // No fiches — save empty to mark done
+          const pdf = await buildSplitPdf(previews);
+          const filename = `fiches_${dateLabel.replace(/\s/g, '-')}.pdf`;
+          await saveFile('fiches', filename, pdf.output('blob'));
+        }
+      } finally {
+        setGeneratingPdf(false);
+        onClose();
+      }
+    }, 800);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoExportDate]);

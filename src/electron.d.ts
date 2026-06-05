@@ -75,7 +75,7 @@ export interface DbAPI {
   getPath: () => Promise<{ path: string; exists: boolean }>;
 }
 
-export type SavePathType = 'backup' | 'fiches' | 'clienti' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
+export type SavePathType = 'backup' | 'fiches' | 'fiches_nero' | 'clienti' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
 export type SavePaths = Record<SavePathType, string>;
 
 export interface FichesSchedConfig {

@@ -3422,6 +3422,7 @@ const SAVE_PATH_LABELS: Record<string, { label: string; desc: string }> = {
   statistiche:   { label: 'Statistiche',    desc: 'PDF report statistiche e schede' },
   qrcode:        { label: 'QR Code',        desc: 'PDF QR code registrazione clienti' },
   comunicazioni: { label: 'Comunicazioni',  desc: 'HTML guida e materiali comunicazione' },
+  fiches_nero: { label: 'Fiches (contanti non registrati)', desc: 'Cartella separata per PDF fiches pagate in contanti non dichiarati' },
 };
 
 function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
@@ -3557,6 +3558,12 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2 text-xs text-amber-700">
                   <AlertTriangle size={13} className="flex-shrink-0" />
                   Configura prima la cartella "Fiches" qui sopra affinché il salvataggio automatico funzioni.
+                </div>
+              )}
+              {fichesSched.enabled && paths.fiches && !paths.fiches_nero && (
+                <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 flex items-center gap-2 text-xs text-stone-600">
+                  <AlertTriangle size={13} className="flex-shrink-0 text-stone-400" />
+                  Opzionale: configura "Fiches (contanti non registrati)" per salvare separatamente le fiches in contanti non dichiarati.
                 </div>
               )}
               <button onClick={saveFichesSched} disabled={saving} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors">

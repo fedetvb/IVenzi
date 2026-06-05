@@ -50,7 +50,7 @@ function writeConfig(cfg) { writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null,
 
 // ─── Config cartelle di salvataggio ──────────────────────────────────────────
 const SAVE_PATHS_CONFIG_PATH = join(USER_DATA, 'save-paths-config.json');
-const DEFAULT_SAVE_PATHS = { backup: '', fiches: '', clienti: '', magazzino: '', rivendita: '', statistiche: '', qrcode: '', comunicazioni: '' };
+const DEFAULT_SAVE_PATHS = { backup: '', fiches: '', fiches_nero: '', clienti: '', magazzino: '', rivendita: '', statistiche: '', qrcode: '', comunicazioni: '' };
 
 function readSavePaths() {
   try { if (existsSync(SAVE_PATHS_CONFIG_PATH)) return { ...DEFAULT_SAVE_PATHS, ...JSON.parse(readFileSync(SAVE_PATHS_CONFIG_PATH, 'utf8')) }; }
@@ -121,6 +121,14 @@ function runMigrations() {
       console.log('[DB] Migrazione: ricariche_carte_premium → ricariche_carta_premium');
     }
   }
+  // Add tipo_pagamento to fiches if missing
+  try {
+    const cols = db.prepare("PRAGMA table_info(fiches)").all();
+    if (!cols.some(c => c.name === 'tipo_pagamento')) {
+      db.exec("ALTER TABLE fiches ADD COLUMN tipo_pagamento TEXT");
+      console.log('[DB] Migrazione: aggiunta colonna tipo_pagamento a fiches');
+    }
+  } catch(e) { console.warn('[DB] tipo_pagamento migration:', e.message); }
 }
 
 function createSchema() {
@@ -171,7 +179,7 @@ function createSchema() {
       id TEXT PRIMARY KEY, appuntamento_id TEXT, cliente_id TEXT, note TEXT DEFAULT '',
       convalidata INTEGER NOT NULL DEFAULT 0, convalidata_at TEXT,
       importo_convalidato REAL NOT NULL DEFAULT 0, manuale INTEGER NOT NULL DEFAULT 0,
-      data_riferimento TEXT, user_id TEXT,
+      data_riferimento TEXT, tipo_pagamento TEXT, user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
