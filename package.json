@@ -30,7 +30,38 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
-  "build": {},
+  "build": {
+    "appId": "com.gestionale.salone",
+    "productName": "Gestionale Salone",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/main.js",
+      "electron/preload.cjs",
+      "package.json",
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "asar": false,
+    "icon": "public/icons/icon-512x512.png",
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "language": 1040,
+      "shortcutName": "Gestionale Salone",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
   "optionalDependencies": {
     "better-sqlite3": "^9.4.3"
   },
