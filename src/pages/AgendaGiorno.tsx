@@ -411,7 +411,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-3 py-0.5 md:px-4 md:py-0.5 bg-white border-b border-stone-200 flex-shrink-0">
+      <div className="px-3 py-px md:px-4 md:py-px bg-white border-b border-stone-200 flex-shrink-0">
         {compleanni.length > 0 && !compleanniDismissed && (
           <div className="mb-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -655,7 +655,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
               {visibleParr.map(p => (
                 <div
                   key={p.id}
-                  className="flex-1 text-center py-3 border-l-2 group"
+                  className="flex-1 text-center py-1 border-l-2 group"
                   style={{ borderColor: p.colore }}
                 >
                   <div className="flex items-center justify-center gap-1.5">
