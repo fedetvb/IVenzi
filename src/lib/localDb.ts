@@ -69,8 +69,14 @@ export interface DbResult<T = unknown> {
 
 // ─── Rilevamento ambiente ─────────────────────────────────────────────────────
 
+let _electronDbReady: boolean = false;
+
+export function setElectronDbReady(ready: boolean) {
+  _electronDbReady = ready;
+}
+
 export function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI?.db;
+  return typeof window !== 'undefined' && !!window.electronAPI?.db && _electronDbReady;
 }
 
 // ID utente corrente (settato da App.tsx dopo il login)

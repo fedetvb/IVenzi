@@ -25,7 +25,7 @@ import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw, ClipboardList } from 'lucide-react';
 import AiChat from './components/AiChat';
-import { isElectron, setCurrentUserId, registerPushRowNow } from './lib/localDb';
+import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow } from './lib/sync';
 
 // Registra il push immediato una volta sola al caricamento del modulo
@@ -148,6 +148,17 @@ export default function App() {
     }
 
     checkStartupAlerts();
+  }, []);
+
+  // Controlla se SQLite e' pronto in Electron; se non lo e', si usa Supabase direttamente
+  useEffect(() => {
+    if (!window.electronAPI?.db) return;
+    window.electronAPI.db.isReady().then((ready: boolean) => {
+      setElectronDbReady(ready);
+    });
+    return window.electronAPI.db.onReady((ready: boolean) => {
+      setElectronDbReady(ready);
+    });
   }, []);
 
   // Imposta userId corrente per il push immediato in localDb
