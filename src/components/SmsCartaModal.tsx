@@ -322,6 +322,7 @@ export default function SmsCartaModal({ nominativo, codice, telefono, azione, on
   function openWhatsapp(messaggio: string) {
     const testo = encodeURIComponent(messaggio);
     window.open(`https://wa.me/${normalizePhone(telefono)}?text=${testo}`, '_blank');
+    onClose();
   }
 
   // Per sconto_creazione usiamo il subcomponent con template

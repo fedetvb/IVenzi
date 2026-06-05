@@ -869,6 +869,7 @@ export default function Clienti({ onSelectCliente }: Props) {
                     ? `https://wa.me/${numero}?text=${encodeURIComponent(messaggioConferma.testo)}`
                     : `https://wa.me/?text=${encodeURIComponent(messaggioConferma.testo)}`;
                   window.open(url, '_blank');
+                  setMessaggioConferma(null);
                 }}
                 className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-green-500 hover:bg-green-600 text-white transition-colors"
               >
