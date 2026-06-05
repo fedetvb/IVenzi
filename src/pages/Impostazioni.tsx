@@ -618,7 +618,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-stone-800">Backup automatico</h3>
             <p className="text-xs text-stone-500">
-              {isElectron
+              {isElectronApp
                 ? 'Schedulato dal sistema operativo — funziona anche con il programma minimizzato'
                 : 'Il backup scatta mentre il programma è aperto nel browser'}
             </p>
@@ -653,7 +653,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
                 className="px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-sm font-mono transition"
               />
               <p className="text-xs text-stone-400 mt-1.5">
-                {isElectron
+                {isElectronApp
                   ? 'Il backup scatta esattamente a quest\'orario — anche con il programma minimizzato'
                   : 'Il backup scatta all\'orario impostato se il browser è aperto, oppure al primo avvio dopo quell\'ora'}
               </p>
