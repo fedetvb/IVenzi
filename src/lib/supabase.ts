@@ -53,6 +53,8 @@ export interface TrattamentoCatalogo {
   colore: string;
   attivo: boolean;
   tipo: 'servizio' | 'trattamento';
+  inizio_posa: number | null;
+  durata_posa: number | null;
   created_at: string;
 }
 

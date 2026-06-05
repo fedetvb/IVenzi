@@ -25,6 +25,13 @@ function getSlots() {
   return slots;
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  const num = parseInt(full, 16);
+  return `rgba(${(num >> 16) & 0xff},${(num >> 8) & 0xff},${num & 0xff},${alpha})`;
+}
+
 function darkenColor(hex: string, amount = 0.38): string {
   const clean = hex.replace('#', '');
   const num = parseInt(clean.length === 3
@@ -80,6 +87,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const msgInputRef = useRef<HTMLTextAreaElement>(null);
   const [loading, setLoading] = useState(true);
   const [assenzeMap, setAssenzeMap] = useState<Map<string, string | null>>(new Map());
+  const [catalogoPosa, setCatalogoPosa] = useState<Map<string, { inizio_posa: number; durata_posa: number }>>(new Map());
 
   const [appModal, setAppModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [multiModal, setMultiModal] = useState<{ open: boolean; date?: Date }>({ open: false });
@@ -118,7 +126,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-    const [parrRes, appRes, impostRes, scRes, prRes, assRes] = await Promise.all([
+    const [parrRes, appRes, impostRes, scRes, prRes, assRes, catPosaRes] = await Promise.all([
       dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome' }] }),
       dbSelectWithRelated({
         table: 'appuntamenti',
@@ -132,19 +140,26 @@ export default function AgendaGiorno({ date, onBack }: Props) {
         relations: [
           { key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, cognome, data_nascita, telefono' },
           { key: 'parrucchieri', table: 'parrucchieri', fk: 'parrucchiere_id', columns: '*' },
-          { key: 'appuntamento_trattamenti', table: 'appuntamento_trattamenti', fk: 'id', many: true, manyFk: 'appuntamento_id', columns: 'nome_trattamento, prezzo' }
+          { key: 'appuntamento_trattamenti', table: 'appuntamento_trattamenti', fk: 'id', many: true, manyFk: 'appuntamento_id', columns: 'nome_trattamento, prezzo, trattamento_id' }
         ],
-        supabaseSelect: '*, clienti(id, nome, cognome, data_nascita, telefono), parrucchieri(*), appuntamento_trattamenti(nome_trattamento, prezzo)'
+        supabaseSelect: '*, clienti(id, nome, cognome, data_nascita, telefono), parrucchieri(*), appuntamento_trattamenti(nome_trattamento, prezzo, trattamento_id)'
       }),
       getImpostazione('messaggio_auguri'),
       dbSelect({ table: 'carte_sconto', columns: 'cliente_id, usa_e_getta, attiva', filters: [{ col: 'cliente_id', op: 'not_null' }, { col: 'attiva', op: 'eq', val: true }, { col: 'deleted_at', op: 'is_null' }] }),
       dbSelect({ table: 'carte_premium', columns: 'cliente_id, saldo, attiva', filters: [{ col: 'deleted_at', op: 'is_null' }, { col: 'attiva', op: 'eq', val: true }] }),
-      dbSelect({ table: 'assenze_parrucchieri', columns: 'parrucchiere_id, data_inizio, data_fine, ora_inizio', filters: [{ col: 'data_inizio', op: 'lte', val: dateStr }, { col: 'data_fine', op: 'gte', val: dateStr }] })
+      dbSelect({ table: 'assenze_parrucchieri', columns: 'parrucchiere_id, data_inizio, data_fine, ora_inizio', filters: [{ col: 'data_inizio', op: 'lte', val: dateStr }, { col: 'data_fine', op: 'gte', val: dateStr }] }),
+      dbSelect({ table: 'trattamenti_catalogo', columns: 'id, inizio_posa, durata_posa', filters: [{ col: 'inizio_posa', op: 'not_null' }, { col: 'durata_posa', op: 'not_null' }] })
     ]);
 
     if (impostRes) setMessaggioAuguri(impostRes);
     setParrucchieri((parrRes.data || []) as Parrucchiere[]);
     setAppuntamenti((appRes.data || []) as Appuntamento[]);
+
+    const posaMap = new Map<string, { inizio_posa: number; durata_posa: number }>();
+    for (const r of (catPosaRes.data || []) as { id: string; inizio_posa: number; durata_posa: number }[]) {
+      if (r.inizio_posa != null && r.durata_posa != null) posaMap.set(r.id, { inizio_posa: r.inizio_posa, durata_posa: r.durata_posa });
+    }
+    setCatalogoPosa(posaMap);
 
     const carteMap = new Map<string, Set<string>>();
     const addCarta = (clienteId: string, tipo: string) => {
@@ -822,6 +837,22 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                       const tratt = app.appuntamento_trattamenti || [];
                       const shortBlock = app.heightPx < slotHeight * 2;
 
+                      // Posa gradient: find first trattamento with posa config
+                      const posaCfg = tratt
+                        .map(t => (t as { trattamento_id?: string }).trattamento_id ? catalogoPosa.get((t as { trattamento_id: string }).trattamento_id) : undefined)
+                        .find(Boolean);
+                      const pxPerMin = slotHeight / SLOT_DURATION;
+                      const blockBg = (() => {
+                        if (!posaCfg) return baseColor;
+                        const pt = posaCfg.inizio_posa * pxPerMin;
+                        const pe = (posaCfg.inizio_posa + posaCfg.durata_posa) * pxPerMin;
+                        const h = app.heightPx - 2;
+                        const safeStart = Math.max(0, Math.min(pt, h));
+                        const safeEnd = Math.max(safeStart, Math.min(pe, h));
+                        if (safeStart >= safeEnd) return baseColor;
+                        return `linear-gradient(to bottom, ${baseColor} ${safeStart}px, ${hexToRgba(baseColor, 0.28)} ${safeStart}px, ${hexToRgba(baseColor, 0.28)} ${safeEnd}px, ${baseColor} ${safeEnd}px)`;
+                      })();
+
                       return (
                         <div
                           key={app.id}
@@ -831,7 +862,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                             height: app.heightPx - 2,
                             left: `calc(${leftPct} + 2px)`,
                             width: `calc(${width} - 4px)`,
-                            backgroundColor: baseColor,
+                            background: blockBg,
                             opacity: isDragged ? 0.35 : isCancellato ? 0.7 : 1,
                             touchAction: 'none',
                           }}

@@ -102,6 +102,19 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione clienti blacklist:', e.message); }
 
+  // Add inizio_posa and durata_posa to trattamenti_catalogo
+  try {
+    const tratCols = db.prepare("PRAGMA table_info(trattamenti_catalogo)").all().map(c => c.name);
+    if (!tratCols.includes('inizio_posa')) {
+      db.exec("ALTER TABLE trattamenti_catalogo ADD COLUMN inizio_posa INTEGER");
+      console.log('[DB] Migrazione: aggiunta colonna inizio_posa a trattamenti_catalogo');
+    }
+    if (!tratCols.includes('durata_posa')) {
+      db.exec("ALTER TABLE trattamenti_catalogo ADD COLUMN durata_posa INTEGER");
+      console.log('[DB] Migrazione: aggiunta colonna durata_posa a trattamenti_catalogo');
+    }
+  } catch(e) { console.warn('[DB] migrazione trattamenti_catalogo posa:', e.message); }
+
   // Add foto_base64 and foto_base64_pendente to clienti for offline photo storage
   try {
     const clientiCols = db.prepare("PRAGMA table_info(clienti)").all().map(c => c.name);
@@ -172,6 +185,8 @@ function createSchema() {
       prezzo REAL NOT NULL DEFAULT 0,
       colore TEXT NOT NULL DEFAULT '#888888',
       attivo INTEGER NOT NULL DEFAULT 1,
+      inizio_posa INTEGER,
+      durata_posa INTEGER,
       user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),

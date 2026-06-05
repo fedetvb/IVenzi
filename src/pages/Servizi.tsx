@@ -11,6 +11,8 @@ interface ServiceForm {
   prezzo: number;
   colore: string;
   attivo: boolean;
+  inizio_posa: number | null;
+  durata_posa: number | null;
 }
 
 interface VoceExtra {
@@ -101,7 +103,7 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
   const [servizi, setServizi] = useState<TrattamentoCatalogo[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ open: boolean; id?: string }>({ open: false });
-  const [form, setForm] = useState<ServiceForm>({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true });
+  const [form, setForm] = useState<ServiceForm>({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true, inizio_posa: null, durata_posa: null });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -118,7 +120,7 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
   useEffect(() => { load(); }, [load]);
 
   function openNew() {
-    setForm({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true });
+    setForm({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true, inizio_posa: null, durata_posa: null });
     setError('');
     setModal({ open: true });
   }
@@ -128,7 +130,7 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
     const data = res.data?.[0];
     if (!data) return;
     const s = data as TrattamentoCatalogo;
-    setForm({ nome: s.nome, descrizione: s.descrizione ?? '', durata_minuti: s.durata_minuti, prezzo: s.prezzo, colore: s.colore, attivo: s.attivo });
+    setForm({ nome: s.nome, descrizione: s.descrizione ?? '', durata_minuti: s.durata_minuti, prezzo: s.prezzo, colore: s.colore, attivo: s.attivo, inizio_posa: s.inizio_posa ?? null, durata_posa: s.durata_posa ?? null });
     setError('');
     setModal({ open: true, id });
   }
@@ -137,7 +139,7 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
     if (!form.nome.trim()) { setError('Il nome del servizio è obbligatorio'); return; }
     setSaving(true);
     setError('');
-    const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), durata_minuti: form.durata_minuti, prezzo: form.prezzo, colore: form.colore, attivo: form.attivo, tipo };
+    const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), durata_minuti: form.durata_minuti, prezzo: form.prezzo, colore: form.colore, attivo: form.attivo, tipo, inizio_posa: form.inizio_posa, durata_posa: form.durata_posa };
     if (modal.id) {
       await dbUpdate({ table: 'trattamenti_catalogo', id: modal.id, data: payload });
     } else {
@@ -196,9 +198,15 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-sm text-stone-500">
+                  <div className="flex items-center gap-3 text-sm text-stone-500 flex-wrap">
                     <span className="flex items-center gap-1"><Clock size={12} /> {s.durata_minuti} min</span>
                     <span className="flex items-center gap-1"><Euro size={12} /> {s.prezzo.toFixed(2)}</span>
+                    {s.inizio_posa != null && s.durata_posa != null && (
+                      <span className="flex items-center gap-1 text-xs text-violet-500" title={`Posa: min ${s.inizio_posa}–${s.inizio_posa + s.durata_posa}`}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        Posa {s.durata_posa}min
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => toggleAttivo(s)}
@@ -290,6 +298,44 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
                   className="w-4 h-4 accent-amber-500"
                 />
                 <label htmlFor="attivo-s" className="text-sm text-stone-700">{tipo === 'trattamento' ? 'Trattamento attivo' : 'Servizio attivo'} (visibile nelle fiches)</label>
+              </div>
+              <div className="border-t border-stone-100 pt-4">
+                <label className="block text-xs font-semibold text-stone-600 mb-3 uppercase tracking-wide">Tempo di posa (opzionale)</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1.5">Inizio posa (min)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="es. 20"
+                      value={form.inizio_posa ?? ''}
+                      onChange={e => setForm(f => ({ ...f, inizio_posa: e.target.value === '' ? null : parseInt(e.target.value) || 0 }))}
+                      onFocus={e => e.target.select()}
+                      className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1.5">Durata posa (min)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      placeholder="es. 30"
+                      value={form.durata_posa ?? ''}
+                      onChange={e => setForm(f => ({ ...f, durata_posa: e.target.value === '' ? null : parseInt(e.target.value) || 0 }))}
+                      onFocus={e => e.target.select()}
+                      className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                </div>
+                {(form.inizio_posa !== null || form.durata_posa !== null) && (
+                  <p className="text-xs text-stone-400 mt-2">
+                    {form.inizio_posa != null && form.durata_posa != null
+                      ? `Posa: min ${form.inizio_posa} → ${form.inizio_posa + form.durata_posa} dall'inizio`
+                      : 'Compila entrambi i campi per attivare la posa'}
+                  </p>
+                )}
               </div>
             </div>
             <div className="px-6 py-4 border-t border-stone-100 flex gap-3 justify-end">
