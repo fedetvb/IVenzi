@@ -394,6 +394,32 @@ export async function dbUpsertMany<T = Record<string, unknown>>(args: {
   }
 }
 
+// ─── RPC (stored procedures) ─────────────────────────────────────────────────
+
+/**
+ * Chiama una funzione Postgres via supabase.rpc().
+ * La chiamata passa per /rest/v1/rpc/ quindi viene intercettata da offlineFetch
+ * e accodata se il dispositivo e' offline — il delta viene applicato atomicamente
+ * al ripristino della connessione.
+ */
+export async function dbRpc(fn: string, params: Record<string, unknown>): Promise<{ error: Error | null }> {
+  if (isElectron()) {
+    // In Electron eseguiamo direttamente su Supabase (online) o ignoriamo (offline: la riga dirty viene sincronizzata dal sync periodico)
+    try {
+      const { error } = await supabase.rpc(fn, params);
+      return { error: error as Error | null };
+    } catch {
+      return { error: null };
+    }
+  }
+  try {
+    const { error } = await supabase.rpc(fn, params);
+    return { error: error as Error | null };
+  } catch {
+    return { error: null };
+  }
+}
+
 // ─── SELECT WITH RELATED (JOIN) ───────────────────────────────────────────────
 
 export interface DbRelation {

@@ -11,7 +11,7 @@ import html2canvas from 'html2canvas';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
-import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated } from '../lib/localDb';
+import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated, dbRpc } from '../lib/localDb';
 import { saveFile } from '../lib/fileSaver';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -429,16 +429,9 @@ function FichesTab() {
             } });
           }
 
-          // Scala sempre lo stock dal catalogo, indipendentemente dal parrucchiere
+          // Scala lo stock atomicamente (safe multi-device)
           if (catalogoId) {
-            const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
-            if (prod && prod.length > 0) {
-              const prodData = prod[0] as any;
-              await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
-                quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
-                quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
-              } });
-            }
+            await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoId, p_stock_delta: -1, p_venduta_delta: 1 });
           }
         }
 
@@ -1236,16 +1229,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           } });
         }
 
-        // Scala sempre lo stock dal catalogo, indipendentemente dal parrucchiere
+        // Scala lo stock atomicamente (safe multi-device)
         if (catalogoId) {
-          const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
-          if (prod && prod.length > 0) {
-            const prodData = prod[0] as any;
-            await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
-              quantita_stock: Math.max(0, (prodData.quantita_stock ?? 0) - 1),
-              quantita_venduta: (prodData.quantita_venduta ?? 0) + 1,
-            } });
-          }
+          await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoId, p_stock_delta: -1, p_venduta_delta: 1 });
         }
       }
 
@@ -1340,20 +1326,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         await dbDelete({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       }
 
-      // Ripristina stock catalogo per ogni voce con __catalogo_id__ nel note
+      // Ripristina stock catalogo per ogni voce con __catalogo_id__ nel note (atomico)
       const { data: vociFiche } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       for (const vf of vociFiche || []) {
         const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
         if (!catalogoMatch) continue;
-        const catalogoId = catalogoMatch[1];
-        const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
-        if (prod && prod.length > 0) {
-          const prodData = prod[0] as any;
-          await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
-            quantita_stock: (prodData.quantita_stock ?? 0) + 1,
-            quantita_venduta: Math.max(0, (prodData.quantita_venduta ?? 0) - 1),
-          } });
-        }
+        await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoMatch[1], p_stock_delta: 1, p_venduta_delta: -1 });
       }
 
       // Rimuovi voci rivendita generate dalla fiche
@@ -1411,20 +1389,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
             await dbDelete({ table: 'utilizzi_carta_premium', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           }
 
-          // Ripristina stock catalogo per voci con __catalogo_id__ nel note
+          // Ripristina stock catalogo per voci con __catalogo_id__ nel note (atomico)
           const { data: vociFiche } = await dbSelect({ table: 'fiche_voci', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           for (const vf of vociFiche || []) {
             const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
             if (!catalogoMatch) continue;
-            const catalogoId = catalogoMatch[1];
-            const { data: prod } = await dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'id', op: 'eq', val: catalogoId }] });
-            if (prod && prod.length > 0) {
-              const prodData = prod[0] as any;
-              await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: catalogoId, data: {
-                quantita_stock: (prodData.quantita_stock ?? 0) + 1,
-                quantita_venduta: Math.max(0, (prodData.quantita_venduta ?? 0) - 1),
-              } });
-            }
+            await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoMatch[1], p_stock_delta: 1, p_venduta_delta: -1 });
           }
 
           // Rimuovi voci rivendita e trattamenti generati
@@ -3343,13 +3313,7 @@ function ProdottiRivenditaTab() {
       note: vendita.prodotto.marca ? `Marca: ${vendita.prodotto.marca}` : '',
       user_id: user?.id,
     } });
-    const nuovoStock = Math.max(0, vendita.prodotto.quantita_stock - vendita.quantita);
-    const nuovaVenduta = (vendita.prodotto.quantita_venduta || 0) + vendita.quantita;
-    await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: vendita.prodotto.id, data: {
-      quantita_stock: nuovoStock,
-      quantita_venduta: nuovaVenduta,
-      updated_at: new Date().toISOString(),
-    } });
+    await dbRpc('aggiorna_stock_catalogo', { p_id: vendita.prodotto.id, p_stock_delta: -vendita.quantita, p_venduta_delta: vendita.quantita });
     setSaving(false);
     setVendita(null);
     setFlash(`Vendita registrata${parr ? ` per ${parr.nome}` : ''}`);
