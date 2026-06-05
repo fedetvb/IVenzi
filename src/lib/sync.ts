@@ -20,6 +20,24 @@ const SYNC_TABLES: string[] = [
   'giorni_parrucchiere', 'voci_extra_catalogo',
 ];
 
+// ─── Helper: scarica URL immagine e restituisce data URI base64 ───────────────
+
+async function fetchImageAsBase64(url: string): Promise<string> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return '';
+    const blob = await resp.blob();
+    return await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string) ?? '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return '';
+  }
+}
+
 // ─── Supabase -> SQLite (download completo) ───────────────────────────────────
 
 export async function syncSupabaseToLocal(userId: string): Promise<void> {
@@ -37,7 +55,28 @@ export async function syncSupabaseToLocal(userId: string): Promise<void> {
         continue;
       }
 
-      await window.electronAPI.db.syncUpsert({ table, rows: data as Record<string, unknown>[] });
+      // Scarica immagini come base64 per uso offline
+      const rows = await Promise.all(
+        (data as Record<string, unknown>[]).map(async (row) => {
+          if (table === 'clienti' && row.foto_url && typeof row.foto_url === 'string') {
+            const b64 = await fetchImageAsBase64(row.foto_url);
+            return { ...row, foto_base64: b64 };
+          }
+          if (table === 'schede_colore') {
+            const updates: Record<string, unknown> = { ...row };
+            if (row.foto_prima_url && typeof row.foto_prima_url === 'string') {
+              updates.foto_prima_base64 = await fetchImageAsBase64(row.foto_prima_url as string);
+            }
+            if (row.foto_dopo_url && typeof row.foto_dopo_url === 'string') {
+              updates.foto_dopo_base64 = await fetchImageAsBase64(row.foto_dopo_url as string);
+            }
+            return updates;
+          }
+          return row;
+        })
+      );
+
+      await window.electronAPI.db.syncUpsert({ table, rows });
     } catch (e) {
       console.warn(`[Sync] Errore download ${table}:`, e);
     }
@@ -74,8 +113,8 @@ export async function pushRowNow(
 ): Promise<void> {
   if (!isElectron() || !navigator.onLine) return;
   try {
-    const { _dirty, synced_at, ...rest } = row as Record<string, unknown>;
-    void _dirty; void synced_at;
+    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, ...rest } = row as Record<string, unknown>;
+    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64;
     const rowToSync = { ...rest, user_id: userId };
 
     const { error } = await supabase
@@ -104,8 +143,8 @@ async function _pushDirtyRows(
   userId: string
 ): Promise<void> {
   const rows = dirtyRows.map(row => {
-    const { _dirty, synced_at, ...rest } = row;
-    void _dirty; void synced_at;
+    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, ...rest } = row;
+    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64;
     return { ...rest, user_id: userId };
   });
 

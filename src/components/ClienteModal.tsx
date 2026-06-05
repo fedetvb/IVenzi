@@ -3,7 +3,7 @@ import { X, Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { type Cliente } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
-import { dbSelect, dbInsert, dbUpdate } from '../lib/localDb';
+import { dbSelect, dbInsert, dbUpdate, isElectron } from '../lib/localDb';
 
 interface Props {
   clienteId?: string | null;
@@ -38,7 +38,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   async function loadCliente() {
     const { data, error } = await dbSelect({ table: 'clienti', filters: [{ col: 'id', op: 'eq', val: clienteId }] });
     if (error || !data || data.length === 0) return;
-    const c = (data[0] as Cliente);
+    const c = (data[0] as Cliente & { foto_base64?: string });
     setForm({
       nome: c.nome,
       cognome: c.cognome,
@@ -47,7 +47,8 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       data_nascita: c.data_nascita ?? '',
       note: c.note ?? '',
     });
-    setFotoUrl(c.foto_url ?? '');
+    // Prefer local base64 for preview (works offline)
+    setFotoUrl(c.foto_base64 || c.foto_url || '');
   }
 
   function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -108,13 +109,26 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
 
     const newFotoUrl = await uploadFoto(id);
 
-    const payload = {
+    // In Electron, also store base64 locally for offline access
+    let fotoBase64 = '';
+    if (isElectron() && fotoFile) {
+      fotoBase64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string) ?? '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(fotoFile);
+      });
+    }
+
+    const payload: Record<string, unknown> = {
       nome: form.nome.trim(), cognome: form.cognome.trim(),
       telefono: form.telefono.trim(), email: form.email.trim(),
       data_nascita: form.data_nascita || null, note: form.note.trim(),
       foto_url: newFotoUrl,
       updated_at: new Date().toISOString(),
     };
+    if (isElectron() && fotoBase64) payload.foto_base64 = fotoBase64;
+    if (isElectron() && !fotoFile && !fotoUrl) payload.foto_base64 = '';
     await dbUpdate({ table: 'clienti', id: id as string, data: payload });
 
     setSaving(false);

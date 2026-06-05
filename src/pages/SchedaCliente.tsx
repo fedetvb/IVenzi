@@ -592,8 +592,8 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 mb-5">
         <div className="flex items-start gap-5">
           <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {cliente.foto_url ? (
-              <img src={cliente.foto_url} alt={`${cliente.nome} ${cliente.cognome}`} className="w-full h-full object-cover" />
+            {((cliente as Record<string, unknown>).foto_base64 as string || cliente.foto_url) ? (
+              <img src={((cliente as Record<string, unknown>).foto_base64 as string) || cliente.foto_url} alt={`${cliente.nome} ${cliente.cognome}`} className="w-full h-full object-cover" />
             ) : (
               <span className="text-xl font-bold text-amber-700">{initials}</span>
             )}

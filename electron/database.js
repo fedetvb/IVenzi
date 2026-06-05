@@ -78,6 +78,28 @@ function runMigrations() {
       console.log('[DB] Migrazione: aggiunta colonna tipo_pagamento a fiches');
     }
   } catch(e) { console.warn('[DB] migrazione fiches colonne:', e.message); }
+
+  // Add foto_base64 to clienti for offline photo storage
+  try {
+    const clientiCols = db.prepare("PRAGMA table_info(clienti)").all().map(c => c.name);
+    if (!clientiCols.includes('foto_base64')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN foto_base64 TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_base64 a clienti');
+    }
+  } catch(e) { console.warn('[DB] migrazione clienti foto_base64:', e.message); }
+
+  // Add foto_prima_base64 and foto_dopo_base64 to schede_colore for offline storage
+  try {
+    const schedeCols = db.prepare("PRAGMA table_info(schede_colore)").all().map(c => c.name);
+    if (!schedeCols.includes('foto_prima_base64')) {
+      db.exec("ALTER TABLE schede_colore ADD COLUMN foto_prima_base64 TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_prima_base64 a schede_colore');
+    }
+    if (!schedeCols.includes('foto_dopo_base64')) {
+      db.exec("ALTER TABLE schede_colore ADD COLUMN foto_dopo_base64 TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_dopo_base64 a schede_colore');
+    }
+  } catch(e) { console.warn('[DB] migrazione schede_colore foto_base64:', e.message); }
 }
 
 function createSchema() {
@@ -91,6 +113,7 @@ function createSchema() {
       data_nascita TEXT,
       note TEXT DEFAULT '',
       foto_url TEXT DEFAULT '',
+      foto_base64 TEXT DEFAULT '',
       user_id TEXT,
       deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -171,6 +194,8 @@ function createSchema() {
       tecnica TEXT DEFAULT '',
       foto_prima_url TEXT DEFAULT '',
       foto_dopo_url TEXT DEFAULT '',
+      foto_prima_base64 TEXT DEFAULT '',
+      foto_dopo_base64 TEXT DEFAULT '',
       user_id TEXT,
       deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
