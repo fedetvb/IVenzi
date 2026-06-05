@@ -894,6 +894,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   const [showAltroForm, setShowAltroForm] = useState(false);
   const [altroNome, setAltroNome] = useState('');
   const [altroPrezzo, setAltroPrezzo] = useState('');
+  const [showServiziPicker, setShowServiziPicker] = useState(false);
+  const [cercaServizio, setCercaServizio] = useState('');
 
   const totaleBase = voci.reduce((s, v) => s + v.prezzo, 0);
 
@@ -1614,15 +1616,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             <div>
               <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Servizi e Prodotti</p>
               <div className="flex flex-wrap gap-2">
-                {serviziCatalogo.map(s => (
-                  <button key={s.id} type="button" onClick={() => addVoceServizio(s)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:shadow-sm active:scale-95"
-                    style={{ borderColor: s.colore, backgroundColor: `${s.colore}15`, color: s.colore }}
-                  >
-                    <Plus size={10} />
-                    {s.nome} {s.prezzo > 0 && <span className="opacity-70">€{s.prezzo.toFixed(0)}</span>}
-                  </button>
-                ))}
+                <button type="button" onClick={() => { setShowServiziPicker(true); setCercaServizio(''); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-stone-300 bg-stone-50 text-stone-700 hover:bg-stone-100 hover:border-stone-400 transition-all hover:shadow-sm active:scale-95"
+                >
+                  <Scissors size={10} />
+                  Trattamenti
+                </button>
                 <button type="button" onClick={() => openRivenditaPicker()}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-orange-300 bg-orange-50 text-orange-600 hover:bg-orange-100 hover:border-orange-400 transition-all hover:shadow-sm active:scale-95"
                 >
@@ -1653,119 +1652,6 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
               </div>
             </div>
 
-            {/* Picker prodotti rivendita */}
-            {showRivenditaPicker && (
-              <div className="bg-stone-50 border border-amber-200 rounded-xl p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-stone-700">Seleziona prodotto da aggiungere</p>
-                  <button type="button" onClick={() => { setShowRivenditaPicker(false); setShowAltroForm(false); setAltroNome(''); setAltroPrezzo(''); setCercaProdotto(''); }} className="p-1 rounded-lg hover:bg-stone-200 text-stone-400 transition-colors">
-                    <X size={13} />
-                  </button>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={cercaProdotto}
-                    onChange={e => setCercaProdotto(e.target.value)}
-                    placeholder="Cerca prodotto..."
-                    className="w-full border border-stone-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white pl-7"
-                    autoFocus
-                  />
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                  {cercaProdotto && (
-                    <button type="button" onClick={() => setCercaProdotto('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-300 hover:text-stone-500 transition-colors">
-                      <X size={11} />
-                    </button>
-                  )}
-                </div>
-                {loadingProdotti ? (
-                  <div className="flex items-center justify-center py-4">
-                    <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {[...prodottiRivendita].filter(p => {
-                      if (!cercaProdotto.trim()) return true;
-                      const q = cercaProdotto.toLowerCase();
-                      return `${p.categoria} ${p.nome} ${p.marca}`.toLowerCase().includes(q);
-                    }).sort((a, b) => {
-                      const nomeA = `${a.categoria} ${a.nome}`.toLowerCase();
-                      const nomeB = `${b.categoria} ${b.nome}`.toLowerCase();
-                      return nomeA.localeCompare(nomeB);
-                    }).map(p => {
-                      const esaurito = p.quantita_stock <= 0;
-                      const scorta = !esaurito && p.quantita_stock <= 2;
-                      const btnCls = esaurito
-                        ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-400'
-                        : scorta
-                          ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:border-orange-400'
-                          : 'border-amber-300 bg-white text-stone-700 hover:bg-amber-50 hover:border-amber-400';
-                      const iconCls = esaurito ? 'text-red-400' : scorta ? 'text-orange-400' : 'text-amber-500';
-                      const stockCls = esaurito ? 'text-red-400 font-semibold' : scorta ? 'text-orange-400 font-semibold' : 'text-stone-400';
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => addProdottoRivendita(p)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:shadow-sm active:scale-95 ${btnCls}`}
-                        >
-                          <Plus size={10} className={iconCls} />
-                          <span className="font-semibold">{p.categoria ? `${p.categoria.toLowerCase()} ${p.nome}` : p.nome}</span>
-                          {p.marca && <span className="opacity-60">{p.marca}</span>}
-                          <span className="text-emerald-600 font-bold">€{p.prezzo_vendita.toFixed(0)}</span>
-                          <span className="opacity-30">·</span>
-                          <span className={stockCls}>stock {p.quantita_stock}</span>
-                        </button>
-                      );
-                    })}
-                    {prodottiRivendita.length === 0 && (
-                      <p className="text-xs text-stone-400 italic py-1">Nessun prodotto disponibile in stock</p>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setShowAltroForm(v => !v)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 hover:border-stone-400 transition-all hover:shadow-sm active:scale-95"
-                    >
-                      <Plus size={10} />
-                      Altro
-                    </button>
-                  </div>
-                )}
-                {showAltroForm && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="text"
-                      value={altroNome}
-                      onChange={e => setAltroNome(e.target.value)}
-                      placeholder="Nome prodotto"
-                      className="flex-1 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
-                    />
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 text-xs">€</span>
-                      <input
-                        type="number"
-                        value={altroPrezzo}
-                        onChange={e => setAltroPrezzo(e.target.value)}
-                        placeholder="0"
-                        min="0"
-                        step="0.5"
-                        className="w-20 border border-stone-200 rounded-lg pl-5 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={addProdottoAltro}
-                      disabled={!altroNome.trim() || !altroPrezzo}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Plus size={11} />
-                      Aggiungi
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Selezione parrucchiere per servizio in sospeso */}
             {pendingServizio && createPortal(
               <SelezioneParrucchiereModal
@@ -1791,6 +1677,172 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
                 labelConferma="Aggiungi voce"
                 accentColor="amber"
               />,
+              document.body
+            )}
+
+            {/* Modal trattamenti */}
+            {showServiziPicker && createPortal(
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowServiziPicker(false)}>
+                <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg border border-stone-100 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+                    <p className="text-sm font-semibold text-stone-800">Seleziona trattamento</p>
+                    <button type="button" onClick={() => setShowServiziPicker(false)} className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 transition-colors">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="px-5 pb-3 flex-shrink-0">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={cercaServizio}
+                        onChange={e => setCercaServizio(e.target.value)}
+                        placeholder="Cerca trattamento..."
+                        className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 bg-stone-50 pl-8"
+                        autoFocus
+                      />
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                      {cercaServizio && (
+                        <button type="button" onClick={() => setCercaServizio('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-300 hover:text-stone-500 transition-colors">
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="px-5 pb-5 overflow-y-auto">
+                    <div className="flex flex-wrap gap-2">
+                      {serviziCatalogo.filter(s => {
+                        if (!cercaServizio.trim()) return true;
+                        return s.nome.toLowerCase().includes(cercaServizio.toLowerCase());
+                      }).map(s => (
+                        <button key={s.id} type="button"
+                          onClick={() => { addVoceServizio(s); setShowServiziPicker(false); setCercaServizio(''); }}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border transition-all hover:shadow-sm active:scale-95"
+                          style={{ borderColor: s.colore, backgroundColor: `${s.colore}15`, color: s.colore }}
+                        >
+                          <Plus size={11} />
+                          {s.nome}
+                          {s.prezzo > 0 && <span className="opacity-70 font-bold">€{s.prezzo.toFixed(0)}</span>}
+                        </button>
+                      ))}
+                      {serviziCatalogo.filter(s => !cercaServizio.trim() || s.nome.toLowerCase().includes(cercaServizio.toLowerCase())).length === 0 && (
+                        <p className="text-sm text-stone-400 italic py-2">Nessun trattamento trovato</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
+
+            {/* Modal prodotti rivendita */}
+            {showRivenditaPicker && createPortal(
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setShowRivenditaPicker(false); setShowAltroForm(false); setAltroNome(''); setAltroPrezzo(''); setCercaProdotto(''); }}>
+                <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg border border-stone-100 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+                    <p className="text-sm font-semibold text-stone-800">Seleziona prodotto da aggiungere</p>
+                    <button type="button" onClick={() => { setShowRivenditaPicker(false); setShowAltroForm(false); setAltroNome(''); setAltroPrezzo(''); setCercaProdotto(''); }} className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 transition-colors">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="px-5 pb-3 flex-shrink-0">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={cercaProdotto}
+                        onChange={e => setCercaProdotto(e.target.value)}
+                        placeholder="Cerca prodotto..."
+                        className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-stone-50 pl-8"
+                        autoFocus
+                      />
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+                      {cercaProdotto && (
+                        <button type="button" onClick={() => setCercaProdotto('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-300 hover:text-stone-500 transition-colors">
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="px-5 pb-5 overflow-y-auto">
+                    {loadingProdotti ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {[...prodottiRivendita].filter(p => {
+                          if (!cercaProdotto.trim()) return true;
+                          const q = cercaProdotto.toLowerCase();
+                          return `${p.categoria} ${p.nome} ${p.marca}`.toLowerCase().includes(q);
+                        }).sort((a, b) => `${a.categoria} ${a.nome}`.toLowerCase().localeCompare(`${b.categoria} ${b.nome}`.toLowerCase())).map(p => {
+                          const esaurito = p.quantita_stock <= 0;
+                          const scorta = !esaurito && p.quantita_stock <= 2;
+                          const btnCls = esaurito
+                            ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-400'
+                            : scorta
+                              ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:border-orange-400'
+                              : 'border-amber-300 bg-white text-stone-700 hover:bg-amber-50 hover:border-amber-400';
+                          const iconCls = esaurito ? 'text-red-400' : scorta ? 'text-orange-400' : 'text-amber-500';
+                          const stockCls = esaurito ? 'text-red-400 font-semibold' : scorta ? 'text-orange-400 font-semibold' : 'text-stone-400';
+                          return (
+                            <button key={p.id} type="button"
+                              onClick={() => addProdottoRivendita(p)}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border transition-all hover:shadow-sm active:scale-95 ${btnCls}`}
+                            >
+                              <Plus size={11} className={iconCls} />
+                              <span className="font-semibold">{p.categoria ? `${p.categoria.toLowerCase()} ${p.nome}` : p.nome}</span>
+                              {p.marca && <span className="opacity-60 text-xs">{p.marca}</span>}
+                              <span className="text-emerald-600 font-bold">€{p.prezzo_vendita.toFixed(0)}</span>
+                              <span className="opacity-30">·</span>
+                              <span className={`text-xs ${stockCls}`}>stock {p.quantita_stock}</span>
+                            </button>
+                          );
+                        })}
+                        {prodottiRivendita.length === 0 && (
+                          <p className="text-sm text-stone-400 italic py-2">Nessun prodotto disponibile in stock</p>
+                        )}
+                        <button type="button"
+                          onClick={() => setShowAltroForm(v => !v)}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 hover:border-stone-400 transition-all hover:shadow-sm active:scale-95"
+                        >
+                          <Plus size={11} />
+                          Altro
+                        </button>
+                      </div>
+                    )}
+                    {showAltroForm && (
+                      <div className="flex items-center gap-2 pt-3">
+                        <input
+                          type="text"
+                          value={altroNome}
+                          onChange={e => setAltroNome(e.target.value)}
+                          placeholder="Nome prodotto"
+                          className="flex-1 border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-stone-50"
+                        />
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm">€</span>
+                          <input
+                            type="number"
+                            value={altroPrezzo}
+                            onChange={e => setAltroPrezzo(e.target.value)}
+                            placeholder="0"
+                            min="0"
+                            step="0.5"
+                            className="w-24 border border-stone-200 rounded-xl pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-stone-50"
+                          />
+                        </div>
+                        <button type="button"
+                          onClick={() => addProdottoAltro()}
+                          disabled={!altroNome.trim() || !altroPrezzo}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Plus size={13} />
+                          Aggiungi
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>,
               document.body
             )}
           </div>
