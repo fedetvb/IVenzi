@@ -411,7 +411,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-3 py-1.5 md:px-4 md:py-1.5 bg-white border-b border-stone-200 flex-shrink-0">
+      <div className="px-3 py-0.5 md:px-4 md:py-0.5 bg-white border-b border-stone-200 flex-shrink-0">
         {compleanni.length > 0 && !compleanniDismissed && (
           <div className="mb-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 space-y-2">
             <div className="flex items-center justify-between gap-2">
