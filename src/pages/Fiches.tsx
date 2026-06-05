@@ -2501,6 +2501,8 @@ interface PrintModalProps {
   autoExportDate?: string | null;
 }
 
+type PrintFilter = 'tutte' | 'normali' | 'nero';
+
 function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
   const printPagesRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<LayoutOption>(() => {
@@ -2508,6 +2510,7 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
     return LAYOUT_OPTIONS.find(o => o.value === Number(saved)) ?? LAYOUT_OPTIONS[4];
   });
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [printFilter, setPrintFilter] = useState<PrintFilter>('tutte');
 
   function buildFichePreview(g: ClienteGruppo) {
     const voci = g.voci.length > 0 ? g.voci : g.appuntamenti.flatMap(app => {
@@ -2523,7 +2526,14 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
     return { g, voci, totale, orari, parrNomi };
   }
 
-  const previews = gruppi.map(buildFichePreview);
+  const allPreviews = gruppi.map(buildFichePreview);
+  const previews = printFilter === 'normali'
+    ? allPreviews.filter(p => p.g.tipoPagamento !== 'contanti_nero')
+    : printFilter === 'nero'
+    ? allPreviews.filter(p => p.g.tipoPagamento === 'contanti_nero')
+    : allPreviews;
+  const countNero = allPreviews.filter(p => p.g.tipoPagamento === 'contanti_nero').length;
+  const countNormali = allPreviews.filter(p => p.g.tipoPagamento !== 'contanti_nero').length;
   const perPage = layout.value;
   const pages: (typeof previews)[] = [];
   for (let i = 0; i < previews.length; i += perPage) pages.push(previews.slice(i, i + perPage));
@@ -2660,8 +2670,11 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
       pdf.setTextColor(22, 163, 74);
       pdf.text(`€${incassoTotale.toFixed(2)}`, 180, y, { align: 'right' });
 
-      const filename = `fiches_${(dateLabel ?? localDateStr()).replace(/\s/g, '-')}.pdf`;
-      await saveFile('fiches', filename, pdf.output('blob'));
+      const isNero = printFilter === 'nero';
+      const filename = isNero
+        ? `fiches_contanti_${(dateLabel ?? localDateStr()).replace(/\s/g, '-')}.pdf`
+        : `fiches_${(dateLabel ?? localDateStr()).replace(/\s/g, '-')}.pdf`;
+      await saveFile(isNero ? 'fiches_nero' : 'fiches', filename, pdf.output('blob'));
     } finally { setGeneratingPdf(false); }
   }
 
@@ -2673,8 +2686,25 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
           <span className="text-sm text-stone-400 whitespace-nowrap">{previews.length} convalidat{previews.length === 1 ? 'a' : 'e'} · {pages.length} pag.</span>
           <span className="text-sm font-semibold text-emerald-600 whitespace-nowrap">Totale: €{previews.reduce((s, p) => s + p.totale, 0).toFixed(2)}</span>
         </div>
+        {/* Filtro tipo pagamento */}
+        <div className="flex gap-1 bg-stone-100 p-0.5 rounded-lg flex-shrink-0">
+          <button onClick={() => setPrintFilter('tutte')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${printFilter === 'tutte' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
+            Tutte ({allPreviews.length})
+          </button>
+          <button onClick={() => setPrintFilter('normali')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${printFilter === 'normali' ? 'bg-white text-emerald-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
+            Dichiarate ({countNormali})
+          </button>
+          {countNero > 0 && (
+            <button onClick={() => setPrintFilter('nero')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${printFilter === 'nero' ? 'bg-stone-800 text-white shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
+              Non dichiarate ({countNero})
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-stone-500 whitespace-nowrap">Fiches per pagina:</span>
+          <span className="text-xs font-medium text-stone-500 whitespace-nowrap">Per pagina:</span>
           <div className="flex gap-1 bg-stone-100 p-0.5 rounded-lg">
             {LAYOUT_OPTIONS.map(opt => (
               <button key={opt.value} onClick={() => { setLayout(opt); localStorage.setItem('fiches_print_layout', String(opt.value)); }}
@@ -2688,17 +2718,31 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
           <button onClick={doPrint} className="flex items-center gap-2 px-4 py-2 bg-stone-700 hover:bg-stone-600 text-white text-sm font-medium rounded-lg transition-colors">
             <Printer size={14} />Stampa
           </button>
-          <button onClick={doSavePdf} disabled={generatingPdf} className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+          <button onClick={() => doSavePdf()} disabled={generatingPdf || previews.length === 0} className={`flex items-center gap-2 px-4 py-2 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors ${printFilter === 'nero' ? 'bg-stone-700 hover:bg-stone-600' : 'bg-amber-500 hover:bg-amber-600'}`}>
             <Download size={14} />{generatingPdf ? 'Generazione…' : 'Salva PDF'}
           </button>
           <button onClick={onClose} className="ml-1 text-stone-400 hover:text-stone-700 transition-colors p-1"><X size={20} /></button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-stone-200 p-6">
+      <div className={`flex-1 overflow-auto p-6 ${printFilter === 'nero' ? 'bg-stone-800' : 'bg-stone-200'}`}>
+        {printFilter === 'nero' && (
+          <div className="text-center mb-3">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-stone-700 text-stone-200 text-xs font-semibold rounded-full">
+              <span className="w-2 h-2 rounded-full bg-stone-400" />
+              Fiches contanti non dichiarati — anteprima separata
+            </span>
+          </div>
+        )}
         <div ref={printPagesRef} className="space-y-6">
-          {pages.map((page, pi) => (
-            <div key={pi} data-print-page className="bg-white shadow-lg mx-auto" style={{ width: '210mm', minHeight: '297mm', padding: '8mm', boxSizing: 'border-box' }}>
+          {previews.length === 0 ? (
+            <div className="text-center py-20">
+              <p className={`text-sm font-medium ${printFilter === 'nero' ? 'text-stone-400' : 'text-stone-500'}`}>
+                Nessuna fiche {printFilter === 'nero' ? 'con contanti non dichiarati' : 'dichiarata'} per questa giornata.
+              </p>
+            </div>
+          ) : pages.map((page, pi) => (
+            <div key={pi} data-print-page className="bg-white shadow-lg mx-auto" style={{ width: '210mm', minHeight: '297mm', padding: '8mm', boxSizing: 'border-box', borderTop: printFilter === 'nero' ? '4px solid #1c1917' : undefined }}>
               <div style={gridStyle()}>
                 {page.map((p, idx) => <PrintFiche key={idx} preview={p} />)}
                 {Array.from({ length: perPage - page.length }).map((_, i) => (
