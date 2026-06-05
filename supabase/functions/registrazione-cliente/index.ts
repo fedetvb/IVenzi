@@ -1,4 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
 
 const HTML = `<!DOCTYPE html>
 <html lang="it">
@@ -25,6 +32,18 @@ label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;lett
 input,textarea{width:100%;padding:13px 16px 13px 42px;background:white;border:1.5px solid #e7e5e4;border-radius:14px;font-size:14px;color:#1c1917;outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none}
 input:focus,textarea:focus{border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.15)}
 textarea{resize:none;padding-top:13px}
+.photo-area{display:flex;flex-direction:column;align-items:center;gap:12px}
+.photo-preview{width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #f59e0b;display:none}
+.photo-placeholder{width:100px;height:100px;border-radius:50%;background:#f5f5f4;border:2.5px dashed #d6d3d1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .15s,background .15s}
+.photo-placeholder:hover{border-color:#f59e0b;background:#fffbeb}
+.photo-placeholder svg{width:28px;height:28px;fill:none;stroke:#a8a29e;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.photo-placeholder span{font-size:11px;color:#a8a29e;font-weight:600;text-align:center;line-height:1.3}
+.photo-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.pbtn{padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:1.5px solid #e7e5e4;background:white;color:#57534e;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px}
+.pbtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pbtn:hover{border-color:#f59e0b;color:#d97706;background:#fffbeb}
+.pbtn.remove{border-color:#fecaca;color:#dc2626}
+.pbtn.remove:hover{background:#fef2f2}
 .privacy{font-size:12px;color:#a8a29e;line-height:1.6;margin-bottom:20px}
 .btn{width:100%;padding:15px;background:#f59e0b;color:white;font-size:15px;font-weight:700;border:none;border-radius:14px;cursor:pointer;transition:background .15s,transform .1s}
 .btn:hover{background:#d97706}
@@ -39,6 +58,8 @@ textarea{resize:none;padding-top:13px}
 .ss p{font-size:15px;color:#78716c;line-height:1.6;max-width:280px}
 .sf{margin-top:32px;display:flex;align-items:center;gap:8px;color:#f59e0b;font-size:14px;font-weight:600}
 .sf svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.prog{width:100%;height:4px;background:#e7e5e4;border-radius:4px;overflow:hidden;margin-top:4px;display:none}
+.prog-bar{height:100%;background:#f59e0b;border-radius:4px;transition:width .3s}
 </style>
 </head>
 <body>
@@ -76,6 +97,45 @@ textarea{resize:none;padding-top:13px}
         <label>Note / Allergie / Preferenze</label>
         <div class="iw"><svg class="ii ti" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><textarea id="note" rows="3" placeholder="Allergie, preferenze, informazioni utili..."></textarea></div>
       </div>
+
+      <div class="fg">
+        <label>Foto profilo <span style="font-weight:400;color:#a8a29e;text-transform:none;letter-spacing:0">(opzionale)</span></label>
+        <div class="photo-area" id="photoArea">
+          <div class="photo-placeholder" id="photoPlaceholder" onclick="document.getElementById('fileGallery').click()">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M20.5 6.5h-2.1l-1.5-2h-9.8l-1.5 2H3.5A2 2 0 001.5 8.5v10a2 2 0 002 2h17a2 2 0 002-2v-10a2 2 0 00-2-2z"/></svg>
+            <span>Tocca per<br/>aggiungere foto</span>
+          </div>
+          <img id="photoPreview" class="photo-preview" alt="Anteprima foto" />
+          <div class="photo-btns" id="photoBtns" style="display:none">
+            <button type="button" class="pbtn" onclick="document.getElementById('fileSelfie').click()">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M20.5 6.5h-2.1l-1.5-2h-9.8l-1.5 2H3.5A2 2 0 001.5 8.5v10a2 2 0 002 2h17a2 2 0 002-2v-10a2 2 0 00-2-2z"/></svg>
+              Selfie
+            </button>
+            <button type="button" class="pbtn" onclick="document.getElementById('fileGallery').click()">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Galleria
+            </button>
+            <button type="button" class="pbtn remove" onclick="removePhoto()">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              Rimuovi
+            </button>
+          </div>
+          <div class="photo-btns" id="photoAddBtns">
+            <button type="button" class="pbtn" onclick="document.getElementById('fileSelfie').click()">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M20.5 6.5h-2.1l-1.5-2h-9.8l-1.5 2H3.5A2 2 0 001.5 8.5v10a2 2 0 002 2h17a2 2 0 002-2v-10a2 2 0 00-2-2z"/></svg>
+              Scatta selfie
+            </button>
+            <button type="button" class="pbtn" onclick="document.getElementById('fileGallery').click()">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Scegli foto
+            </button>
+          </div>
+          <input type="file" id="fileSelfie" accept="image/*" capture="user" style="display:none" onchange="handlePhoto(this)"/>
+          <input type="file" id="fileGallery" accept="image/*" style="display:none" onchange="handlePhoto(this)"/>
+          <div class="prog" id="prog"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
+        </div>
+      </div>
+
       <div id="err" class="eb" style="display:none"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span id="em"></span></div>
       <p class="privacy">I tuoi dati saranno utilizzati esclusivamente per la gestione della scheda cliente nel salone e non saranno ceduti a terzi.</p>
       <button type="submit" class="btn" id="btn">Invia la mia scheda</button>
@@ -83,7 +143,42 @@ textarea{resize:none;padding-top:13px}
   </div>
 </div>
 <script>
-var SU="__SU__",SK="__SK__";
+var SU="__SU__",SK="__SK__",EF="__EF__";
+var photoBase64=null,photoMime=null;
+
+function handlePhoto(input){
+  var file=input.files[0];
+  if(!file)return;
+  if(file.size>5*1024*1024){showErr("La foto non deve superare 5 MB.");input.value='';return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var data=e.target.result;
+    photoBase64=data.split(',')[1];
+    photoMime=file.type||'image/jpeg';
+    document.getElementById('photoPreview').src=data;
+    document.getElementById('photoPreview').style.display='block';
+    document.getElementById('photoPlaceholder').style.display='none';
+    document.getElementById('photoBtns').style.display='flex';
+    document.getElementById('photoAddBtns').style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto(){
+  photoBase64=null;photoMime=null;
+  document.getElementById('photoPreview').style.display='none';
+  document.getElementById('photoPlaceholder').style.display='flex';
+  document.getElementById('photoBtns').style.display='none';
+  document.getElementById('photoAddBtns').style.display='flex';
+  document.getElementById('fileSelfie').value='';
+  document.getElementById('fileGallery').value='';
+}
+
+function showErr(msg){
+  document.getElementById('em').textContent=msg;
+  document.getElementById('err').style.display='flex';
+}
+
 document.getElementById("f").onsubmit=async function(e){
   e.preventDefault();
   var n=document.getElementById("nome").value.trim();
@@ -92,22 +187,33 @@ document.getElementById("f").onsubmit=async function(e){
   var em=document.getElementById("email").value.trim();
   var d=document.getElementById("dn").value||null;
   var no=document.getElementById("note").value.trim();
-  var ed=document.getElementById("err");
-  var emsg=document.getElementById("em");
   var btn=document.getElementById("btn");
-  if(!n||!c){emsg.textContent="Nome e cognome sono obbligatori.";ed.style.display="flex";return;}
-  ed.style.display="none";btn.disabled=true;btn.textContent="Invio in corso...";
+  var prog=document.getElementById('prog');
+  var progBar=document.getElementById('progBar');
+  if(!n||!c){showErr("Nome e cognome sono obbligatori.");return;}
+  document.getElementById('err').style.display="none";
+  btn.disabled=true;btn.textContent="Invio in corso...";
+  if(photoBase64){prog.style.display='block';progBar.style.width='30%';}
   try{
-    var r=await fetch(SU+"/rest/v1/schede_clienti_da_confermare",{
+    var payload={nome:n,cognome:c,telefono:t,email:em,data_nascita:d,note:no};
+    if(photoBase64){payload.foto_base64=photoBase64;payload.foto_mime=photoMime;}
+    if(photoBase64)progBar.style.width='60%';
+    var r=await fetch(EF,{
       method:"POST",
-      headers:{"Content-Type":"application/json","apikey":SK,"Authorization":"Bearer "+SK,"Prefer":"return=minimal"},
-      body:JSON.stringify({nome:n,cognome:c,telefono:t,email:em,data_nascita:d,note:no,stato:"in_attesa"})
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+SK},
+      body:JSON.stringify(payload)
     });
-    if(!r.ok)throw 1;
-    document.getElementById("app").innerHTML='<div class="ss"><div class="si"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><h2>Grazie!</h2><p>I tuoi dati sono stati inviati correttamente.<br/>Il nostro staff creer\u00e0 la tua scheda al pi\u00f9 presto.</p><div class="sf"><svg viewBox="0 0 24 24"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>Ti aspettiamo!</div></div>';
+    if(photoBase64)progBar.style.width='90%';
+    var res=await r.json();
+    if(!r.ok||res.error)throw new Error(res.error||'Errore');
+    if(photoBase64)progBar.style.width='100%';
+    setTimeout(function(){
+      document.getElementById("app").innerHTML='<div class="ss"><div class="si"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><h2>Grazie!</h2><p>I tuoi dati sono stati inviati correttamente.<br/>Il nostro staff creer\u00e0 la tua scheda al pi\u00f9 presto.</p><div class="sf"><svg viewBox="0 0 24 24"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>Ti aspettiamo!</div></div>';
+    },300);
   }catch(x){
     btn.disabled=false;btn.textContent="Invia la mia scheda";
-    emsg.textContent="Si \u00e8 verificato un errore. Riprova.";ed.style.display="flex";
+    showErr(x.message||"Si \u00e8 verificato un errore. Riprova.");
+    prog.style.display='none';
   }
 };
 </script>
@@ -116,29 +222,90 @@ document.getElementById("f").onsubmit=async function(e){
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-      },
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  try {
-    const su = Deno.env.get("SUPABASE_URL") ?? "";
-    const sk = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-    const html = HTML.replace("__SU__", su).replace("__SK__", sk);
+  const su = Deno.env.get("SUPABASE_URL") ?? "";
+  const sk = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const efUrl = `${su}/functions/v1/registrazione-cliente`;
 
+  // GET: serve la pagina HTML
+  if (req.method === "GET") {
+    const html = HTML
+      .replace("__SU__", su)
+      .replace("__SK__", sk)
+      .replace("__EF__", efUrl);
     return new Response(html, {
       status: 200,
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "x-content-type-options": "nosniff",
-      },
+      headers: { ...corsHeaders, "content-type": "text/html; charset=utf-8" },
     });
-  } catch (err) {
-    return new Response(String(err), { status: 500 });
   }
+
+  // POST: riceve dati + eventuale foto, inserisce nel DB
+  if (req.method === "POST") {
+    try {
+      const body = await req.json();
+      const { nome, cognome, telefono, email, data_nascita, note, foto_base64, foto_mime } = body;
+
+      if (!nome || !cognome) {
+        return new Response(JSON.stringify({ error: "Nome e cognome sono obbligatori." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const admin = createClient(su, serviceKey);
+      let foto_url = "";
+
+      if (foto_base64 && foto_mime) {
+        const mimeType = String(foto_mime).startsWith("image/") ? String(foto_mime) : "image/jpeg";
+        const ext = mimeType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+        const filename = `schede/${crypto.randomUUID()}.${ext}`;
+
+        const binaryStr = atob(String(foto_base64));
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+
+        const { error: uploadErr } = await admin.storage
+          .from("foto-clienti")
+          .upload(filename, bytes, { contentType: mimeType, upsert: false });
+
+        if (!uploadErr) {
+          const { data: urlData } = admin.storage.from("foto-clienti").getPublicUrl(filename);
+          foto_url = urlData.publicUrl;
+        }
+      }
+
+      const { error: insertErr } = await admin
+        .from("schede_clienti_da_confermare")
+        .insert({
+          nome: String(nome).trim(),
+          cognome: String(cognome).trim(),
+          telefono: String(telefono ?? "").trim(),
+          email: String(email ?? "").trim(),
+          data_nascita: data_nascita || null,
+          note: String(note ?? "").trim(),
+          foto_url,
+          stato: "in_attesa",
+        });
+
+      if (insertErr) throw new Error(insertErr.message);
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return new Response(JSON.stringify({ error: msg }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
+  return new Response("Method not allowed", { status: 405, headers: corsHeaders });
 });

@@ -21,6 +21,7 @@ interface SchedaDaConfermare {
   email: string;
   data_nascita: string | null;
   note: string;
+  foto_url: string;
   stato: string;
   created_at: string;
 }
@@ -128,7 +129,7 @@ export default function Clienti({ onSelectCliente }: Props) {
         email: scheda.email || '',
         data_nascita: scheda.data_nascita || null,
         note: scheda.note || '',
-        foto_url: '',
+        foto_url: scheda.foto_url || '',
         user_id: user?.id,
       }
     });
@@ -673,8 +674,12 @@ export default function Clienti({ onSelectCliente }: Props) {
                   onClick={() => setSchedaAperta(s)}
                   className="bg-white rounded-xl border border-amber-200 px-5 py-4 flex items-center gap-4 cursor-pointer hover:border-amber-400 hover:shadow-sm transition-all group"
                 >
-                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <UserPlus size={16} className="text-amber-600" />
+                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {s.foto_url ? (
+                      <img src={s.foto_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserPlus size={16} className="text-amber-600" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-stone-800 group-hover:text-amber-700 transition-colors">
@@ -744,6 +749,15 @@ export default function Clienti({ onSelectCliente }: Props) {
 
             {/* Dati */}
             <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+              {schedaAperta.foto_url && (
+                <div className="flex justify-center pb-2">
+                  <img
+                    src={schedaAperta.foto_url}
+                    alt={`${schedaAperta.nome} ${schedaAperta.cognome}`}
+                    className="w-24 h-24 rounded-full object-cover border-4 border-amber-100 shadow"
+                  />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-stone-400 uppercase tracking-wide font-semibold mb-1">Nome</p>
