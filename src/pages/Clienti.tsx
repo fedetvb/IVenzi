@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar, ShieldOff } from 'lucide-react';
+import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar, ShieldOff, Ban } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import ClienteModal from '../components/ClienteModal';
@@ -33,7 +33,7 @@ export default function Clienti({ onSelectCliente }: Props) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [tab, setTab] = useState<'clienti' | 'da_confermare'>('clienti');
+  const [tab, setTab] = useState<'clienti' | 'da_confermare' | 'blacklist'>('clienti');
   const [schede, setSchede] = useState<SchedaDaConfermare[]>([]);
   const [schedeLoading, setSchedeLoading] = useState(false);
   const [schedaAperta, setSchedaAperta] = useState<SchedaDaConfermare | null>(null);
@@ -468,6 +468,18 @@ export default function Clienti({ onSelectCliente }: Props) {
             <span className="text-xs bg-amber-500 text-white rounded-full px-2 py-0.5">{schede.length}</span>
           )}
         </button>
+        <button
+          onClick={() => setTab('blacklist')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            tab === 'blacklist' ? 'bg-white text-red-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+          }`}
+        >
+          <Ban size={15} />
+          Lista nera
+          {clienti.filter(c => c.in_blacklist).length > 0 && (
+            <span className="text-xs bg-red-500 text-white rounded-full px-2 py-0.5">{clienti.filter(c => c.in_blacklist).length}</span>
+          )}
+        </button>
       </div>
 
       {tab === 'clienti' && (
@@ -728,6 +740,58 @@ export default function Clienti({ onSelectCliente }: Props) {
           )}
         </>
       )}
+
+      {tab === 'blacklist' && (() => {
+        const blacklisted = clienti.filter(c => c.in_blacklist);
+        return (
+          <>
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-sm text-stone-500">
+                {blacklisted.length === 0
+                  ? 'Nessun cliente in lista nera.'
+                  : `${blacklisted.length} ${blacklisted.length === 1 ? 'cliente' : 'clienti'} in lista nera. Apri la scheda per rimuoverli.`}
+              </p>
+            </div>
+            {blacklisted.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-stone-200 p-16 text-center">
+                <Ban size={32} className="text-stone-300 mx-auto mb-3" />
+                <p className="text-stone-500 font-medium">Lista nera vuota</p>
+                <p className="text-stone-400 text-sm mt-1">Nessun cliente e' stato inserito in lista nera</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {blacklisted.map(c => (
+                  <div
+                    key={c.id}
+                    onClick={() => onSelectCliente(c.id)}
+                    className="bg-red-50 rounded-xl border border-red-200 px-5 py-4 flex items-center gap-4 cursor-pointer hover:border-red-400 hover:shadow-sm transition-all group"
+                  >
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <ShieldOff size={16} className="text-red-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-red-800 group-hover:text-red-900 transition-colors">
+                        {c.cognome} {c.nome}
+                      </p>
+                      {c.motivo_blacklist && (
+                        <p className="text-xs text-red-500 mt-0.5 truncate">{c.motivo_blacklist}</p>
+                      )}
+                      <div className="flex items-center gap-4 mt-0.5">
+                        {c.telefono && (
+                          <span className="flex items-center gap-1 text-xs text-stone-400">
+                            <Phone size={10} /> {c.telefono}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-red-300 group-hover:text-red-500 transition-colors" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {showModal && (
         <ClienteModal

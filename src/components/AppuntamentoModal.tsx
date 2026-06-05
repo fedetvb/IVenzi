@@ -144,12 +144,20 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     }
   }, [clienti]);
 
-  function selectCliente(c: Cliente) {
+  async function selectCliente(c: Cliente) {
     setForm(f => ({ ...f, cliente_id: c.id }));
     setClienteSearch(`${c.cognome} ${c.nome}`);
     setClienteDropdown(false);
-    if (c.in_blacklist) {
-      setBlacklistWarning({ motivo: c.motivo_blacklist || '' });
+    // Verifica blacklist fresca dal DB per evitare dati vecchi in cache
+    const { data } = await dbSelect<Cliente>({
+      table: 'clienti',
+      columns: 'in_blacklist, motivo_blacklist',
+      filters: [{ col: 'id', op: 'eq', val: c.id }],
+      limit: 1,
+    });
+    const fresh = data?.[0];
+    if (fresh?.in_blacklist) {
+      setBlacklistWarning({ motivo: fresh.motivo_blacklist || '' });
     } else {
       setBlacklistWarning(null);
     }

@@ -50,7 +50,7 @@ export function getCurrentUserId(): string | null { return _currentUserId; }
 
 const BOOL_FIELDS = new Set([
   'attivo', 'convalidata', 'manuale', 'nominativa', 'attiva', 'usa_e_getta',
-  'ricorrente', 'is_default', '_dirty',
+  'ricorrente', 'is_default', '_dirty', 'in_blacklist',
 ]);
 
 function boolCols(row: Record<string, unknown>): Record<string, unknown> {
