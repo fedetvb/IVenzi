@@ -148,16 +148,17 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     setForm(f => ({ ...f, cliente_id: c.id }));
     setClienteSearch(`${c.cognome} ${c.nome}`);
     setClienteDropdown(false);
-    // Verifica blacklist fresca dal DB per evitare dati vecchi in cache
+    // Verifica blacklist fresca dal DB (SQLite in Electron, Supabase in browser).
+    // Se offline su browser, data sarà null e si usa il dato già in memoria.
     const { data } = await dbSelect<Cliente>({
       table: 'clienti',
       columns: 'in_blacklist, motivo_blacklist',
       filters: [{ col: 'id', op: 'eq', val: c.id }],
       limit: 1,
     });
-    const fresh = data?.[0];
-    if (fresh?.in_blacklist) {
-      setBlacklistWarning({ motivo: fresh.motivo_blacklist || '' });
+    const checked = data?.[0] ?? c;
+    if (checked.in_blacklist) {
+      setBlacklistWarning({ motivo: checked.motivo_blacklist || '' });
     } else {
       setBlacklistWarning(null);
     }
