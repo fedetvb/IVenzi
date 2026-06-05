@@ -12,7 +12,7 @@ import { isElectron } from './localDb';
 const SYNC_TABLES: string[] = [
   'clienti', 'parrucchieri', 'trattamenti_catalogo', 'appuntamenti',
   'appuntamento_trattamenti', 'schede_colore', 'fiches', 'fiche_voci',
-  'incassi', 'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium',
+  'incassi_giornalieri', 'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium',
   'ricariche_carta_premium', 'utilizzi_carta_premium', 'prodotti_rivendita_catalogo',
   'rivendita_prodotti', 'trattamenti_eseguiti', 'impostazioni', 'template_messaggi',
   'assenze_parrucchieri', 'magazzino_prodotti', 'magazzino_movimenti',

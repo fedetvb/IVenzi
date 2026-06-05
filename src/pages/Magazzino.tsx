@@ -100,22 +100,14 @@ function InventarioView() {
   const [saving, setSaving] = useState(false);
 
   async function load() {
-    const { data: cats } = dbSelect<Categoria>({
-      table: 'magazzino_categorie',
-      orderBy: [{ col: 'ordine' }],
-    });
-    const { data: prods } = dbSelect<Prodotto>({
-      table: 'magazzino_prodotti',
-      orderBy: [{ col: 'ordine' }],
-    });
-    const { data: riv } = dbSelect<ProdottoRivendita>({
-      table: 'prodotti_rivendita_catalogo',
-      filters: [{ col: 'attivo', op: 'eq', val: true }],
-      orderBy: [{ col: 'categoria' }, { col: 'nome' }],
-    });
-    setCategorie((cats || []) as Categoria[]);
-    setProdotti((prods || []) as Prodotto[]);
-    setRivendita((riv || []) as ProdottoRivendita[]);
+    const [catsRes, prodsRes, rivRes] = await Promise.all([
+      dbSelect<Categoria>({ table: 'magazzino_categorie', orderBy: [{ col: 'ordine' }] }),
+      dbSelect<Prodotto>({ table: 'magazzino_prodotti', orderBy: [{ col: 'ordine' }] }),
+      dbSelect<ProdottoRivendita>({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'categoria' }, { col: 'nome' }] }),
+    ]);
+    setCategorie((catsRes.data || []) as Categoria[]);
+    setProdotti((prodsRes.data || []) as Prodotto[]);
+    setRivendita((rivRes.data || []) as ProdottoRivendita[]);
     setLoading(false);
   }
 
@@ -559,22 +551,14 @@ function MagazzinoView() {
   const [savedMsg, setSavedMsg] = useState(false);
 
   async function load() {
-    const { data: cats } = dbSelect<Categoria>({
-      table: 'magazzino_categorie',
-      orderBy: [{ col: 'ordine' }],
-    });
-    const { data: prods } = dbSelect<Prodotto>({
-      table: 'magazzino_prodotti',
-      orderBy: [{ col: 'ordine' }],
-    });
-    const { data: riv } = dbSelect<ProdottoRivendita>({
-      table: 'prodotti_rivendita_catalogo',
-      filters: [{ col: 'attivo', op: 'eq', val: true }],
-      orderBy: [{ col: 'categoria' }, { col: 'nome' }],
-    });
-    setCategorie((cats || []) as Categoria[]);
-    setProdotti((prods || []) as Prodotto[]);
-    setRivendita((riv || []) as ProdottoRivendita[]);
+    const [catsRes, prodsRes, rivRes] = await Promise.all([
+      dbSelect<Categoria>({ table: 'magazzino_categorie', orderBy: [{ col: 'ordine' }] }),
+      dbSelect<Prodotto>({ table: 'magazzino_prodotti', orderBy: [{ col: 'ordine' }] }),
+      dbSelect<ProdottoRivendita>({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'categoria' }, { col: 'nome' }] }),
+    ]);
+    setCategorie((catsRes.data || []) as Categoria[]);
+    setProdotti((prodsRes.data || []) as Prodotto[]);
+    setRivendita((rivRes.data || []) as ProdottoRivendita[]);
     setLoading(false);
   }
 
@@ -1111,7 +1095,7 @@ function ProdottiRivenditaView() {
   const [adjusting, setAdjusting] = useState<Set<string>>(new Set());
 
   async function load() {
-    const { data } = dbSelect<ProdottoRivendita>({
+    const { data } = await dbSelect<ProdottoRivendita>({
       table: 'prodotti_rivendita_catalogo',
       orderBy: [{ col: 'categoria' }, { col: 'ordine' }, { col: 'nome' }],
     });

@@ -615,13 +615,12 @@ function NuovaVenditaModal({ parrucchieri, parrucchierePreselezionato, onClose, 
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const { data } = dbSelect<ProdottoCatalogo>({
+    dbSelect<ProdottoCatalogo>({
       table: 'prodotti_rivendita_catalogo',
       columns: ['id', 'nome', 'marca', 'categoria', 'prezzo_acquisto', 'prezzo_vendita'],
       filters: [{ col: 'attivo', op: 'eq', val: true }],
       orderBy: [{ col: 'categoria' }, { col: 'nome' }],
-    });
-    setCatalogo((data || []) as ProdottoCatalogo[]);
+    }).then(({ data }) => setCatalogo((data || []) as ProdottoCatalogo[]));
   }, []);
 
   useEffect(() => {
@@ -1380,20 +1379,14 @@ export default function Rivendita() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: parr } = dbSelect<Parrucchiere>({
-      table: 'parrucchieri',
-      filters: [{ col: 'attivo', op: 'eq', val: true }],
-      orderBy: [{ col: 'nome' }],
-    });
-    const { data: vend } = dbSelect<Vendita>({
-      table: 'rivendita_prodotti',
-      filters: [{ col: 'deleted_at', op: 'is_null' }],
-      orderBy: [{ col: 'data_vendita', asc: false }, { col: 'created_at', asc: false }],
-    });
-    const { data: tratt } = dbSelect<Trattamento>({
-      table: 'trattamenti_eseguiti',
-      orderBy: [{ col: 'data_esecuzione', asc: false }, { col: 'created_at', asc: false }],
-    });
+    const [parrRes, vendRes, trattRes] = await Promise.all([
+      dbSelect<Parrucchiere>({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome' }] }),
+      dbSelect<Vendita>({ table: 'rivendita_prodotti', filters: [{ col: 'deleted_at', op: 'is_null' }], orderBy: [{ col: 'data_vendita', asc: false }, { col: 'created_at', asc: false }] }),
+      dbSelect<Trattamento>({ table: 'trattamenti_eseguiti', orderBy: [{ col: 'data_esecuzione', asc: false }, { col: 'created_at', asc: false }] }),
+    ]);
+    const parr = parrRes.data;
+    const vend = vendRes.data;
+    const tratt = trattRes.data;
     const parrList = (parr || []) as Parrucchiere[];
     const vendList = (vend || []) as Vendita[];
     const trattList = (tratt || []) as Trattamento[];
