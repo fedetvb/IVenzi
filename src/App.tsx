@@ -84,6 +84,7 @@ export default function App() {
   const [showKeepAlivePopup, setShowKeepAlivePopup] = useState(false);
   const [keepAlivePopupTs, setKeepAlivePopupTs] = useState<string | null>(null);
 
+  const [electronDbReady, setElectronDbReadyState] = useState(false);
   const hasFicheNonConvalidateRef = { current: false };
 
   function getReminderKey(todayKey: string, orario: string) {
@@ -155,9 +156,11 @@ export default function App() {
     if (!window.electronAPI?.db) return;
     window.electronAPI.db.isReady().then((ready: boolean) => {
       setElectronDbReady(ready);
+      setElectronDbReadyState(ready);
     });
     return window.electronAPI.db.onReady((ready: boolean) => {
       setElectronDbReady(ready);
+      setElectronDbReadyState(ready);
     });
   }, []);
 
@@ -166,9 +169,9 @@ export default function App() {
     setCurrentUserId(user?.id ?? null);
   }, [user]);
 
-  // Sync SQLite <-> Supabase all'avvio (solo in Electron, solo se online)
+  // Sync SQLite <-> Supabase all'avvio (solo in Electron, solo se online e DB pronto)
   useEffect(() => {
-    if (!user || !isElectron() || !navigator.onLine) return;
+    if (!user || !electronDbReady || !isElectron() || !navigator.onLine) return;
     const userId = user.id;
     let cancelled = false;
 
@@ -189,7 +192,7 @@ export default function App() {
     }, 5 * 60 * 1000);
 
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user]);
+  }, [user, electronDbReady]);
 
   // Promemoria convalida fiches (controllato ogni 30s in base all'orario configurato)
   useEffect(() => {
