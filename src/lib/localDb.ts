@@ -558,22 +558,63 @@ export async function setImpostazione(chiave: string, valore: string, userId: st
 
 // ─── BACKUP ───────────────────────────────────────────────────────────────────
 
+const BACKUP_TABLES = [
+  'clienti','parrucchieri','trattamenti_catalogo','appuntamenti','appuntamento_trattamenti',
+  'schede_colore','fiches','fiche_voci','incassi_giornalieri','carte_sconto','utilizzi_carta_sconto',
+  'carte_premium','ricariche_carta_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
+  'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
+  'assenze_parrucchieri','magazzino_prodotti','magazzino_movimenti','magazzino_schede_salvate',
+  'spese','schede_clienti_da_confermare','giorni_parrucchiere','voci_extra_catalogo',
+];
+
+async function restoreToIndexedDb(backupData: Record<string, unknown>): Promise<{ success: boolean; results: Record<string, unknown> }> {
+  if (!_currentUserId) return { success: false, results: { error: 'Utente non autenticato' } };
+  const results: Record<string, unknown> = {};
+  for (const table of BACKUP_TABLES) {
+    const rows = backupData[table] ?? backupData[`${table}_voci`];
+    if (!Array.isArray(rows) || rows.length === 0) continue;
+    try {
+      await setTableCache(table, _currentUserId, rows);
+      results[table] = { ok: true, count: rows.length };
+    } catch (e) {
+      results[table] = { ok: false, error: String(e) };
+    }
+  }
+  return { success: true, results };
+}
+
 export async function restoreBackup(backupData: Record<string, unknown>): Promise<{ success: boolean; error?: string; results?: Record<string, unknown> }> {
   if (isElectron()) {
     const res = await window.electronAPI!.db!.importBackup(backupData);
     return res as { success: boolean; error?: string; results?: Record<string, unknown> };
   }
-  const { data: { session } } = await supabase.auth.getSession();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = supabase as any;
-  const apiUrl = `${sb.supabaseUrl}/functions/v1/backup-database`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'apikey': sb.supabaseKey ?? '',
-  };
-  if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-  const res = await fetch(apiUrl, { method: 'POST', headers, body: JSON.stringify(backupData) });
-  return await res.json();
+
+  // Fallback offline: salva direttamente in IndexedDB se non c'e' connessione
+  if (!navigator.onLine) {
+    const res = await restoreToIndexedDb(backupData);
+    return res;
+  }
+
+  // Online: invia a Supabase via edge function + aggiorna anche IndexedDB come cache
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
+    const apiUrl = `${sb.supabaseUrl}/functions/v1/backup-database`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'apikey': sb.supabaseKey ?? '',
+    };
+    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+    const res = await fetch(apiUrl, { method: 'POST', headers, body: JSON.stringify(backupData) });
+    const result = await res.json();
+    // Aggiorna anche IndexedDB in background cosi' i dati sono subito disponibili
+    if (result.success) restoreToIndexedDb(backupData).catch(() => {/* best effort */});
+    return result;
+  } catch {
+    // Se la chiamata a Supabase fallisce (es. connessione persa a meta'), salva in IndexedDB
+    return await restoreToIndexedDb(backupData);
+  }
 }
 
 export async function exportBackup(): Promise<Record<string, unknown> | null> {
