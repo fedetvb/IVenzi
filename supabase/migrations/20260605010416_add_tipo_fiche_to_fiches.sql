@@ -1,0 +1,2 @@
+ALTER TABLE fiches ADD COLUMN IF NOT EXISTS tipo_fiche TEXT DEFAULT 'manuale';
+COMMENT ON COLUMN fiches.tipo_fiche IS 'manuale = created manually in Fiches tab; carta_premium = auto-created from Carte tab on recharge/creation';

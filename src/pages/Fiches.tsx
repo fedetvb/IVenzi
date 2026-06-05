@@ -58,6 +58,7 @@ interface FicheData {
 
 interface ClienteGruppo {
   clienteId: string;
+  clienteUuid?: string; // real client UUID for carteMap lookups (used for __premium__ groups)
   clienteNome: string;
   clienteCognome: string;
   appuntamenti: RawAppuntamento[];
@@ -243,13 +244,18 @@ function FichesTab() {
 
     for (const f of (ficheManuali || []) as Array<{
       id: string; cliente_id: string | null; note: string; convalidata: boolean; importo_convalidato: number;
-      created_at: string; fiche_voci: FicheVoce[]; clienti: { id: string; nome: string; cognome: string } | null;
+      created_at: string; tipo_fiche?: string; fiche_voci: FicheVoce[]; clienti: { id: string; nome: string; cognome: string } | null;
     }>) {
-      const cid = f.clienti?.id ? `__manuale__${f.clienti.id}` : `__manuale__${f.id}`;
+      // Carta premium fiches always get their own card (separate even for same client)
+      const isCartaPremium = f.tipo_fiche === 'carta_premium';
+      const cid = isCartaPremium
+        ? `__premium__${f.id}`
+        : (f.clienti?.id ? `__manuale__${f.clienti.id}` : `__manuale__${f.id}`);
       const voci = (f.fiche_voci || []).sort((a: FicheVoce, b: FicheVoce) => a.ordine - b.ordine);
       if (!gruppoMap[cid]) {
         gruppoMap[cid] = {
           clienteId: cid,
+          clienteUuid: f.clienti?.id ?? undefined,
           clienteNome: f.clienti?.nome ?? '—',
           clienteCognome: f.clienti?.cognome ?? '',
           appuntamenti: [],
@@ -287,13 +293,16 @@ function FichesTab() {
 
     // Carica mappa carte per i clienti del giorno
     const clienteIds = Object.keys(gruppoMap).filter(id =>
-      id !== '__sconosciuto__' && !id.startsWith('__manuale__')
+      id !== '__sconosciuto__' && !id.startsWith('__manuale__') && !id.startsWith('__premium__')
     );
     const manualeIds = Object.keys(gruppoMap)
       .filter(id => id.startsWith('__manuale__'))
       .map(id => id.replace('__manuale__', ''))
       .filter(id => /^[0-9a-f-]{36}$/i.test(id));
-    const allClienteIds = [...new Set([...clienteIds, ...manualeIds])];
+    const premiumIds = Object.values(gruppoMap)
+      .filter(g => g.clienteId.startsWith('__premium__') && g.clienteUuid)
+      .map(g => g.clienteUuid as string);
+    const allClienteIds = [...new Set([...clienteIds, ...manualeIds, ...premiumIds])];
 
     const carteMap = new Map<string, { hasPremium: boolean; hasPremiumEsaurita: boolean; hasSconto: boolean }>();
     if (allClienteIds.length > 0) {
@@ -508,7 +517,9 @@ function FichesTab() {
         const renderCard = (g: ClienteGruppo) => {
           const realId = g.clienteId.startsWith('__manuale__')
             ? g.clienteId.replace('__manuale__', '')
-            : g.clienteId;
+            : g.clienteId.startsWith('__premium__')
+              ? (g.clienteUuid ?? '')
+              : g.clienteId;
           const carteTipi = clientiCarte.get(realId);
           return (
           <FicheCard
@@ -1070,6 +1081,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
     const rawGruppoId = gruppo.clienteId;
     const clienteGruppoId = rawGruppoId === '__sconosciuto__' ? null
       : rawGruppoId.startsWith('__manuale__') ? rawGruppoId.replace('__manuale__', '')
+      : rawGruppoId.startsWith('__premium__') ? (gruppo.clienteUuid ?? null)
       : rawGruppoId;
     const clienteGruppoIdValid = clienteGruppoId && /^[0-9a-f-]{36}$/i.test(clienteGruppoId) ? clienteGruppoId : null;
     const scontoValido = cartaSconto && scontoAmt > 0 &&
