@@ -564,13 +564,13 @@ function createWindow() {
     width: 1280, height: 800, minWidth: 900, minHeight: 600,
     title: 'Gestionale Salone',
     webPreferences: {
-      preload: join(app.getAppPath(), 'electron', 'preload.cjs'),
+      preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: false,
     },
     autoHideMenuBar: true,
   });
   if (isDev) { mainWindow.loadURL('http://localhost:5173'); }
-  else { mainWindow.loadFile(join(app.getAppPath(), 'dist', 'index.html')); }
+  else { mainWindow.loadFile(join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'index.html')); }
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();

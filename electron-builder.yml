@@ -13,6 +13,10 @@ files:
   - electron/preload.cjs
   - package.json
 
+# Estrai dist dall'asar per poterla caricare con loadFile
+asarUnpack:
+  - "dist/**"
+
 # Punto di ingresso
 extraMetadata:
   main: electron/main.js
