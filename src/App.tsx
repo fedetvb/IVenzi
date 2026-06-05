@@ -169,14 +169,16 @@ export default function App() {
     setCurrentUserId(user?.id ?? null);
   }, [user]);
 
-  // Prefetch dati in IndexedDB per garantire la disponibilita' offline
-  // Funziona anche senza SQLite (better-sqlite3 non disponibile)
+  // Prefetch dati in IndexedDB — garantisce disponibilita' offline
+  // Funziona anche senza SQLite. Si avvia subito dopo login e ogni 3 minuti.
+  // Si riavvia immediatamente quando la connessione torna.
   useEffect(() => {
-    if (!user || !navigator.onLine) return;
+    if (!user) return;
     const userId = user.id;
     let cancelled = false;
 
     async function doPrefetch() {
+      if (!navigator.onLine || cancelled) return;
       try {
         await prefetchToIndexedDb(userId);
       } catch (e) {
@@ -184,12 +186,21 @@ export default function App() {
       }
     }
 
-    doPrefetch();
-    const interval = setInterval(() => {
-      if (navigator.onLine && !cancelled) doPrefetch();
-    }, 3 * 60 * 1000);
+    if (navigator.onLine) doPrefetch();
 
-    return () => { cancelled = true; clearInterval(interval); };
+    const interval = setInterval(doPrefetch, 3 * 60 * 1000);
+
+    const handleOnline = () => {
+      // Al ritorno online: sync immediato scritture pending, poi aggiorna cache lettura
+      setTimeout(doPrefetch, 2000); // lascia 2s a offlineFetch per sincronizzare le mutazioni
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+    };
   }, [user]);
 
   // Sync SQLite <-> Supabase all'avvio (solo se SQLite disponibile e DB pronto)

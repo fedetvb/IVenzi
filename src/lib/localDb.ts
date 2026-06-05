@@ -8,7 +8,24 @@
  */
 
 import { supabase } from './supabase';
-import { getTableCache } from './indexedDb';
+import { getTableCache, setTableCache } from './indexedDb';
+
+// ─── Helpers per aggiornamento cache offline ──────────────────────────────────
+
+async function cacheInsert(table: string, userId: string, row: Record<string, unknown>) {
+  const rows = (await getTableCache(table, userId)) as Record<string, unknown>[] ?? [];
+  await setTableCache(table, userId, [...rows, row]);
+}
+
+async function cacheUpdate(table: string, userId: string, id: string, patch: Record<string, unknown>) {
+  const rows = (await getTableCache(table, userId)) as Record<string, unknown>[] ?? [];
+  await setTableCache(table, userId, rows.map(r => r.id === id ? { ...r, ...patch } : r));
+}
+
+async function cacheRemoveById(table: string, userId: string, id: string) {
+  const rows = (await getTableCache(table, userId)) as Record<string, unknown>[] ?? [];
+  await setTableCache(table, userId, rows.filter(r => r.id !== id));
+}
 
 // ─── Compressione immagini ─────────────────────────────────────────────────────
 
@@ -209,6 +226,13 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
+  if (!navigator.onLine && _currentUserId) {
+    const row = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...args.data };
+    await cacheInsert(args.table, _currentUserId, row);
+    // La mutazione verra' accodata da offlineFetch e inviata al ritorno online
+    supabase.from(args.table).insert(args.data).select().catch(() => {});
+    return { data: row as T, error: null };
+  }
   try {
     const { data, error } = await supabase.from(args.table).insert(args.data).select();
     if (error) return { data: null, error: error.message };
@@ -233,6 +257,11 @@ export async function dbUpdate<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
+  if (!navigator.onLine && _currentUserId) {
+    await cacheUpdate(args.table, _currentUserId, args.id, args.data);
+    supabase.from(args.table).update(args.data).eq('id', args.id).select().catch(() => {});
+    return { data: { id: args.id, ...args.data } as T, error: null };
+  }
   try {
     const { data, error } = await supabase.from(args.table).update(args.data).eq('id', args.id).select();
     if (error) return { data: null, error: error.message };
@@ -252,6 +281,18 @@ export async function dbDelete(args: {
   if (isElectron()) {
     const res = await window.electronAPI!.db!.delete(args);
     if (!res.ok) return { data: null, error: res.error ?? 'Errore DB' };
+    return { data: null, error: null };
+  }
+  if (!navigator.onLine && _currentUserId) {
+    const idFilter = args.filters.find(f => f.col === 'id' && (f.op === 'eq' || f.op === '='));
+    if (idFilter) await cacheRemoveById(args.table, _currentUserId, idFilter.val as string);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from(args.table).delete();
+    for (const f of args.filters) {
+      if (f.op === 'eq' || f.op === '=') q = q.eq(f.col, f.val);
+      else if (f.op === 'in') q = q.in(f.col, f.val as unknown[]);
+    }
+    q.catch(() => {});
     return { data: null, error: null };
   }
   try {
@@ -282,6 +323,16 @@ export async function dbUpsert<T = Record<string, unknown>>(args: {
     const row = res.data ? boolCols(res.data as Record<string, unknown>) as T : null;
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
+  }
+  if (!navigator.onLine && _currentUserId) {
+    const row = { id: crypto.randomUUID(), ...args.data };
+    if (args.data.id) {
+      await cacheUpdate(args.table, _currentUserId, args.data.id as string, args.data);
+    } else {
+      await cacheInsert(args.table, _currentUserId, row);
+    }
+    supabase.from(args.table).upsert(args.data, args.onConflict ? { onConflict: args.onConflict } : undefined).select().catch(() => {});
+    return { data: (args.data.id ? args.data : row) as T, error: null };
   }
   try {
     const { data, error } = await supabase
