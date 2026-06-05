@@ -544,8 +544,9 @@ let tray = null;
 let isQuitting = false;
 
 function createTray() {
-  const iconPath = join(__dirname, '../public/icons/icon-32x32.png');
-  const fallbackPath = join(__dirname, '../public/icons/icon-96x96.png');
+  const appPath = app.getAppPath();
+  const iconPath = join(appPath, 'dist', 'icons', 'icon-96x96.png');
+  const fallbackPath = join(appPath, 'dist', 'icons', 'icon-192x192.png');
   const img = nativeImage.createFromPath(existsSync(iconPath) ? iconPath : existsSync(fallbackPath) ? fallbackPath : '');
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
   tray.setToolTip('Gestionale Salone');
@@ -563,13 +564,13 @@ function createWindow() {
     width: 1280, height: 800, minWidth: 900, minHeight: 600,
     title: 'Gestionale Salone',
     webPreferences: {
-      preload: join(__dirname, 'preload.cjs'),
+      preload: join(app.getAppPath(), 'electron', 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: false,
     },
     autoHideMenuBar: true,
   });
   if (isDev) { mainWindow.loadURL('http://localhost:5173'); }
-  else { mainWindow.loadFile(join(__dirname, '../dist/index.html')); }
+  else { mainWindow.loadFile(join(app.getAppPath(), 'dist', 'index.html')); }
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
