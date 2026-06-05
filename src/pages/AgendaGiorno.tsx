@@ -936,7 +936,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 )}
                               </div>
                               {!shortBlock && tratt.length > 0 && (
-                                <p className="truncate leading-tight mt-0.5" style={{ fontSize: `${0.64 * (fontSize / 100)}rem`, color: 'rgba(255,255,255,0.9)', textShadow: posaCfg ? '0 0 4px rgba(0,0,0,0.7), 0 1px 6px rgba(0,0,0,0.6)' : undefined }}>
+                                <p className="truncate leading-tight mt-0.5" style={{ fontSize: `${0.64 * (fontSize / 100)}rem`, color: 'rgba(255,255,255,0.9)', textShadow: posaCfg ? '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' : undefined }}>
                                   {tratt.map(t => t.nome_trattamento).join(', ')}
                                 </p>
                               )}
