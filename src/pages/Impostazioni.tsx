@@ -3,9 +3,10 @@ import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLef
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
+import { saveFile } from '../lib/fileSaver';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const [sub, setSub] = useState<SubPage>(null);
@@ -24,6 +25,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'qrcode') return <PaginaQRCode onBack={() => setSub(null)} />;
   if (sub === 'backup') return <PaginaBackup onBack={() => setSub(null)} />;
   if (sub === 'connessione') return <PaginaConnessione onBack={() => setSub(null)} />;
+  if (sub === 'cartelle') return <PaginaCartelleSalvataggio onBack={() => setSub(null)} />;
   if (sub === 'keepalive') return <PaginaKeepAlive onBack={() => setSub(null)} />;
 
   return (
@@ -198,6 +200,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Keep-alive automatico</p>
             <p className="text-xs text-stone-400 mt-0.5">Stato del ping automatico che mantiene attivo il database Supabase</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Cartelle di salvataggio */}
+        <button
+          onClick={() => setSub('cartelle')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <FolderOpen size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Cartelle di salvataggio</p>
+            <p className="text-xs text-stone-400 mt-0.5">Configura le cartelle di destinazione per file scaricabili e salvataggio automatico</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -390,43 +407,12 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
       const jsonStr = JSON.stringify(data, null, 2);
       const suggestedName = `backup-salone-${localDateStr()}.json`;
 
-      // Electron: usa dialog nativo del sistema operativo
-      if (window.electronAPI) {
-        const result = await window.electronAPI.saveBackupFile(suggestedName, jsonStr);
-        if (result.ok) {
-          setFeedback({ tipo: 'ok', msg: `Backup salvato in: ${result.filePath}` });
-        } else if (result.reason !== 'canceled') {
-          setFeedback({ tipo: 'err', msg: `Errore: ${result.reason}` });
-        }
-        return;
+      const result = await saveFile('backup', suggestedName, jsonStr);
+      if (result) {
+        setFeedback({ tipo: 'ok', msg: result.filePath ? `Backup salvato in: ${result.filePath}` : 'Backup esportato con successo.' });
+      } else {
+        setFeedback({ tipo: 'ok', msg: 'Backup esportato con successo.' });
       }
-
-      // Browser: File System Access API se disponibile
-      if ('showSaveFilePicker' in window) {
-        try {
-          const handle = await (window as Window & { showSaveFilePicker: (opts: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
-            suggestedName,
-            types: [{ description: 'File di backup JSON', accept: { 'application/json': ['.json'] } }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(jsonStr);
-          await writable.close();
-          setFeedback({ tipo: 'ok', msg: 'Backup salvato con successo.' });
-          return;
-        } catch (pickerErr) {
-          if ((pickerErr as { name?: string }).name === 'AbortError') return;
-        }
-      }
-
-      // Fallback: download diretto
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = suggestedName;
-      a.click();
-      URL.revokeObjectURL(url);
-      setFeedback({ tipo: 'ok', msg: 'Backup esportato con successo.' });
     } catch (e) {
       setFeedback({ tipo: 'err', msg: String(e) });
     } finally {
@@ -959,7 +945,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       }
 
       const formatoLabel = formato.toUpperCase();
-      doc.save(`qr-registrazione-${formatoLabel}.pdf`);
+      await saveFile('qrcode', `qr-registrazione-${formatoLabel}.pdf`, doc.output('blob'));
     } finally {
       setGenerando(false);
     }
@@ -1099,28 +1085,8 @@ document.getElementById("f").onsubmit=async function(e){
 </script>
 </body>
 </html>`;
-    const blob = new Blob([html], { type: 'text/html' });
     const filename = 'registrazione-cliente.html';
-    if ('showSaveFilePicker' in window) {
-      try {
-        const handle = await (window as Window & { showSaveFilePicker: (opts: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: 'Pagina HTML', accept: { 'text/html': ['.html'] } }],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(html);
-        await writable.close();
-        return;
-      } catch (e) {
-        if ((e as { name?: string }).name === 'AbortError') return;
-      }
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    await saveFile('comunicazioni', filename, html);
   }
 
   return (
@@ -3441,6 +3407,167 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
           </li>
         </ul>
       </div>
+    </div>
+  );
+}
+
+// ─── Cartelle di salvataggio ──────────────────────────────────────────────────
+
+const SAVE_PATH_LABELS: Record<string, { label: string; desc: string }> = {
+  backup:        { label: 'Backup',         desc: 'File JSON backup del database' },
+  fiches:        { label: 'Fiches',         desc: 'PDF fiches giornaliere (auto e manuale)' },
+  clienti:       { label: 'Clienti',        desc: 'CSV e PDF esportazione clienti' },
+  magazzino:     { label: 'Magazzino',      desc: 'CSV, PDF e HTML inventario magazzino' },
+  rivendita:     { label: 'Rivendita',      desc: 'PDF report vendite prodotti' },
+  statistiche:   { label: 'Statistiche',    desc: 'PDF report statistiche e schede' },
+  qrcode:        { label: 'QR Code',        desc: 'PDF QR code registrazione clienti' },
+  comunicazioni: { label: 'Comunicazioni',  desc: 'HTML guida e materiali comunicazione' },
+};
+
+function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
+  const isElectronApp = !!(window as any).electronAPI;
+  const [paths, setPaths] = useState<Record<string, string>>({});
+  const [fichesSched, setFichesSched] = useState({ enabled: false, time: '08:00' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      if (isElectronApp) {
+        const [p, s] = await Promise.all([
+          (window as any).electronAPI.getFilePaths(),
+          (window as any).electronAPI.getFichesSched(),
+        ]);
+        setPaths(p || {});
+        if (s) setFichesSched({ enabled: s.enabled, time: s.time });
+      }
+      setLoading(false);
+    })();
+  }, [isElectronApp]);
+
+  async function pickFolder(type: string) {
+    if (!isElectronApp) return;
+    const label = SAVE_PATH_LABELS[type]?.label ?? type;
+    const res = await (window as any).electronAPI.pickFolder(`Scegli cartella per: ${label}`);
+    if (res.ok && res.folder) {
+      const newPaths = { ...paths, [type]: res.folder };
+      setPaths(newPaths);
+      await (window as any).electronAPI.setFilePaths(newPaths);
+      showFlash('Cartella aggiornata');
+    }
+  }
+
+  async function saveFichesSched() {
+    if (!isElectronApp) return;
+    setSaving(true);
+    await (window as any).electronAPI.setFichesSched({ ...fichesSched, last: '' });
+    setSaving(false);
+    showFlash('Impostazioni salvate');
+  }
+
+  function showFlash(msg: string) {
+    setFlash(msg);
+    setTimeout(() => setFlash(null), 3000);
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-xl hover:bg-stone-100 transition-colors text-stone-500 hover:text-stone-700">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Cartelle di salvataggio</h2>
+          <p className="text-sm text-stone-500 mt-0.5">Percorsi dove vengono salvati i file scaricabili</p>
+        </div>
+      </div>
+
+      {!isElectronApp && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-700">Questa funzione è disponibile solo nell'app installata (Electron). Nella versione web i file vengono scaricati direttamente dal browser.</p>
+        </div>
+      )}
+
+      {isElectronApp && !loading && (
+        <>
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-stone-100">
+              <h3 className="font-semibold text-stone-800 text-sm">Cartelle per tipo di file</h3>
+              <p className="text-xs text-stone-400 mt-0.5">Clicca "Scegli" per selezionare la cartella di destinazione. Se non configurata, viene usato il download standard del browser.</p>
+            </div>
+            <div className="divide-y divide-stone-100">
+              {Object.entries(SAVE_PATH_LABELS).map(([type, info]) => (
+                <div key={type} className="flex items-center gap-4 px-6 py-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-stone-800">{info.label}</p>
+                    <p className="text-xs text-stone-400 mt-0.5">{info.desc}</p>
+                    {paths[type] ? (
+                      <p className="text-xs text-emerald-600 font-mono mt-1 truncate" title={paths[type]}>{paths[type]}</p>
+                    ) : (
+                      <p className="text-xs text-stone-300 italic mt-1">Download standard — nessuna cartella configurata</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {paths[type] && (
+                      <button onClick={() => (window as any).electronAPI.showFolder(paths[type])} title="Apri cartella" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors">
+                        <FolderOpen size={14} />
+                      </button>
+                    )}
+                    <button onClick={() => pickFolder(type)} className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-amber-100 text-stone-600 hover:text-amber-700 rounded-lg transition-colors">
+                      Scegli
+                    </button>
+                    {paths[type] && (
+                      <button onClick={async () => { const np = { ...paths, [type]: '' }; setPaths(np); await (window as any).electronAPI.setFilePaths(np); }} title="Rimuovi" className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors">
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-stone-100">
+              <h3 className="font-semibold text-stone-800 text-sm">Salvataggio automatico fiches</h3>
+              <p className="text-xs text-stone-400 mt-0.5">Ogni giorno all'orario impostato salva automaticamente un PDF con le fiches del giorno precedente nella cartella Fiches</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">Attivo</p>
+                  <p className="text-xs text-stone-400 mt-0.5">L'app deve essere aperta o minimizzata nel tray di sistema</p>
+                </div>
+                <button onClick={() => setFichesSched(s => ({ ...s, enabled: !s.enabled }))} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${fichesSched.enabled ? 'bg-amber-500' : 'bg-stone-200'}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${fichesSched.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-stone-600 block mb-1.5">Orario salvataggio</label>
+                  <input type="time" value={fichesSched.time} onChange={e => setFichesSched(s => ({ ...s, time: e.target.value }))} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                </div>
+                <div className="flex-1 pt-5">
+                  <p className="text-xs text-stone-400">Il PDF viene generato ogni mattina a quest'ora con le fiches del giorno precedente.</p>
+                </div>
+              </div>
+              {!paths.fiches && fichesSched.enabled && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2 text-xs text-amber-700">
+                  <AlertTriangle size={13} className="flex-shrink-0" />
+                  Configura prima la cartella "Fiches" qui sopra affinché il salvataggio automatico funzioni.
+                </div>
+              )}
+              <button onClick={saveFichesSched} disabled={saving} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors">
+                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+                {saving ? 'Salvataggio...' : 'Salva impostazioni'}
+              </button>
+              {flash && <p className="text-sm text-emerald-600 font-medium flex items-center gap-1.5"><Check size={14} /> {flash}</p>}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

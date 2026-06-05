@@ -3,6 +3,7 @@ import { Plus, Trash2, CreditCard as Edit2, Check, X, ChevronDown, ChevronRight,
 import { supabase } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
+import { saveFile as saveFileToPath } from '../lib/fileSaver';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -804,7 +805,7 @@ function SchedeSalvateView() {
     ]);
     const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const filename = `inventario-${snapshotFileslug(s)}.csv`;
-    await saveFile('\uFEFF' + csv, filename, 'text/csv;charset=utf-8;', 'File CSV', '.csv');
+    await saveFile('\uFEFF' + csv, filename);
   }
 
   async function downloadCSVEn(s: SchedaSalvata) {
@@ -818,7 +819,7 @@ function SchedeSalvateView() {
       return sv.includes(',') || sv.includes('"') ? `"${sv.replace(/"/g, '""')}"` : sv;
     }).join(',')).join('\r\n');
     const filename = `inventory-${snapshotFileslug(s)}.csv`;
-    await saveFile(csv, filename, 'text/csv;charset=utf-8;', 'CSV File', '.csv');
+    await saveFile(csv, filename);
   }
 
   async function downloadPDF(s: SchedaSalvata) {
@@ -857,7 +858,7 @@ function SchedeSalvateView() {
       doc.text(`Pagina ${i} di ${pageCount}  —  ${s.num_prodotti} prodotti  —  Generato il ${snapshotDateStr(s)}`, 14, doc.internal.pageSize.getHeight() - 8);
     }
     const blob = doc.output('blob');
-    await saveFile(blob, `inventario-${snapshotFileslug(s)}.pdf`, 'application/pdf', 'File PDF', '.pdf');
+    await saveFile(blob, `inventario-${snapshotFileslug(s)}.pdf`);
   }
 
   function buildHtml(s: SchedaSalvata) {
@@ -888,7 +889,7 @@ td{padding:7px 10px;border-bottom:1px solid #f0ece8}.num{text-align:right}
 
   async function downloadHtml(s: SchedaSalvata) {
     const html = buildHtml(s);
-    await saveFile(html, `inventario-${snapshotFileslug(s)}.html`, 'text/html', 'Pagina HTML', '.html');
+    await saveFile(html, `inventario-${snapshotFileslug(s)}.html`);
   }
 
   function printScheda(s: SchedaSalvata) {
@@ -899,26 +900,9 @@ td{padding:7px 10px;border-bottom:1px solid #f0ece8}.num{text-align:right}
     setTimeout(() => win.print(), 250);
   }
 
-  async function saveFile(content: string | Blob, filename: string, mime: string, description: string, ext: string) {
-    if ('showSaveFilePicker' in window) {
-      try {
-        const handle = await (window as Window & { showSaveFilePicker: (opts: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description, accept: { [mime.split(';')[0]]: [ext] } }],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(content);
-        await writable.close();
-        return;
-      } catch (e) {
-        if ((e as { name?: string }).name === 'AbortError') return;
-      }
-    }
-    const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+  async function saveFile(content: string | Blob, filename: string) {
+    const blob = typeof content === 'string' ? new Blob([content]) : content;
+    await saveFileToPath('magazzino', filename, blob);
   }
 
   // ────────────────────────────────────────────────────────────────────────────

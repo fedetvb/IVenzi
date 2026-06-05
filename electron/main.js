@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
@@ -47,6 +47,27 @@ function readConfig() {
   return { enabled: false, time: '08:00', days: [1, 2, 3, 4, 5], last: '', folder: '' };
 }
 function writeConfig(cfg) { writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8'); }
+
+// ─── Config cartelle di salvataggio ──────────────────────────────────────────
+const SAVE_PATHS_CONFIG_PATH = join(USER_DATA, 'save-paths-config.json');
+const DEFAULT_SAVE_PATHS = { backup: '', fiches: '', clienti: '', magazzino: '', rivendita: '', statistiche: '', qrcode: '', comunicazioni: '' };
+
+function readSavePaths() {
+  try { if (existsSync(SAVE_PATHS_CONFIG_PATH)) return { ...DEFAULT_SAVE_PATHS, ...JSON.parse(readFileSync(SAVE_PATHS_CONFIG_PATH, 'utf8')) }; }
+  catch { /* ignore */ }
+  return { ...DEFAULT_SAVE_PATHS };
+}
+function writeSavePaths(paths) { writeFileSync(SAVE_PATHS_CONFIG_PATH, JSON.stringify(paths, null, 2), 'utf8'); }
+
+// ─── Config auto-salvataggio fiches ──────────────────────────────────────────
+const FICHES_SCHED_PATH = join(USER_DATA, 'fiches-sched-config.json');
+
+function readFichesSched() {
+  try { if (existsSync(FICHES_SCHED_PATH)) return JSON.parse(readFileSync(FICHES_SCHED_PATH, 'utf8')); }
+  catch { /* ignore */ }
+  return { enabled: false, time: '08:00', last: '' };
+}
+function writeFichesSched(cfg) { writeFileSync(FICHES_SCHED_PATH, JSON.stringify(cfg, null, 2), 'utf8'); }
 
 // ─── Database SQLite ──────────────────────────────────────────────────────────
 let db = null;
@@ -435,6 +456,23 @@ function importBackup(backupData) {
 
 // ─── Finestra principale ──────────────────────────────────────────────────────
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+
+function createTray() {
+  const iconPath = join(__dirname, '../public/icons/icon-32x32.png');
+  const fallbackPath = join(__dirname, '../public/icons/icon-96x96.png');
+  const img = nativeImage.createFromPath(existsSync(iconPath) ? iconPath : existsSync(fallbackPath) ? fallbackPath : '');
+  tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
+  tray.setToolTip('Gestionale Salone');
+  const menu = Menu.buildFromTemplate([
+    { label: 'Apri Gestionale Salone', click() { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } else { createWindow(); } } },
+    { type: 'separator' },
+    { label: 'Esci', click() { isQuitting = true; app.quit(); } },
+  ]);
+  tray.setContextMenu(menu);
+  tray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -448,6 +486,12 @@ function createWindow() {
   });
   if (isDev) { mainWindow.loadURL('http://localhost:5173'); }
   else { mainWindow.loadFile(join(__dirname, '../dist/index.html')); }
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
   mainWindow.on('closed', () => { mainWindow = null; });
   mainWindow.webContents.on('before-input-event', (_e, input) => { if (input.key === 'F12') mainWindow.webContents.toggleDevTools(); });
   mainWindow.webContents.once('did-finish-load', () => {
@@ -461,11 +505,14 @@ app.whenReady().then(() => {
   if (deepLinkArg) pendingDeepLink = deepLinkArg;
   dbReady = initDatabase();
   createWindow();
+  createTray();
   startBackupScheduler();
+  startFichesScheduler();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin' && isQuitting) app.quit(); });
+app.on('before-quit', () => { isQuitting = true; });
 
 // ─── Scheduler backup automatico ─────────────────────────────────────────────
 let schedulerInterval = null;
@@ -490,6 +537,29 @@ async function checkAndRunBackup() {
 
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ─── Scheduler auto-salvataggio fiches ───────────────────────────────────────
+let fichesSchedInterval = null;
+
+function startFichesScheduler() {
+  if (fichesSchedInterval) clearInterval(fichesSchedInterval);
+  checkAndRunFiches();
+  fichesSchedInterval = setInterval(checkAndRunFiches, 60_000);
+}
+
+function checkAndRunFiches() {
+  const cfg = readFichesSched();
+  if (!cfg.enabled) return;
+  const n = new Date();
+  const todayStr = toLocalDateStr(n);
+  if (cfg.last === todayStr) return;
+  const [hh, mm] = cfg.time.split(':').map(Number);
+  if (n.getHours() < hh || (n.getHours() === hh && n.getMinutes() < mm)) return;
+  const yesterday = new Date(n);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = toLocalDateStr(yesterday);
+  if (mainWindow) mainWindow.webContents.send('trigger-auto-fiches', { dateStr: yesterdayStr, todayStr });
 }
 
 // ─── IPC: backup file ─────────────────────────────────────────────────────────
@@ -518,6 +588,34 @@ ipcMain.handle('backup:save-file', async (_e, { filename, content }) => {
 ipcMain.handle('backup:mark-done', (_e, { todayStr }) => { const cfg = readConfig(); cfg.last = todayStr; writeConfig(cfg); return { ok: true }; });
 ipcMain.handle('shell:show-folder', (_e, fp) => shell.openPath(fp));
 ipcMain.handle('shell:show-item', (_e, fp) => shell.showItemInFolder(fp));
+
+// ─── IPC: cartelle di salvataggio ────────────────────────────────────────────
+ipcMain.handle('files:get-paths', () => readSavePaths());
+ipcMain.handle('files:set-paths', (_e, paths) => { writeSavePaths(paths); return { ok: true }; });
+ipcMain.handle('files:pick-folder', async (_e, { label }) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { title: label || 'Scegli cartella', properties: ['openDirectory', 'createDirectory'] });
+  return canceled || !filePaths.length ? { ok: false } : { ok: true, folder: filePaths[0] };
+});
+ipcMain.handle('files:save-auto', async (_e, { type, filename, content, encoding }) => {
+  const paths = readSavePaths();
+  const folder = paths[type];
+  if (!folder) return { ok: false, reason: 'no-folder' };
+  try {
+    if (!existsSync(folder)) mkdirSync(folder, { recursive: true });
+    const fullPath = join(folder, filename);
+    if (encoding === 'base64') {
+      writeFileSync(fullPath, Buffer.from(content, 'base64'));
+    } else {
+      writeFileSync(fullPath, content, 'utf8');
+    }
+    return { ok: true, filePath: fullPath };
+  } catch (err) { return { ok: false, reason: String(err) }; }
+});
+
+// ─── IPC: scheduler fiches ───────────────────────────────────────────────────
+ipcMain.handle('fiches:get-sched', () => readFichesSched());
+ipcMain.handle('fiches:set-sched', (_e, cfg) => { writeFichesSched(cfg); startFichesScheduler(); return { ok: true }; });
+ipcMain.handle('fiches:mark-done', (_e, { todayStr }) => { const cfg = readFichesSched(); cfg.last = todayStr; writeFichesSched(cfg); return { ok: true }; });
 
 // ─── IPC: database locale ─────────────────────────────────────────────────────
 ipcMain.handle('db:is-ready', () => dbReady);

@@ -17,6 +17,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showFolder: (folderPath) => ipcRenderer.invoke('shell:show-folder', folderPath),
   showItemInFolder: (filePath) => ipcRenderer.invoke('shell:show-item', filePath),
 
+  // ── Cartelle di salvataggio ────────────────────────────────────────────────
+  getFilePaths: () => ipcRenderer.invoke('files:get-paths'),
+  setFilePaths: (paths) => ipcRenderer.invoke('files:set-paths', paths),
+  pickFolder: (label) => ipcRenderer.invoke('files:pick-folder', { label }),
+  saveFileTo: (type, filename, content, encoding) => ipcRenderer.invoke('files:save-auto', { type, filename, content, encoding: encoding || 'utf8' }),
+
+  // ── Scheduler auto-salvataggio fiches ──────────────────────────────────────
+  getFichesSched: () => ipcRenderer.invoke('fiches:get-sched'),
+  setFichesSched: (cfg) => ipcRenderer.invoke('fiches:set-sched', cfg),
+  markFichesDone: (todayStr) => ipcRenderer.invoke('fiches:mark-done', { todayStr }),
+  onTriggerAutoFiches: (callback) => {
+    ipcRenderer.on('trigger-auto-fiches', (_e, data) => callback(data));
+    return () => ipcRenderer.removeAllListeners('trigger-auto-fiches');
+  },
+
   // ── Deep link ──────────────────────────────────────────────────────────────
   onDeepLink: (callback) => {
     ipcRenderer.on('deep-link', (_e, url) => callback(url));

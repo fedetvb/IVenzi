@@ -8,6 +8,7 @@ import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveFile } from '../lib/fileSaver';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -421,7 +422,7 @@ function mkRivConfronto(
   };
 }
 
-function esportaRivenditaPDF(parr: Parrucchiere, vendite: Vendita[], periodoLabel: string, confronto?: PdfConfrRiv) {
+async function esportaRivenditaPDF(parr: Parrucchiere, vendite: Vendita[], periodoLabel: string, confronto?: PdfConfrRiv) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   doc.setFont('helvetica', 'bold');
@@ -482,10 +483,10 @@ function esportaRivenditaPDF(parr: Parrucchiere, vendite: Vendita[], periodoLabe
     pdfSezConfronto(doc, confronto, afterTable);
   }
 
-  doc.save(`rivendita-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`);
+  await saveFile('rivendita', `rivendita-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
-function esportaTotaleRivenditaPDF(vendite: Vendita[], confronto?: PdfConfrRiv) {
+async function esportaTotaleRivenditaPDF(vendite: Vendita[], confronto?: PdfConfrRiv) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const annoCorrente = new Date().getFullYear();
 
@@ -555,7 +556,7 @@ function esportaTotaleRivenditaPDF(vendite: Vendita[], confronto?: PdfConfrRiv) 
     pdfSezConfronto(doc, confronto, afterTable);
   }
 
-  doc.save(`rivendita-totale-${annoCorrente}.pdf`);
+  await saveFile('rivendita', `rivendita-totale-${annoCorrente}.pdf`, doc.output('blob'));
 }
 
 // ─── Grafico barre orizzontali ────────────────────────────────────────────────

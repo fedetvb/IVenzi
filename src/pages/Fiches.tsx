@@ -11,6 +11,7 @@ import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated } from '../lib/localDb';
+import { saveFile } from '../lib/fileSaver';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ function FichesTab() {
   const [openCard, setOpenCard] = useState<string | null>(null);
   const [clientiCarte, setClientiCarte] = useState<Map<string, { hasPremium: boolean; hasSconto: boolean }>>(new Map());
   const [showPrint, setShowPrint] = useState(false);
+  const [autoExportDate, setAutoExportDate] = useState<string | null>(null);
   const [showNuovaFiche, setShowNuovaFiche] = useState(false);
   const [showBulkGate, setShowBulkGate] = useState(false);
   const [bulkConvalidando, setBulkConvalidando] = useState(false);
@@ -342,6 +344,16 @@ function FichesTab() {
   }, [selectedDate]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onTriggerAutoFiches) return;
+    const unsub = window.electronAPI.onTriggerAutoFiches(({ dateStr, todayStr }: { dateStr: string; todayStr: string }) => {
+      setSelectedDate(dateStr);
+      setAutoExportDate(dateStr);
+      if (window.electronAPI?.markFichesDone) window.electronAPI.markFichesDone(todayStr);
+    });
+    return unsub;
+  }, []);
 
   // Riepilogo incasso del giorno (solo convalidate)
   const incassoConvalidato = gruppi
@@ -580,8 +592,12 @@ function FichesTab() {
         />,
         document.body
       )}
-      {showPrint && createPortal(
-        <PrintModal gruppi={gruppi.filter(g => g.ficheConvalidata)} onClose={() => setShowPrint(false)} />,
+      {(showPrint || autoExportDate !== null) && createPortal(
+        <PrintModal
+          gruppi={gruppi.filter(g => g.ficheConvalidata)}
+          onClose={() => { setShowPrint(false); setAutoExportDate(null); }}
+          autoExportDate={autoExportDate}
+        />,
         document.body
       )}
       {showNuovaFiche && createPortal(
@@ -1357,6 +1373,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
   };
 
   const isManuale = gruppo.appuntamenti.length === 0;
+  const isCartaPremium = gruppo.clienteId.startsWith('__premium__');
 
   const parrucchieriUnici = Array.from(
     new Map(
@@ -1375,9 +1392,11 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
         className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-stone-50/60 transition-colors rounded-xl"
       >
         <div className="flex-shrink-0 w-20 text-center">
-          {isManuale
-            ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-wide">Manuale</span>
-            : <span className="text-xs font-semibold text-stone-500">{orari}</span>
+          {isCartaPremium
+            ? <span className="text-[10px] font-bold text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full uppercase tracking-wide">Carta Premium</span>
+            : isManuale
+              ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-wide">Manuale</span>
+              : <span className="text-xs font-semibold text-stone-500">{orari}</span>
           }
         </div>
 
@@ -1389,7 +1408,10 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="font-semibold text-stone-800">{gruppo.clienteNome} {gruppo.clienteCognome}</p>
+            {isCartaPremium
+              ? <p className="font-semibold text-yellow-700">Fiche automatica carta premium</p>
+              : <p className="font-semibold text-stone-800">{gruppo.clienteNome} {gruppo.clienteCognome}</p>
+            }
             {carteTipi?.hasPremium && (
               <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" title={carteTipi.hasPremiumEsaurita ? 'Carta Premium esaurita' : 'Carta Premium'}>
                 {!carteTipi.hasPremiumEsaurita && <defs><linearGradient id="pgold-fiche" x1="0" y1="0" x2="18" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#F59E0B"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs>}
@@ -1407,13 +1429,15 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, p
             )}
           </div>
           <p className="text-xs text-stone-400 truncate">
-            {isManuale
-              ? 'Fiche manuale'
-              : <>
-                  {parrucchieriUnici.map(p => p.nome).join(', ')}
-                  {' · '}
-                  {gruppo.appuntamenti.flatMap(a => a.appuntamento_trattamenti?.map(t => t.nome_trattamento) || []).join(', ') || 'Nessun servizio'}
-                </>
+            {isCartaPremium
+              ? `${gruppo.clienteNome} ${gruppo.clienteCognome}`.trim()
+              : isManuale
+                ? 'Fiche manuale'
+                : <>
+                    {parrucchieriUnici.map(p => p.nome).join(', ')}
+                    {' · '}
+                    {gruppo.appuntamenti.flatMap(a => a.appuntamento_trattamenti?.map(t => t.nome_trattamento) || []).join(', ') || 'Nessun servizio'}
+                  </>
             }
           </p>
         </div>
@@ -2330,9 +2354,10 @@ type LayoutOption = typeof LAYOUT_OPTIONS[number];
 interface PrintModalProps {
   gruppi: ClienteGruppo[];
   onClose: () => void;
+  autoExportDate?: string | null;
 }
 
-function PrintModal({ gruppi, onClose }: PrintModalProps) {
+function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
   const printPagesRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<LayoutOption>(LAYOUT_OPTIONS[4]);
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -2356,6 +2381,13 @@ function PrintModal({ gruppi, onClose }: PrintModalProps) {
   const pages: (typeof previews)[] = [];
   for (let i = 0; i < previews.length; i += perPage) pages.push(previews.slice(i, i + perPage));
 
+  useEffect(() => {
+    if (!autoExportDate) return;
+    const timer = setTimeout(() => { doSavePdf(autoExportDate).then(onClose); }, 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoExportDate]);
+
   function gridStyle(): React.CSSProperties {
     return { display: 'grid', gridTemplateColumns: `repeat(${layout.cols}, 1fr)`, gridTemplateRows: `repeat(${layout.rows}, 1fr)`, gap: '3mm', height: '277mm' };
   }
@@ -2371,7 +2403,7 @@ function PrintModal({ gruppi, onClose }: PrintModalProps) {
     if (root) root.style.display = 'none';
   }
 
-  async function doSavePdf() {
+  async function doSavePdf(dateLabel?: string) {
     if (!printPagesRef.current) return;
     setGeneratingPdf(true);
     try {
@@ -2383,19 +2415,45 @@ function PrintModal({ gruppi, onClose }: PrintModalProps) {
         if (i > 0) pdf.addPage();
         pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
       }
-      const blob = pdf.output('blob');
-      if ('showSaveFilePicker' in window) {
-        try {
-          const fh = await (window as any).showSaveFilePicker({ suggestedName: `fiches_${localDateStr()}.pdf`, types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }] });
-          const writable = await fh.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          setGeneratingPdf(false); return;
-        } catch (err: any) { if (err?.name === 'AbortError') { setGeneratingPdf(false); return; } }
+
+      // Pagina riepilogo incasso
+      const incassoTotale = previews.reduce((sum, p) => sum + p.totale, 0);
+      pdf.addPage();
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.setTextColor(28, 25, 23);
+      pdf.text('Riepilogo incasso', 14, 24);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.setTextColor(120, 113, 108);
+      pdf.text(dateLabel ?? localDateStr(), 14, 31);
+      pdf.setDrawColor(231, 229, 228);
+      pdf.line(14, 34, 196, 34);
+      let y = 42;
+      pdf.setFontSize(9);
+      for (const p of previews) {
+        const nome = p.g.clienteId.startsWith('__premium__')
+          ? `Carta Premium — ${`${p.g.clienteNome} ${p.g.clienteCognome}`.trim()}`
+          : `${p.g.clienteNome} ${p.g.clienteCognome}`.trim() || 'Sconosciuto';
+        pdf.setTextColor(28, 25, 23);
+        pdf.text(nome, 14, y);
+        pdf.setTextColor(28, 100, 58);
+        pdf.text(`€${p.totale.toFixed(2)}`, 180, y, { align: 'right' });
+        y += 6;
+        if (y > 270) { pdf.addPage(); y = 20; }
       }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `fiches_${localDateStr()}.pdf`; a.click();
-      URL.revokeObjectURL(url);
+      pdf.setDrawColor(231, 229, 228);
+      pdf.line(14, y, 196, y);
+      y += 6;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.setTextColor(28, 25, 23);
+      pdf.text('Totale incasso', 14, y);
+      pdf.setTextColor(22, 163, 74);
+      pdf.text(`€${incassoTotale.toFixed(2)}`, 180, y, { align: 'right' });
+
+      const filename = `fiches_${(dateLabel ?? localDateStr()).replace(/\s/g, '-')}.pdf`;
+      await saveFile('fiches', filename, pdf.output('blob'));
     } finally { setGeneratingPdf(false); }
   }
 
@@ -2473,12 +2531,23 @@ function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forP
   const visibleVoci = voci.slice(0, MAX_VOCI);
   const hidden = voci.length - visibleVoci.length;
 
+  const isCartaPremiumPrint = g.clienteId.startsWith('__premium__');
+
   if (forPrint) {
     return (
       <div style={{ border: '1px solid #333', borderRadius: '4px', padding: '4mm', fontSize: '8pt', fontFamily: 'Arial, sans-serif', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' }}>
         <div style={{ borderBottom: '1px solid #ddd', paddingBottom: '2mm', marginBottom: '2mm' }}>
-          <div style={{ fontWeight: 'bold', fontSize: '9pt' }}>{g.clienteNome} {g.clienteCognome}</div>
-          <div style={{ color: '#666', fontSize: '7pt' }}>{orari}{parrNomi ? ` · ${parrNomi}` : ''}</div>
+          {isCartaPremiumPrint ? (
+            <>
+              <div style={{ fontWeight: 'bold', fontSize: '9pt', color: '#92400E' }}>Fiche automatica carta premium</div>
+              <div style={{ color: '#666', fontSize: '7pt' }}>{g.clienteNome} {g.clienteCognome}</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontWeight: 'bold', fontSize: '9pt' }}>{g.clienteNome} {g.clienteCognome}</div>
+              <div style={{ color: '#666', fontSize: '7pt' }}>{orari}{parrNomi ? ` · ${parrNomi}` : ''}</div>
+            </>
+          )}
         </div>
         <div style={{ flex: 1 }}>
           {visibleVoci.map((v, i) => (
@@ -2505,8 +2574,17 @@ function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forP
   return (
     <div className="border border-stone-300 rounded p-2 flex flex-col overflow-hidden bg-white text-[10px]">
       <div className="border-b border-stone-200 pb-1.5 mb-1.5">
-        <div className="font-bold text-stone-800 text-xs leading-tight">{g.clienteNome} {g.clienteCognome}</div>
-        <div className="text-stone-400 text-[9px] truncate">{orari}{parrNomi ? ` · ${parrNomi}` : ''}</div>
+        {isCartaPremiumPrint ? (
+          <>
+            <div className="font-bold text-yellow-700 text-xs leading-tight">Fiche automatica carta premium</div>
+            <div className="text-stone-500 text-[9px] truncate">{g.clienteNome} {g.clienteCognome}</div>
+          </>
+        ) : (
+          <>
+            <div className="font-bold text-stone-800 text-xs leading-tight">{g.clienteNome} {g.clienteCognome}</div>
+            <div className="text-stone-400 text-[9px] truncate">{orari}{parrNomi ? ` · ${parrNomi}` : ''}</div>
+          </>
+        )}
       </div>
       <div className="flex-1 space-y-px overflow-hidden">
         {visibleVoci.map((v, i) => (

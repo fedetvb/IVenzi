@@ -7,6 +7,7 @@ import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveFile } from '../lib/fileSaver';
 
 interface Props {
   onSelectCliente: (id: string) => void;
@@ -164,40 +165,26 @@ export default function Clienti({ onSelectCliente }: Props) {
     return `${d}/${m}/${y}`;
   }
 
-  function esportaExcel() {
+  async function esportaExcel() {
     setExporting(true);
     const header = ['Cognome', 'Nome', 'Telefono', 'Email', 'Data di nascita', 'Eta', 'Note'];
     const rows = clienti.map(c => [
       c.cognome, c.nome, c.telefono ?? '', c.email ?? '',
       formatDataIT(c.data_nascita ?? null), calcEta(c.data_nascita ?? null), (c.note ?? '').replace(/\n/g, ' '),
     ]);
-    // Semicolon separator for Italian Excel locale
     const csvContent = [header, ...rows]
       .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
       .join('\r\n');
-    const bom = '\uFEFF';
-    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `clienti-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    await saveFile('clienti', `clienti-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.csv`, '\uFEFF' + csvContent);
     setExporting(false);
     setExportOpen(false);
   }
 
-  function scaricaCsv(filename: string, header: string[], rows: string[][]) {
+  async function scaricaCsv(filename: string, header: string[], rows: string[][]) {
     const csvContent = [header, ...rows]
       .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'))
       .join('\r\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    await saveFile('clienti', filename, '\uFEFF' + csvContent);
   }
 
   async function esportaSchedeColore() {
@@ -430,7 +417,8 @@ export default function Clienti({ onSelectCliente }: Props) {
       doc.text(`Pagina ${i} di ${totalPages}`, W - 14, 205, { align: 'right' });
     }
 
-    doc.save(`report-completo-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.pdf`);
+    const filename = `report-completo-${new Date().toLocaleDateString('it-IT').replace(/\//g, '-')}.pdf`;
+    await saveFile('clienti', filename, doc.output('blob'));
     setExporting(false);
   }
 

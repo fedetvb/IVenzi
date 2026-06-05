@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveFile } from '../lib/fileSaver';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ function pdfHeader(doc: jsPDF, titolo: string, periodo: string) {
   doc.line(14, 33, doc.internal.pageSize.width - 14, 33);
 }
 
-function esportaClientiPDF(ranked: ClienteStats[], modalita: ModalitaClienti, classifica: Classifica, periodoLabel: string, confronto?: PdfConfronto) {
+async function esportaClientiPDF(ranked: ClienteStats[], modalita: ModalitaClienti, classifica: Classifica, periodoLabel: string, confronto?: PdfConfronto) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const modalitaLabel: Record<ModalitaClienti, string> = { combinata: 'Combinata', frequenza: 'Frequenza', spesa: 'Spesa', fiches: 'Media fiches' };
   pdfHeader(doc, `Clienti — ${modalitaLabel[modalita]} (${classifica === 'migliori' ? 'migliori' : 'peggiori'})`, periodoLabel);
@@ -119,10 +120,10 @@ function esportaClientiPDF(ranked: ClienteStats[], modalita: ModalitaClienti, cl
     pdfSezionConfronto(doc, confronto, afterTable);
   }
 
-  doc.save(`statistiche-clienti-${periodoLabel.replace(/\s/g, '-')}.pdf`);
+  await saveFile('statistiche', `statistiche-clienti-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
-function esportaParrucchieriPDF(ranked: ParrStats[], modalita: ModalitaParr, classifica: Classifica, periodoLabel: string) {
+async function esportaParrucchieriPDF(ranked: ParrStats[], modalita: ModalitaParr, classifica: Classifica, periodoLabel: string) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const modalitaLabel: Record<ModalitaParr, string> = { combinata: 'Combinata', fiches: 'Media fiches', spesa: 'Spesa', clienti_serviti: 'Clienti serviti', appuntamenti: 'Appuntamenti' };
   pdfHeader(doc, `Parrucchieri — ${modalitaLabel[modalita]} (${classifica === 'migliori' ? 'migliori' : 'peggiori'})`, periodoLabel);
@@ -147,7 +148,7 @@ function esportaParrucchieriPDF(ranked: ParrStats[], modalita: ModalitaParr, cla
     columnStyles: { 0: { cellWidth: 8 }, 1: { cellWidth: 40 } },
   });
 
-  doc.save(`statistiche-parrucchieri-${periodoLabel.replace(/\s/g, '-')}.pdf`);
+  await saveFile('statistiche', `statistiche-parrucchieri-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
 interface PdfConfronto {
@@ -243,7 +244,7 @@ function mkPdfConfronto(
   };
 }
 
-function esportaSchedaParrPDF(
+async function esportaSchedaParrPDF(
   parr: Parrucchiere,
   stats: ParrStats,
   mensile: MensilePoint[],
@@ -300,10 +301,10 @@ function esportaSchedaParrPDF(
     pdfSezionConfronto(doc, confronto, afterTable);
   }
 
-  doc.save(`scheda-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`);
+  await saveFile('statistiche', `scheda-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
-function esportaNegozioPDF(
+async function esportaNegozioPDF(
   mediaFiche: { count: number; totale: number; media: number },
   serviziSorted: ServizioStats[],
   periodoLabel: string,
@@ -358,10 +359,10 @@ function esportaNegozioPDF(
     pdfSezionConfronto(doc, confronto, afterTable);
   }
 
-  doc.save(`statistiche-negozio-${periodoLabel.replace(/\s/g, '-')}.pdf`);
+  await saveFile('statistiche', `statistiche-negozio-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
-function esportaAssenzePDF(
+async function esportaAssenzePDF(
   parrucchieri: Parrucchiere[],
   assenze: Assenza[],
   periodo: PeriodoKey,
@@ -403,7 +404,7 @@ function esportaAssenzePDF(
     doc.text('Nessuna assenza nel periodo selezionato.', 14, 42);
   }
 
-  doc.save(`assenze-parrucchieri-${periodoLabel.replace(/\s/g, '-')}.pdf`);
+  await saveFile('statistiche', `assenze-parrucchieri-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
 // ─── Confronto periodi personalizzato ─────────────────────────────────────────

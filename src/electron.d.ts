@@ -75,6 +75,15 @@ export interface DbAPI {
   getPath: () => Promise<{ path: string; exists: boolean }>;
 }
 
+export type SavePathType = 'backup' | 'fiches' | 'clienti' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
+export type SavePaths = Record<SavePathType, string>;
+
+export interface FichesSchedConfig {
+  enabled: boolean;
+  time: string;   // "HH:MM"
+  last: string;   // "YYYY-MM-DD"
+}
+
 export interface ElectronAPI {
   getBackupConfig: () => Promise<AutoBackupConfig>;
   setBackupConfig: (cfg: AutoBackupConfig) => Promise<{ ok: boolean }>;
@@ -86,6 +95,16 @@ export interface ElectronAPI {
   showFolder: (folderPath: string) => void;
   showItemInFolder: (filePath: string) => void;
   onDeepLink: (cb: (url: string) => void) => () => void;
+  // Cartelle di salvataggio
+  getFilePaths: () => Promise<SavePaths>;
+  setFilePaths: (paths: SavePaths) => Promise<{ ok: boolean }>;
+  pickFolder: (label: string) => Promise<{ ok: boolean; folder?: string }>;
+  saveFileTo: (type: SavePathType, filename: string, content: string, encoding?: 'utf8' | 'base64') => Promise<{ ok: boolean; filePath?: string; reason?: string }>;
+  // Auto-salvataggio fiches
+  getFichesSched: () => Promise<FichesSchedConfig>;
+  setFichesSched: (cfg: FichesSchedConfig) => Promise<{ ok: boolean }>;
+  markFichesDone: (todayStr: string) => Promise<{ ok: boolean }>;
+  onTriggerAutoFiches: (cb: (data: { dateStr: string; todayStr: string }) => void) => () => void;
   db?: DbAPI;
 }
 
