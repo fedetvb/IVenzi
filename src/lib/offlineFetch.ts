@@ -52,6 +52,10 @@ async function getCurrentAuthHeader(): Promise<string> {
   return session?.access_token ? `Bearer ${session.access_token}` : '';
 }
 
+export async function flushPendingSync(): Promise<void> {
+  await syncPending();
+}
+
 async function syncPending() {
   if (!_online) return;
   const pending = await getPendingMutations();

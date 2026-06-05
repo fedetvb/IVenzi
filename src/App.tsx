@@ -27,6 +27,7 @@ import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw, ClipboardList } from
 import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
+import { flushPendingSync } from './lib/offlineFetch';
 
 // Registra il push immediato una volta sola al caricamento del modulo
 registerPushRowNow(pushRowNow);
@@ -191,8 +192,8 @@ export default function App() {
     const interval = setInterval(doPrefetch, 3 * 60 * 1000);
 
     const handleOnline = () => {
-      // Al ritorno online: sync immediato scritture pending, poi aggiorna cache lettura
-      setTimeout(doPrefetch, 2000); // lascia 2s a offlineFetch per sincronizzare le mutazioni
+      // Al ritorno online: aspetta che le mutazioni pending siano sincronizzate, poi aggiorna la cache
+      flushPendingSync().then(() => doPrefetch()).catch(() => doPrefetch());
     };
     window.addEventListener('online', handleOnline);
 
