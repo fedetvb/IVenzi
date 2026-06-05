@@ -26,7 +26,7 @@ import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, RefreshCw, ClipboardList } from 'lucide-react';
 import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
-import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow } from './lib/sync';
+import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
 
 // Registra il push immediato una volta sola al caricamento del modulo
 registerPushRowNow(pushRowNow);
@@ -169,7 +169,30 @@ export default function App() {
     setCurrentUserId(user?.id ?? null);
   }, [user]);
 
-  // Sync SQLite <-> Supabase all'avvio (solo in Electron, solo se online e DB pronto)
+  // Prefetch dati in IndexedDB per garantire la disponibilita' offline
+  // Funziona anche senza SQLite (better-sqlite3 non disponibile)
+  useEffect(() => {
+    if (!user || !navigator.onLine) return;
+    const userId = user.id;
+    let cancelled = false;
+
+    async function doPrefetch() {
+      try {
+        await prefetchToIndexedDb(userId);
+      } catch (e) {
+        console.warn('[Prefetch] Errore:', e);
+      }
+    }
+
+    doPrefetch();
+    const interval = setInterval(() => {
+      if (navigator.onLine && !cancelled) doPrefetch();
+    }, 3 * 60 * 1000);
+
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user]);
+
+  // Sync SQLite <-> Supabase all'avvio (solo se SQLite disponibile e DB pronto)
   useEffect(() => {
     if (!user || !electronDbReady || !isElectron() || !navigator.onLine) return;
     const userId = user.id;

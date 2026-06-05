@@ -8,6 +8,7 @@
  */
 
 import { supabase } from './supabase';
+import { getTableCache } from './indexedDb';
 
 // ─── Compressione immagini ─────────────────────────────────────────────────────
 
@@ -127,7 +128,45 @@ export async function dbSelect<T = Record<string, unknown>>(args: {
     return { data: normRows<T>(res.data), error: null };
   }
 
-  // Browser: Supabase
+  // Browser / Electron senza SQLite: se offline usa IndexedDB cache
+  if (!navigator.onLine && _currentUserId) {
+    try {
+      const cached = await getTableCache(args.table, _currentUserId);
+      if (cached !== null) {
+        let rows = cached as Record<string, unknown>[];
+        for (const f of (args.filters || [])) {
+          rows = rows.filter(row => {
+            if (f.op === 'is_null') return row[f.col] === null || row[f.col] === undefined;
+            if (f.op === 'not_null') return row[f.col] !== null && row[f.col] !== undefined;
+            if (f.op === 'eq' || f.op === '=') return row[f.col] == f.val;
+            if (f.op === 'neq' || f.op === '!=') return row[f.col] != f.val;
+            if (f.op === 'in') return Array.isArray(f.val) && f.val.includes(row[f.col]);
+            if (f.op === 'gte' || f.op === '>=') return (row[f.col] as number) >= (f.val as number);
+            if (f.op === 'lte' || f.op === '<=') return (row[f.col] as number) <= (f.val as number);
+            if (f.op === '>') return (row[f.col] as number) > (f.val as number);
+            if (f.op === '<') return (row[f.col] as number) < (f.val as number);
+            if (f.op === 'like') return typeof row[f.col] === 'string' && (row[f.col] as string).toLowerCase().includes((f.val as string).replace(/%/g, '').toLowerCase());
+            return true;
+          });
+        }
+        if (args.orderBy?.length) {
+          rows = [...rows].sort((a, b) => {
+            for (const o of args.orderBy!) {
+              const av = String(a[o.col] ?? '');
+              const bv = String(b[o.col] ?? '');
+              const cmp = av.localeCompare(bv);
+              if (cmp !== 0) return o.asc !== false ? cmp : -cmp;
+            }
+            return 0;
+          });
+        }
+        if (args.limit) rows = rows.slice(0, args.limit);
+        return { data: rows as T[], error: null };
+      }
+    } catch { /* fallthrough */ }
+  }
+
+  // Supabase (online)
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = supabase.from(args.table).select(args.columns || '*');

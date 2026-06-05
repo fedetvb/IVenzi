@@ -1,5 +1,5 @@
 const DB_NAME = 'gestionale_offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -14,6 +14,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('pending_mutations')) {
         db.createObjectStore('pending_mutations', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('table_cache')) {
+        db.createObjectStore('table_cache', { keyPath: 'key' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -116,5 +119,35 @@ export async function countPendingMutations(): Promise<number> {
     });
   } catch {
     return 0;
+  }
+}
+
+// ─── Cache tabelle per offline (chiavi stabili, indipendenti dal token) ────────
+
+export async function setTableCache(table: string, userId: string, rows: unknown[]): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('table_cache', 'readwrite');
+      tx.objectStore('table_cache').put({ key: `${table}:${userId}`, rows, ts: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // Non-critical
+  }
+}
+
+export async function getTableCache(table: string, userId: string): Promise<unknown[] | null> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve) => {
+      const tx = db.transaction('table_cache', 'readonly');
+      const req = tx.objectStore('table_cache').get(`${table}:${userId}`);
+      req.onsuccess = () => resolve(req.result ? (req.result.rows as unknown[]) : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
   }
 }

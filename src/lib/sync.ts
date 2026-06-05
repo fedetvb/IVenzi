@@ -8,11 +8,12 @@
 
 import { supabase } from './supabase';
 import { isElectron, compressImage } from './localDb';
+import { setTableCache, getTableCache } from './indexedDb';
 
 const SYNC_TABLES: string[] = [
   'clienti', 'parrucchieri', 'trattamenti_catalogo', 'appuntamenti',
   'appuntamento_trattamenti', 'schede_colore', 'fiches', 'fiche_voci',
-  'incassi_giornalieri', 'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium',
+  'incassi', 'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium',
   'ricariche_carta_premium', 'utilizzi_carta_premium', 'prodotti_rivendita_catalogo',
   'rivendita_prodotti', 'trattamenti_eseguiti', 'impostazioni', 'template_messaggi',
   'assenze_parrucchieri', 'magazzino_prodotti', 'magazzino_movimenti',
@@ -38,7 +39,28 @@ async function fetchImageAsBase64(url: string): Promise<string> {
   }
 }
 
-// ─── Supabase -> SQLite (download completo) ───────────────────────────────────
+// ─── Supabase -> IndexedDB (prefetch per uso offline senza SQLite) ────────────
+
+export async function prefetchToIndexedDb(userId: string): Promise<void> {
+  for (const table of SYNC_TABLES) {
+    try {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .eq('user_id', userId);
+      if (error) { console.warn(`[Prefetch] ${table}:`, error.message); continue; }
+      await setTableCache(table, userId, data ?? []);
+    } catch (e) {
+      console.warn(`[Prefetch] Errore ${table}:`, e);
+    }
+  }
+}
+
+export async function getOfflineTableData(table: string, userId: string): Promise<unknown[]> {
+  return (await getTableCache(table, userId)) ?? [];
+}
+
+// ─── Supabase -> SQLite (download completo) + IndexedDB ──────────────────────
 
 export async function syncSupabaseToLocal(userId: string): Promise<void> {
   if (!isElectron() || !window.electronAPI?.db) return;
@@ -54,6 +76,9 @@ export async function syncSupabaseToLocal(userId: string): Promise<void> {
         if (error) console.warn(`[Sync] Errore lettura ${table}:`, error.message);
         continue;
       }
+
+      // Salva sempre in IndexedDB come fallback
+      await setTableCache(table, userId, data);
 
       // Scarica immagini come base64 per uso offline
       const rows = await Promise.all(
