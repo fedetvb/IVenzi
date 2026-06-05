@@ -8,7 +8,7 @@
  */
 
 import { supabase } from './supabase';
-import { getTableCache, setTableCache } from './indexedDb';
+import { getTableCache, setTableCache, addPendingMutation } from './indexedDb';
 
 // ─── Helpers per aggiornamento cache offline ──────────────────────────────────
 
@@ -598,7 +598,7 @@ const BACKUP_TABLES = [
   'schede_colore','fiches','fiche_voci','incassi_giornalieri','carte_sconto','utilizzi_carta_sconto',
   'carte_premium','ricariche_carta_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
   'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
-  'assenze_parrucchieri','magazzino_prodotti','magazzino_movimenti','magazzino_schede_salvate',
+  'assenze_parrucchieri','magazzino_prodotti','magazzino_schede_salvate',
   'spese','schede_clienti_da_confermare','giorni_parrucchiere','voci_extra_catalogo',
 ];
 
@@ -624,9 +624,31 @@ export async function restoreBackup(backupData: Record<string, unknown>): Promis
     return res as { success: boolean; error?: string; results?: Record<string, unknown> };
   }
 
-  // Fallback offline: salva direttamente in IndexedDB se non c'e' connessione
+  // Fallback offline: salva in IndexedDB e accoda la sincronizzazione a Supabase per quando torna online
   if (!navigator.onLine) {
     const res = await restoreToIndexedDb(backupData);
+    if (res.success) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sb = supabase as any;
+        const apiUrl = `${sb.supabaseUrl}/functions/v1/backup-database`;
+        const payload = JSON.stringify({
+          version: 1,
+          tables: Object.keys(backupData),
+          data: backupData,
+        });
+        await addPendingMutation({
+          url: apiUrl,
+          method: 'POST',
+          body: payload,
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': sb.supabaseKey ?? '',
+          },
+          ts: Date.now(),
+        });
+      } catch { /* non critico: il ripristino locale e' avvenuto */ }
+    }
     return res;
   }
 
