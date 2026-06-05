@@ -44,7 +44,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     const inizioSettimana = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - giornoSettimana).toISOString();
     const fineSettimana = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - giornoSettimana + 6, 23, 59, 59).toISOString();
 
-    const { data: appOggiData } = dbSelect<Appuntamento>({
+    const { data: appOggiData } = await dbSelect<Appuntamento>({
       table: 'appuntamenti',
       filters: [
         { col: 'data_ora', op: 'gte', val: inizioOggi },
@@ -54,7 +54,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       orderBy: [{ col: 'data_ora' }],
     });
 
-    const { data: appSettimanaData } = dbSelect<Appuntamento>({
+    const { data: appSettimanaData } = await dbSelect<Appuntamento>({
       table: 'appuntamenti',
       filters: [
         { col: 'data_ora', op: 'gte', val: inizioSettimana },
@@ -63,7 +63,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       ],
     });
 
-    const { data: clientiData } = dbSelect({
+    const { data: clientiData } = await dbSelect({
       table: 'clienti',
     });
 
@@ -75,7 +75,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     const appOggiWithClienti: (Appuntamento & { clienti?: Cliente })[] = [];
     if (appOggiData) {
       for (const app of appOggiData) {
-        const { data: clienteData } = dbSelect<Cliente>({
+        const { data: clienteData } = await dbSelect<Cliente>({
           table: 'clienti',
           filters: [{ col: 'id', op: 'eq', val: app.cliente_id }],
         });

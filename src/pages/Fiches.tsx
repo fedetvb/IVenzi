@@ -10,7 +10,7 @@ import html2canvas from 'html2canvas';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
-import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
+import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated } from '../lib/localDb';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -145,24 +145,28 @@ function FichesTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    // toISOString() restituisce sempre UTC, causando uno shift in Italia (UTC+2):
-    // "2026-05-22T00:00:00" locale → "2026-05-21T22:00:00Z" UTC, tagliando le prime 2 ore.
-    // Passiamo invece la stringa con offset esplicito del browser così Postgres la tratta correttamente.
-    const pad2 = (n: number) => String(n).padStart(2, '0');
-    const tzOff = -new Date().getTimezoneOffset(); // minuti, positivo per UTC+
-    const tzSign = tzOff >= 0 ? '+' : '-';
-    const tzHH = pad2(Math.floor(Math.abs(tzOff) / 60));
-    const tzMM = pad2(Math.abs(tzOff) % 60);
-    const tz = `${tzSign}${tzHH}:${tzMM}`;
-    const start = `${selectedDate}T00:00:00${tz}`;
-    const end   = `${selectedDate}T23:59:59${tz}`;
+    // Use UTC ISO strings so SQLite string comparison works correctly with stored timestamps.
+    const startLocal = new Date(`${selectedDate}T00:00:00`);
+    const endLocal = new Date(`${selectedDate}T23:59:59`);
+    const start = startLocal.toISOString();
+    const end   = endLocal.toISOString();
 
     const [appsRes, voceExtraRes, parrRes, serviziRes] = await Promise.all([
-      dbSelect({ table: 'appuntamenti', filters: [
-        { col: 'data_ora', op: 'gte', val: start },
-        { col: 'data_ora', op: 'lte', val: end },
-        { col: 'stato', op: 'neq', val: 'cancellato' },
-      ], orderBy: [{ col: 'data_ora', asc: true }] }),
+      dbSelectWithRelated<RawAppuntamento>({
+        table: 'appuntamenti',
+        filters: [
+          { col: 'data_ora', op: 'gte', val: start },
+          { col: 'data_ora', op: 'lte', val: end },
+          { col: 'stato', op: 'neq', val: 'cancellato' },
+        ],
+        orderBy: [{ col: 'data_ora', asc: true }],
+        relations: [
+          { table: 'clienti', fk: 'cliente_id', many: false },
+          { table: 'parrucchieri', fk: 'parrucchiere_id', many: false },
+          { table: 'appuntamento_trattamenti', manyFk: 'appuntamento_id', many: true },
+        ],
+        supabaseSelect: '*, clienti(id, nome, cognome), parrucchieri(id, nome, colore), appuntamento_trattamenti(nome_trattamento, prezzo)',
+      }),
       dbSelect({ table: 'voci_extra_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
       dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
       dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
