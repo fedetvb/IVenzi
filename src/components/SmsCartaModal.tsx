@@ -1,6 +1,6 @@
 import { Copy, Check, X, MessageSquare, Send, ChevronDown, CreditCard as Edit3, Loader } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { dbSelect } from '../lib/localDb';
+import { dbSelect, getImpostazione } from '../lib/localDb';
 
 export type AzioneCarta =
   | { tipo: 'creazione'; credito: number }
@@ -309,7 +309,16 @@ function ScontoCreazionePart({
 
 export default function SmsCartaModal({ nominativo, codice, telefono, azione, onClose, messaggioOverride }: Props) {
   const [copied, setCopied] = useState(false);
+  const [ready, setReady] = useState(false);
   const hasPhone = telefono.trim().length > 0;
+
+  useEffect(() => {
+    getImpostazione('whatsapp_avviso_disabilitato').then(v => {
+      if (v === 'true') { onClose(); } else { setReady(true); }
+    });
+  }, []);
+
+  if (!ready) return null;
 
   const titoloAzione =
     azione.tipo === 'creazione' ? 'Carta Premium creata' :
