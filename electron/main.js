@@ -30,7 +30,7 @@ function handleDeepLink(url) {
 app.on('second-instance', (_event, argv) => {
   const url = argv.find(a => a.startsWith(`${PROTOCOL}://`));
   if (url) handleDeepLink(url);
-  if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+  if (mainWindow) { mainWindow.show(); if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
 });
 app.on('open-url', (_event, url) => handleDeepLink(url));
 
@@ -578,7 +578,8 @@ function createTray() {
     { label: 'Esci', click() { isQuitting = true; app.quit(); } },
   ]);
   tray.setContextMenu(menu);
-  tray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
+  tray.on('click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } else { createWindow(); } });
+  tray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } else { createWindow(); } });
 }
 
 function createWindow() {
