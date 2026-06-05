@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar, ShieldOff, Ban } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
-import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
+import { dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione } from '../lib/localDb';
 import ClienteModal from '../components/ClienteModal';
 import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
@@ -139,7 +139,10 @@ export default function Clienti({ onSelectCliente }: Props) {
       setSchedaAperta(null);
       loadSchede();
       loadClienti();
-      setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome), clienteId: clienteRes.data.id, telefono: scheda.telefono || '' });
+      const waDisabilitato = await getImpostazione('whatsapp_avviso_disabilitato');
+      if (waDisabilitato !== 'true') {
+        setMessaggioConferma({ nome: scheda.nome, testo: buildMessaggioConferma(scheda.nome), clienteId: clienteRes.data.id, telefono: scheda.telefono || '' });
+      }
     }
     setConfermando(null);
   }
