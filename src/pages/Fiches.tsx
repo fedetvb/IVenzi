@@ -2364,7 +2364,10 @@ interface PrintModalProps {
 
 function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
   const printPagesRef = useRef<HTMLDivElement>(null);
-  const [layout, setLayout] = useState<LayoutOption>(LAYOUT_OPTIONS[4]);
+  const [layout, setLayout] = useState<LayoutOption>(() => {
+    const saved = localStorage.getItem('fiches_print_layout');
+    return LAYOUT_OPTIONS.find(o => o.value === Number(saved)) ?? LAYOUT_OPTIONS[4];
+  });
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   function buildFichePreview(g: ClienteGruppo) {
@@ -2474,7 +2477,7 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
           <span className="text-xs font-medium text-stone-500 whitespace-nowrap">Fiches per pagina:</span>
           <div className="flex gap-1 bg-stone-100 p-0.5 rounded-lg">
             {LAYOUT_OPTIONS.map(opt => (
-              <button key={opt.value} onClick={() => setLayout(opt)}
+              <button key={opt.value} onClick={() => { setLayout(opt); localStorage.setItem('fiches_print_layout', String(opt.value)); }}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${layout.value === opt.value ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
                 {opt.value}
               </button>
