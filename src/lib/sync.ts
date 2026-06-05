@@ -88,6 +88,9 @@ export async function syncSupabaseToLocal(userId: string): Promise<void> {
 export async function syncLocalToSupabase(userId: string): Promise<void> {
   if (!isElectron() || !window.electronAPI?.db) return;
 
+  // Prima: carica le foto che erano state salvate offline come pendenti
+  await _uploadPendingPhotos(userId);
+
   for (const table of SYNC_TABLES) {
     try {
       const res = await window.electronAPI.db.getDirty(table);
@@ -113,8 +116,8 @@ export async function pushRowNow(
 ): Promise<void> {
   if (!isElectron() || !navigator.onLine) return;
   try {
-    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, ...rest } = row as Record<string, unknown>;
-    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64;
+    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, foto_base64_pendente, ...rest } = row as Record<string, unknown>;
+    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64; void foto_base64_pendente;
     const rowToSync = { ...rest, user_id: userId };
 
     const { error } = await supabase
@@ -135,6 +138,71 @@ export async function pushRowNow(
   }
 }
 
+// ─── Upload foto pendenti (clienti con foto_base64_pendente) ──────────────────
+
+async function _uploadPendingPhotos(userId: string): Promise<void> {
+  if (!window.electronAPI?.db) return;
+
+  try {
+    const res = await window.electronAPI.db.select({
+      table: 'clienti',
+      filters: [{ col: 'foto_base64_pendente', op: 'not_null' }],
+    });
+    if (!res.ok || !res.data) return;
+
+    const rows = (res.data as Record<string, unknown>[]).filter(
+      r => r.user_id === userId && r.foto_base64_pendente && typeof r.foto_base64_pendente === 'string' && r.foto_base64_pendente.length > 0
+    );
+
+    for (const row of rows) {
+      try {
+        const base64 = row.foto_base64_pendente as string;
+        // Converti data URI in Blob
+        const [header, b64data] = base64.split(',');
+        const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+        const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+        const binary = atob(b64data);
+        const arr = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+        const blob = new Blob([arr], { type: mime });
+
+        const filename = `clienti/${row.id}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('foto-clienti')
+          .upload(filename, blob, { contentType: mime, upsert: true });
+
+        if (uploadErr) {
+          console.warn(`[Sync] Upload foto pendente fallito per cliente ${row.id}:`, uploadErr.message);
+          continue;
+        }
+
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
+        const newUrl = urlData.publicUrl;
+
+        // Aggiorna foto_url su Supabase
+        await supabase
+          .from('clienti')
+          .update({ foto_url: newUrl })
+          .eq('id', row.id as string)
+          .eq('user_id', userId);
+
+        // Aggiorna localmente: svuota il pendente e aggiorna foto_url
+        await window.electronAPI.db.update({
+          table: 'clienti',
+          id: row.id as string,
+          data: { foto_url: newUrl, foto_base64_pendente: '' },
+        });
+
+        console.log(`[Sync] Foto pendente caricata per cliente ${row.id}`);
+      } catch (e) {
+        console.warn(`[Sync] Errore upload foto pendente cliente ${row.id}:`, e);
+      }
+    }
+  } catch (e) {
+    console.warn('[Sync] Errore lettura foto pendenti:', e);
+  }
+}
+
 // ─── Push di piu' righe dirty ─────────────────────────────────────────────────
 
 async function _pushDirtyRows(
@@ -143,8 +211,8 @@ async function _pushDirtyRows(
   userId: string
 ): Promise<void> {
   const rows = dirtyRows.map(row => {
-    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, ...rest } = row;
-    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64;
+    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, foto_base64_pendente, ...rest } = row;
+    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64; void foto_base64_pendente;
     return { ...rest, user_id: userId };
   });
 

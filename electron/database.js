@@ -79,12 +79,16 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione fiches colonne:', e.message); }
 
-  // Add foto_base64 to clienti for offline photo storage
+  // Add foto_base64 and foto_base64_pendente to clienti for offline photo storage
   try {
     const clientiCols = db.prepare("PRAGMA table_info(clienti)").all().map(c => c.name);
     if (!clientiCols.includes('foto_base64')) {
       db.exec("ALTER TABLE clienti ADD COLUMN foto_base64 TEXT DEFAULT ''");
       console.log('[DB] Migrazione: aggiunta colonna foto_base64 a clienti');
+    }
+    if (!clientiCols.includes('foto_base64_pendente')) {
+      db.exec("ALTER TABLE clienti ADD COLUMN foto_base64_pendente TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_base64_pendente a clienti');
     }
   } catch(e) { console.warn('[DB] migrazione clienti foto_base64:', e.message); }
 
@@ -114,6 +118,7 @@ function createSchema() {
       note TEXT DEFAULT '',
       foto_url TEXT DEFAULT '',
       foto_base64 TEXT DEFAULT '',
+      foto_base64_pendente TEXT DEFAULT '',
       user_id TEXT,
       deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),

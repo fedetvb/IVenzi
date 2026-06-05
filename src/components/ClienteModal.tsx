@@ -67,8 +67,8 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  async function uploadFoto(id: string): Promise<string> {
-    if (!fotoFile) return fotoUrl;
+  async function uploadFoto(id: string): Promise<{ url: string; uploaded: boolean }> {
+    if (!fotoFile) return { url: fotoUrl, uploaded: false };
     setUploadingFoto(true);
     const ext = fotoFile.type.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
     const filename = `clienti/${id}.${ext}`;
@@ -76,9 +76,9 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       .from('foto-clienti')
       .upload(filename, fotoFile, { contentType: fotoFile.type, upsert: true });
     setUploadingFoto(false);
-    if (uploadErr) return fotoUrl;
+    if (uploadErr) return { url: fotoUrl, uploaded: false };
     const { data } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
-    return data.publicUrl;
+    return { url: data.publicUrl, uploaded: true };
   }
 
   function setField<K extends keyof ClienteForm>(k: K, v: ClienteForm[K]) {
@@ -107,16 +107,16 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
 
     if (!id) { setSaving(false); return; }
 
-    const newFotoUrl = await uploadFoto(id);
+    const { url: newFotoUrl, uploaded: fotoUploaded } = await uploadFoto(id);
 
-    // In Electron, also store base64 locally for offline access
+    // In Electron, store base64 locally for offline access
     let fotoBase64 = '';
     if (isElectron() && fotoFile) {
       fotoBase64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve((reader.result as string) ?? '');
         reader.onerror = () => resolve('');
-        reader.readAsDataURL(fotoFile);
+        reader.readAsDataURL(fotoFile!);
       });
     }
 
@@ -127,8 +127,15 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       foto_url: newFotoUrl,
       updated_at: new Date().toISOString(),
     };
-    if (isElectron() && fotoBase64) payload.foto_base64 = fotoBase64;
-    if (isElectron() && !fotoFile && !fotoUrl) payload.foto_base64 = '';
+    if (isElectron() && fotoBase64) {
+      payload.foto_base64 = fotoBase64;
+      // Se l'upload e' fallito (offline), salva il base64 come pendente per ritentare al prossimo sync
+      payload.foto_base64_pendente = fotoUploaded ? '' : fotoBase64;
+    }
+    if (isElectron() && !fotoFile && !fotoUrl) {
+      payload.foto_base64 = '';
+      payload.foto_base64_pendente = '';
+    }
     await dbUpdate({ table: 'clienti', id: id as string, data: payload });
 
     setSaving(false);
