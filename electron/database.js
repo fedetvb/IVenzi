@@ -57,6 +57,16 @@ export function getDb() {
 }
 
 function runMigrations() {
+  // Rinomina spese_voci → spese per allineamento con Supabase
+  try {
+    const speseVociExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='spese_voci'").get();
+    const speseExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='spese'").get();
+    if (speseVociExists && !speseExists) {
+      db.exec('ALTER TABLE spese_voci RENAME TO spese');
+      console.log('[DB] Migrazione: spese_voci → spese');
+    }
+  } catch(e) { console.warn('[DB] migrazione spese_voci→spese:', e.message); }
+
   // Rename ricariche_carte_premium → ricariche_carta_premium to match Supabase
   const oldExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ricariche_carte_premium'").get();
   if (oldExists) {
@@ -473,7 +483,7 @@ function createSchema() {
       _dirty INTEGER NOT NULL DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS spese_voci (
+    CREATE TABLE IF NOT EXISTS spese (
       id TEXT PRIMARY KEY,
       descrizione TEXT NOT NULL DEFAULT '',
       importo REAL NOT NULL DEFAULT 0,

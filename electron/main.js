@@ -77,13 +77,25 @@ function initDatabase() {
   let Database;
   try {
     if (app.isPackaged) {
-      const packedBase = join(app.getAppPath(), 'node_modules', 'better-sqlite3');
-      Database = require(existsSync(packedBase) ? packedBase : 'better-sqlite3');
+      // Con asar:false, electron-builder copia i node_modules nella cartella dell'app
+      // Proviamo piu' percorsi per compatibilita'
+      const candidates = [
+        join(app.getAppPath(), 'node_modules', 'better-sqlite3'),
+        join(process.resourcesPath, 'app', 'node_modules', 'better-sqlite3'),
+        join(__dirname, '..', 'node_modules', 'better-sqlite3'),
+      ];
+      let loaded = false;
+      for (const p of candidates) {
+        try {
+          if (existsSync(p)) { Database = require(p); loaded = true; break; }
+        } catch { /* prova il prossimo */ }
+      }
+      if (!loaded) Database = require('better-sqlite3');
     } else {
       Database = require('better-sqlite3');
     }
   } catch (e) {
-    console.warn('[DB] better-sqlite3 non disponibile:', e.message);
+    console.warn('[DB] better-sqlite3 non disponibile (modalita\' IndexedDB attiva):', e.message);
     return false;
   }
   try {
@@ -176,6 +188,16 @@ function runMigrations() {
       console.log('[DB] Migrazione: aggiunta colonna tipo a trattamenti_catalogo');
     }
   } catch(e) { console.warn('[DB] migrazione trattamenti_catalogo tipo:', e.message); }
+
+  // Rinomina spese_voci → spese per allineamento con Supabase
+  try {
+    const speseVociExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='spese_voci'").get();
+    const speseExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='spese'").get();
+    if (speseVociExists && !speseExists) {
+      db.exec('ALTER TABLE spese_voci RENAME TO spese');
+      console.log('[DB] Migrazione: spese_voci → spese');
+    }
+  } catch(e) { console.warn('[DB] migrazione spese_voci→spese:', e.message); }
 
   // Create incassi_giornalieri table if missing (was previously named 'incassi')
   try {
@@ -356,7 +378,7 @@ function createSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
-    CREATE TABLE IF NOT EXISTS spese_voci (
+    CREATE TABLE IF NOT EXISTS spese (
       id TEXT PRIMARY KEY, descrizione TEXT NOT NULL DEFAULT '', importo REAL NOT NULL DEFAULT 0,
       iva REAL DEFAULT 0, categoria TEXT DEFAULT '', data_spesa TEXT NOT NULL,
       ricorrente INTEGER NOT NULL DEFAULT 0, ricorrenza TEXT DEFAULT '',
@@ -510,7 +532,7 @@ const ALL_TABLES = [
   'carte_premium','ricariche_carta_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
   'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
   'assenze_parrucchieri','magazzino_prodotti','magazzino_movimenti','magazzino_schede_salvate',
-  'spese_voci','schede_clienti_da_confermare','giorni_parrucchiere','voci_extra_catalogo',
+  'spese','schede_clienti_da_confermare','giorni_parrucchiere','voci_extra_catalogo',
 ];
 
 function exportLocalData() {
