@@ -24,8 +24,26 @@ input,textarea,select{width:100%;padding:13px 16px 13px 44px;background:white;bo
 input:focus,textarea:focus{border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.15)}
 input::placeholder,textarea::placeholder{color:#c4bfbb}
 textarea{resize:none;padding-top:13px;line-height:1.5}
+
+/* Photo */
+.photo-area{display:flex;flex-direction:column;align-items:center;gap:12px;padding:4px 0}
+.photo-circle{width:100px;height:100px;border-radius:50%;background:#f5f5f4;border:2.5px dashed #d6d3d1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .15s,background .15s;overflow:hidden;flex-shrink:0}
+.photo-circle:hover{border-color:#f59e0b;background:#fffbeb}
+.photo-circle svg{width:28px;height:28px;fill:none;stroke:#a8a29e;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.photo-circle span{font-size:11px;color:#a8a29e;font-weight:600;text-align:center;line-height:1.3}
+.photo-circle.has-photo{border-style:solid;border-color:#f59e0b}
+#photoPreview{width:100%;height:100%;object-fit:cover;display:none}
+.photo-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.pbtn{padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:1.5px solid #e7e5e4;background:white;color:#57534e;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;font-family:inherit}
+.pbtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pbtn:hover{border-color:#f59e0b;color:#d97706;background:#fffbeb}
+.pbtn.del{border-color:#fecaca;color:#dc2626}
+.pbtn.del:hover{background:#fef2f2}
+.prog{width:100%;height:4px;background:#e7e5e4;border-radius:4px;overflow:hidden;display:none}
+.prog-bar{height:100%;background:#f59e0b;border-radius:4px;transition:width .3s}
+
 .privacy{font-size:12px;color:#a8a29e;line-height:1.7;margin-bottom:22px;padding:12px 14px;background:#fafaf9;border-radius:10px;border:1px solid #f0ece8}
-.btn{width:100%;padding:16px;background:#f59e0b;color:white;font-size:15px;font-weight:700;border:none;border-radius:14px;cursor:pointer;transition:background .15s,transform .1s,box-shadow .15s;box-shadow:0 4px 14px rgba(245,158,11,.35);letter-spacing:.01em}
+.btn{width:100%;padding:16px;background:#f59e0b;color:white;font-size:15px;font-weight:700;border:none;border-radius:14px;cursor:pointer;transition:background .15s,transform .1s,box-shadow .15s;box-shadow:0 4px 14px rgba(245,158,11,.35);letter-spacing:.01em;font-family:inherit}
 .btn:hover{background:#e89000;box-shadow:0 6px 18px rgba(245,158,11,.4)}
 .btn:active{transform:scale(.98)}
 .btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
@@ -112,6 +130,46 @@ textarea{resize:none;padding-top:13px;line-height:1.5}
         </div>
       </div>
 
+      <div class="divider"></div>
+      <p class="section-title">Foto profilo <span style="font-weight:400;text-transform:none;letter-spacing:0">(opzionale)</span></p>
+
+      <div class="fg">
+        <div class="photo-area">
+          <div class="photo-circle" id="photoCircle" onclick="document.getElementById('fileGallery').click()">
+            <img id="photoPreview" alt="Anteprima" />
+            <svg id="photoIcon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M20.5 6.5h-2.1l-1.5-2h-9.8l-1.5 2H3.5A2 2 0 001.5 8.5v10a2 2 0 002 2h17a2 2 0 002-2v-10a2 2 0 00-2-2z"/></svg>
+            <span id="photoHint">Tocca per<br/>aggiungere foto</span>
+          </div>
+          <div class="photo-btns" id="photoAddBtns">
+            <button type="button" class="pbtn" id="btnSelfie" onclick="openCamera()">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M20.5 6.5h-2.1l-1.5-2h-9.8l-1.5 2H3.5A2 2 0 001.5 8.5v10a2 2 0 002 2h17a2 2 0 002-2v-10a2 2 0 00-2-2z"/></svg>
+              Scatta selfie
+            </button>
+            <button type="button" class="pbtn" onclick="openGallery()">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Scegli foto
+            </button>
+          </div>
+          <div class="photo-btns" id="photoEditBtns" style="display:none">
+            <button type="button" class="pbtn" onclick="openCamera()">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M20.5 6.5h-2.1l-1.5-2h-9.8l-1.5 2H3.5A2 2 0 001.5 8.5v10a2 2 0 002 2h17a2 2 0 002-2v-10a2 2 0 00-2-2z"/></svg>
+              Selfie
+            </button>
+            <button type="button" class="pbtn" onclick="openGallery()">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Galleria
+            </button>
+            <button type="button" class="pbtn del" onclick="removePhoto()">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              Rimuovi
+            </button>
+          </div>
+          <input type="file" id="fileSelfie" accept="image/*" capture="user" style="display:none" onchange="handlePhoto(this)" />
+          <input type="file" id="fileGallery" accept="image/*" style="display:none" onchange="handlePhoto(this)" />
+          <div class="prog" id="prog"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
+        </div>
+      </div>
+
       <div id="err" class="eb" style="display:none">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span id="em"></span>
@@ -127,6 +185,69 @@ textarea{resize:none;padding-top:13px;line-height:1.5}
 <script>
 var SU = "https://cfsourwsjhhriytkdnuw.supabase.co";
 var SK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmc291cndzamhocml5dGtkbnV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjEzMDksImV4cCI6MjA5NDQ5NzMwOX0.XXTX5NYTIYF-Dn9-iA-YgJQd8G4CVKPTedoBscD1OOI";
+var EF = SU + "/functions/v1/registrazione-cliente";
+
+var photoBase64 = null;
+var photoMime = null;
+
+function openCamera() {
+  var el = document.getElementById('fileSelfie');
+  el.value = '';
+  el.click();
+}
+function openGallery() {
+  var el = document.getElementById('fileGallery');
+  el.value = '';
+  el.click();
+}
+
+function handlePhoto(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { showErr("La foto non deve superare 5 MB."); input.value = ''; return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var data = e.target.result;
+    photoBase64 = data.split(',')[1];
+    photoMime = file.type || 'image/jpeg';
+    var preview = document.getElementById('photoPreview');
+    var icon = document.getElementById('photoIcon');
+    var hint = document.getElementById('photoHint');
+    var circle = document.getElementById('photoCircle');
+    preview.src = data;
+    preview.style.display = 'block';
+    icon.style.display = 'none';
+    hint.style.display = 'none';
+    circle.classList.add('has-photo');
+    circle.onclick = null;
+    document.getElementById('photoAddBtns').style.display = 'none';
+    document.getElementById('photoEditBtns').style.display = 'flex';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto() {
+  photoBase64 = null; photoMime = null;
+  var preview = document.getElementById('photoPreview');
+  var icon = document.getElementById('photoIcon');
+  var hint = document.getElementById('photoHint');
+  var circle = document.getElementById('photoCircle');
+  preview.style.display = 'none';
+  preview.src = '';
+  icon.style.display = '';
+  hint.style.display = '';
+  circle.classList.remove('has-photo');
+  circle.onclick = function() { document.getElementById('fileGallery').click(); };
+  document.getElementById('photoAddBtns').style.display = 'flex';
+  document.getElementById('photoEditBtns').style.display = 'none';
+  document.getElementById('fileSelfie').value = '';
+  document.getElementById('fileGallery').value = '';
+}
+
+function showErr(msg) {
+  document.getElementById('em').textContent = msg;
+  document.getElementById('err').style.display = 'flex';
+}
 
 document.getElementById("f").onsubmit = async function(e) {
   e.preventDefault();
@@ -136,58 +257,55 @@ document.getElementById("f").onsubmit = async function(e) {
   var em = document.getElementById("email").value.trim();
   var d  = document.getElementById("dn").value || null;
   var no = document.getElementById("note").value.trim();
-  var ed = document.getElementById("err");
-  var emsg = document.getElementById("em");
   var btn = document.getElementById("btn");
+  var prog = document.getElementById('prog');
+  var progBar = document.getElementById('progBar');
 
-  if (!n || !c) {
-    emsg.textContent = "Nome e cognome sono obbligatori.";
-    ed.style.display = "flex";
-    return;
-  }
-
-  ed.style.display = "none";
+  if (!n || !c) { showErr("Nome e cognome sono obbligatori."); return; }
+  document.getElementById('err').style.display = "none";
   btn.disabled = true;
   btn.textContent = "Invio in corso...";
 
+  if (photoBase64) { prog.style.display = 'block'; progBar.style.width = '20%'; }
+
   try {
-    var r = await fetch(SU + "/rest/v1/schede_clienti_da_confermare", {
+    var payload = { nome: n, cognome: c, telefono: t || null, email: em || null, data_nascita: d, note: no || null };
+    if (photoBase64) { payload.foto_base64 = photoBase64; payload.foto_mime = photoMime; }
+
+    if (photoBase64) progBar.style.width = '50%';
+
+    var r = await fetch(EF, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": SK,
-        "Authorization": "Bearer " + SK,
-        "Prefer": "return=minimal"
+        "Authorization": "Bearer " + SK
       },
-      body: JSON.stringify({
-        nome: n,
-        cognome: c,
-        telefono: t || null,
-        email: em || null,
-        data_nascita: d,
-        note: no || null,
-        stato: "in_attesa"
-      })
+      body: JSON.stringify(payload)
     });
 
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (photoBase64) progBar.style.width = '90%';
+    var res = await r.json();
+    if (!r.ok || res.error) throw new Error(res.error || "HTTP " + r.status);
+    if (photoBase64) progBar.style.width = '100%';
 
-    document.getElementById("app").innerHTML =
-      '<div class="ss">' +
-        '<div class="si"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' +
-        '<h2>Grazie!</h2>' +
-        '<p>I tuoi dati sono stati inviati correttamente.<br/>Il nostro staff creer\u00e0 la tua scheda al pi\u00f9 presto.</p>' +
-        '<div class="sf">' +
-          '<svg viewBox="0 0 24 24"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>' +
-          'Ti aspettiamo!' +
-        '</div>' +
-      '</div>';
+    setTimeout(function() {
+      document.getElementById("app").innerHTML =
+        '<div class="ss">' +
+          '<div class="si"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' +
+          '<h2>Grazie!</h2>' +
+          '<p>I tuoi dati sono stati inviati correttamente.<br/>Il nostro staff creer\u00e0 la tua scheda al pi\u00f9 presto.</p>' +
+          '<div class="sf">' +
+            '<svg viewBox="0 0 24 24"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>' +
+            'Ti aspettiamo!' +
+          '</div>' +
+        '</div>';
+    }, 300);
 
   } catch(x) {
     btn.disabled = false;
     btn.textContent = "Invia la mia scheda";
-    emsg.textContent = "Si \u00e8 verificato un errore. Riprova tra qualche secondo.";
-    ed.style.display = "flex";
+    showErr(x.message || "Si \u00e8 verificato un errore. Riprova tra qualche secondo.");
+    prog.style.display = 'none';
   }
 };
 </script>
