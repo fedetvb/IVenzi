@@ -775,6 +775,56 @@ const FORMATO_MM: Record<QrFormato, [number, number]> = {
   cartolina: [100, 150],
 };
 
+const QR_LOGO_KEY = 'qr_logo_data_url';
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function buildQrWithLogo(qrImgUrl: string, logo: string | null): Promise<string> {
+  const qrImg = await loadImage(qrImgUrl);
+  const size = qrImg.naturalWidth || 400;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+  ctx.drawImage(qrImg, 0, 0);
+
+  if (logo) {
+    const logoImg = await loadImage(logo);
+    const logoSize = size * 0.22;
+    const lx = (size - logoSize) / 2;
+    const ly = (size - logoSize) / 2;
+    const pad = logoSize * 0.14;
+    const bx = lx - pad, by = ly - pad, bw = logoSize + pad * 2, bh = logoSize + pad * 2;
+    const r = bw * 0.18;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.lineTo(bx + bw - r, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
+    ctx.lineTo(bx + bw, by + bh - r);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+    ctx.lineTo(bx + r, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - r);
+    ctx.lineTo(bx, by + r);
+    ctx.quadraticCurveTo(bx, by, bx + r, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.drawImage(logoImg, lx, ly, logoSize, logoSize);
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
 function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const [registrazioneUrl, setRegistrazioneUrl] = useState('https://silver-kitsune-3a0339.netlify.app/');
   const [editingUrl, setEditingUrl] = useState(false);
@@ -783,11 +833,16 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const [layout, setLayout] = useState<QrLayout>('con_frase');
   const [formato, setFormato] = useState<QrFormato>('a4');
   const [generando, setGenerando] = useState(false);
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [qrComposite, setQrComposite] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
       const val = await getImpostazione('registrazione_url');
       if (val) setRegistrazioneUrl(val);
+      const saved = localStorage.getItem(QR_LOGO_KEY);
+      if (saved) setLogoDataUrl(saved);
     })();
   }, []);
 
@@ -804,6 +859,29 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
 
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&data=${encodeURIComponent(registrazioneUrl)}`;
 
+  useEffect(() => {
+    setQrComposite(null);
+    buildQrWithLogo(qrUrl, logoDataUrl).then(setQrComposite).catch(() => setQrComposite(qrUrl));
+  }, [qrUrl, logoDataUrl]);
+
+  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const result = ev.target?.result as string;
+      setLogoDataUrl(result);
+      localStorage.setItem(QR_LOGO_KEY, result);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  function handleRemoveLogo() {
+    setLogoDataUrl(null);
+    localStorage.removeItem(QR_LOGO_KEY);
+  }
+
   async function handleDownloadPdf() {
     setGenerando(true);
     try {
@@ -818,25 +896,9 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       doc.setFillColor(255, 255, 255);
       doc.rect(0, 0, w, h, 'F');
 
-      // carica QR come immagine
+      // carica QR (con logo sovrapposto se presente)
       const qrSize = Math.min(w * 0.52, h * 0.40);
-
-      const qrImg = await new Promise<string>((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx = canvas.getContext('2d')!;
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = reject;
-        img.src = qrUrl;
-      });
+      const qrImg = await buildQrWithLogo(qrUrl, logoDataUrl);
 
       let y = margin;
 
@@ -1126,12 +1188,14 @@ document.getElementById("f").onsubmit=async function(e){
           Scansiona il codice QR con il tuo smartphone per compilare la tua scheda cliente
         </p>
 
-        <div className="inline-block p-3 bg-white border border-stone-200 rounded-2xl shadow-sm mb-8">
-          <img
-            src={qrUrl}
-            alt="QR Code registrazione clienti"
-            className="w-52 h-52 block"
-          />
+        <div className="inline-block p-3 bg-white border border-stone-200 rounded-2xl shadow-sm mb-8 relative">
+          {qrComposite ? (
+            <img src={qrComposite} alt="QR Code registrazione clienti" className="w-52 h-52 block" />
+          ) : (
+            <div className="w-52 h-52 flex items-center justify-center bg-stone-50 rounded-xl">
+              <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
         </div>
 
         <div className="bg-stone-50 rounded-xl p-5 text-left space-y-3 max-w-xs mx-auto mb-6">
@@ -1206,6 +1270,50 @@ document.getElementById("f").onsubmit=async function(e){
             )}
           </div>
         </div>
+      </div>
+
+      {/* Logo QR */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+        <p className="text-sm font-bold text-stone-800 mb-1">Logo nel QR Code</p>
+        <p className="text-xs text-stone-400 mb-4">Aggiungi il logo del tuo salone al centro del codice QR (opzionale)</p>
+        <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+        {logoDataUrl ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl border border-stone-200 overflow-hidden flex-shrink-0 bg-stone-50">
+              <img src={logoDataUrl} alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-stone-700 mb-2">Logo caricato</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => logoInputRef.current?.click()}
+                  className="px-3 py-1.5 text-xs font-semibold border border-stone-200 rounded-lg text-stone-600 hover:border-amber-300 hover:text-amber-700 transition-colors"
+                >
+                  Cambia
+                </button>
+                <button
+                  onClick={handleRemoveLogo}
+                  className="px-3 py-1.5 text-xs font-semibold border border-red-200 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  Rimuovi
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => logoInputRef.current?.click()}
+            className="w-full flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-stone-200 rounded-xl hover:border-amber-300 hover:bg-amber-50 transition-all group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center transition-colors">
+              <Download size={18} className="text-stone-400 group-hover:text-amber-600 transition-colors" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-stone-600 group-hover:text-amber-700 transition-colors">Carica logo</p>
+              <p className="text-xs text-stone-400">PNG, JPG, SVG — comparirà al centro del QR</p>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Opzioni stampa PDF */}
