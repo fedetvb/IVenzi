@@ -776,6 +776,7 @@ const FORMATO_MM: Record<QrFormato, [number, number]> = {
 };
 
 const QR_LOGO_KEY = 'qr_logo_data_url';
+const QR_LOGO_DEFAULT = '/Screenshot_2026-06-05_115030.png';
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -833,7 +834,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const [layout, setLayout] = useState<QrLayout>('con_frase');
   const [formato, setFormato] = useState<QrFormato>('a4');
   const [generando, setGenerando] = useState(false);
-  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(QR_LOGO_DEFAULT);
   const [qrComposite, setQrComposite] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -842,7 +843,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       const val = await getImpostazione('registrazione_url');
       if (val) setRegistrazioneUrl(val);
       const saved = localStorage.getItem(QR_LOGO_KEY);
-      if (saved) setLogoDataUrl(saved);
+      setLogoDataUrl(saved || QR_LOGO_DEFAULT);
     })();
   }, []);
 
@@ -878,7 +879,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   }
 
   function handleRemoveLogo() {
-    setLogoDataUrl(null);
+    setLogoDataUrl(QR_LOGO_DEFAULT);
     localStorage.removeItem(QR_LOGO_KEY);
   }
 
@@ -1275,7 +1276,7 @@ document.getElementById("f").onsubmit=async function(e){
       {/* Logo QR */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <p className="text-sm font-bold text-stone-800 mb-1">Logo nel QR Code</p>
-        <p className="text-xs text-stone-400 mb-4">Aggiungi il logo del tuo salone al centro del codice QR (opzionale)</p>
+        <p className="text-xs text-stone-400 mb-4">Il logo del salone compare al centro del codice QR. Puoi caricarne uno personalizzato.</p>
         <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
         {logoDataUrl ? (
           <div className="flex items-center gap-4">
@@ -1293,9 +1294,9 @@ document.getElementById("f").onsubmit=async function(e){
                 </button>
                 <button
                   onClick={handleRemoveLogo}
-                  className="px-3 py-1.5 text-xs font-semibold border border-red-200 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                  className="px-3 py-1.5 text-xs font-semibold border border-stone-200 rounded-lg text-stone-500 hover:bg-stone-50 transition-colors"
                 >
-                  Rimuovi
+                  Predefinito
                 </button>
               </div>
             </div>
