@@ -478,7 +478,42 @@ export async function dbSelectWithRelated<T = Record<string, unknown>>(args: {
     return { data: rows as T[], error: null };
   }
 
-  // Browser: Supabase with nested select
+  // Browser: usa IndexedDB cache se disponibile (popola offline e migliora performance)
+  if (_currentUserId) {
+    try {
+      const cached = await getTableCache(args.table, _currentUserId);
+      if (cached !== null) {
+        const rows = applyFiltersToCache<Record<string, unknown>>(cached, args);
+
+        for (const rel of args.relations) {
+          const pk = rel.pk ?? 'id';
+          if (!rel.many) {
+            const fkValues = [...new Set(rows.map(r => r[rel.fk]).filter(Boolean))] as unknown[];
+            if (fkValues.length === 0) { for (const r of rows) r[rel.key] = null; continue; }
+            const relCached = ((await getTableCache(rel.table, _currentUserId)) ?? []) as Record<string, unknown>[];
+            const relMap = new Map(relCached.map(r => [r[pk], r]));
+            for (const r of rows) r[rel.key] = relMap.get(r[rel.fk]) ?? null;
+          } else {
+            const manyFk = rel.manyFk ?? `${args.table.replace(/s$/, '')}_id`;
+            const primaryIds = rows.map(r => r.id).filter(Boolean) as unknown[];
+            if (primaryIds.length === 0) { for (const r of rows) r[rel.key] = []; continue; }
+            const relCached = ((await getTableCache(rel.table, _currentUserId)) ?? []) as Record<string, unknown>[];
+            const relMap = new Map<unknown, Record<string, unknown>[]>();
+            for (const rel2 of relCached) {
+              const parentId = rel2[manyFk];
+              if (!relMap.has(parentId)) relMap.set(parentId, []);
+              relMap.get(parentId)!.push(rel2);
+            }
+            for (const r of rows) r[rel.key] = relMap.get(r.id) ?? [];
+          }
+        }
+
+        return { data: rows as T[], error: null };
+      }
+    } catch { /* cache miss: fallthrough a Supabase */ }
+  }
+
+  // Fallback: Supabase (solo se cache vuota — es. primo avvio)
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = supabase.from(args.table).select(args.supabaseSelect);
