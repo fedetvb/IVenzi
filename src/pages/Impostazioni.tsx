@@ -3486,11 +3486,11 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
       {!isElectronApp && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
           <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-700">Questa funzione è disponibile solo nell'app installata (Electron). Nella versione web i file vengono scaricati direttamente dal browser.</p>
+          <p className="text-sm text-amber-700">Nella versione web le cartelle non sono selezionabili — i file vengono scaricati direttamente dal browser. Nell'app installata (Electron) potrai configurare le cartelle di destinazione.</p>
         </div>
       )}
 
-      {isElectronApp && !loading && (
+      {!loading && (
         <>
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-stone-100">
