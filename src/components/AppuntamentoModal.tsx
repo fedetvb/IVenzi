@@ -104,6 +104,21 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     setParrucchieri((parrRes.data || []) as Parrucchiere[]);
   }
 
+  async function checkAndSetBlacklist(clienteId: string) {
+    const { data } = await dbSelect<Cliente>({
+      table: 'clienti',
+      columns: 'in_blacklist, motivo_blacklist',
+      filters: [{ col: 'id', op: 'eq', val: clienteId }],
+      limit: 1,
+    });
+    const found = data?.[0] ?? clienti.find(c => c.id === clienteId);
+    if (found?.in_blacklist) {
+      setBlacklistWarning({ motivo: found.motivo_blacklist || '' });
+    } else {
+      setBlacklistWarning(null);
+    }
+  }
+
   async function loadAppuntamento() {
     const { data: appRes } = await dbSelect({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: appuntamentoId }] });
     const appData = appRes?.[0] as any;
@@ -134,6 +149,8 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
           }))
         : [emptyServizio(parrId)],
     });
+
+    if (appData.cliente_id) await checkAndSetBlacklist(appData.cliente_id);
   }
 
   // Re-populate cliente search when clienti load after loadAppuntamento
@@ -148,20 +165,7 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     setForm(f => ({ ...f, cliente_id: c.id }));
     setClienteSearch(`${c.cognome} ${c.nome}`);
     setClienteDropdown(false);
-    // Verifica blacklist fresca dal DB (SQLite in Electron, Supabase in browser).
-    // Se offline su browser, data sarà null e si usa il dato già in memoria.
-    const { data } = await dbSelect<Cliente>({
-      table: 'clienti',
-      columns: 'in_blacklist, motivo_blacklist',
-      filters: [{ col: 'id', op: 'eq', val: c.id }],
-      limit: 1,
-    });
-    const checked = data?.[0] ?? c;
-    if (checked.in_blacklist) {
-      setBlacklistWarning({ motivo: checked.motivo_blacklist || '' });
-    } else {
-      setBlacklistWarning(null);
-    }
+    await checkAndSetBlacklist(c.id);
   }
 
   const clientiFiltrati = clienteSearch.trim().length > 0
