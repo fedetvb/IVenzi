@@ -66,6 +66,18 @@ function runMigrations() {
       console.log('[DB] Migrazione: ricariche_carte_premium → ricariche_carta_premium');
     }
   }
+  // Add tipo_fiche and tipo_pagamento to fiches if missing
+  try {
+    const cols = db.prepare("PRAGMA table_info(fiches)").all().map(c => c.name);
+    if (!cols.includes('tipo_fiche')) {
+      db.exec("ALTER TABLE fiches ADD COLUMN tipo_fiche TEXT DEFAULT 'manuale'");
+      console.log('[DB] Migrazione: aggiunta colonna tipo_fiche a fiches');
+    }
+    if (!cols.includes('tipo_pagamento')) {
+      db.exec("ALTER TABLE fiches ADD COLUMN tipo_pagamento TEXT");
+      console.log('[DB] Migrazione: aggiunta colonna tipo_pagamento a fiches');
+    }
+  } catch(e) { console.warn('[DB] migrazione fiches colonne:', e.message); }
 }
 
 function createSchema() {
@@ -178,6 +190,8 @@ function createSchema() {
       importo_convalidato REAL NOT NULL DEFAULT 0,
       manuale INTEGER NOT NULL DEFAULT 0,
       data_riferimento TEXT,
+      tipo_fiche TEXT DEFAULT 'manuale',
+      tipo_pagamento TEXT,
       user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
