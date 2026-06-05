@@ -60,35 +60,35 @@ function filtroToRange(f: FiltroStato): { start: string; end: string } {
   }
 
   if (f.tipo === 'mese_corrente') {
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
+    const lastDay = new Date(y, m, 0).getDate();
     return {
-      start: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`,
-      end: todayStr,
+      start: `${y}-${pad(m)}-01`,
+      end: `${y}-${pad(m)}-${pad(lastDay)}`,
     };
   }
 
   if (f.tipo === 'anno_corrente') {
-    return { start: `${now.getFullYear()}-01-01`, end: todayStr };
+    return { start: `${now.getFullYear()}-01-01`, end: `${now.getFullYear()}-12-31` };
   }
 
   if (f.tipo === 'sempre') {
-    return { start: '2000-01-01', end: todayStr };
+    return { start: '2000-01-01', end: '2999-12-31' };
   }
 
   if (f.tipo === 'anno' && f.anno) {
-    const isCurrentYear = f.anno === now.getFullYear();
     return {
       start: `${f.anno}-01-01`,
-      end: isCurrentYear ? todayStr : `${f.anno}-12-31`,
+      end: `${f.anno}-12-31`,
     };
   }
 
   if (f.tipo === 'mese' && f.anno && f.mese) {
     const lastDay = new Date(f.anno, f.mese, 0).getDate();
-    const end = `${f.anno}-${pad(f.mese)}-${pad(lastDay)}`;
-    const isCurrentOrFuture = new Date(end) > now;
     return {
       start: `${f.anno}-${pad(f.mese)}-01`,
-      end: isCurrentOrFuture ? todayStr : end,
+      end: `${f.anno}-${pad(f.mese)}-${pad(lastDay)}`,
     };
   }
 
