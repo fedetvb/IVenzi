@@ -61,4 +61,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getPath: () => ipcRenderer.invoke('db:get-path'),
     setUserProfile: (userId) => ipcRenderer.invoke('db:set-user-profile', { userId }),
   },
+
+  // ── Autenticazione locale offline ──────────────────────────────────────────
+  auth: {
+    saveProfile: (userId, email, password) => ipcRenderer.invoke('auth:save-profile', { userId, email, password }),
+    getProfiles: () => ipcRenderer.invoke('auth:get-profiles'),
+    verifyPassword: (email, password) => ipcRenderer.invoke('auth:verify-password', { email, password }),
+  },
 });

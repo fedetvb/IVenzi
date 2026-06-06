@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { Scissors, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Scissors, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, WifiOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
+import type { LocalProfile } from '../electron.d';
 
-type Mode = 'login' | 'register' | 'reset-email' | 'reset-otp';
+type Mode = 'login' | 'register' | 'reset-email' | 'reset-otp' | 'offline';
 
 export default function Login() {
+  const { offlineSignIn } = useAuth();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,10 +20,50 @@ export default function Login() {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [localProfiles, setLocalProfiles] = useState<LocalProfile[]>([]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    function onOnline() { setIsOffline(false); }
+    function onOffline() { setIsOffline(true); }
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+  }, []);
+
+  // Carica i profili locali salvati (solo in Electron)
+  useEffect(() => {
+    if (!window.electronAPI?.auth) return;
+    window.electronAPI.auth.getProfiles().then(profiles => {
+      setLocalProfiles(profiles);
+      // Se offline e ci sono profili salvati, vai subito alla schermata offline
+      if (!navigator.onLine && profiles.length > 0) {
+        setMode('offline');
+        setEmail(profiles[0].email);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Quando la connettivita' cambia, aggiorna la modalita'
+  useEffect(() => {
+    if (isOffline && localProfiles.length > 0 && mode === 'login') {
+      setMode('offline');
+      if (localProfiles.length > 0) setEmail(localProfiles[0].email);
+    } else if (!isOffline && mode === 'offline') {
+      setMode('login');
+    }
+  }, [isOffline]);
 
   function resetState() {
     setError('');
     setSuccessMsg('');
+  }
+
+  async function saveLocalProfile(userId: string, emailAddr: string, pwd: string) {
+    if (!window.electronAPI?.auth) return;
+    try {
+      await window.electronAPI.auth.saveProfile(userId, emailAddr, pwd);
+    } catch { /* non critico */ }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -28,13 +71,23 @@ export default function Login() {
     setLoading(true);
     resetState();
 
-    if (mode === 'login') {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) setError(translateError(err.message));
+    if (mode === 'offline') {
+      await handleOfflineLogin();
+    } else if (mode === 'login') {
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (err) {
+        setError(translateError(err.message));
+      } else if (data.user) {
+        // Login riuscito: salva le credenziali per uso offline futuro
+        await saveLocalProfile(data.user.id, email, password);
+      }
     } else if (mode === 'register') {
-      const { error: err } = await supabase.auth.signUp({ email, password });
+      const { data, error: err } = await supabase.auth.signUp({ email, password });
       if (err) setError(translateError(err.message));
-      else setSuccessMsg('Account creato! Controlla la tua email per confermare la registrazione.');
+      else {
+        if (data.user) await saveLocalProfile(data.user.id, email, password);
+        setSuccessMsg('Account creato! Controlla la tua email per confermare la registrazione.');
+      }
     } else if (mode === 'reset-email') {
       await handleSendOtp();
     } else if (mode === 'reset-otp') {
@@ -42,6 +95,19 @@ export default function Login() {
     }
 
     setLoading(false);
+  }
+
+  async function handleOfflineLogin() {
+    if (!window.electronAPI?.auth) {
+      setError('Login offline non disponibile in questa versione.');
+      return;
+    }
+    const res = await window.electronAPI.auth.verifyPassword(email, password);
+    if (!res.ok || !res.userId || !res.email) {
+      setError(res.error ?? 'Credenziali non valide.');
+      return;
+    }
+    offlineSignIn(res.userId, res.email);
   }
 
   async function handleSendOtp() {
@@ -111,6 +177,8 @@ export default function Login() {
     return msg;
   }
 
+  const isOfflineMode = mode === 'offline';
+
   return (
     <div className="min-h-screen bg-stone-50 flex">
       {/* Left panel */}
@@ -155,14 +223,26 @@ export default function Login() {
             </div>
           </div>
 
+          {/* Banner offline */}
+          {isOfflineMode && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
+              <WifiOff size={15} className="text-amber-600 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                Sei offline. Accedi con le credenziali salvate localmente.
+              </p>
+            </div>
+          )}
+
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-stone-800">
+              {isOfflineMode && 'Accesso offline'}
               {mode === 'login' && 'Accedi al tuo account'}
               {mode === 'register' && 'Crea un account'}
               {mode === 'reset-email' && 'Password dimenticata'}
               {mode === 'reset-otp' && 'Inserisci il codice'}
             </h2>
             <p className="text-stone-500 text-sm mt-1">
+              {isOfflineMode && 'Inserisci le tue credenziali per continuare in modalita\' locale'}
               {mode === 'login' && 'Inserisci le tue credenziali per continuare'}
               {mode === 'register' && 'Crea il tuo account per iniziare'}
               {mode === 'reset-email' && 'Inserisci la tua email per ricevere il codice di verifica'}
@@ -170,7 +250,7 @@ export default function Login() {
             </p>
           </div>
 
-          {/* Google OAuth */}
+          {/* Google OAuth — solo online */}
           {(mode === 'login' || mode === 'register') && (
             <>
               <button
@@ -269,23 +349,43 @@ export default function Login() {
                 </>
               )}
 
-              {/* Login / Register fields */}
-              {(mode === 'login' || mode === 'register') && (
+              {/* Login / Register / Offline fields */}
+              {(mode === 'login' || mode === 'register' || isOfflineMode) && (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Email</label>
-                    <div className="relative">
-                      <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                      <input
-                        type="email"
+                  {/* Selezione profilo se ci sono piu' account offline */}
+                  {isOfflineMode && localProfiles.length > 1 && (
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1.5">Account</label>
+                      <select
                         value={email}
                         onChange={e => setEmail(e.target.value)}
-                        required
-                        placeholder="tuaemail@esempio.com"
-                        className="w-full pl-9 pr-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
-                      />
+                        className="w-full px-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm"
+                      >
+                        {localProfiles.map(p => (
+                          <option key={p.userId} value={p.email}>{p.email}</option>
+                        ))}
+                      </select>
                     </div>
-                  </div>
+                  )}
+
+                  {(!isOfflineMode || localProfiles.length <= 1) && (
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1.5">Email</label>
+                      <div className="relative">
+                        <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          required
+                          placeholder="tuaemail@esempio.com"
+                          readOnly={isOfflineMode && localProfiles.length === 1}
+                          className={`w-full pl-9 pr-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition ${isOfflineMode && localProfiles.length === 1 ? 'bg-stone-50 text-stone-500' : ''}`}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1.5">Password</label>
                     <div className="relative">
@@ -295,6 +395,7 @@ export default function Login() {
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         required
+                        autoFocus={isOfflineMode}
                         placeholder="••••••••"
                         minLength={6}
                         className="w-full pl-9 pr-10 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
@@ -331,6 +432,8 @@ export default function Login() {
               >
                 {loading
                   ? 'Attendere...'
+                  : isOfflineMode
+                  ? 'Accedi offline'
                   : mode === 'login'
                   ? 'Accedi'
                   : mode === 'register'
@@ -392,6 +495,11 @@ export default function Login() {
               >
                 Torna al login
               </button>
+            )}
+            {isOfflineMode && (
+              <p className="text-xs text-stone-400 mt-4">
+                Dati locali — sincronizzazione disponibile quando torni online.
+              </p>
             )}
           </div>
         </div>

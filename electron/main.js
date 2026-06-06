@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { createRequire } from 'module';
+import { pbkdf2Sync, randomBytes } from 'crypto';
 
 const require = createRequire(import.meta.url);
 
@@ -58,6 +59,26 @@ function readSavePaths() {
   return { ...DEFAULT_SAVE_PATHS };
 }
 function writeSavePaths(paths) { writeFileSync(SAVE_PATHS_CONFIG_PATH, JSON.stringify(paths, null, 2), 'utf8'); }
+
+// ─── Profili locali offline ───────────────────────────────────────────────────
+const LOCAL_PROFILES_PATH = join(USER_DATA, 'local-profiles.json');
+
+function readLocalProfiles() {
+  try {
+    if (existsSync(LOCAL_PROFILES_PATH)) {
+      return JSON.parse(readFileSync(LOCAL_PROFILES_PATH, 'utf8'));
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+function writeLocalProfiles(profiles) {
+  writeFileSync(LOCAL_PROFILES_PATH, JSON.stringify(profiles, null, 2), 'utf8');
+}
+
+function hashPassword(password, salt) {
+  return pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
+}
 
 // ─── Config auto-salvataggio fiches ──────────────────────────────────────────
 const FICHES_SCHED_PATH = join(USER_DATA, 'fiches-sched-config.json');
@@ -892,4 +913,33 @@ ipcMain.handle('db:set-user-profile', (_e, { userId }) => {
   } catch (e) {
     return { ok: false, error: String(e) };
   }
+});
+
+// ─── IPC: autenticazione locale offline ───────────────────────────────────────
+ipcMain.handle('auth:save-profile', (_e, { userId, email, password }) => {
+  try {
+    const profiles = readLocalProfiles();
+    const salt = randomBytes(32).toString('hex');
+    const hash = hashPassword(password, salt);
+    const idx = profiles.findIndex(p => p.userId === userId);
+    const profile = { userId, email, hash, salt, savedAt: new Date().toISOString() };
+    if (idx >= 0) profiles[idx] = profile; else profiles.push(profile);
+    writeLocalProfiles(profiles);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String(e) }; }
+});
+
+ipcMain.handle('auth:get-profiles', () => {
+  return readLocalProfiles().map(p => ({ userId: p.userId, email: p.email, savedAt: p.savedAt }));
+});
+
+ipcMain.handle('auth:verify-password', (_e, { email, password }) => {
+  try {
+    const profiles = readLocalProfiles();
+    const profile = profiles.find(p => p.email.toLowerCase() === email.toLowerCase());
+    if (!profile) return { ok: false, error: 'Nessun profilo locale trovato per questa email.' };
+    const hash = hashPassword(password, profile.salt);
+    if (hash !== profile.hash) return { ok: false, error: 'Password non corretta.' };
+    return { ok: true, userId: profile.userId, email: profile.email };
+  } catch (e) { return { ok: false, error: String(e) }; }
 });

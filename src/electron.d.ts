@@ -87,6 +87,18 @@ export interface FichesSchedConfig {
   last: string;   // "YYYY-MM-DD"
 }
 
+export interface LocalProfile {
+  userId: string;
+  email: string;
+  savedAt: string;
+}
+
+export interface AuthAPI {
+  saveProfile: (userId: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  getProfiles: () => Promise<LocalProfile[]>;
+  verifyPassword: (email: string, password: string) => Promise<{ ok: boolean; userId?: string; email?: string; error?: string }>;
+}
+
 export interface ElectronAPI {
   getBackupConfig: () => Promise<AutoBackupConfig>;
   setBackupConfig: (cfg: AutoBackupConfig) => Promise<{ ok: boolean }>;
@@ -109,6 +121,7 @@ export interface ElectronAPI {
   markFichesDone: (todayStr: string) => Promise<{ ok: boolean }>;
   onTriggerAutoFiches: (cb: (data: { dateStr: string; todayStr: string }) => void) => () => void;
   db?: DbAPI;
+  auth?: AuthAPI;
 }
 
 declare global {
