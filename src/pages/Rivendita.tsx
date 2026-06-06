@@ -561,7 +561,7 @@ async function esportaTotaleRivenditaPDF(vendite: Vendita[], confronto?: PdfConf
 
 // ─── Grafico barre orizzontali ────────────────────────────────────────────────
 
-function BarChart({ data, color }: { data: { label: string; value: number }[]; color: string }) {
+function BarChart({ data, color }: { data: { label: string; value: number; pezzi?: number }[]; color: string }) {
   const max = Math.max(...data.map(d => d.value), 0.01);
   if (data.length === 0) return <p className="text-xs text-stone-400 text-center py-6">Nessun dato nel periodo</p>;
   return (
@@ -575,6 +575,9 @@ function BarChart({ data, color }: { data: { label: string; value: number }[]; c
               style={{ width: `${Math.max((d.value / max) * 100, d.value > 0 ? 4 : 0)}%`, backgroundColor: color }}
             />
           </div>
+          {d.pezzi !== undefined && (
+            <span className="text-xs text-stone-400 w-10 text-right flex-shrink-0">{d.pezzi}pz</span>
+          )}
           <span className="text-xs font-semibold text-stone-700 w-16 text-right flex-shrink-0">€{fmt(d.value)}</span>
         </div>
       ))}
@@ -831,12 +834,14 @@ function CassettoParrucchiere({ parr, venditeAll, periodo, anni, onPeriodoChange
   const totB = venditeB.reduce((s, v) => s + valoreVendita(v), 0);
 
   // Grafico per prodotto
-  const perProdotto: Record<string, number> = {};
+  const perProdotto: Record<string, { value: number; pezzi: number }> = {};
   for (const v of vendite) {
-    perProdotto[v.nome_prodotto] = (perProdotto[v.nome_prodotto] || 0) + valoreVendita(v);
+    if (!perProdotto[v.nome_prodotto]) perProdotto[v.nome_prodotto] = { value: 0, pezzi: 0 };
+    perProdotto[v.nome_prodotto].value += valoreVendita(v);
+    perProdotto[v.nome_prodotto].pezzi += v.quantita;
   }
   const prodottiData = Object.entries(perProdotto)
-    .map(([label, value]) => ({ label, value }))
+    .map(([label, { value, pezzi }]) => ({ label, value, pezzi }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
 
@@ -1466,12 +1471,14 @@ export default function Rivendita() {
   const totGlobB = vendGlobB.reduce((s, v) => s + valoreV(v), 0);
 
   // Top prodotti globali
-  const perProdottoGlobale: Record<string, number> = {};
+  const perProdottoGlobale: Record<string, { value: number; pezzi: number }> = {};
   for (const v of venditeCorrente) {
-    perProdottoGlobale[v.nome_prodotto] = (perProdottoGlobale[v.nome_prodotto] || 0) + valoreV(v);
+    if (!perProdottoGlobale[v.nome_prodotto]) perProdottoGlobale[v.nome_prodotto] = { value: 0, pezzi: 0 };
+    perProdottoGlobale[v.nome_prodotto].value += valoreV(v);
+    perProdottoGlobale[v.nome_prodotto].pezzi += v.quantita;
   }
   const topProdotti = Object.entries(perProdottoGlobale)
-    .map(([label, value]) => ({ label, value }))
+    .map(([label, { value, pezzi }]) => ({ label, value, pezzi }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
