@@ -768,6 +768,19 @@ function buildParrStats(
       ficheMappa[f.parrucchiere_id].count++;
       ficheMappa[f.parrucchiere_id].clientiUnici.add(f.cliente_id);
     }
+    // Adjust for rivendita: importo_convalidato includes rivendita revenue; replace with margin
+    const rivFiltrati = rivenditaProdotti.filter(r => {
+      const d = r.data_vendita;
+      if (!d) return false;
+      const dataOra = d.length === 10 ? d + 'T00:00:00' : d;
+      return filtraPerPeriodo([{ ...r, data_ora: dataOra }], periodo).length > 0;
+    });
+    for (const r of rivFiltrati) {
+      if (!r.parrucchiere_id || !ficheMappa[r.parrucchiere_id]) continue;
+      const revenue = (r.prezzo_unitario ?? 0) * (r.quantita ?? 1);
+      const margine = ((r.prezzo_unitario ?? 0) - (r.costo_unitario ?? 0)) * (r.quantita ?? 1);
+      ficheMappa[r.parrucchiere_id].importo = ficheMappa[r.parrucchiere_id].importo - revenue + margine;
+    }
   }
 
   return parrucchieri.map(p => {
@@ -1141,7 +1154,10 @@ function buildMensile(
     const apptMese = apptFiltrati.filter(a => a.data_ora.startsWith(mese));
     const ficheMese = ficheFiltrate.filter(f => f.data_ora.startsWith(mese));
     const clientiSet = new Set(ficheMese.map(f => f.cliente_id));
-    const spesa = ficheMese.reduce((s, f) => s + f.importo_convalidato, 0);
+    const rivMese = rivenditaProdotti.filter(r => r.parrucchiere_id === parrId && (r.data_vendita ?? '').startsWith(mese));
+    // Net: replace rivendita revenue with margin = subtract cost from fiche total
+    const rivAdjust = rivMese.reduce((s, r) => s - (r.costo_unitario ?? 0) * (r.quantita ?? 1), 0);
+    const spesa = ficheMese.reduce((s, f) => s + f.importo_convalidato, 0) + rivAdjust;
     const ficheCount = ficheMese.length;
     return {
       mese,
