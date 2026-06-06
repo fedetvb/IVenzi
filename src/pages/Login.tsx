@@ -74,12 +74,31 @@ export default function Login() {
     if (mode === 'offline') {
       await handleOfflineLogin();
     } else if (mode === 'login') {
-      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) {
-        setError(translateError(err.message));
-      } else if (data.user) {
-        // Login riuscito: salva le credenziali per uso offline futuro
-        await saveLocalProfile(data.user.id, email, password);
+      let networkError = false;
+      try {
+        const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+        if (err) {
+          // Distingui errori di rete da errori di credenziali
+          const isNetworkErr = err.message.toLowerCase().includes('fetch') ||
+            err.message.toLowerCase().includes('network') ||
+            err.message.toLowerCase().includes('failed') ||
+            !navigator.onLine;
+          if (isNetworkErr && window.electronAPI?.auth) {
+            networkError = true;
+          } else {
+            setError(translateError(err.message));
+          }
+        } else if (data.user) {
+          // Login riuscito: salva le credenziali per uso offline futuro
+          await saveLocalProfile(data.user.id, email, password);
+        }
+      } catch {
+        if (window.electronAPI?.auth) networkError = true;
+        else setError('Errore di connessione. Verifica la tua connessione internet.');
+      }
+      // Fallback offline Electron: Supabase non raggiungibile ma c'e' un profilo locale
+      if (networkError) {
+        await handleOfflineLogin();
       }
     } else if (mode === 'register') {
       const { data, error: err } = await supabase.auth.signUp({ email, password });
