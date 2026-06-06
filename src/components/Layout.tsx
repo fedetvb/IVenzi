@@ -23,14 +23,21 @@ import {
   Trash2,
   BookOpen,
   Download,
-  Wifi,
   WifiOff,
   RefreshCw,
-  Check,
+  Star,
+  Zap,
+  Heart,
+  Flame,
+  Crown,
+  Sparkles,
+  Gem,
+  Wifi,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { onOfflineStateChange, flushPendingSync, type SyncState } from '../lib/offlineFetch';
+import { getTheme, applyTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, type ThemeSettings } from '../lib/theme';
 
 interface PingLogRow {
   eseguito_at: string;
@@ -70,6 +77,10 @@ const navItems = [
   { id: 'guida' as Page, label: 'Guida', icon: BookOpen },
 ];
 
+const ICON_MAP: Record<string, React.ElementType> = {
+  Scissors, Star, Zap, Heart, Flame, Crown, Sparkles, Gem,
+};
+
 function isMobile() {
   return window.innerWidth < 768;
 }
@@ -80,6 +91,7 @@ function NavTooltipButton({
   icon: Icon,
   active,
   collapsed,
+  accentColor,
   onClick,
 }: {
   id: string;
@@ -87,6 +99,7 @@ function NavTooltipButton({
   icon: React.ElementType;
   active: boolean;
   collapsed: boolean;
+  accentColor: string;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -109,9 +122,10 @@ function NavTooltipButton({
         onClick={onClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setHovered(false)}
+        style={active ? { backgroundColor: accentColor } : undefined}
         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
           active
-            ? 'bg-black text-white'
+            ? 'text-white'
             : 'text-stone-400 hover:bg-stone-800 hover:text-white'
         }`}
       >
@@ -119,7 +133,6 @@ function NavTooltipButton({
         {!collapsed && <span>{label}</span>}
       </button>
 
-      {/* Tooltip — only when collapsed on desktop */}
       {collapsed && hovered && (
         <div
           className="fixed z-[200] pointer-events-none"
@@ -166,6 +179,47 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncState, setSyncState] = useState<SyncState>('idle');
+  const [theme, setTheme] = useState<ThemeSettings>(getTheme);
+  const [logoSrc, setLogoSrc] = useState<string>(() => getLogoCacheB64());
+
+  // Apply theme CSS variables on mount and on change
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  // Listen for theme changes from Impostazioni page
+  useEffect(() => {
+    function onThemeChange() {
+      const next = getTheme();
+      setTheme(next);
+      applyTheme(next);
+      setLogoSrc(getLogoCacheB64());
+    }
+    window.addEventListener('themechange', onThemeChange);
+    return () => window.removeEventListener('themechange', onThemeChange);
+  }, []);
+
+  // When theme.logoUrl is set, try to cache it as base64 for offline use
+  useEffect(() => {
+    if (!theme.logoUrl) return;
+    const cached = getLogoCacheB64();
+    if (cached) { setLogoSrc(cached); return; }
+
+    // Fetch and cache
+    fetch(theme.logoUrl)
+      .then(r => r.blob())
+      .then(blob => new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(blob);
+      }))
+      .then(b64 => {
+        saveLogoCacheB64(b64);
+        setLogoSrc(b64);
+      })
+      .catch(() => { /* use URL directly */ setLogoSrc(theme.logoUrl); });
+  }, [theme.logoUrl]);
 
   useEffect(() => {
     return onOfflineStateChange((online, pending, state) => {
@@ -237,17 +291,29 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '??';
   const userEmail = user?.email ?? '';
 
+  const SidebarIcon = ICON_MAP[theme.sidebarIcon] ?? Scissors;
+
   const sidebarContent = (showLabels: boolean, isMobileDrawer = false) => (
     <>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-stone-700 flex-shrink-0">
-        <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Scissors size={16} className="text-white" />
+      <div
+        className="flex items-center gap-3 px-4 py-5 flex-shrink-0"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
+          style={{ backgroundColor: logoSrc ? 'transparent' : theme.accentColor }}
+        >
+          {logoSrc ? (
+            <img src={logoSrc} alt="Logo salone" className="w-full h-full object-cover" />
+          ) : (
+            <SidebarIcon size={16} className="text-white" />
+          )}
         </div>
         {showLabels && (
           <div className="flex-1 min-w-0">
             <p className="font-bold text-sm tracking-wide text-white">Salone</p>
-            <p className="text-xs text-amber-400 font-medium">Gestionale</p>
+            <p className="text-xs font-medium" style={{ color: theme.accentColor }}>Gestionale</p>
           </div>
         )}
         {isMobileDrawer && (
@@ -267,6 +333,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             icon={Icon}
             active={currentPage === id}
             collapsed={!showLabels}
+            accentColor={theme.accentColor}
             onClick={() => handleNavigate(id)}
           />
         ))}
@@ -274,7 +341,10 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
 
       {/* Collapse button — desktop only */}
       {!isMobileDrawer && (
-        <div className="px-2 pb-4 flex-shrink-0 border-t border-stone-700 pt-3">
+        <div
+          className="px-2 pb-4 flex-shrink-0 pt-3"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
+        >
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-800 hover:text-white transition-all text-sm"
@@ -292,9 +362,10 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
       {/* Desktop sidebar */}
       {!mobile && (
         <aside
-          className={`hidden md:flex flex-col bg-stone-900 text-stone-100 transition-all duration-300 min-h-0 flex-shrink-0 ${
+          className={`hidden md:flex flex-col text-stone-100 transition-all duration-300 min-h-0 flex-shrink-0 ${
             collapsed ? 'w-16' : 'w-60'
           }`}
+          style={{ backgroundColor: theme.sidebarBg }}
         >
           {sidebarContent(!collapsed, false)}
         </aside>
@@ -310,9 +381,10 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             />
           )}
           <aside
-            className={`fixed top-0 left-0 h-full w-64 bg-stone-900 text-stone-100 flex flex-col z-50 transition-transform duration-300 min-h-0 ${
+            className={`fixed top-0 left-0 h-full w-64 text-stone-100 flex flex-col z-50 transition-transform duration-300 min-h-0 ${
               mobileOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
+            style={{ backgroundColor: theme.sidebarBg }}
           >
             {sidebarContent(true, true)}
           </aside>
@@ -345,7 +417,8 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             {!isInstalled && installPrompt && (
               <button
                 onClick={handleInstall}
-                className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-white text-sm font-medium rounded-lg transition-colors"
+                style={{ backgroundColor: theme.accentColor }}
               >
                 <Download size={15} />
                 <span className="hidden sm:inline">Installa App</span>
@@ -358,8 +431,15 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-stone-100 transition-colors"
               >
-                <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                  {userInitials}
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden"
+                  style={{ backgroundColor: logoSrc ? 'transparent' : theme.accentColor }}
+                >
+                  {logoSrc ? (
+                    <img src={logoSrc} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    userInitials
+                  )}
                 </div>
                 <span className="text-sm text-stone-600 font-medium hidden sm:block max-w-[140px] truncate">{userEmail}</span>
               </button>
@@ -382,7 +462,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
           </div>
         </header>
 
-        {/* Banner riepilogo ping settimanale — martedi >= 10:00 italiane */}
+        {/* Banner riepilogo ping settimanale */}
         {pingBanner && (
           <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-3 flex items-start gap-3 flex-shrink-0">
             <div className="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -466,3 +546,5 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
     </div>
   );
 }
+
+export { dispatchThemeChange };

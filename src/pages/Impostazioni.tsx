@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Palette, Scissors, Zap, Heart, Flame, Crown, Sparkles, Gem, ImagePlus, RotateCcw } from 'lucide-react';
+import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
-import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
+import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione, compressImage } from '../lib/localDb';
 import { saveFile, browserDownload } from '../lib/fileSaver';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -25,6 +26,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
     await setImpostazione('whatsapp_avviso_disabilitato', val ? 'true' : 'false', user?.id);
   }
 
+  if (sub === 'tema') return <PaginaTema onBack={() => setSub(null)} />;
   if (sub === 'account') return (
     <StatisticheGate isActive={sub === 'account'} chiave="password_account" sezione="account e credenziali" sessionKey="account_unlocked">
       <PaginaAccount onBack={() => setSub(null)} />
@@ -60,6 +62,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Account e Credenziali</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica email e password di accesso al gestionale</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Tema e Personalizzazione */}
+        <button
+          onClick={() => setSub('tema')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-violet-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Palette size={18} className="text-stone-500 group-hover:text-violet-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Tema e Personalizzazione</p>
+            <p className="text-xs text-stone-400 mt-0.5">Colori sidebar, icona e logo del salone (per questo dispositivo)</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -249,6 +266,294 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
             <p className="text-xs text-stone-400 mt-0.5">Configura le cartelle di destinazione per file scaricabili e salvataggio automatico</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tema e Personalizzazione ─────────────────────────────────────────────────
+
+const ICON_COMPONENTS: Record<string, React.ElementType> = {
+  Scissors, Star, Zap, Heart, Flame, Crown, Sparkles, Gem,
+};
+
+function PaginaTema({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [theme, setThemeState] = useState(getTheme);
+  const [logoPreview, setLogoPreview] = useState<string>(() => getLogoCacheB64());
+  const [uploading, setUploading] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function apply(patch: Parameters<typeof saveTheme>[0]) {
+    const next = saveTheme(patch);
+    setThemeState(next);
+
+    // Apply CSS vars immediately for live preview
+    document.documentElement.style.setProperty('--sidebar-bg', next.sidebarBg);
+    document.documentElement.style.setProperty('--accent', next.accentColor);
+    dispatchThemeChange();
+  }
+
+  async function handleLogoUpload(file: File) {
+    if (!user) return;
+    setUploading(true);
+    try {
+      const blob = await compressImage(file);
+
+      // Cache base64 immediately for offline use
+      const b64 = await new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(blob);
+      });
+      saveLogoCacheB64(b64);
+      setLogoPreview(b64);
+
+      // Upload to Supabase Storage
+      const path = `logo/${user.id}/salone-logo.jpg`;
+      const { error } = await supabase.storage
+        .from('foto-clienti')
+        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+        const logoUrl = urlData.publicUrl;
+        apply({ logoUrl });
+        // Persist URL in impostazioni for cross-device sync
+        await supabase.from('impostazioni').upsert(
+          { chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id },
+          { onConflict: 'chiave,user_id' }
+        );
+      }
+
+      dispatchThemeChange();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      // silently ignore
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeLogo() {
+    saveLogoCacheB64('');
+    setLogoPreview('');
+    apply({ logoUrl: '' });
+    if (user) {
+      await supabase.from('impostazioni').upsert(
+        { chiave: 'logo_salone_url', valore: '', user_id: user.id },
+        { onConflict: 'chiave,user_id' }
+      );
+    }
+  }
+
+  function resetAll() {
+    saveLogoCacheB64('');
+    setLogoPreview('');
+    const next = saveTheme(THEME_DEFAULTS);
+    setThemeState(next);
+    document.documentElement.style.setProperty('--sidebar-bg', next.sidebarBg);
+    document.documentElement.style.setProperty('--accent', next.accentColor);
+    dispatchThemeChange();
+  }
+
+  const SidebarIconComp = ICON_COMPONENTS[theme.sidebarIcon] ?? Scissors;
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-lg hover:bg-stone-100 text-stone-500 hover:text-stone-800 transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Tema e Personalizzazione</h2>
+          <p className="text-xs text-stone-400 mt-0.5">Preferenze salvate su questo dispositivo</p>
+        </div>
+      </div>
+
+      {/* Live preview */}
+      <div className="rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
+        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wide px-4 pt-4 pb-2">Anteprima</div>
+        <div className="flex items-stretch" style={{ minHeight: 72 }}>
+          <div
+            className="flex items-center gap-3 px-4 py-4 flex-shrink-0"
+            style={{ backgroundColor: theme.sidebarBg, width: 192 }}
+          >
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
+              style={{ backgroundColor: logoPreview ? 'transparent' : theme.accentColor }}
+            >
+              {logoPreview
+                ? <img src={logoPreview} alt="logo" className="w-full h-full object-cover" />
+                : <SidebarIconComp size={16} className="text-white" />}
+            </div>
+            <div>
+              <p className="font-bold text-sm text-white">Salone</p>
+              <p className="text-xs font-medium" style={{ color: theme.accentColor }}>Gestionale</p>
+            </div>
+          </div>
+          <div className="flex-1 bg-white flex items-center px-4 gap-3">
+            <div
+              className="px-3 py-1.5 rounded-lg text-white text-xs font-semibold"
+              style={{ backgroundColor: theme.accentColor }}
+            >
+              Voce attiva
+            </div>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden"
+              style={{ backgroundColor: logoPreview ? 'transparent' : theme.accentColor }}>
+              {logoPreview ? <img src={logoPreview} alt="" className="w-full h-full object-cover" /> : 'FE'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Colore sidebar */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+        <p className="text-sm font-semibold text-stone-800">Colore sidebar</p>
+        <div className="grid grid-cols-4 gap-2">
+          {SIDEBAR_PRESETS.map(p => (
+            <button
+              key={p.value}
+              onClick={() => apply({ sidebarBg: p.value })}
+              className="flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all"
+              style={{
+                borderColor: theme.sidebarBg === p.value ? theme.accentColor : 'transparent',
+                backgroundColor: theme.sidebarBg === p.value ? '#fafaf9' : 'transparent',
+              }}
+            >
+              <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: p.value }} />
+              <span className="text-[10px] text-stone-500 font-medium">{p.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Colore accento */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+        <p className="text-sm font-semibold text-stone-800">Colore accento</p>
+        <div className="grid grid-cols-4 gap-2">
+          {ACCENT_PRESETS.map(p => (
+            <button
+              key={p.value}
+              onClick={() => apply({ accentColor: p.value })}
+              className="flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all"
+              style={{
+                borderColor: theme.accentColor === p.value ? p.value : 'transparent',
+                backgroundColor: theme.accentColor === p.value ? '#fafaf9' : 'transparent',
+              }}
+            >
+              <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: p.value }} />
+              <span className="text-[10px] text-stone-500 font-medium">{p.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Icona sidebar */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+        <p className="text-sm font-semibold text-stone-800">Icona sidebar</p>
+        <p className="text-xs text-stone-400">Usata quando non e' impostato un logo</p>
+        <div className="flex flex-wrap gap-2">
+          {ICON_PRESETS.map(iconName => {
+            const Ic = ICON_COMPONENTS[iconName] ?? Scissors;
+            const active = theme.sidebarIcon === iconName;
+            return (
+              <button
+                key={iconName}
+                onClick={() => apply({ sidebarIcon: iconName })}
+                className="w-11 h-11 rounded-xl flex items-center justify-center border-2 transition-all"
+                style={{
+                  backgroundColor: active ? theme.accentColor : '#f5f5f4',
+                  borderColor: active ? theme.accentColor : 'transparent',
+                  color: active ? 'white' : '#78716c',
+                }}
+              >
+                <Ic size={18} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Logo salone */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-stone-800">Logo salone</p>
+          <p className="text-xs text-stone-400 mt-0.5">Condiviso su tutti i dispositivi dello stesso account. Salvato offline automaticamente.</p>
+        </div>
+
+        {logoPreview ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0">
+              <img src={logoPreview} alt="Logo salone" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="text-sm text-stone-600 hover:text-stone-900 font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <ImagePlus size={15} />
+                Cambia immagine
+              </button>
+              <button
+                onClick={removeLogo}
+                className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <X size={15} />
+                Rimuovi logo
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="w-full flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-200 hover:border-stone-300 transition-colors text-stone-400 hover:text-stone-600"
+          >
+            {uploading ? (
+              <RefreshCw size={24} className="animate-spin" />
+            ) : (
+              <ImagePlus size={24} />
+            )}
+            <span className="text-sm font-medium">
+              {uploading ? 'Caricamento...' : 'Carica logo'}
+            </span>
+            <span className="text-xs">PNG, JPG — max 5 MB</span>
+          </button>
+        )}
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) handleLogoUpload(f);
+            e.target.value = '';
+          }}
+        />
+
+        {saved && (
+          <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium">
+            <Check size={15} />
+            Logo salvato e sincronizzato
+          </div>
+        )}
+      </div>
+
+      {/* Reset */}
+      <div className="flex justify-end">
+        <button
+          onClick={resetAll}
+          className="flex items-center gap-2 text-sm text-stone-400 hover:text-stone-700 transition-colors font-medium"
+        >
+          <RotateCcw size={14} />
+          Ripristina impostazioni predefinite
         </button>
       </div>
     </div>
