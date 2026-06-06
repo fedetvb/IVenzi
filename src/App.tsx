@@ -213,9 +213,11 @@ export default function App() {
     async function doSync() {
       if (!navigator.onLine || cancelled) return;
       try {
-        await syncSupabaseToLocal(userId);
-        if (cancelled) return;
+        // Prima carica le modifiche locali su Supabase, poi scarica
+        // (così Supabase ha già i dati aggiornati quando si tira giù)
         await syncLocalToSupabase(userId);
+        if (cancelled) return;
+        await syncSupabaseToLocal(userId);
       } catch (e) {
         console.warn('[Sync] Errore sync:', e);
       }
