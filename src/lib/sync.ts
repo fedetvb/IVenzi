@@ -36,7 +36,6 @@ const SYNC_TABLES: string[] = [
   'magazzino_prodotti',
   'magazzino_schede_salvate',
   'spese',
-  'schede_clienti_da_confermare',
   'giorni_parrucchieri',
   'voci_extra_catalogo',
 ];

@@ -71,8 +71,14 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
 
   const loadSchede = useCallback(async () => {
     setSchedeLoading(true);
-    const res = await dbSelect({ table: 'schede_clienti_da_confermare', columns: '*', filters: [{col:'stato', op:'eq', val:'in_attesa'}], orderBy: [{col:'created_at', asc:false}] });
-    setSchede((res.data || []) as SchedaDaConfermare[]);
+    // Fetch diretto a Supabase — questa tabella è popolata da form esterni (user_id = null)
+    // e non deve essere letta dalla cache IndexedDB.
+    const { data } = await supabase
+      .from('schede_clienti_da_confermare')
+      .select('*')
+      .eq('stato', 'in_attesa')
+      .order('created_at', { ascending: false });
+    setSchede((data || []) as SchedaDaConfermare[]);
     setSchedeLoading(false);
   }, []);
 
