@@ -2561,13 +2561,12 @@ export default function Statistiche({ onSelectCliente }: Props) {
         dbSelect({ table: 'appuntamenti', columns: 'id, data_ora, stato, cliente_id, parrucchiere_id', orderBy: [{ col: 'data_ora', asc: false }] }),
         dbSelect({
           table: 'fiches',
-          columns: 'id, importo_convalidato, convalidata_at, appuntamento_id, cliente_id, appuntamenti(id, data_ora, cliente_id, parrucchiere_id)',
+          columns: 'id, importo_convalidato, convalidata_at, appuntamento_id, cliente_id',
           filters: [{ col: 'convalidata', op: 'eq', val: true }],
         }),
         dbSelect({
           table: 'fiche_voci',
-          columns: 'parrucchiere_id, prezzo, fiche_id, nome_voce, tipo, fiches!inner(convalidata, convalidata_at, appuntamento_id, cliente_id, appuntamenti(data_ora, cliente_id, parrucchiere_id))',
-          filters: [{ col: 'fiches.convalidata', op: 'eq', val: true }],
+          columns: 'parrucchiere_id, prezzo, fiche_id, nome_voce, tipo',
         }),
         dbSelect({ table: 'assenze_parrucchieri', columns: 'id, parrucchiere_id, data_inizio, data_fine, ora_inizio, note', orderBy: [{ col: 'data_inizio', asc: false }] }),
         dbSelect({ table: 'rivendita_prodotti', columns: 'fiche_id, parrucchiere_id, prezzo_unitario, costo_unitario, quantita, data_vendita', filters: [{ col: 'deleted_at', op: 'is_null' }] }),
@@ -2577,19 +2576,22 @@ export default function Statistiche({ onSelectCliente }: Props) {
       setAppuntamenti((ap as RawAppuntamento[]) || []);
       setAssenze((ass as Assenza[]) || []);
 
-      // Mappa appuntamento_id -> appuntamento per join rapido in JS
+      // In-memory join: mappa appuntamenti per id
       const appMap: Record<string, { cliente_id: string | null; parrucchiere_id: string | null; data_ora: string }> = {};
       for (const a of ap || []) appMap[a.id] = { cliente_id: a.cliente_id, parrucchiere_id: a.parrucchiere_id, data_ora: a.data_ora };
 
+      // In-memory join: mappa fiches per id (solo convalidate, già filtrate dalla query)
+      type RawFichaFlat = { id: string; importo_convalidato: number; convalidata_at: string | null; appuntamento_id: string | null; cliente_id: string | null };
+      const ficheMap: Record<string, RawFichaFlat> = {};
+      for (const f of (fiche || []) as RawFichaFlat[]) ficheMap[f.id] = f;
+
       const ficheFlat: FicheConvalidata[] = [];
-      for (const f of fiche || []) {
-        const appJoined = Array.isArray(f.appuntamenti) ? f.appuntamenti[0] : f.appuntamenti;
-        // fallback: cerca nella mappa appuntamenti già caricata (gestisce casi dove il join non porta dati)
+      for (const f of (fiche || []) as RawFichaFlat[]) {
         const appFromMap = f.appuntamento_id ? appMap[f.appuntamento_id] : null;
-        const dataOra = appJoined?.data_ora ?? appFromMap?.data_ora ?? f.convalidata_at;
+        const dataOra = appFromMap?.data_ora ?? f.convalidata_at;
         if (!dataOra) continue;
-        const clienteId = appJoined?.cliente_id ?? appFromMap?.cliente_id ?? f.cliente_id ?? `__anonimo__${f.id}`;
-        const parrucchiereId = appJoined?.parrucchiere_id ?? appFromMap?.parrucchiere_id ?? null;
+        const clienteId = appFromMap?.cliente_id ?? f.cliente_id ?? `__anonimo__${f.id}`;
+        const parrucchiereId = appFromMap?.parrucchiere_id ?? null;
         ficheFlat.push({
           appuntamento_id: f.appuntamento_id,
           importo_convalidato: f.importo_convalidato,
@@ -2601,22 +2603,17 @@ export default function Statistiche({ onSelectCliente }: Props) {
       }
       setFicheConvalidate(ficheFlat);
 
+      // In-memory join: fiche_voci -> fiches -> appuntamenti
+      type RawVoceFlat = { parrucchiere_id: string | null; prezzo: number; fiche_id: string; nome_voce: string; tipo: string };
       const vociFlatStats: FicheVoceStats[] = [];
-      for (const v of (voci || []) as Array<{
-        parrucchiere_id: string | null; prezzo: number; fiche_id: string; nome_voce: string; tipo: string;
-        fiches: { convalidata: boolean; convalidata_at: string; appuntamento_id: string | null; cliente_id: string | null; appuntamenti: { data_ora: string; cliente_id: string; parrucchiere_id: string | null } | null } | null;
-      }>) {
-        const ficheRec = v.fiches;
-        if (!ficheRec || !ficheRec.convalidata) continue;
-        const appJoined = ficheRec.appuntamenti;
+      for (const v of (voci || []) as RawVoceFlat[]) {
+        const ficheRec = ficheMap[v.fiche_id];
+        if (!ficheRec) continue;
         const appFromMap = ficheRec.appuntamento_id ? appMap[ficheRec.appuntamento_id] : null;
-        const dataOra = appJoined?.data_ora ?? appFromMap?.data_ora ?? ficheRec.convalidata_at;
+        const dataOra = appFromMap?.data_ora ?? ficheRec.convalidata_at;
         if (!dataOra) continue;
-        const clienteId = appJoined?.cliente_id ?? appFromMap?.cliente_id ?? ficheRec.cliente_id ?? `__anonimo__${v.fiche_id}`;
-        const parrucchiereId = v.parrucchiere_id
-          ?? appJoined?.parrucchiere_id
-          ?? appFromMap?.parrucchiere_id
-          ?? null;
+        const clienteId = appFromMap?.cliente_id ?? ficheRec.cliente_id ?? `__anonimo__${v.fiche_id}`;
+        const parrucchiereId = v.parrucchiere_id ?? appFromMap?.parrucchiere_id ?? null;
         if (!parrucchiereId) continue;
         vociFlatStats.push({
           fiche_id: v.fiche_id,

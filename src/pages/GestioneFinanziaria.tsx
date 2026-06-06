@@ -712,50 +712,53 @@ export default function GestioneFinanziaria() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: sp }, { data: tx }, { data: fiches }, { data: riv }, { data: parr }, { data: ficheVociParr }] = await Promise.all([
+    const [{ data: sp }, { data: tx }, { data: ficheRaw }, { data: riv }, { data: parr }, { data: ficheVociRaw }, { data: appRaw }] = await Promise.all([
       dbSelect({ table: 'spese', columns: '*', filters: [{ col: 'deleted_at', op: 'is_null' }], orderBy: [{ col: 'data', asc: false }] }),
       dbSelect({ table: 'impostazioni_tasse', columns: '*', limit: 1 }),
-      dbSelect({ table: 'fiches', columns: 'data_riferimento, importo_convalidato, appuntamenti(data_ora)', filters: [{ col: 'convalidata', op: 'eq', val: true }, { col: 'deleted_at', op: 'is_null' }] }),
+      dbSelect({ table: 'fiches', columns: 'id, data_riferimento, importo_convalidato, appuntamento_id', filters: [{ col: 'convalidata', op: 'eq', val: true }, { col: 'deleted_at', op: 'is_null' }] }),
       dbSelect({ table: 'rivendita_prodotti', columns: 'data_vendita, totale' }),
       dbSelect({ table: 'parrucchieri', columns: 'id, nome, colore', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
-      dbSelect({ table: 'fiche_voci', columns: 'parrucchiere_id, prezzo, fiches!inner(data_riferimento, convalidata, deleted_at, appuntamenti(data_ora))', filters: [{ col: 'fiches.convalidata', op: 'eq', val: true }, { col: 'fiches.deleted_at', op: 'is_null' }] }),
+      dbSelect({ table: 'fiche_voci', columns: 'parrucchiere_id, prezzo, fiche_id' }),
+      dbSelect({ table: 'appuntamenti', columns: 'id, data_ora' }),
     ]);
     setSpese((sp || []) as Spesa[]);
     if (tx && tx.length > 0) setTasse(tx[0] as ImpostazioneTasse);
 
-    type RawFicha = {
-      data_riferimento: string | null;
-      importo_convalidato: number;
-      appuntamenti: { data_ora: string | null } | null;
-    };
+    // In-memory join: appuntamenti map per risolvere la data quando data_riferimento è null
+    type RawApp = { id: string; data_ora: string | null };
+    const appMap: Record<string, string> = {};
+    for (const a of (appRaw || []) as RawApp[]) {
+      if (a.id && a.data_ora) appMap[a.id] = a.data_ora;
+    }
+
+    // In-memory join: mappa fiche per id
+    type RawFichaFlat = { id: string; data_riferimento: string | null; importo_convalidato: number; appuntamento_id: string | null };
+    const ficheMap: Record<string, RawFichaFlat> = {};
+    for (const f of (ficheRaw || []) as RawFichaFlat[]) ficheMap[f.id] = f;
+
+    const ficheList = (ficheRaw || []) as RawFichaFlat[];
     const vociFinali: { data: string; importo: number }[] = [
-      ...((fiches || []) as unknown as RawFicha[]).map(f => ({
-        data: (f.data_riferimento ?? f.appuntamenti?.data_ora?.slice(0, 10) ?? '') as string,
-        importo: f.importo_convalidato as number,
+      ...ficheList.map(f => ({
+        data: f.data_riferimento ?? (f.appuntamento_id ? appMap[f.appuntamento_id]?.slice(0, 10) : null) ?? '',
+        importo: f.importo_convalidato,
       })),
       ...((riv || []).map(r => ({ data: r.data_vendita as string, importo: r.totale as number }))),
     ].filter(v => v.data && v.importo > 0);
 
     setTutteVoci(vociFinali);
 
-    // Per ogni voce di fiche convalidate, attribuisce il prezzo al parrucchiere che l'ha eseguita
-    // (stesso principio usato nelle Statistiche)
-    type RawVoceParr = {
-      parrucchiere_id: string | null;
-      prezzo: number;
-      fiches: {
-        data_riferimento: string | null;
-        appuntamenti: { data_ora: string | null } | null;
-      } | null;
-    };
-    const ficheNorm = ((ficheVociParr || []) as unknown as RawVoceParr[]).flatMap(v => {
-      if (!v.parrucchiere_id) return [];
-      const data = v.fiches?.data_riferimento ?? v.fiches?.appuntamenti?.data_ora?.slice(0, 10) ?? null;
+    // Per ogni voce di fiche convalidate, attribuisce il prezzo al parrucchiere tramite join in memoria
+    type RawVoceFlat = { parrucchiere_id: string | null; prezzo: number; fiche_id: string };
+    const ficheNorm = ((ficheVociRaw || []) as RawVoceFlat[]).flatMap(v => {
+      if (!v.parrucchiere_id || !v.fiche_id) return [];
+      const fiche = ficheMap[v.fiche_id];
+      if (!fiche) return [];
+      const data = fiche.data_riferimento ?? (fiche.appuntamento_id ? appMap[fiche.appuntamento_id]?.slice(0, 10) : null) ?? null;
       if (!data) return [];
       return [{ parrucchiere_id: v.parrucchiere_id, data_riferimento: data, importo_convalidato: v.prezzo }];
     });
 
-    setFichePerParr(ficheNorm as { parrucchiere_id: string | null; data_riferimento: string; importo_convalidato: number }[]);
+    setFichePerParr(ficheNorm);
     setParrucchieri((parr || []).map(p => ({ id: p.id, nome: p.nome, colore: p.colore ?? '#10b981', fatturatoNelPeriodo: 0 })));
     setLoading(false);
   }, []);
