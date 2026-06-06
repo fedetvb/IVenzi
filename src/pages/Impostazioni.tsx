@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Palette, Scissors, Droplets, Wind, Leaf, Sun, Smile, Sparkles, ImagePlus, RotateCcw } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, ImagePlus, RotateCcw } from 'lucide-react';
+import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -275,7 +276,14 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
 // ─── Tema e Personalizzazione ─────────────────────────────────────────────────
 
 const ICON_COMPONENTS: Record<string, React.ElementType> = {
-  Scissors, Droplets, Wind, Leaf, Sun, Smile, Palette, Sparkles,
+  Scissors,
+  Comb: CombIcon,
+  Razor: RazorIcon,
+  Nails: NailsIcon,
+  WomanFace: WomanFaceIcon,
+  Droplets,
+  Wind,
+  Sparkles,
 };
 
 function PaginaTema({ onBack }: { onBack: () => void }) {

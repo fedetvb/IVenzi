@@ -27,13 +27,10 @@ import {
   RefreshCw,
   Droplets,
   Wind,
-  Leaf,
-  Sun,
-  Smile,
-  Palette,
   Sparkles,
   Wifi,
 } from 'lucide-react';
+import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { onOfflineStateChange, flushPendingSync, type SyncState } from '../lib/offlineFetch';
@@ -78,7 +75,14 @@ const navItems = [
 ];
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Scissors, Droplets, Wind, Leaf, Sun, Smile, Palette, Sparkles,
+  Scissors,
+  Comb: CombIcon,
+  Razor: RazorIcon,
+  Nails: NailsIcon,
+  WomanFace: WomanFaceIcon,
+  Droplets,
+  Wind,
+  Sparkles,
 };
 
 function isMobile() {
