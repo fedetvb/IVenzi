@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
 import { createRequire } from 'module';
 import { pbkdf2Sync, randomBytes } from 'crypto';
 
@@ -78,6 +78,79 @@ function writeLocalProfiles(profiles) {
 
 function hashPassword(password, salt) {
   return pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
+}
+
+// ─── Migrazione database locale: vecchio userId → nuovo userId Supabase ────────
+// Rinomina la cartella database/<oldUserId>/ in database/<newUserId>/,
+// aggiorna user_id in tutte le tabelle SQLite e marca _dirty=1 cosi'
+// la sync successiva carichera' tutto su Supabase col nuovo UUID.
+function migrateLocalDatabase(oldUserId, newUserId) {
+  try {
+    const oldDir = join(USER_DATA, 'database', oldUserId);
+    const newDir = join(USER_DATA, 'database', newUserId);
+
+    if (!existsSync(oldDir)) {
+      console.log('[Migration] Nessuna cartella locale per', oldUserId);
+      return false;
+    }
+    if (existsSync(newDir)) {
+      console.log('[Migration] Cartella destinazione gia\' esistente:', newDir);
+      return false;
+    }
+
+    // Chiudi il DB se e' aperto sulla vecchia cartella
+    if (db) {
+      try { db.close(); } catch { /* ignora */ }
+      db = null;
+      dbReady = false;
+    }
+
+    // Rinomina la cartella (zero copie, zero perdita dati)
+    renameSync(oldDir, newDir);
+    console.log('[Migration] Cartella rinominata:', oldDir, '→', newDir);
+
+    // Aggiorna user_id in tutte le tabelle e marca _dirty=1 per la sync
+    let Database;
+    try { Database = loadBetterSqlite3(); } catch { Database = null; }
+    if (!Database) return true; // rinomina avvenuta, update user_id non possibile senza SQLite
+
+    const dbPath = join(newDir, 'gestionale.db');
+    if (!existsSync(dbPath)) return true;
+
+    const tmpDb = new Database(dbPath);
+    const TABLES_TO_MIGRATE = [
+      'clienti', 'parrucchieri', 'trattamenti_catalogo', 'appuntamenti',
+      'appuntamento_trattamenti', 'schede_colore', 'fiches', 'fiche_voci',
+      'incassi', 'incassi_giornalieri', 'carte_sconto', 'utilizzi_carta_sconto',
+      'carte_premium', 'ricariche_carta_premium', 'utilizzi_carta_premium',
+      'prodotti_rivendita_catalogo', 'rivendita_prodotti', 'trattamenti_eseguiti',
+      'impostazioni', 'template_messaggi', 'assenze_parrucchieri',
+      'magazzino_prodotti', 'magazzino_movimenti', 'magazzino_schede_salvate',
+      'spese', 'schede_clienti_da_confermare', 'giorni_parrucchieri',
+      'voci_extra_catalogo',
+    ];
+
+    const updateAll = tmpDb.transaction(() => {
+      for (const table of TABLES_TO_MIGRATE) {
+        try {
+          // Aggiorna le righe col vecchio userId
+          tmpDb.prepare(`UPDATE ${table} SET user_id = ?, _dirty = 1 WHERE user_id = ?`)
+            .run(newUserId, oldUserId);
+          // Aggiorna anche le righe senza user_id (create offline prima che il concetto esistesse)
+          tmpDb.prepare(`UPDATE ${table} SET user_id = ?, _dirty = 1 WHERE user_id IS NULL`)
+            .run(newUserId);
+        } catch { /* tabella potrebbe non esistere ancora — ignorare */ }
+      }
+    });
+    updateAll();
+    tmpDb.close();
+
+    console.log('[Migration] user_id aggiornato da', oldUserId, 'a', newUserId, 'in tutte le tabelle');
+    return true;
+  } catch (e) {
+    console.error('[Migration] Errore durante la migrazione:', e);
+    return false;
+  }
 }
 
 // ─── Config auto-salvataggio fiches ──────────────────────────────────────────
@@ -921,6 +994,25 @@ ipcMain.handle('auth:save-profile', (_e, { userId, email, password }) => {
     const profiles = readLocalProfiles();
     const salt = randomBytes(32).toString('hex');
     const hash = hashPassword(password, salt);
+
+    // Migrazione local UUID → Supabase UUID:
+    // se esiste un profilo con la stessa email ma un userId diverso,
+    // rinomina la cartella SQLite e aggiorna user_id in tutte le tabelle.
+    const oldProfile = profiles.find(
+      p => p.email.toLowerCase() === email.toLowerCase() && p.userId !== userId
+    );
+    if (oldProfile) {
+      const migrated = migrateLocalDatabase(oldProfile.userId, userId);
+      if (migrated) {
+        console.log('[Auth] Migrazione completata:', oldProfile.userId, '→', userId);
+        // Rimuovi il vecchio profilo dall'elenco
+        const filtered = profiles.filter(p => p.userId !== oldProfile.userId);
+        filtered.push({ userId, email, hash, salt, savedAt: new Date().toISOString() });
+        writeLocalProfiles(filtered);
+        return { ok: true, migrated: true };
+      }
+    }
+
     const idx = profiles.findIndex(p => p.userId === userId);
     const profile = { userId, email, hash, salt, savedAt: new Date().toISOString() };
     if (idx >= 0) profiles[idx] = profile; else profiles.push(profile);
