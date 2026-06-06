@@ -179,12 +179,18 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const [pingBanner, setPingBanner] = useState<PingLogRow[] | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [theme, setTheme] = useState<ThemeSettings>(getTheme);
   const [logoSrc, setLogoSrc] = useState<string>(() => getLogoCacheB64());
+
+  // Reset scroll to top on every page navigation
+  useEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [currentPage]);
 
   // Apply theme CSS variables on mount and on change
   useEffect(() => {
@@ -539,7 +545,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
         )}
 
         {/* Content */}
-        <main className="flex-1 overflow-auto">
+        <main ref={mainRef} className="flex-1 overflow-auto">
           {children}
         </main>
       </div>

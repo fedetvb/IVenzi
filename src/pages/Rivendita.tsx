@@ -87,7 +87,8 @@ function labelPeriodo(p: PeriodoKey): string {
 
 function filtraPerPeriodo(items: Vendita[], periodo: PeriodoKey): Vendita[] {
   return items.filter(v => {
-    const dateStr = v.data_vendita; // YYYY-MM-DD
+    const dateStr = v.data_vendita;
+    if (!dateStr) return false;
     const y = Number(dateStr.split('-')[0]);
     if (periodo === 'corrente') return y === annoCorrente;
     if (periodo === 'sempre') return true;
@@ -1369,6 +1370,7 @@ function CassettoParrucchiere({ parr, venditeAll, periodo, anni, onPeriodoChange
 function filtraTrattamentiPerPeriodo(items: Trattamento[], periodo: PeriodoKey): Trattamento[] {
   return items.filter(t => {
     const dateStr = t.data_esecuzione;
+    if (!dateStr) return false;
     const y = Number(dateStr.split('-')[0]);
     if (periodo === 'corrente') return y === annoCorrente;
     if (periodo === 'sempre') return true;
@@ -1810,18 +1812,18 @@ export default function Rivendita() {
 
     // Calcola anni disponibili rivendita
     const anniSet = new Set<number>([annoCorrente]);
-    for (const v of vendList) anniSet.add(Number(v.data_vendita.split('-')[0]));
+    for (const v of vendList) if (v.data_vendita) anniSet.add(Number(v.data_vendita.split('-')[0]));
     setAnniDisp([...anniSet].sort((a, b) => a - b));
 
     // Calcola anni disponibili trattamenti
     const anniSetTratt = new Set<number>([annoCorrente]);
-    for (const t of trattList) anniSetTratt.add(Number(t.data_esecuzione.split('-')[0]));
+    for (const t of trattList) if (t.data_esecuzione) anniSetTratt.add(Number(t.data_esecuzione.split('-')[0]));
     setAnniDispTratt([...anniSetTratt].sort((a, b) => a - b));
 
     // Calcola anni disponibili totale (unione rivendita + trattamenti)
     const anniSetTot = new Set<number>([annoCorrente]);
-    for (const v of vendList) anniSetTot.add(Number(v.data_vendita.split('-')[0]));
-    for (const t of trattList) anniSetTot.add(Number(t.data_esecuzione.split('-')[0]));
+    for (const v of vendList) if (v.data_vendita) anniSetTot.add(Number(v.data_vendita.split('-')[0]));
+    for (const t of trattList) if (t.data_esecuzione) anniSetTot.add(Number(t.data_esecuzione.split('-')[0]));
     setAnniDispTotale([...anniSetTot].sort((a, b) => a - b));
 
     // Inizializza periodi per ogni parrucchiere
