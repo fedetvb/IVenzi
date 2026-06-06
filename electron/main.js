@@ -73,36 +73,41 @@ function writeFichesSched(cfg) { writeFileSync(FICHES_SCHED_PATH, JSON.stringify
 let db = null;
 let dbReady = false;
 
-function initDatabase() {
+function loadBetterSqlite3() {
+  if (app.isPackaged) {
+    const candidates = [
+      join(app.getAppPath(), 'node_modules', 'better-sqlite3'),
+      join(process.resourcesPath, 'app', 'node_modules', 'better-sqlite3'),
+      join(__dirname, '..', 'node_modules', 'better-sqlite3'),
+    ];
+    for (const p of candidates) {
+      try {
+        if (existsSync(p)) return require(p);
+      } catch { /* prova il prossimo */ }
+    }
+  }
+  return require('better-sqlite3');
+}
+
+function openDatabase(userId) {
   let Database;
   try {
-    if (app.isPackaged) {
-      // Con asar:false, electron-builder copia i node_modules nella cartella dell'app
-      // Proviamo piu' percorsi per compatibilita'
-      const candidates = [
-        join(app.getAppPath(), 'node_modules', 'better-sqlite3'),
-        join(process.resourcesPath, 'app', 'node_modules', 'better-sqlite3'),
-        join(__dirname, '..', 'node_modules', 'better-sqlite3'),
-      ];
-      let loaded = false;
-      for (const p of candidates) {
-        try {
-          if (existsSync(p)) { Database = require(p); loaded = true; break; }
-        } catch { /* prova il prossimo */ }
-      }
-      if (!loaded) Database = require('better-sqlite3');
-    } else {
-      Database = require('better-sqlite3');
-    }
+    Database = loadBetterSqlite3();
   } catch (e) {
     console.warn('[DB] better-sqlite3 non disponibile (modalita\' IndexedDB attiva):', e.message);
     return false;
   }
   try {
-    const { mkdirSync } = require('fs');
-    const dbDir = join(USER_DATA, 'database');
+    // Se userId e' fornito, usa una sottocartella dedicata per isolare i dati
+    const dbDir = userId
+      ? join(USER_DATA, 'database', userId)
+      : join(USER_DATA, 'database');
     if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
     const dbPath = join(dbDir, 'gestionale.db');
+    if (db) {
+      try { db.close(); } catch { /* ignora */ }
+      db = null;
+    }
     db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -114,6 +119,10 @@ function initDatabase() {
     console.error('[DB] Errore inizializzazione:', e);
     return false;
   }
+}
+
+function initDatabase() {
+  return openDatabase(null);
 }
 
 function nowIso() { return new Date().toISOString(); }
@@ -873,4 +882,14 @@ ipcMain.handle('db:import-backup', (_e, backupData) => {
 ipcMain.handle('db:get-path', () => {
   const dbPath = join(USER_DATA, 'database', 'gestionale.db');
   return { path: dbPath, exists: existsSync(dbPath) };
+});
+ipcMain.handle('db:set-user-profile', (_e, { userId }) => {
+  try {
+    const ok = openDatabase(userId);
+    dbReady = ok;
+    if (mainWindow) mainWindow.webContents.send('db:ready', ok);
+    return { ok };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
 });

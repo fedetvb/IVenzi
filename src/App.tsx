@@ -148,9 +148,19 @@ export default function App() {
     });
   }, []);
 
-  // Imposta userId corrente per il push immediato in localDb
+  // Imposta userId corrente per il push immediato in localDb.
+  // In Electron, riapre il database SQLite nella sottocartella dell'utente
+  // cosi' due account diversi non condividono mai lo stesso file .db.
   useEffect(() => {
     setCurrentUserId(user?.id ?? null);
+    if (!user || !window.electronAPI?.db?.setUserProfile) return;
+    // Segnala che il DB non e' ancora pronto finche' non si completa il cambio profilo
+    setElectronDbReady(false);
+    setElectronDbReadyState(false);
+    window.electronAPI.db.setUserProfile(user.id).catch(() => {
+      // Se fallisce (es. better-sqlite3 non disponibile), lascia il DB nello stato corrente
+    });
+    // La risposta arriva tramite l'evento 'db:ready' gia' ascoltato nell'effect sopra
   }, [user]);
 
   // Prefetch dati in IndexedDB — garantisce disponibilita' offline

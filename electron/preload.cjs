@@ -59,5 +59,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     export: () => ipcRenderer.invoke('db:export'),
     importBackup: (data) => ipcRenderer.invoke('db:import-backup', data),
     getPath: () => ipcRenderer.invoke('db:get-path'),
+    setUserProfile: (userId) => ipcRenderer.invoke('db:set-user-profile', { userId }),
   },
 });

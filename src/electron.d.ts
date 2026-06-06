@@ -75,6 +75,7 @@ export interface DbAPI {
   export: () => Promise<DbIpcResult<Record<string, unknown[]>>>;
   importBackup: (data: Record<string, unknown>) => Promise<DbIpcResult & { success?: boolean; results?: Record<string, unknown> }>;
   getPath: () => Promise<{ path: string; exists: boolean }>;
+  setUserProfile: (userId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 export type SavePathType = 'backup' | 'fiches' | 'fiches_nero' | 'clienti' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
