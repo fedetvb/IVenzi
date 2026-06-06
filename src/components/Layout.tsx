@@ -432,7 +432,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-stone-100 transition-colors"
               >
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden"
                   style={{ backgroundColor: logoSrc ? 'transparent' : theme.accentColor }}
                 >
                   {logoSrc ? (
