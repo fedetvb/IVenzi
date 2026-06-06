@@ -940,7 +940,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       if (layout === 'con_frase') {
         // icona cerchio dorato
         const r = Math.min(w * 0.055, 7);
-        doc.setFillColor(245, 158, 11);
+        doc.setFillColor(37, 77, 26);
         doc.circle(cx, y + r, r, 'F');
         y += r * 2 + 3;
 
@@ -948,7 +948,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(Math.max(14, w * 0.07));
         doc.setTextColor(28, 25, 23);
-        doc.text('Benvenuta!', cx, y, { align: 'center' });
+        doc.text('Benvenuta/o!', cx, y, { align: 'center' });
         y += Math.max(6, w * 0.04);
 
         // bella frase
@@ -988,7 +988,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
         // solo QR + 4 punti (no bella frase, no titolo)
         // piccolo logo
         const r = Math.min(w * 0.045, 6);
-        doc.setFillColor(245, 158, 11);
+        doc.setFillColor(37, 77, 26);
         doc.circle(cx, y + r, r, 'F');
         y += r * 2 + 4;
 
@@ -996,7 +996,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(Math.max(12, w * 0.06));
         doc.setTextColor(28, 25, 23);
-        doc.text('Benvenuta!', cx, y, { align: 'center' });
+        doc.text('Benvenuta/o!', cx, y, { align: 'center' });
         y += Math.max(5, w * 0.035);
 
         doc.setFont('helvetica', 'normal');
@@ -1075,7 +1075,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       const dotX = bx + boxPad + dotR;
       const dotY = sy - dotR * 0.2;
 
-      doc.setFillColor(245, 158, 11);
+      doc.setFillColor(37, 77, 26);
       doc.circle(dotX, dotY, dotR, 'F');
 
       doc.setFont('helvetica', 'bold');
@@ -1215,10 +1215,10 @@ document.getElementById("f").onsubmit=async function(e){
 
       {/* Anteprima QR */}
       <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center shadow-sm">
-        <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{background:'#254d1a'}}>
           <QrCode size={22} className="text-white" />
         </div>
-        <h3 className="text-xl font-bold text-stone-800 mb-2">Benvenuta!</h3>
+        <h3 className="text-xl font-bold text-stone-800 mb-2">Benvenuta/o!</h3>
         <p className="text-sm text-stone-500 mb-8 leading-relaxed max-w-xs mx-auto">
           Scansiona il codice QR con il tuo smartphone per compilare la tua scheda cliente
         </p>
@@ -1228,7 +1228,7 @@ document.getElementById("f").onsubmit=async function(e){
             <img src={qrComposite} alt="QR Code registrazione clienti" className="w-52 h-52 block" />
           ) : (
             <div className="w-52 h-52 flex items-center justify-center bg-stone-50 rounded-xl">
-              <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:'#254d1a',borderTopColor:'transparent'}} />
             </div>
           )}
         </div>
@@ -1236,7 +1236,7 @@ document.getElementById("f").onsubmit=async function(e){
         <div className="bg-stone-50 rounded-xl p-5 text-left space-y-3 max-w-xs mx-auto mb-6">
           {['Apri la fotocamera del tuo smartphone', 'Inquadra il codice QR', 'Compila il modulo con i tuoi dati', 'Invia — lo staff creerà la tua scheda!'].map((step, i) => (
             <div key={i} className="flex items-start gap-3">
-              <div className="w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+              <div className="w-6 h-6 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5" style={{background:'#254d1a'}}>
                 {i + 1}
               </div>
               <p className="text-sm text-stone-600 leading-snug">{step}</p>
@@ -1258,7 +1258,7 @@ document.getElementById("f").onsubmit=async function(e){
                 value={urlDraft}
                 onChange={e => setUrlDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleSaveUrl(); if (e.key === 'Escape') setEditingUrl(false); }}
-                className="w-full border border-amber-400 rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
+                className="w-full rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none bg-white" style={{border:'1px solid #254d1a',boxShadow:'0 0 0 0px transparent'}} onFocus={e=>{e.currentTarget.style.boxShadow='0 0 0 2px rgba(37,77,26,.25)'}} onBlur={e=>{e.currentTarget.style.boxShadow='none'}}
                 placeholder="https://tuosito.netlify.app/"
               />
             ) : (
