@@ -486,7 +486,7 @@ async function esportaRivenditaPDF(parr: Parrucchiere, vendite: Vendita[], perio
   await saveFile('rivendita', `rivendita-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
-async function esportaTotaleRivenditaPDF(vendite: Vendita[], confronto?: PdfConfrRiv) {
+async function esportaTotaleRivenditaPDF(vendite: Vendita[], trattamenti: Trattamento[], confronto?: PdfConfrRiv) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const annoCorrente = new Date().getFullYear();
 
@@ -556,7 +556,136 @@ async function esportaTotaleRivenditaPDF(vendite: Vendita[], confronto?: PdfConf
     pdfSezConfronto(doc, confronto, afterTable);
   }
 
+  // Trattamenti nel PDF
+  if (trattamenti.length > 0) {
+    const afterRiv = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y + 10;
+    let yT = afterRiv + 8;
+    if (yT > 260) { doc.addPage(); yT = 20; }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(28, 25, 23);
+    doc.text('Trattamenti (storico)', 14, yT);
+
+    const trattCorr = trattamenti.filter(t => new Date(t.data_esecuzione).getFullYear() === annoCorrente);
+    const totTrComp = trattamenti.reduce((s, t) => s + t.prezzo, 0);
+    const totTrCorr = trattCorr.reduce((s, t) => s + t.prezzo, 0);
+
+    const riepilogoTr: [string, string][] = [
+      [`Trattamenti ${annoCorrente}`, String(trattCorr.length)],
+      [`Incasso trattamenti ${annoCorrente}`, '€' + totTrCorr.toLocaleString('it-IT', { minimumFractionDigits: 2 })],
+      ['Totale storico trattamenti', String(trattamenti.length)],
+      ['Totale storico incassato', '€' + totTrComp.toLocaleString('it-IT', { minimumFractionDigits: 2 })],
+    ];
+    yT += 5;
+    riepilogoTr.forEach(([label, val]) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(120, 113, 108);
+      doc.text(label + ':', 14, yT);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(28, 25, 23);
+      doc.text(val, 90, yT);
+      yT += 6;
+    });
+
+    const nomiMap: Record<string, { count: number; totale: number }> = {};
+    trattamenti.forEach(t => {
+      if (!nomiMap[t.nome_trattamento]) nomiMap[t.nome_trattamento] = { count: 0, totale: 0 };
+      nomiMap[t.nome_trattamento].count += 1;
+      nomiMap[t.nome_trattamento].totale += t.prezzo;
+    });
+    const topTr = Object.entries(nomiMap).sort((a, b) => b[1].totale - a[1].totale).slice(0, 20);
+    if (topTr.length > 0) {
+      autoTable(doc, {
+        startY: yT + 2,
+        head: [['Trattamento', 'N° eseguiti', 'Incasso totale (€)']],
+        body: topTr.map(([nome, d]) => [nome, String(d.count), d.totale.toFixed(2)]),
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [20, 184, 166], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [240, 253, 250] },
+        columnStyles: { 0: { cellWidth: 90 } },
+      });
+    }
+  }
+
+  if (confronto) {
+    const afterTable = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y + 10;
+    pdfSezConfronto(doc, confronto, afterTable);
+  }
+
   await saveFile('rivendita', `rivendita-totale-${annoCorrente}.pdf`, doc.output('blob'));
+}
+
+// ─── Excel (CSV italiano) export totale ───────────────────────────────────────
+
+function fmtIt(n: number): string {
+  return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function esportaTotaleExcel(vendite: Vendita[], trattamenti: Trattamento[]) {
+  const annoCorrente = new Date().getFullYear();
+  const sep = ';';
+  const rows: string[] = [];
+
+  const esc = (s: string | number) => {
+    const str = String(s);
+    return str.includes(sep) || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+
+  // ── Sezione Rivendita ──
+  rows.push('RIVENDITA');
+  rows.push(['Data', 'Prodotto', 'Quantità', 'Prezzo unitario', 'Totale', 'Note'].map(esc).join(sep));
+  const sorted = [...vendite].sort((a, b) => a.data_vendita.localeCompare(b.data_vendita));
+  for (const v of sorted) {
+    rows.push([
+      new Date(v.data_vendita).toLocaleDateString('it-IT'),
+      v.nome_prodotto,
+      v.quantita,
+      fmtIt(v.prezzo_unitario),
+      fmtIt(v.totale),
+      v.note || '',
+    ].map(esc).join(sep));
+  }
+
+  // Riepilogo rivendita
+  rows.push('');
+  const totRiv = vendite.reduce((s, v) => s + v.totale, 0);
+  const totRivCorr = vendite.filter(v => new Date(v.data_vendita).getFullYear() === annoCorrente).reduce((s, v) => s + v.totale, 0);
+  rows.push(['Totale storico rivendita', fmtIt(totRiv)].map(esc).join(sep));
+  rows.push([`Totale rivendita ${annoCorrente}`, fmtIt(totRivCorr)].map(esc).join(sep));
+
+  rows.push('');
+  rows.push('');
+
+  // ── Sezione Trattamenti ──
+  rows.push('TRATTAMENTI');
+  rows.push(['Data', 'Trattamento', 'Prezzo', 'Note'].map(esc).join(sep));
+  const sortedTr = [...trattamenti].sort((a, b) => a.data_esecuzione.localeCompare(b.data_esecuzione));
+  for (const t of sortedTr) {
+    rows.push([
+      new Date(t.data_esecuzione).toLocaleDateString('it-IT'),
+      t.nome_trattamento,
+      fmtIt(t.prezzo),
+      t.note || '',
+    ].map(esc).join(sep));
+  }
+
+  // Riepilogo trattamenti
+  rows.push('');
+  const totTr = trattamenti.reduce((s, t) => s + t.prezzo, 0);
+  const totTrCorr = trattamenti.filter(t => new Date(t.data_esecuzione).getFullYear() === annoCorrente).reduce((s, t) => s + t.prezzo, 0);
+  rows.push(['Totale storico trattamenti', fmtIt(totTr)].map(esc).join(sep));
+  rows.push([`Totale trattamenti ${annoCorrente}`, fmtIt(totTrCorr)].map(esc).join(sep));
+
+  rows.push('');
+  rows.push(['TOTALE COMBINATO (storico)', fmtIt(totRiv + totTr)].map(esc).join(sep));
+  rows.push([`TOTALE COMBINATO ${annoCorrente}`, fmtIt(totRivCorr + totTrCorr)].map(esc).join(sep));
+
+  // BOM UTF-8 per Excel italiano
+  const bom = '\uFEFF';
+  const csv = bom + rows.join('\r\n');
+  await saveFile('rivendita', `rivendita-trattamenti-${annoCorrente}.csv`, csv, 'utf8');
 }
 
 // ─── Grafico barre orizzontali ────────────────────────────────────────────────
@@ -1581,21 +1710,32 @@ export default function Rivendita() {
                 <GitCompare size={14} />
                 Confronta periodi — Rivendita totale
               </button>
-              {vendite.length > 0 && (
-                <button
-                  onClick={() => esportaTotaleRivenditaPDF(
-                    vendite,
-                    showConfrontoGlob ? mkRivConfronto([
-                      { label: 'Numero vendite', corrente: vendGlobA.length, precedente: vendGlobB.length, fmtFn: v => String(Math.round(v)) },
-                      { label: 'Totale incassato', corrente: totGlobA, precedente: totGlobB, fmtFn: v => `€${fmt(v)}` },
-                    ], `${fmtData(globA1)} — ${fmtData(globA2 >= globA1 ? globA2 : globA1)}`, `${fmtData(globB1)} — ${fmtData(globB2 >= globB1 ? globB2 : globB1)}`) : undefined
-                  )}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors"
-                  title="Esporta PDF rivendita totale"
-                >
-                  <Download size={14} />
-                  PDF Totale
-                </button>
+              {(vendite.length > 0 || trattamenti.length > 0) && (
+                <>
+                  <button
+                    onClick={() => esportaTotaleRivenditaPDF(
+                      vendite,
+                      trattamenti,
+                      showConfrontoGlob ? mkRivConfronto([
+                        { label: 'Numero vendite', corrente: vendGlobA.length, precedente: vendGlobB.length, fmtFn: v => String(Math.round(v)) },
+                        { label: 'Totale incassato', corrente: totGlobA, precedente: totGlobB, fmtFn: v => `€${fmt(v)}` },
+                      ], `${fmtData(globA1)} — ${fmtData(globA2 >= globA1 ? globA2 : globA1)}`, `${fmtData(globB1)} — ${fmtData(globB2 >= globB1 ? globB2 : globB1)}`) : undefined
+                    )}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors"
+                    title="Esporta PDF rivendita + trattamenti"
+                  >
+                    <Download size={14} />
+                    PDF Totale
+                  </button>
+                  <button
+                    onClick={() => esportaTotaleExcel(vendite, trattamenti)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors"
+                    title="Esporta Excel (CSV italiano) rivendita + trattamenti"
+                  >
+                    <Download size={14} />
+                    Excel Totale
+                  </button>
+                </>
               )}
             </div>
             {showConfrontoGlob && (

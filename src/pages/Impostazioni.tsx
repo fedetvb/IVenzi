@@ -3954,7 +3954,7 @@ const SAVE_PATH_LABELS: Record<string, { label: string; desc: string }> = {
   fiches:        { label: 'Fiches',         desc: 'PDF fiches giornaliere (auto e manuale)' },
   clienti:       { label: 'Clienti',        desc: 'CSV e PDF esportazione clienti' },
   magazzino:     { label: 'Magazzino',      desc: 'CSV, PDF e HTML inventario magazzino' },
-  rivendita:     { label: 'Rivendita',      desc: 'PDF report vendite prodotti' },
+  rivendita:     { label: 'Rivendita',      desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
   statistiche:   { label: 'Statistiche',    desc: 'PDF report statistiche e schede' },
   qrcode:        { label: 'QR Code',        desc: 'PDF QR code registrazione clienti' },
   comunicazioni: { label: 'Comunicazioni',  desc: 'HTML guida e materiali comunicazione' },
