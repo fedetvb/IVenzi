@@ -3359,6 +3359,9 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
 
 const KEEPALIVE_INTERVAL_DAYS = 2;
 
+const LS_NOTIF_ENABLED = 'keepalive_notif_enabled';
+const LS_NOTIF_DAYS = 'keepalive_notif_days';
+
 function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
   const [lastPing, setLastPing] = useState<string | null>(null);
   const [lastPingTipo, setLastPingTipo] = useState<'automatico' | 'manuale' | null>(null);
@@ -3366,6 +3369,21 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
   const [pingOk, setPingOk] = useState<boolean | null>(null);
   const [pingError, setPingError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem(LS_NOTIF_ENABLED) !== 'false');
+  const [notifDays, setNotifDays] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem(LS_NOTIF_DAYS) ?? '7', 10);
+    return isNaN(v) || v < 1 ? 7 : v;
+  });
+
+  function saveNotifEnabled(val: boolean) {
+    setNotifEnabled(val);
+    localStorage.setItem(LS_NOTIF_ENABLED, val ? 'true' : 'false');
+  }
+
+  function saveNotifDays(val: number) {
+    setNotifDays(val);
+    localStorage.setItem(LS_NOTIF_DAYS, String(val));
+  }
 
   useEffect(() => {
     async function load() {
@@ -3529,6 +3547,60 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
             : <><Wifi size={15} className={pinging ? 'animate-pulse' : ''} />{pinging ? 'Ping in corso...' : 'Esegui ping manuale ora'}</>
           }
         </button>
+      </div>
+
+      {/* Impostazioni avviso riepilogo ping */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-stone-700">Avviso riepilogo ping</h3>
+          <p className="text-xs text-stone-400 mt-0.5">
+            Mostra un banner silenzioso con l'elenco dei ping eseguiti nel periodo
+          </p>
+        </div>
+
+        {/* Toggle attiva/disattiva */}
+        <div className="flex items-center justify-between py-1">
+          <div>
+            <p className="text-sm font-medium text-stone-700">Avviso attivo</p>
+            <p className="text-xs text-stone-400 mt-0.5">Se disattivato, nessun banner verrà mostrato</p>
+          </div>
+          <button
+            onClick={() => saveNotifEnabled(!notifEnabled)}
+            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${notifEnabled ? 'bg-emerald-500' : 'bg-stone-300'}`}
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${notifEnabled ? 'translate-x-5' : 'translate-x-0.5'}`}
+            />
+          </button>
+        </div>
+
+        {/* Frequenza */}
+        {notifEnabled && (
+          <div className="space-y-2 pt-1 border-t border-stone-100">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-stone-700">Frequenza avviso</p>
+              <span className="text-sm font-bold text-emerald-700">ogni {notifDays} {notifDays === 1 ? 'giorno' : 'giorni'}</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={14}
+              step={1}
+              value={notifDays}
+              onChange={e => saveNotifDays(Number(e.target.value))}
+              className="w-full accent-emerald-500"
+            />
+            <div className="flex justify-between text-[10px] text-stone-400">
+              <span>1 giorno</span>
+              <span>7 giorni</span>
+              <span>14 giorni</span>
+            </div>
+            <p className="text-xs text-stone-400">
+              Il banner compare al massimo una volta ogni {notifDays} {notifDays === 1 ? 'giorno' : 'giorni'},
+              mostrando i ping eseguiti in quel periodo.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Info tecnica */}

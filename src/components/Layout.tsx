@@ -134,18 +134,23 @@ function NavTooltipButton({
   );
 }
 
-function isTuesdayAfter10Italian() {
-  const now = new Date();
-  const itStr = now.toLocaleString('en-US', { timeZone: 'Europe/Rome', hour12: false, weekday: 'short', hour: 'numeric' });
-  // itStr es: "Tue 10" or "Tue 14"
-  const parts = itStr.split(' ');
-  const weekday = parts[0];
-  const hour = parseInt(parts[1], 10);
-  return weekday === 'Tue' && hour >= 10;
+const LS_NOTIF_ENABLED = 'keepalive_notif_enabled';
+const LS_NOTIF_DAYS = 'keepalive_notif_days';
+const LS_NOTIF_LAST_SHOWN = 'keepalive_notif_last_shown';
+
+function keepaliveNotifEnabled(): boolean {
+  return localStorage.getItem(LS_NOTIF_ENABLED) !== 'false';
 }
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+function keepaliveNotifDays(): number {
+  const v = parseInt(localStorage.getItem(LS_NOTIF_DAYS) ?? '7', 10);
+  return isNaN(v) || v < 1 ? 7 : v;
+}
+
+function daysSinceLastShown(): number {
+  const last = localStorage.getItem(LS_NOTIF_LAST_SHOWN);
+  if (!last) return Infinity;
+  return (Date.now() - new Date(last).getTime()) / (1000 * 60 * 60 * 24);
 }
 
 export default function Layout({ currentPage, onNavigate, children, user }: LayoutProps) {
@@ -205,12 +210,12 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
   }, []);
 
   useEffect(() => {
-    if (!isTuesdayAfter10Italian()) return;
-    const dismissedKey = `keepalive_banner_dismissed_${todayKey()}`;
-    if (localStorage.getItem(dismissedKey)) return;
+    if (!keepaliveNotifEnabled()) return;
+    const days = keepaliveNotifDays();
+    if (daysSinceLastShown() < days) return;
 
     const since = new Date();
-    since.setDate(since.getDate() - 7);
+    since.setDate(since.getDate() - days);
     supabase
       .from('keep_alive_ping_log')
       .select('eseguito_at, tipo')
@@ -402,7 +407,7 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
             </div>
             <button
               onClick={() => {
-                localStorage.setItem(`keepalive_banner_dismissed_${todayKey()}`, '1');
+                localStorage.setItem(LS_NOTIF_LAST_SHOWN, new Date().toISOString());
                 setPingBanner(null);
               }}
               className="text-emerald-500 hover:text-emerald-700 flex-shrink-0 mt-0.5"
