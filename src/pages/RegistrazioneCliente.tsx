@@ -24,7 +24,8 @@ export default function RegistrazioneCliente() {
   const [errore, setErrore] = useState('');
 
   function setField(k: keyof Form, v: string) {
-    setForm(f => ({ ...f, [k]: v }));
+    const val = (k === 'nome' || k === 'cognome') && v ? v.charAt(0).toUpperCase() + v.slice(1) : v;
+    setForm(f => ({ ...f, [k]: val }));
   }
 
   async function handleSubmit(e: React.FormEvent) {

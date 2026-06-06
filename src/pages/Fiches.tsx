@@ -698,7 +698,11 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
     const found = clienti.filter(c =>
       `${c.nome} ${c.cognome}`.toLowerCase().includes(q) ||
       `${c.cognome} ${c.nome}`.toLowerCase().includes(q)
-    ).slice(0, 6);
+    ).sort((a, b) => {
+      const aS = a.nome.toLowerCase().startsWith(q) || a.cognome.toLowerCase().startsWith(q);
+      const bS = b.nome.toLowerCase().startsWith(q) || b.cognome.toLowerCase().startsWith(q);
+      return aS === bS ? 0 : aS ? -1 : 1;
+    }).slice(0, 6);
     setSuggerimenti(found);
     setDropOpen(true);
   }
@@ -719,10 +723,11 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
     if (!resolvedId && clienteInput.trim()) {
       // Stesso parsing di MultiBookModal: "Nome Cognome Telefono"
       const parts = clienteInput.trim().split(/\s+/);
-      const nome = parts[0] ?? '';
+      const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+      const nome = cap(parts[0] ?? '');
       const lastPart = parts[parts.length - 1] ?? '';
       const isPhone = parts.length >= 3 && /^[+\d]{6,15}$/.test(lastPart);
-      const cognome = isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' ');
+      const cognome = cap(isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' '));
       const telefono = isPhone ? lastPart : undefined;
       const { data: nc } = await dbInsert({ table: 'clienti', data: { nome, cognome, ...(telefono ? { telefono } : {}), user_id: user?.id } });
       if (nc) { resolvedId = (nc as any).id; clienteNome = (nc as any).nome; clienteCognome = (nc as any).cognome; }

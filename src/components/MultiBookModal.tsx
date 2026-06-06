@@ -229,7 +229,11 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
     const found = clienti.filter(c =>
       `${c.nome} ${c.cognome}`.toLowerCase().includes(q) ||
       `${c.cognome} ${c.nome}`.toLowerCase().includes(q)
-    ).slice(0, 6);
+    ).sort((a, b) => {
+      const aS = a.nome.toLowerCase().startsWith(q) || a.cognome.toLowerCase().startsWith(q);
+      const bS = b.nome.toLowerCase().startsWith(q) || b.cognome.toLowerCase().startsWith(q);
+      return aS === bS ? 0 : aS ? -1 : 1;
+    }).slice(0, 6);
     setClienteSuggerimenti(found);
     setClienteDropOpen(true);
   }
@@ -264,10 +268,11 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
     let resolvedClienteId = clienteId;
     if (!resolvedClienteId) {
       const parts = clienteInput.trim().split(/\s+/);
-      const nome = parts[0] ?? '';
+      const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+      const nome = cap(parts[0] ?? '');
       const lastPart = parts[parts.length - 1] ?? '';
       const isPhone = parts.length >= 3 && /^[+\d]{6,15}$/.test(lastPart);
-      const cognome = isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' ');
+      const cognome = cap(isPhone ? parts.slice(1, -1).join(' ') : parts.slice(1).join(' '));
       const telefono = isPhone ? lastPart : undefined;
       const nuovoClienteRes = await dbInsert<any>({
         table: 'clienti',

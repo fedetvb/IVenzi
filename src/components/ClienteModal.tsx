@@ -86,7 +86,10 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   }
 
   function setField<K extends keyof ClienteForm>(k: K, v: ClienteForm[K]) {
-    setForm(f => ({ ...f, [k]: v }));
+    const val = (k === 'nome' || k === 'cognome') && typeof v === 'string' && v
+      ? v.charAt(0).toUpperCase() + v.slice(1) as ClienteForm[K]
+      : v;
+    setForm(f => ({ ...f, [k]: val }));
   }
 
   async function handleSave() {

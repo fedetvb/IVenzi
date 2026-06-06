@@ -436,7 +436,16 @@ export default function Clienti({ onSelectCliente }: Props) {
     );
   });
 
-  const grouped = filtered.reduce<Record<string, Cliente[]>>((acc, c) => {
+  const sortedFiltered = query.trim()
+    ? [...filtered].sort((a, b) => {
+        const q = query.toLowerCase();
+        const aS = a.nome.toLowerCase().startsWith(q) || a.cognome.toLowerCase().startsWith(q);
+        const bS = b.nome.toLowerCase().startsWith(q) || b.cognome.toLowerCase().startsWith(q);
+        return aS === bS ? 0 : aS ? -1 : 1;
+      })
+    : filtered;
+
+  const grouped = sortedFiltered.reduce<Record<string, Cliente[]>>((acc, c) => {
     const letter = c.cognome[0]?.toUpperCase() ?? '#';
     if (!acc[letter]) acc[letter] = [];
     acc[letter].push(c);

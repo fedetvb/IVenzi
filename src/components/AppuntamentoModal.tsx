@@ -170,6 +170,12 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
 
   const clientiFiltrati = clienteSearch.trim().length > 0
     ? clienti.filter(c => `${c.cognome} ${c.nome}`.toLowerCase().includes(clienteSearch.toLowerCase()))
+        .sort((a, b) => {
+          const q = clienteSearch.toLowerCase();
+          const aS = a.nome.toLowerCase().startsWith(q) || a.cognome.toLowerCase().startsWith(q);
+          const bS = b.nome.toLowerCase().startsWith(q) || b.cognome.toLowerCase().startsWith(q);
+          return aS === bS ? 0 : aS ? -1 : 1;
+        })
     : clienti.slice(0, 20);
 
   function updateServizio(idx: number, patch: Partial<ServizioRow>) {

@@ -282,8 +282,8 @@ Deno.serve(async (req: Request) => {
       const { error: insertErr } = await admin
         .from("schede_clienti_da_confermare")
         .insert({
-          nome: String(nome).trim(),
-          cognome: String(cognome).trim(),
+          nome: (() => { const s = String(nome).trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; })(),
+          cognome: (() => { const s = String(cognome).trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; })(),
           telefono: String(telefono ?? "").trim(),
           email: String(email ?? "").trim(),
           data_nascita: data_nascita || null,
