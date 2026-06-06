@@ -1071,17 +1071,23 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     const dotR = Math.max(2, w * 0.022);
     const fontSize = Math.max(6.5, w * 0.032);
 
+    const stepRgb: [number, number, number][] = [
+      [140, 195, 118],
+      [90, 152, 68],
+      [55, 110, 38],
+      [37, 77, 26],
+    ];
     steps.forEach((step, i) => {
       const dotX = bx + boxPad + dotR;
       const dotY = sy - dotR * 0.2;
 
-      doc.setFillColor(37, 77, 26);
+      doc.setFillColor(...stepRgb[i]);
       doc.circle(dotX, dotY, dotR, 'F');
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(fontSize * 0.85);
+      doc.setFontSize(fontSize);
       doc.setTextColor(255, 255, 255);
-      doc.text(String(i + 1), dotX, dotY + dotR * 0.45, { align: 'center' });
+      doc.text(String(i + 1), dotX, dotY + dotR * 0.38, { align: 'center' });
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(fontSize);
@@ -1234,14 +1240,17 @@ document.getElementById("f").onsubmit=async function(e){
         </div>
 
         <div className="bg-stone-50 rounded-xl p-5 text-left space-y-3 max-w-xs mx-auto mb-6">
-          {['Apri la fotocamera del tuo smartphone', 'Inquadra il codice QR', 'Compila il modulo con i tuoi dati', 'Invia — lo staff creerà la tua scheda!'].map((step, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <div className="w-6 h-6 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5" style={{background:'#254d1a'}}>
-                {i + 1}
+          {(['Apri la fotocamera del tuo smartphone', 'Inquadra il codice QR', 'Compila il modulo con i tuoi dati', 'Invia — lo staff creerà la tua scheda!'] as const).map((step, i) => {
+            const stepColors = ['#8cc376', '#5a9844', '#376e26', '#254d1a'];
+            return (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-7 h-7 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 leading-none" style={{background: stepColors[i]}}>
+                  {i + 1}
+                </div>
+                <p className="text-sm text-stone-600 leading-snug">{step}</p>
               </div>
-              <p className="text-sm text-stone-600 leading-snug">{step}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <p className="text-xs text-stone-400">I tuoi dati saranno trattati nel rispetto della privacy</p>
