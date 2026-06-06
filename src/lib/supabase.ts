@@ -20,6 +20,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
+  global: {
+    // Always use the current window.fetch so that the offlineFetch interceptor
+    // (which patches window.fetch after module init) is correctly applied.
+    fetch: (url: RequestInfo | URL, init?: RequestInit) => window.fetch(url, init),
+  },
 });
 
 /** Returns today's date as YYYY-MM-DD using local timezone (not UTC). */
