@@ -648,9 +648,11 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
                         onClick={() => onSelectCliente(c.id)}
                         className={`bg-white rounded-xl border px-5 py-4 flex items-center gap-4 cursor-pointer hover:shadow-sm transition-all group ${c.in_blacklist ? 'border-red-200 bg-red-50/30 hover:border-red-400' : 'border-stone-200 hover:border-amber-300'}`}
                       >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${c.in_blacklist ? 'bg-red-100' : 'bg-amber-100'}`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ${c.in_blacklist ? 'bg-red-100' : 'bg-amber-100'}`}>
                           {c.in_blacklist ? (
                             <ShieldOff size={16} className="text-red-500" />
+                          ) : c.foto_url ? (
+                            <img src={c.foto_url} alt="" className="w-full h-full object-cover" />
                           ) : (
                             <span className="text-sm font-bold text-amber-700">
                               {c.nome[0]?.toUpperCase()}{c.cognome[0]?.toUpperCase()}
