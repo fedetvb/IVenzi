@@ -218,21 +218,44 @@ export function initOfflineFetch() {
       }
 
       return response;
-    } catch (err) {
-      // Network failure — try cache for reads
+    } catch {
+      // Network failure while navigator.onLine is true (WiFi connected but no internet).
       if (isRead) {
+        // Serve from cache if available, otherwise return empty array to avoid crashing the UI.
         const cached = await getCachedData(cacheKey);
-        if (cached !== null) {
-          return new Response(JSON.stringify(cached.data), {
-            status: 200,
-            headers: new Headers({
-              'Content-Type': 'application/json',
-              'Content-Range': cached.contentRange ?? '0-0/0',
-            }),
-          });
+        const body = JSON.stringify(cached?.data ?? []);
+        const contentRange = cached?.contentRange ?? '0-0/0';
+        return new Response(body, {
+          status: 200,
+          headers: new Headers({
+            'Content-Type': 'application/json',
+            'Content-Range': contentRange,
+          }),
+        });
+      } else {
+        // Write failed due to network: queue it so it gets replayed when connectivity returns.
+        let rawBody: string | null = null;
+        if (init?.body) {
+          rawBody = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
         }
+        await addPendingMutation({
+          url,
+          method,
+          body: rawBody,
+          headers: headersToObject(init?.headers),
+          ts: Date.now(),
+        });
+        await refreshPendingCount();
+        // Schedule a retry — the connection may recover soon even if navigator.onLine is still true.
+        scheduleSync(10_000);
+        // Return optimistic success so the caller doesn't crash.
+        const fakeData = rawBody ? (() => { try { return JSON.parse(rawBody!); } catch { return null; } })() : null;
+        const fakeArray = Array.isArray(fakeData) ? fakeData : fakeData ? [fakeData] : [];
+        return new Response(JSON.stringify(fakeArray), {
+          status: method === 'POST' ? 201 : 200,
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
       }
-      throw err;
     }
   };
 
