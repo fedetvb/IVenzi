@@ -43,6 +43,15 @@ interface FicheVoceStats {
   tipo: string;
 }
 
+interface RivenditaProdottoStats {
+  fiche_id: string;
+  parrucchiere_id: string;
+  prezzo_unitario: number;
+  costo_unitario: number;
+  quantita: number;
+  data_vendita: string;
+}
+
 interface Cliente { id: string; nome: string; cognome: string; }
 interface Parrucchiere { id: string; nome: string; colore?: string; }
 
@@ -707,6 +716,7 @@ function buildParrStats(
   fiches: FicheConvalidata[],
   periodo: PeriodoKey,
   ficheVoci: FicheVoceStats[] = [],
+  rivenditaProdotti: RivenditaProdottoStats[] = [],
 ): ParrStats[] {
   const apptFiltrati = filtraPerPeriodo(appuntamenti, periodo).filter(a => a.stato !== 'cancellato');
   const apptMappa: Record<string, { appuntamenti: number; clientiUnici: Set<string> }> = {};
@@ -729,8 +739,24 @@ function buildParrStats(
     for (const v of vociFiltrate) {
       if (!v.parrucchiere_id || !ficheMappa[v.parrucchiere_id]) continue;
       fichePerParr[v.parrucchiere_id].add(v.fiche_id);
-      ficheMappa[v.parrucchiere_id].importo += v.prezzo;
       ficheMappa[v.parrucchiere_id].clientiUnici.add(v.cliente_id);
+      const isRivendita = v.nome_voce.toLowerCase().includes('rivendita');
+      if (!isRivendita) {
+        ficheMappa[v.parrucchiere_id].importo += v.prezzo;
+      }
+      // rivendita revenue is excluded here; margins are added below from rivendita_prodotti
+    }
+    // Add aggregated rivendita margins per parrucchiere for the filtered period
+    const rivFiltrati = rivenditaProdotti.filter(r => {
+      const d = r.data_vendita;
+      if (!d) return false;
+      const dataOra = d.length === 10 ? d + 'T00:00:00' : d;
+      return filtraPerPeriodo([{ ...r, data_ora: dataOra }], periodo).length > 0;
+    });
+    for (const r of rivFiltrati) {
+      if (!r.parrucchiere_id || !ficheMappa[r.parrucchiere_id]) continue;
+      const margine = ((r.prezzo_unitario ?? 0) - (r.costo_unitario ?? 0)) * (r.quantita ?? 1);
+      ficheMappa[r.parrucchiere_id].importo += margine;
     }
     for (const p of parrucchieri) {
       ficheMappa[p.id].count = fichePerParr[p.id].size;
@@ -1062,6 +1088,7 @@ function buildMensile(
   fiches: FicheConvalidata[],
   periodo: PeriodoKey,
   ficheVoci: FicheVoceStats[] = [],
+  rivenditaProdotti: RivenditaProdottoStats[] = [],
 ): MensilePoint[] {
   const apptFiltrati = filtraPerPeriodo(appuntamenti, periodo).filter(a => a.stato !== 'cancellato' && a.parrucchiere_id === parrId);
 
@@ -1072,6 +1099,15 @@ function buildMensile(
   if (ficheVoci.length > 0) {
     const vociFiltrate = filtraPerPeriodo(ficheVoci, periodo).filter(v => v.parrucchiere_id === parrId);
     for (const v of vociFiltrate) mesiSet.add(v.data_ora.slice(0, 7));
+
+    // rivendita margins by fiche_id for this parrucchiere
+    const rivByFiche: Record<string, number> = {};
+    for (const r of rivenditaProdotti) {
+      if (r.parrucchiere_id !== parrId) continue;
+      const margine = ((r.prezzo_unitario ?? 0) - (r.costo_unitario ?? 0)) * (r.quantita ?? 1);
+      rivByFiche[r.fiche_id] = (rivByFiche[r.fiche_id] ?? 0) + margine;
+    }
+
     const mesiSorted = [...mesiSet].sort();
 
     return mesiSorted.map(mese => {
@@ -1079,7 +1115,12 @@ function buildMensile(
       const vociMese = vociFiltrate.filter(v => v.data_ora.startsWith(mese));
       const ficheDistinte = new Set(vociMese.map(v => v.fiche_id));
       const clientiSet = new Set(vociMese.map(v => v.cliente_id));
-      const spesa = vociMese.reduce((s, v) => s + v.prezzo, 0);
+      const spesaServizi = vociMese
+        .filter(v => !v.nome_voce.toLowerCase().includes('rivendita'))
+        .reduce((s, v) => s + v.prezzo, 0);
+      const rivMese = rivenditaProdotti.filter(r => r.parrucchiere_id === parrId && (r.data_vendita ?? '').startsWith(mese));
+      const spesaRivendita = rivMese.reduce((s, r) => s + ((r.prezzo_unitario ?? 0) - (r.costo_unitario ?? 0)) * (r.quantita ?? 1), 0);
+      const spesa = spesaServizi + spesaRivendita;
       const ficheCount = ficheDistinte.size;
       return {
         mese,
@@ -1114,12 +1155,13 @@ function buildMensile(
 }
 
 function SchedaParrucchiere({
-  parrucchiere, appuntamenti, fiches, ficheVoci, anni, mesiPerAnno, onBack,
+  parrucchiere, appuntamenti, fiches, ficheVoci, rivenditaProdotti, anni, mesiPerAnno, onBack,
 }: {
   parrucchiere: Parrucchiere;
   appuntamenti: RawAppuntamento[];
   fiches: FicheConvalidata[];
   ficheVoci: FicheVoceStats[];
+  rivenditaProdotti: RivenditaProdottoStats[];
   anni: number[];
   mesiPerAnno: Record<number, number[]>;
   onBack: () => void;
@@ -1133,11 +1175,11 @@ function SchedaParrucchiere({
   const [confB1, setConfB1] = useState(today);
   const [confB2, setConfB2] = useState(today);
 
-  const stats = buildParrStats([parrucchiere], appuntamenti, fiches, periodo, ficheVoci)[0];
-  const mensile = buildMensile(parrucchiere.id, appuntamenti, fiches, periodo, ficheVoci);
+  const stats = buildParrStats([parrucchiere], appuntamenti, fiches, periodo, ficheVoci, rivenditaProdotti)[0];
+  const mensile = buildMensile(parrucchiere.id, appuntamenti, fiches, periodo, ficheVoci, rivenditaProdotti);
   const color = parrucchiere.colore || avatarColor(parrucchiere.id);
 
-  const combinata = buildParrStats([parrucchiere], appuntamenti, fiches, periodo, ficheVoci);
+  const combinata = buildParrStats([parrucchiere], appuntamenti, fiches, periodo, ficheVoci, rivenditaProdotti);
   const scored = rankParr(combinata, 'combinata', 'migliori');
   const scoreCorrente = scored[0]?.score ?? 0;
 
@@ -1151,8 +1193,8 @@ function SchedaParrucchiere({
 
   const pA = mkIntervalloPeriodo(confA1, confA2 >= confA1 ? confA2 : confA1);
   const pB = mkIntervalloPeriodo(confB1, confB2 >= confB1 ? confB2 : confB1);
-  const statsA = buildParrStats([parrucchiere], appuntamenti, fiches, pA, ficheVoci)[0];
-  const statsB = buildParrStats([parrucchiere], appuntamenti, fiches, pB, ficheVoci)[0];
+  const statsA = buildParrStats([parrucchiere], appuntamenti, fiches, pA, ficheVoci, rivenditaProdotti)[0];
+  const statsB = buildParrStats([parrucchiere], appuntamenti, fiches, pB, ficheVoci, rivenditaProdotti)[0];
 
   return (
     <div className="space-y-5">
@@ -1588,9 +1630,10 @@ function RigaParrucchiereWithMax({ p, pos, modalita, classifica, maxFiche, maxSp
   );
 }
 
-function SezioneParrucchieri({ parrucchieri, appuntamenti, fiches, ficheVoci, anni, mesiPerAnno }: {
+function SezioneParrucchieri({ parrucchieri, appuntamenti, fiches, ficheVoci, rivenditaProdotti, anni, mesiPerAnno }: {
   parrucchieri: Parrucchiere[]; appuntamenti: RawAppuntamento[]; fiches: FicheConvalidata[];
   ficheVoci: FicheVoceStats[];
+  rivenditaProdotti: RivenditaProdottoStats[];
   anni: number[]; mesiPerAnno: Record<number, number[]>;
 }) {
   const [modalita, setModalita] = useState<ModalitaParr>('combinata');
@@ -1606,6 +1649,7 @@ function SezioneParrucchieri({ parrucchieri, appuntamenti, fiches, ficheVoci, an
         appuntamenti={appuntamenti}
         fiches={fiches}
         ficheVoci={ficheVoci}
+        rivenditaProdotti={rivenditaProdotti}
         anni={anni}
         mesiPerAnno={mesiPerAnno}
         onBack={() => setSchedaParrId(null)}
@@ -1613,7 +1657,7 @@ function SezioneParrucchieri({ parrucchieri, appuntamenti, fiches, ficheVoci, an
     );
   }
 
-  const stats = buildParrStats(parrucchieri, appuntamenti, fiches, periodo, ficheVoci);
+  const stats = buildParrStats(parrucchieri, appuntamenti, fiches, periodo, ficheVoci, rivenditaProdotti);
   const ranked = rankParr(stats, modalita, classifica);
   const maxFiche = Math.max(...ranked.map(s => s.mediaFiche), 0.001);
   const maxSpesa = Math.max(...ranked.map(s => s.spesaTotale), 0.001);
@@ -2488,13 +2532,14 @@ export default function Statistiche({ onSelectCliente }: Props) {
   const [appuntamenti, setAppuntamenti] = useState<RawAppuntamento[]>([]);
   const [ficheConvalidate, setFicheConvalidate] = useState<FicheConvalidata[]>([]);
   const [ficheVociStats, setFicheVociStats] = useState<FicheVoceStats[]>([]);
+  const [rivenditaProdottiStats, setRivenditaProdottiStats] = useState<RivenditaProdottoStats[]>([]);
   const [assenze, setAssenze] = useState<Assenza[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data: cl }, { data: parr }, { data: ap }, { data: fiche }, { data: voci }, { data: ass }] = await Promise.all([
+      const [{ data: cl }, { data: parr }, { data: ap }, { data: fiche }, { data: voci }, { data: ass }, { data: riv }] = await Promise.all([
         dbSelect({ table: 'clienti', columns: 'id, nome, cognome', orderBy: [{ col: 'cognome', asc: true }] }),
         dbSelect({ table: 'parrucchieri', columns: 'id, nome, colore', orderBy: [{ col: 'nome', asc: true }] }),
         dbSelect({ table: 'appuntamenti', columns: 'id, data_ora, stato, cliente_id, parrucchiere_id', orderBy: [{ col: 'data_ora', asc: false }] }),
@@ -2509,6 +2554,7 @@ export default function Statistiche({ onSelectCliente }: Props) {
           filters: [{ col: 'fiches.convalidata', op: 'eq', val: true }],
         }),
         dbSelect({ table: 'assenze_parrucchieri', columns: 'id, parrucchiere_id, data_inizio, data_fine, ora_inizio, note', orderBy: [{ col: 'data_inizio', asc: false }] }),
+        dbSelect({ table: 'rivendita_prodotti', columns: 'fiche_id, parrucchiere_id, prezzo_unitario, costo_unitario, quantita, data_vendita', filters: [{ col: 'deleted_at', op: 'is_null' }] }),
       ]);
       setClienti((cl as Cliente[]) || []);
       setParrucchieri((parr as Parrucchiere[]) || []);
@@ -2567,6 +2613,7 @@ export default function Statistiche({ onSelectCliente }: Props) {
         });
       }
       setFicheVociStats(vociFlatStats);
+      setRivenditaProdottiStats((riv as RivenditaProdottoStats[]) || []);
       setLoading(false);
     }
     load();
@@ -2628,7 +2675,7 @@ export default function Statistiche({ onSelectCliente }: Props) {
       ) : sezione === 'clienti' ? (
         <SezioneClienti clienti={clienti} appuntamenti={appuntamenti} fiches={ficheConvalidate} anni={anni} mesiPerAnno={mesiPerAnno} onSelectCliente={onSelectCliente} />
       ) : sezione === 'parrucchieri' ? (
-        <SezioneParrucchieri parrucchieri={parrucchieri} appuntamenti={appuntamenti} fiches={ficheConvalidate} ficheVoci={ficheVociStats} anni={anni} mesiPerAnno={mesiPerAnno} />
+        <SezioneParrucchieri parrucchieri={parrucchieri} appuntamenti={appuntamenti} fiches={ficheConvalidate} ficheVoci={ficheVociStats} rivenditaProdotti={rivenditaProdottiStats} anni={anni} mesiPerAnno={mesiPerAnno} />
       ) : sezione === 'assenze' ? (
         <SezioneAssenze parrucchieri={parrucchieri} anni={anni} mesiPerAnno={mesiPerAnno} assenze={assenze} />
       ) : (

@@ -416,6 +416,16 @@ function FichesTab() {
           const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
           const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
+          let costoUnitario = 0;
+          if (catalogoId) {
+            const { data: catRow } = await dbSelect<{ prezzo_acquisto: number }>({
+              table: 'prodotti_rivendita_catalogo',
+              filters: [{ col: 'id', op: 'eq', val: catalogoId }],
+              limit: 1,
+            });
+            costoUnitario = catRow?.[0]?.prezzo_acquisto ?? 0;
+          }
+
           if (v.parrucchiere_id) {
             await dbInsert({ table: 'rivendita_prodotti', data: {
               fiche_id: ficheId,
@@ -423,6 +433,8 @@ function FichesTab() {
               nome_prodotto: v.nome_voce,
               quantita: 1,
               prezzo_unitario: v.prezzo,
+              costo_unitario: costoUnitario,
+              totale: v.prezzo,
               data_vendita: selectedDate,
               note: catalogoId ? '' : (v.note || ''),
               user_id: user?.id,
@@ -1221,6 +1233,16 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         const catalogoMatch = v.note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
         const catalogoId = catalogoMatch ? catalogoMatch[1] : null;
 
+        let costoUnitario = 0;
+        if (catalogoId) {
+          const { data: catRow } = await dbSelect<{ prezzo_acquisto: number }>({
+            table: 'prodotti_rivendita_catalogo',
+            filters: [{ col: 'id', op: 'eq', val: catalogoId }],
+            limit: 1,
+          });
+          costoUnitario = catRow?.[0]?.prezzo_acquisto ?? 0;
+        }
+
         if (v.parrucchiere_id) {
           await dbInsert({ table: 'rivendita_prodotti', data: {
             fiche_id: ficheId,
@@ -1228,6 +1250,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
             nome_prodotto: v.nome_voce,
             quantita: 1,
             prezzo_unitario: v.prezzo,
+            costo_unitario: costoUnitario,
+            totale: v.prezzo,
             data_vendita: selectedDate,
             note: catalogoId ? '' : (v.note || ''),
             user_id: user?.id,
