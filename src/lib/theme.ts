@@ -23,13 +23,13 @@ export const THEME_DEFAULTS: ThemeSettings = {
 
 export const SIDEBAR_PRESETS = [
   { label: 'Carbone', value: '#1c1917' },
-  { label: 'Grafite', value: '#18181b' },
-  { label: 'Ardesia', value: '#0f172a' },
-  { label: 'Notte', value: '#111827' },
-  { label: 'Muschio', value: '#14241a' },
-  { label: 'Marina', value: '#0c1a2e' },
-  { label: 'Prugna', value: '#1e0a2e' },
-  { label: 'Mogano', value: '#1f1009' },
+  { label: 'Grafite', value: '#374151' },
+  { label: 'Navy', value: '#1e3a5f' },
+  { label: 'Oceano', value: '#0e4f5c' },
+  { label: 'Foresta', value: '#1a3d2b' },
+  { label: 'Prugna', value: '#3b1660' },
+  { label: 'Mogano', value: '#4a1e08' },
+  { label: 'Rosso', value: '#4a1010' },
 ];
 
 export const ACCENT_PRESETS = [
