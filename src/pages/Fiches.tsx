@@ -174,9 +174,9 @@ function FichesTab() {
         ],
         orderBy: [{ col: 'data_ora', asc: true }],
         relations: [
-          { table: 'clienti', fk: 'cliente_id', many: false },
-          { table: 'parrucchieri', fk: 'parrucchiere_id', many: false },
-          { table: 'appuntamento_trattamenti', manyFk: 'appuntamento_id', many: true },
+          { key: 'clienti', table: 'clienti', fk: 'cliente_id', many: false },
+          { key: 'parrucchieri', table: 'parrucchieri', fk: 'parrucchiere_id', many: false },
+          { key: 'appuntamento_trattamenti', table: 'appuntamento_trattamenti', manyFk: 'appuntamento_id', many: true },
         ],
         supabaseSelect: '*, clienti(id, nome, cognome), parrucchieri(id, nome, colore), appuntamento_trattamenti(nome_trattamento, prezzo)',
       }),

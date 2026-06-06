@@ -206,27 +206,33 @@ export default function App() {
 
   // Sync SQLite <-> Supabase all'avvio (solo se SQLite disponibile e DB pronto)
   useEffect(() => {
-    if (!user || !electronDbReady || !isElectron() || !navigator.onLine) return;
+    if (!user || !electronDbReady || !isElectron()) return;
     const userId = user.id;
     let cancelled = false;
 
     async function doSync() {
+      if (!navigator.onLine || cancelled) return;
       try {
         await syncSupabaseToLocal(userId);
         if (cancelled) return;
         await syncLocalToSupabase(userId);
       } catch (e) {
-        console.warn('[Sync] Errore sync iniziale:', e);
+        console.warn('[Sync] Errore sync:', e);
       }
     }
 
     doSync();
     // Retry ogni 5 minuti per recuperare eventuali dirty rimaste
-    const interval = setInterval(() => {
-      if (navigator.onLine && !cancelled) doSync();
-    }, 5 * 60 * 1000);
+    const interval = setInterval(() => { doSync(); }, 5 * 60 * 1000);
+    // Sync immediato al ritorno online (copre il caso app avviata offline)
+    const handleOnline = () => { doSync(); };
+    window.addEventListener('online', handleOnline);
 
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+    };
   }, [user, electronDbReady]);
 
   // Promemoria convalida fiches (controllato ogni 30s in base all'orario configurato)
