@@ -28,7 +28,6 @@ import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
 import { flushPendingSync } from './lib/offlineFetch';
-import { supabase } from './lib/supabase';
 
 // Registra il push immediato una volta sola al caricamento del modulo
 registerPushRowNow(pushRowNow);
