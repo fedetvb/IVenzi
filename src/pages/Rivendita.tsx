@@ -1804,7 +1804,10 @@ export default function Rivendita() {
     const vend = vendRes.data;
     const tratt = trattRes.data;
     const parrList = (parr || []) as Parrucchiere[];
-    const vendList = (vend || []) as Vendita[];
+    const vendList = ((vend || []) as Vendita[]).map(v => ({
+      ...v,
+      totale: v.totale ?? (v.quantita * v.prezzo_unitario),
+    }));
     const trattList = (tratt || []) as Trattamento[];
     setParrucchieri(parrList);
     setVendite(vendList);
