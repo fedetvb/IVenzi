@@ -66,8 +66,8 @@ textarea{resize:none;padding-top:13px;line-height:1.5}
 <body>
 <div class="header">
   <div class="hi">
-    <div class="logo">
-      <img src="/icons/I_Venzi_iniziali.png" alt="I·V" />
+    <div class="logo" id="logoBox">
+      <img id="logoImg" src="/icons/I_Venzi_iniziali.png" alt="I·V" />
     </div>
     <h1>Scheda Cliente</h1>
   </div>
@@ -193,6 +193,25 @@ textarea{resize:none;padding-top:13px;line-height:1.5}
 var SU = "https://cfsourwsjhhriytkdnuw.supabase.co";
 var SK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmc291cndzamhocml5dGtkbnV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjEzMDksImV4cCI6MjA5NDQ5NzMwOX0.XXTX5NYTIYF-Dn9-iA-YgJQd8G4CVKPTedoBscD1OOI";
 var EF = SU + "/functions/v1/registrazione-cliente";
+
+(function loadLogo() {
+  fetch(SU + "/rest/v1/impostazioni?chiave=eq.logo_salone_url&select=valore&limit=1", {
+    headers: { "apikey": SK, "Authorization": "Bearer " + SK }
+  }).then(function(r) { return r.json(); }).then(function(rows) {
+    if (rows && rows.length > 0 && rows[0].valore) {
+      var img = document.getElementById('logoImg');
+      if (img) {
+        img.src = rows[0].valore;
+        img.style.width = '40px';
+        img.style.height = '40px';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '10px';
+        var box = document.getElementById('logoBox');
+        if (box) { box.style.background = 'transparent'; box.style.boxShadow = 'none'; }
+      }
+    }
+  }).catch(function() {});
+})();
 
 var photoBase64 = null;
 var photoMime = null;
