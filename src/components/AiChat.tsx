@@ -304,8 +304,10 @@ export default function AiChat() {
 
   const voiceTranscriptRef = useRef('');
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldRestartRef = useRef(false);
 
   const stopListening = useCallback(() => {
+    shouldRestartRef.current = false;
     if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
     recognitionRef.current?.stop();
     setListening(false);
@@ -316,7 +318,6 @@ export default function AiChat() {
 
     if (listening) {
       stopListening();
-      // Se c'è testo accumulato, invialo
       const text = voiceTranscriptRef.current.trim();
       if (text) {
         setInput('');
@@ -327,75 +328,82 @@ export default function AiChat() {
     }
 
     voiceTranscriptRef.current = '';
+    shouldRestartRef.current = true;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition: SpeechRecognition = new SpeechRec();
-    recognition.lang = 'it-IT';
-    recognition.continuous = true;
-    recognition.interimResults = true;
 
-    const resetSilenceTimer = () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      // Invia dopo 2.5 secondi di silenzio
-      silenceTimerRef.current = setTimeout(() => {
-        const text = voiceTranscriptRef.current.trim();
-        recognition.stop();
+    function startRecognition() {
+      const recognition: SpeechRecognition = new SpeechRec();
+      recognition.lang = 'it-IT';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      const scheduleSend = () => {
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          shouldRestartRef.current = false;
+          recognition.stop();
+        }, 2000);
+      };
+
+      recognition.onstart = () => {
+        setListening(true);
+        scheduleSend();
+      };
+
+      recognition.onresult = (e: SpeechRecognitionEvent) => {
+        let finalText = '';
+        let interimText = '';
+        for (let i = 0; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            finalText += e.results[i][0].transcript;
+          } else {
+            interimText += e.results[i][0].transcript;
+          }
+        }
+        const display = (finalText + ' ' + interimText).trim();
+        voiceTranscriptRef.current = finalText.trim() || display;
+        setInput(display);
+        if (inputRef.current) {
+          inputRef.current.style.height = 'auto';
+          inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 80)}px`;
+        }
+        scheduleSend();
+      };
+
+      recognition.onend = () => {
+        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+
+        // Su iOS/mobile, continuous viene ignorato → riavvia finché shouldRestart è true e non abbiamo ancora del testo final
+        if (shouldRestartRef.current && !voiceTranscriptRef.current.trim()) {
+          try { startRecognition(); return; } catch { /* ignora */ }
+        }
+
+        shouldRestartRef.current = false;
         setListening(false);
-        if (text) {
-          setInput('');
-          voiceTranscriptRef.current = '';
-          sendTextRef.current(text);
-        }
-      }, 2500);
-    };
+        const text = voiceTranscriptRef.current.trim();
+        if (!text) return;
+        setInput('');
+        voiceTranscriptRef.current = '';
+        sendTextRef.current(text);
+      };
 
-    recognition.onstart = () => {
-      setListening(true);
-      resetSilenceTimer();
-    };
+      recognition.onerror = (e) => {
+        const err = (e as SpeechRecognitionErrorEvent).error;
+        if (err === 'no-speech') return; // pausa normale, onend riavvierà
+        shouldRestartRef.current = false;
+        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+        setListening(false);
+        voiceTranscriptRef.current = '';
+      };
 
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
-      // Accumula solo i risultati finali + l'ultimo interlocutorio
-      let finalText = '';
-      let interimText = '';
-      for (let i = 0; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          finalText += e.results[i][0].transcript;
-        } else {
-          interimText += e.results[i][0].transcript;
-        }
-      }
-      const display = (finalText + ' ' + interimText).trim();
-      voiceTranscriptRef.current = finalText.trim() || display;
-      setInput(display);
-      if (inputRef.current) {
-        inputRef.current.style.height = 'auto';
-        inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 80)}px`;
-      }
-      // Resetta il timer di silenzio ad ogni parola rilevata
-      resetSilenceTimer();
-    };
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
 
-    recognition.onend = () => {
-      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-      setListening(false);
-      const text = voiceTranscriptRef.current.trim();
-      if (!text) return;
-      setInput('');
-      voiceTranscriptRef.current = '';
-      sendTextRef.current(text);
-    };
-
-    recognition.onerror = (e) => {
-      // 'no-speech' è normale quando si fa una pausa, non è un errore critico
-      if ((e as SpeechRecognitionErrorEvent).error === 'no-speech') return;
-      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-      setListening(false);
-      voiceTranscriptRef.current = '';
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    startRecognition();
   }, [voiceSupported, listening, stopListening]);
 
   function resetChat() {

@@ -130,15 +130,18 @@ const PAROLE_FUNZIONE = new Set([
 ]);
 
 function parseFissaAppuntamento(raw: string, text: string, parrucchieriNomi: string[] = []): ParsedIntent | null {
-  const KW_VERBI = /\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea)\b/i;
+  const KW_VERBI = /\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea|vorrei|voglio|posso|puoi)\b/i;
   const hasVerbo = KW_VERBI.test(text);
-  const hasAppuntamento = text.includes('appuntamento');
+  const hasAppuntamento = /\bappuntament[oi]?\b/.test(text);
   if (!hasVerbo && !hasAppuntamento) return null;
   if (!hasVerbo) return null;
 
-  // Estrai ora — obbligatoria
+  // Estrai ora — se mancante mostra gli slot liberi per la data richiesta
   const ora = extractOra(text);
-  if (!ora) return null;
+  if (!ora) {
+    const data = resolveDateText(text);
+    return { tool: 'get_slot_liberi', args: { data }, displayQuestion: raw };
+  }
 
   // Estrai data
   const data = resolveDateText(text);
@@ -227,12 +230,12 @@ function parseFissaAppuntamento(raw: string, text: string, parrucchieriNomi: str
 
 // ─── Contiene parole chiave "agenda/appuntamenti" ─────────────────────────────
 
-const KW_AGENDA = ['appuntament', 'agenda', 'prenotat', 'chi viene', 'chi ha', 'occupato', 'chi c\'è', 'clienti di', 'booking'];
-const KW_INCASSI = ['incasso', 'incassat', 'guadagn', 'fatturato', 'soldi', 'euro', 'ricavi', 'entrate', 'denaro', 'media fich', 'scontrino', 'ticket medio'];
-const KW_SERVIZI = ['servizi', 'trattament', 'taglio', 'colore', 'piastra', 'piega', 'shampoo', 'eseguiti', 'richiesti', 'piu fatti', 'più fatti', 'classifica', 'populari', 'frequenti'];
+const KW_AGENDA = ['appuntament', 'agenda', 'prenotat', 'chi viene', 'chi ha', 'occupato', 'chi c\'è', 'clienti di', 'booking', 'visite', 'lavori'];
+const KW_INCASSI = ['incasso', 'incassat', 'guadagn', 'fatturato', 'soldi', 'euro', 'ricavi', 'entrate', 'denaro', 'media fich', 'scontrino', 'ticket medio', 'quanto abbiamo fatto', 'quanti soldi', 'quanto ho guadagn'];
+const KW_SERVIZI = ['servizi', 'trattament', 'taglio', 'colore', 'piastra', 'piega', 'shampoo', 'eseguiti', 'richiesti', 'piu fatti', 'più fatti', 'classifica', 'populari', 'frequenti', 'cosa si fa di piu', 'cosa facciamo di piu'];
 const KW_PARR = ['parrucchier', 'operatori', 'dipendenti', 'staff', 'collaboratori', 'stylist'];
-const KW_SLOT = ['slot', 'libero', 'libera', 'disponibil', 'orari liberi', 'quando posso', 'posto libero', 'quando c\'è posto', 'spazio'];
-const KW_ASSENTI = ['assent', 'non vengono', 'non viene', 'non si vede', 'non si vedono', 'mancant', 'persi', 'non tornano', 'non ritornano', 'spariti', 'latitant', 'che non vengo'];
+const KW_SLOT = ['slot', 'libero', 'libera', 'disponibil', 'orari liberi', 'quando posso', 'posto libero', 'quando c\'è posto', 'spazio', 'ore libere', 'quando sei libero', 'quando siete liberi'];
+const KW_ASSENTI = ['assent', 'non vengono', 'non viene', 'non si vede', 'non si vedono', 'mancant', 'persi', 'non tornano', 'non ritornano', 'spariti', 'latitant', 'che non vengo', 'clienti persi', 'clienti mancanti'];
 
 function hasKw(text: string, kws: string[]): boolean {
   return kws.some(k => text.includes(k));
