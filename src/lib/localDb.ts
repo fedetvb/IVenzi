@@ -637,7 +637,7 @@ const BACKUP_TABLES = [
   'carte_premium','ricariche_carta_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
   'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
   'assenze_parrucchieri','magazzino_prodotti','magazzino_schede_salvate',
-  'spese','schede_clienti_da_confermare','giorni_parrucchiere','voci_extra_catalogo',
+  'spese','schede_clienti_da_confermare','giorni_parrucchieri','voci_extra_catalogo',
 ];
 
 async function restoreToIndexedDb(backupData: Record<string, unknown>): Promise<{ success: boolean; results: Record<string, unknown> }> {

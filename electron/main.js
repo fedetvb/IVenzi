@@ -199,6 +199,16 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione spese_voci→spese:', e.message); }
 
+  // Rinomina giorni_parrucchiere → giorni_parrucchieri per allineamento con Supabase
+  try {
+    const vecchiaExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='giorni_parrucchiere'").get();
+    const nuovaExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='giorni_parrucchieri'").get();
+    if (vecchiaExists && !nuovaExists) {
+      db.exec('ALTER TABLE giorni_parrucchiere RENAME TO giorni_parrucchieri');
+      console.log('[DB] Migrazione: giorni_parrucchiere → giorni_parrucchieri');
+    }
+  } catch(e) { console.warn('[DB] migrazione giorni_parrucchieri:', e.message); }
+
   // Create pending_deletes table if missing (for offline delete sync)
   try {
     const pdExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_deletes'").get();
@@ -409,7 +419,7 @@ function createSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
-    CREATE TABLE IF NOT EXISTS giorni_parrucchiere (
+    CREATE TABLE IF NOT EXISTS giorni_parrucchieri (
       id TEXT PRIMARY KEY, data_specifica TEXT NOT NULL, parrucchiere_id TEXT NOT NULL,
       ordine INTEGER NOT NULL DEFAULT 0, user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
@@ -582,7 +592,7 @@ const ALL_TABLES = [
   'carte_premium','ricariche_carta_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
   'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
   'assenze_parrucchieri','magazzino_prodotti','magazzino_movimenti','magazzino_schede_salvate',
-  'spese','schede_clienti_da_confermare','giorni_parrucchiere','voci_extra_catalogo',
+  'spese','schede_clienti_da_confermare','giorni_parrucchieri','voci_extra_catalogo',
 ];
 
 function exportLocalData() {
