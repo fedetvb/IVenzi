@@ -677,7 +677,7 @@ function NuovaFicheModal({ selectedDate, onClose, onCreated }: NuovaFicheModalPr
   const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    dbSelect({ table: 'clienti', filters: [], orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome' }).then(({ data }) => {
+    dbSelect({ table: 'clienti', filters: [{ col: 'deleted_at', op: 'is_null', val: null }], orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome' }).then(({ data }) => {
       setClienti((data || []) as { id: string; nome: string; cognome: string }[]);
     });
   }, []);

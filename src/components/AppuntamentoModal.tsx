@@ -95,7 +95,7 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
 
   async function loadOptions() {
     const [clRes, catRes, parrRes] = await Promise.all([
-      dbSelect({ table: 'clienti', orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome, in_blacklist, motivo_blacklist' }),
+      dbSelect({ table: 'clienti', filters: [{ col: 'deleted_at', op: 'is_null', val: null }], orderBy: [{ col: 'cognome', asc: true }], columns: 'id, nome, cognome, in_blacklist, motivo_blacklist' }),
       dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
       dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }),
     ]);

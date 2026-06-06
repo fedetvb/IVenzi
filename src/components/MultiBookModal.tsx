@@ -85,6 +85,7 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
         dbSelect<Cliente>({
           table: 'clienti',
           columns: 'id, nome, cognome, in_blacklist, motivo_blacklist',
+          filters: [{ col: 'deleted_at', op: 'is_null', val: null }],
           orderBy: [{ col: 'cognome' }],
         }),
       ]);
