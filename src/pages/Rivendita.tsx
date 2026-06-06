@@ -486,6 +486,243 @@ async function esportaRivenditaPDF(parr: Parrucchiere, vendite: Vendita[], perio
   await saveFile('rivendita', `rivendita-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
 }
 
+async function esportaTrattamentiPDF(parr: Parrucchiere, trattamenti: Trattamento[], periodoLabel: string) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(28, 25, 23);
+  doc.text('Trattamenti — ' + parr.nome, 14, 18);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120, 113, 108);
+  doc.text('Periodo: ' + periodoLabel, 14, 25);
+  doc.text('Generato il ' + new Date().toLocaleDateString('it-IT'), 14, 30);
+  doc.setDrawColor(231, 229, 228);
+  doc.line(14, 33, doc.internal.pageSize.width - 14, 33);
+
+  const totale = trattamenti.reduce((s, t) => s + t.prezzo, 0);
+  let y = 40;
+  const riepilogo: [string, string][] = [
+    ['Numero trattamenti', String(trattamenti.length)],
+    ['Totale incassato', '€' + totale.toLocaleString('it-IT', { minimumFractionDigits: 2 })],
+  ];
+  riepilogo.forEach(([label, val]) => {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120, 113, 108);
+    doc.text(label + ':', 14, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(28, 25, 23);
+    doc.text(val, 70, y);
+    y += 6;
+  });
+
+  if (trattamenti.length > 0) {
+    const sorted = [...trattamenti].sort((a, b) => b.data_esecuzione.localeCompare(a.data_esecuzione) || b.created_at.localeCompare(a.created_at));
+    autoTable(doc, {
+      startY: y + 4,
+      head: [['Data', 'Trattamento', 'N°', 'Prezzo (€)', 'Note']],
+      body: sorted.map(t => [
+        new Date(t.data_esecuzione).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }),
+        t.nome_trattamento,
+        '1',
+        t.prezzo.toFixed(2),
+        t.note || '',
+      ]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [20, 184, 166], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [240, 253, 250] },
+      columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 65 }, 2: { cellWidth: 10 }, 4: { cellWidth: 30 } },
+    });
+
+    // Top trattamenti
+    const afterTable = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y + 10;
+    let yTop = afterTable + 8;
+    if (yTop > 260) { doc.addPage(); yTop = 20; }
+    const nomiMap: Record<string, { count: number; totale: number }> = {};
+    trattamenti.forEach(t => {
+      if (!nomiMap[t.nome_trattamento]) nomiMap[t.nome_trattamento] = { count: 0, totale: 0 };
+      nomiMap[t.nome_trattamento].count += 1;
+      nomiMap[t.nome_trattamento].totale += t.prezzo;
+    });
+    const topTr = Object.entries(nomiMap).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(28, 25, 23);
+    doc.text('Riepilogo per tipo', 14, yTop);
+    autoTable(doc, {
+      startY: yTop + 4,
+      head: [['Trattamento', 'N° eseguiti', 'Incasso (€)']],
+      body: topTr.map(([nome, d]) => [nome, String(d.count), d.totale.toFixed(2)]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [20, 184, 166], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [240, 253, 250] },
+      columnStyles: { 0: { cellWidth: 90 } },
+    });
+  }
+
+  await saveFile('rivendita', `trattamenti-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
+}
+
+async function esportaTrattamentiExcel(parr: Parrucchiere, trattamenti: Trattamento[], periodoLabel: string) {
+  const sep = ';';
+  const esc = (s: string | number) => { const str = String(s); return str.includes(sep) || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str; };
+  const fmtItL = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const rows: string[] = [];
+  rows.push(`TRATTAMENTI — ${parr.nome}`);
+  rows.push(`Periodo: ${periodoLabel}`);
+  rows.push('');
+  rows.push(['Data', 'Trattamento', 'Prezzo', 'Note'].map(esc).join(sep));
+
+  const sorted = [...trattamenti].sort((a, b) => a.data_esecuzione.localeCompare(b.data_esecuzione));
+  for (const t of sorted) {
+    rows.push([
+      new Date(t.data_esecuzione).toLocaleDateString('it-IT'),
+      t.nome_trattamento,
+      fmtItL(t.prezzo),
+      t.note || '',
+    ].map(esc).join(sep));
+  }
+
+  rows.push('');
+  rows.push(['Totale trattamenti', String(trattamenti.length)].map(esc).join(sep));
+  rows.push(['Totale incassato', fmtItL(trattamenti.reduce((s, t) => s + t.prezzo, 0))].map(esc).join(sep));
+
+  rows.push('');
+  rows.push('RIEPILOGO PER TIPO');
+  rows.push(['Trattamento', 'N° eseguiti', 'Incasso totale'].map(esc).join(sep));
+  const nomiMap: Record<string, { count: number; totale: number }> = {};
+  trattamenti.forEach(t => {
+    if (!nomiMap[t.nome_trattamento]) nomiMap[t.nome_trattamento] = { count: 0, totale: 0 };
+    nomiMap[t.nome_trattamento].count += 1;
+    nomiMap[t.nome_trattamento].totale += t.prezzo;
+  });
+  Object.entries(nomiMap).sort((a, b) => b[1].count - a[1].count).forEach(([nome, d]) => {
+    rows.push([nome, String(d.count), fmtItL(d.totale)].map(esc).join(sep));
+  });
+
+  const csv = '\uFEFF' + rows.join('\r\n');
+  await saveFile('rivendita', `trattamenti-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.csv`, csv, 'utf8');
+}
+
+async function esportaTotaleParrPDF(parr: Parrucchiere, vendite: Vendita[], trattamenti: Trattamento[], periodoLabel: string) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(28, 25, 23);
+  doc.text('Rivendita e trattamenti — ' + parr.nome, 14, 18);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120, 113, 108);
+  doc.text('Periodo: ' + periodoLabel, 14, 25);
+  doc.text('Generato il ' + new Date().toLocaleDateString('it-IT'), 14, 30);
+  doc.setDrawColor(231, 229, 228);
+  doc.line(14, 33, doc.internal.pageSize.width - 14, 33);
+
+  const totRiv = vendite.reduce((s, v) => s + v.totale, 0);
+  const totTr = trattamenti.reduce((s, t) => s + t.prezzo, 0);
+  let y = 40;
+  [
+    ['Vendite', String(vendite.length)],
+    ['Totale rivendita', '€' + totRiv.toLocaleString('it-IT', { minimumFractionDigits: 2 })],
+    ['Trattamenti', String(trattamenti.length)],
+    ['Totale trattamenti', '€' + totTr.toLocaleString('it-IT', { minimumFractionDigits: 2 })],
+    ['TOTALE COMBINATO', '€' + (totRiv + totTr).toLocaleString('it-IT', { minimumFractionDigits: 2 })],
+  ].forEach(([label, val]) => {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120, 113, 108);
+    doc.text(label + ':', 14, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(28, 25, 23);
+    doc.text(val, 80, y);
+    y += 6;
+  });
+
+  if (vendite.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Rivendita', 14, y + 4);
+    const sortedV = [...vendite].sort((a, b) => b.data_vendita.localeCompare(a.data_vendita));
+    autoTable(doc, {
+      startY: y + 8,
+      head: [['Data', 'Prodotto', 'Qtà', 'Prezzo (€)', 'Totale (€)', 'Note']],
+      body: sortedV.map(v => [
+        new Date(v.data_vendita).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }),
+        v.nome_prodotto, String(v.quantita), v.prezzo_unitario.toFixed(2), v.totale.toFixed(2), v.note || '',
+      ]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [20, 184, 166], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [240, 253, 250] },
+    });
+  }
+
+  if (trattamenti.length > 0) {
+    const afterV = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y + 10;
+    let yT = afterV + 8;
+    if (yT > 260) { doc.addPage(); yT = 20; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(28, 25, 23);
+    doc.text('Trattamenti', 14, yT);
+    const sortedT = [...trattamenti].sort((a, b) => b.data_esecuzione.localeCompare(a.data_esecuzione));
+    autoTable(doc, {
+      startY: yT + 4,
+      head: [['Data', 'Trattamento', 'Prezzo (€)', 'Note']],
+      body: sortedT.map(t => [
+        new Date(t.data_esecuzione).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }),
+        t.nome_trattamento, t.prezzo.toFixed(2), t.note || '',
+      ]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [20, 184, 166], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [240, 253, 250] },
+    });
+  }
+
+  await saveFile('rivendita', `totale-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.pdf`, doc.output('blob'));
+}
+
+async function esportaTotaleParrExcel(parr: Parrucchiere, vendite: Vendita[], trattamenti: Trattamento[], periodoLabel: string) {
+  const sep = ';';
+  const esc = (s: string | number) => { const str = String(s); return str.includes(sep) || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str; };
+  const fmtItL = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const rows: string[] = [];
+  rows.push(`RIVENDITA E TRATTAMENTI — ${parr.nome}`);
+  rows.push(`Periodo: ${periodoLabel}`);
+  rows.push('');
+
+  rows.push('RIVENDITA');
+  rows.push(['Data', 'Prodotto', 'Quantità', 'Prezzo unitario', 'Totale', 'Note'].map(esc).join(sep));
+  [...vendite].sort((a, b) => a.data_vendita.localeCompare(b.data_vendita)).forEach(v => {
+    rows.push([
+      new Date(v.data_vendita).toLocaleDateString('it-IT'),
+      v.nome_prodotto, v.quantita, fmtItL(v.prezzo_unitario), fmtItL(v.totale), v.note || '',
+    ].map(esc).join(sep));
+  });
+  rows.push(['Totale rivendita', fmtItL(vendite.reduce((s, v) => s + v.totale, 0))].map(esc).join(sep));
+
+  rows.push('');
+  rows.push('');
+
+  rows.push('TRATTAMENTI');
+  rows.push(['Data', 'Trattamento', 'Prezzo', 'Note'].map(esc).join(sep));
+  [...trattamenti].sort((a, b) => a.data_esecuzione.localeCompare(b.data_esecuzione)).forEach(t => {
+    rows.push([
+      new Date(t.data_esecuzione).toLocaleDateString('it-IT'),
+      t.nome_trattamento, fmtItL(t.prezzo), t.note || '',
+    ].map(esc).join(sep));
+  });
+  rows.push(['Totale trattamenti', fmtItL(trattamenti.reduce((s, t) => s + t.prezzo, 0))].map(esc).join(sep));
+
+  rows.push('');
+  rows.push(['TOTALE COMBINATO', fmtItL(vendite.reduce((s, v) => s + v.totale, 0) + trattamenti.reduce((s, t) => s + t.prezzo, 0))].map(esc).join(sep));
+
+  const csv = '\uFEFF' + rows.join('\r\n');
+  await saveFile('rivendita', `totale-${parr.nome.toLowerCase().replace(/\s/g, '-')}-${periodoLabel.replace(/\s/g, '-')}.csv`, csv, 'utf8');
+}
+
 async function esportaTotaleRivenditaPDF(vendite: Vendita[], trattamenti: Trattamento[], confronto?: PdfConfrRiv) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const annoCorrente = new Date().getFullYear();
@@ -1176,12 +1413,14 @@ function CassettoTrattamenti({ parr, trattamentiAll, periodo, anni, onPeriodoCha
   const totA = trattA.reduce((s, t) => s + t.prezzo, 0);
   const totB = trattB.reduce((s, t) => s + t.prezzo, 0);
 
-  const perNome: Record<string, number> = {};
+  const perNome: Record<string, { value: number; pezzi: number }> = {};
   for (const t of trattamenti) {
-    perNome[t.nome_trattamento] = (perNome[t.nome_trattamento] || 0) + t.prezzo;
+    if (!perNome[t.nome_trattamento]) perNome[t.nome_trattamento] = { value: 0, pezzi: 0 };
+    perNome[t.nome_trattamento].value += t.prezzo;
+    perNome[t.nome_trattamento].pezzi += 1;
   }
   const nomiData = Object.entries(perNome)
-    .map(([label, value]) => ({ label, value }))
+    .map(([label, { value, pezzi }]) => ({ label, value, pezzi }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
 
@@ -1221,6 +1460,26 @@ function CassettoTrattamenti({ parr, trattamentiAll, periodo, anni, onPeriodoCha
                 <GitCompare size={14} />
                 <span className="hidden sm:inline">Confronta</span>
               </button>
+              {trattamenti.length > 0 && (
+                <>
+                  <button
+                    onClick={() => esportaTrattamentiPDF(parr, trattamenti, labelPeriodo(periodo))}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors"
+                    title="Esporta PDF trattamenti"
+                  >
+                    <Download size={14} />
+                    <span className="hidden sm:inline">PDF</span>
+                  </button>
+                  <button
+                    onClick={() => esportaTrattamentiExcel(parr, trattamenti, labelPeriodo(periodo))}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors"
+                    title="Esporta Excel trattamenti"
+                  >
+                    <Download size={14} />
+                    <span className="hidden sm:inline">Excel</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1390,6 +1649,26 @@ function CassettoTotale({ parr, venditeAll, trattamentiAll, periodo, anni, onPer
                 <GitCompare size={14} />
                 <span className="hidden sm:inline">Confronta</span>
               </button>
+              {(vendite.length > 0 || trattamenti.length > 0) && (
+                <>
+                  <button
+                    onClick={() => esportaTotaleParrPDF(parr, vendite, trattamenti, labelPeriodo(periodo))}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors"
+                    title="Esporta PDF totale"
+                  >
+                    <Download size={14} />
+                    <span className="hidden sm:inline">PDF</span>
+                  </button>
+                  <button
+                    onClick={() => esportaTotaleParrExcel(parr, vendite, trattamenti, labelPeriodo(periodo))}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors"
+                    title="Esporta Excel totale"
+                  >
+                    <Download size={14} />
+                    <span className="hidden sm:inline">Excel</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
