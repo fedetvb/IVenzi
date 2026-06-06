@@ -310,7 +310,20 @@ export async function dbDelete(args: {
   // LOCAL-FIRST: rimuove subito da IndexedDB, poi invia a Supabase in background.
   if (_currentUserId) {
     const idFilter = args.filters.find(f => f.col === 'id' && (f.op === 'eq' || f.op === '='));
-    if (idFilter) await cacheRemoveById(args.table, _currentUserId, idFilter.val as string);
+    if (idFilter) {
+      await cacheRemoveById(args.table, _currentUserId, idFilter.val as string);
+    } else {
+      // Filtro generico (es. fiche_id): rimuove le righe corrispondenti dalla cache
+      try {
+        const cached = await getTableCache(args.table, _currentUserId);
+        if (cached !== null) {
+          const rows = cached as Record<string, unknown>[];
+          const toRemove = applyFiltersToCache<Record<string, unknown>>(cached, { filters: args.filters });
+          const removeIds = new Set(toRemove.map(r => r.id));
+          await setTableCache(args.table, _currentUserId, rows.filter(r => !removeIds.has(r.id)));
+        }
+      } catch { /* cache update failure is non-critical */ }
+    }
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

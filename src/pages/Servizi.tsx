@@ -596,7 +596,7 @@ function ProdottiRivenditaTab() {
     setVendita(null);
     setFlash(`Vendita registrata${parr ? ` per ${parr.nome}` : ''}`);
     setTimeout(() => setFlash(null), 3000);
-    load();
+    await load();
   }
 
   const categorie = [...new Set(prodotti.map(p => p.categoria))].sort();
