@@ -551,6 +551,11 @@ function dbSyncUpsert({ table, rows }) {
   const ts = nowIso();
   const upsertAll = db.transaction((allRows) => {
     for (const row of allRows) {
+      // Non sovrascrivere righe con modifiche locali non ancora sincronizzate
+      try {
+        const local = db.prepare(`SELECT _dirty FROM ${table} WHERE id = ?`).get(row.id);
+        if (local && local._dirty === 1) continue;
+      } catch { /* tabella senza _dirty: prosegui */ }
       const r = coerce({ ...row, synced_at: ts, _dirty: 0 });
       const cols = Object.keys(r).filter(k => r[k] !== undefined);
       db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).run(...cols.map(k => r[k]));
