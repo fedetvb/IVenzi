@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn } from 'lucide-react';
 import { localDateStr, type Cliente, type SchedaColore, type Appuntamento } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated } from '../lib/localDb';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
@@ -428,6 +428,7 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
   const [ficheVoci, setFicheVoci] = useState<FicheVoceCliente[]>([]);
   const [showGraficoGate, setShowGraficoGate] = useState(false);
   const [showGrafico, setShowGrafico] = useState(false);
+  const [fotoZoom, setFotoZoom] = useState(false);
 
   const load = useCallback(async () => {
     const [clRes, scRes, appRes, cscRes, cprRes] = await Promise.all([
@@ -591,13 +592,25 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
       {/* Header card */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 mb-5">
         <div className="flex items-start gap-5">
-          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {((cliente as Record<string, unknown>).foto_base64 as string || cliente.foto_url) ? (
-              <img src={((cliente as Record<string, unknown>).foto_base64 as string) || cliente.foto_url} alt={`${cliente.nome} ${cliente.cognome}`} className="w-full h-full object-cover" />
+          {(() => {
+            const fotoSrc = ((cliente as Record<string, unknown>).foto_base64 as string) || cliente.foto_url;
+            return fotoSrc ? (
+              <button
+                onClick={() => setFotoZoom(true)}
+                className="w-16 h-16 rounded-2xl flex-shrink-0 overflow-hidden relative group focus:outline-none"
+                title="Ingrandisci foto"
+              >
+                <img src={fotoSrc} alt={`${cliente.nome} ${cliente.cognome}`} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                  <ZoomIn size={18} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </button>
             ) : (
-              <span className="text-xl font-bold text-amber-700">{initials}</span>
-            )}
-          </div>
+              <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                <span className="text-xl font-bold text-amber-700">{initials}</span>
+              </div>
+            );
+          })()}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1007,6 +1020,30 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
           onSaved={() => { setAppModal({ open: false }); load(); }}
         />
       )}
+
+      {fotoZoom && (() => {
+        const fotoSrc = ((cliente as Record<string, unknown>).foto_base64 as string) || cliente.foto_url;
+        return (
+          <div
+            className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setFotoZoom(false)}
+          >
+            <button
+              onClick={() => setFotoZoom(false)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <X size={20} className="text-white" />
+            </button>
+            <img
+              src={fotoSrc!}
+              alt={`${cliente.nome} ${cliente.cognome}`}
+              className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
+              style={{ maxHeight: '90vh', maxWidth: '90vw' }}
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }
