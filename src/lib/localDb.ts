@@ -477,9 +477,9 @@ export async function dbRpc(fn: string, params: Record<string, unknown>): Promis
       filters: [{ col: 'id', op: 'eq', val: id }],
       limit: 1,
     });
-    if (cur.data && cur.data.length > 0) {
+    if (cur.data && cur.data.length > 0 && _currentUserId) {
       const row = cur.data[0];
-      await cacheUpdate('prodotti_rivendita_catalogo', _currentUserId!, id, {
+      await cacheUpdate('prodotti_rivendita_catalogo', _currentUserId, id, {
         quantita_stock: Math.max(0, (row.quantita_stock ?? 0) + stockDelta),
         quantita_venduta: Math.max(0, (row.quantita_venduta ?? 0) + vendutaDelta),
       });
