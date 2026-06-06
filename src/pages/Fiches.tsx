@@ -3331,7 +3331,7 @@ function ProdottiRivenditaTab() {
     if (filterCat !== 'all' && p.categoria !== filterCat) return false;
     if (search) {
       const q = search.toLowerCase();
-      return p.nome.toLowerCase().includes(q) || p.marca.toLowerCase().includes(q);
+      return p.nome.toLowerCase().includes(q) || (p.marca ?? '').toLowerCase().includes(q);
     }
     return true;
   });

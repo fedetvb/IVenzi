@@ -189,6 +189,33 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione trattamenti_catalogo tipo:', e.message); }
 
+  // Add deleted_at, totale to rivendita_prodotti if missing
+  try {
+    const rivCols = db.prepare("PRAGMA table_info(rivendita_prodotti)").all().map(c => c.name);
+    if (!rivCols.includes('deleted_at')) {
+      db.exec("ALTER TABLE rivendita_prodotti ADD COLUMN deleted_at TEXT");
+      console.log('[DB] Migrazione: aggiunta colonna deleted_at a rivendita_prodotti');
+    }
+    if (!rivCols.includes('totale')) {
+      db.exec("ALTER TABLE rivendita_prodotti ADD COLUMN totale REAL");
+      db.exec("UPDATE rivendita_prodotti SET totale = prezzo_unitario * quantita WHERE totale IS NULL");
+      console.log('[DB] Migrazione: aggiunta colonna totale a rivendita_prodotti');
+    }
+  } catch(e) { console.warn('[DB] migrazione rivendita_prodotti:', e.message); }
+
+  // Add marca, quantita_minima to prodotti_rivendita_catalogo if missing
+  try {
+    const catCols = db.prepare("PRAGMA table_info(prodotti_rivendita_catalogo)").all().map(c => c.name);
+    if (!catCols.includes('marca')) {
+      db.exec("ALTER TABLE prodotti_rivendita_catalogo ADD COLUMN marca TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna marca a prodotti_rivendita_catalogo');
+    }
+    if (!catCols.includes('quantita_minima')) {
+      db.exec("ALTER TABLE prodotti_rivendita_catalogo ADD COLUMN quantita_minima INTEGER NOT NULL DEFAULT 0");
+      console.log('[DB] Migrazione: aggiunta colonna quantita_minima a prodotti_rivendita_catalogo');
+    }
+  } catch(e) { console.warn('[DB] migrazione prodotti_rivendita_catalogo:', e.message); }
+
   // Rinomina spese_voci → spese per allineamento con Supabase
   try {
     const speseVociExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='spese_voci'").get();
@@ -348,10 +375,10 @@ function createSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS prodotti_rivendita_catalogo (
-      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', categoria TEXT DEFAULT '',
-      prezzo_vendita REAL NOT NULL DEFAULT 0, prezzo_acquisto REAL DEFAULT 0,
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', marca TEXT DEFAULT '',
+      categoria TEXT DEFAULT '', prezzo_vendita REAL NOT NULL DEFAULT 0, prezzo_acquisto REAL DEFAULT 0,
       quantita_stock INTEGER NOT NULL DEFAULT 0, quantita_venduta INTEGER NOT NULL DEFAULT 0,
-      attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT, deleted_at TEXT,
+      quantita_minima INTEGER NOT NULL DEFAULT 0, attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT, deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
@@ -359,8 +386,8 @@ function createSchema() {
       id TEXT PRIMARY KEY, fiche_id TEXT, parrucchiere_id TEXT,
       nome_prodotto TEXT NOT NULL DEFAULT '', quantita INTEGER NOT NULL DEFAULT 1,
       prezzo_unitario REAL NOT NULL DEFAULT 0, costo_unitario REAL DEFAULT 0,
-      data_vendita TEXT NOT NULL, note TEXT DEFAULT '', catalogo_id TEXT, user_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+      totale REAL, data_vendita TEXT NOT NULL, note TEXT DEFAULT '', catalogo_id TEXT, user_id TEXT,
+      deleted_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS trattamenti_eseguiti (
       id TEXT PRIMARY KEY, fiche_id TEXT, parrucchiere_id TEXT,

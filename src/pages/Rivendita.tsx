@@ -635,7 +635,7 @@ function NuovaVenditaModal({ parrucchieri, parrucchierePreselezionato, onClose, 
   const suggerimenti = search.length >= 1
     ? catalogo.filter(p =>
         p.nome.toLowerCase().includes(search.toLowerCase()) ||
-        p.marca.toLowerCase().includes(search.toLowerCase())
+        (p.marca ?? '').toLowerCase().includes(search.toLowerCase())
       ).slice(0, 8)
     : catalogo.slice(0, 8);
 
