@@ -942,7 +942,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
         const r = Math.min(w * 0.055, 7);
         doc.setFillColor(37, 77, 26);
         doc.circle(cx, y + r, r, 'F');
-        y += r * 2 + 3;
+        y += r * 2 + 9;
 
         // titolo
         doc.setFont('helvetica', 'bold');
@@ -990,7 +990,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
         const r = Math.min(w * 0.045, 6);
         doc.setFillColor(37, 77, 26);
         doc.circle(cx, y + r, r, 'F');
-        y += r * 2 + 4;
+        y += r * 2 + 9;
 
         // titolo compatto
         doc.setFont('helvetica', 'bold');
