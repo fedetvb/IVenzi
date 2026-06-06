@@ -47,9 +47,25 @@ function headersToObject(headers: HeadersInit | undefined): Record<string, strin
   return out;
 }
 
-async function getCurrentAuthHeader(): Promise<string> {
+async function getFreshAuthHeader(): Promise<string> {
+  // Try current session first
   const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token ? `Bearer ${session.access_token}` : '';
+  if (session?.access_token) return `Bearer ${session.access_token}`;
+  // No valid session – attempt a refresh
+  try {
+    const { data } = await supabase.auth.refreshSession();
+    if (data.session?.access_token) return `Bearer ${data.session.access_token}`;
+  } catch { /* ignore */ }
+  return '';
+}
+
+async function attemptMutation(
+  m: { url: string; method: string; headers: Record<string, string>; body: string | null },
+  authHeader: string
+): Promise<Response> {
+  const headers: Record<string, string> = { ...m.headers };
+  if (authHeader) headers['Authorization'] = authHeader;
+  return originalFetch(m.url, { method: m.method, headers, body: m.body ?? undefined });
 }
 
 export async function flushPendingSync(): Promise<void> {
@@ -64,34 +80,51 @@ async function syncPending() {
   _syncState = 'syncing';
   notify();
 
-  let failed = false;
-  for (const m of pending) {
-    try {
-      const authHeader = await getCurrentAuthHeader();
-      const headers: Record<string, string> = { ...m.headers };
-      if (authHeader) headers['Authorization'] = authHeader;
+  // Get a fresh auth token before starting
+  let authHeader = await getFreshAuthHeader();
 
-      const res = await originalFetch(m.url, {
-        method: m.method,
-        headers,
-        body: m.body ?? undefined,
-      });
+  let networkFailed = false;
+
+  for (const m of pending) {
+    // Stop if a network-level failure occurred — server errors and
+    // network drops need time to recover, so we pause and retry later.
+    if (networkFailed) break;
+
+    try {
+      let res = await attemptMutation(m, authHeader);
+
+      // If we get a 401 the token may have just expired — refresh and retry once.
+      if (res.status === 401) {
+        authHeader = await getFreshAuthHeader();
+        res = await attemptMutation(m, authHeader);
+      }
 
       if (res.ok || res.status === 404 || res.status === 409) {
-        // Success or conflict/not-found: remove from queue regardless
+        // Success or idempotent conflict: remove from queue.
         await deletePendingMutation(m.id!);
+      } else if (res.status >= 500) {
+        // Server-side error: stop and retry the whole batch later.
+        networkFailed = true;
       } else {
-        failed = true;
-        break;
+        // 4xx permanent error (400, 403, 422 …): the request is structurally
+        // bad and retrying will never succeed.  Skip it so it doesn't block
+        // subsequent mutations.
+        console.warn(`[Sync] Mutazione rimossa (${res.status}):`, m.method, m.url.split('?')[0].split('/rest/v1/')[1]);
+        await deletePendingMutation(m.id!);
       }
     } catch {
-      failed = true;
-      break;
+      // True network error (no connectivity yet): pause and retry later.
+      networkFailed = true;
     }
   }
 
-  _syncState = failed ? 'error' : 'idle';
+  _syncState = networkFailed ? 'error' : 'idle';
   await refreshPendingCount();
+
+  // Auto-retry after 30 s if something failed and we're still online.
+  if (networkFailed && _online) {
+    scheduleSync(30_000);
+  }
 }
 
 function scheduleSync(delay = 2000) {

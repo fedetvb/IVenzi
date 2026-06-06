@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
-import { onOfflineStateChange, type SyncState } from '../lib/offlineFetch';
+import { onOfflineStateChange, flushPendingSync, type SyncState } from '../lib/offlineFetch';
 
 interface PingLogRow {
   eseguito_at: string;
@@ -441,9 +441,15 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
         {isOnline && syncState === 'error' && pendingCount > 0 && (
           <div className="bg-red-50 border-b border-red-200 px-4 sm:px-6 py-2 flex items-center gap-3 flex-shrink-0">
             <WifiOff size={14} className="text-red-500 flex-shrink-0" />
-            <p className="text-sm text-red-700">
-              Impossibile sincronizzare {pendingCount} {pendingCount === 1 ? 'modifica' : 'modifiche'}. Riprovera' automaticamente.
+            <p className="text-sm text-red-700 flex-1">
+              Impossibile sincronizzare {pendingCount} {pendingCount === 1 ? 'modifica' : 'modifiche'}.
             </p>
+            <button
+              onClick={() => flushPendingSync()}
+              className="text-xs font-semibold text-red-700 border border-red-300 rounded-md px-2.5 py-1 hover:bg-red-100 transition-colors flex-shrink-0"
+            >
+              Riprova
+            </button>
           </div>
         )}
 
