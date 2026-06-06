@@ -1104,7 +1104,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
 type QrLayout = 'con_frase' | 'solo_punti' | 'solo_qr';
 type QrFormato = 'a4' | 'a5' | 'a6' | 'cartolina';
 
-const BELLA_FRASE = 'Ogni capello racconta una storia.\nLasciaci essere parte della tua.';
+const BELLA_FRASE = 'Ogni capello racconta una storia.\nScriviamola insieme!';
 
 const FORMATO_LABELS: Record<QrFormato, string> = {
   a4: 'A4 (210×297 mm)',
