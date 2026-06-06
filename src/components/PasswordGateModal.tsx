@@ -18,7 +18,7 @@ export default function PasswordGateModal({ titolo = 'Operazione protetta', desc
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 60);
+    setTimeout(() => { window.focus(); inputRef.current?.focus(); }, 100);
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

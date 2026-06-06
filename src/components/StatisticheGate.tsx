@@ -23,7 +23,7 @@ export default function StatisticheGate({ children, isActive, chiave, sezione, s
   }, [isActive]);
 
   useEffect(() => {
-    if (!unlocked) setTimeout(() => inputRef.current?.focus(), 50);
+    if (!unlocked) setTimeout(() => { window.focus(); inputRef.current?.focus(); }, 100);
   }, [unlocked]);
 
   async function handleSubmit(e: React.FormEvent) {
