@@ -328,9 +328,9 @@ function PaginaTema({ onBack }: { onBack: () => void }) {
 
       if (!error) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
-        const logoUrl = urlData.publicUrl;
+        const logoUrl = urlData.publicUrl + '?v=' + Date.now();
         apply({ logoUrl });
-        // Persist URL in impostazioni for cross-device sync
+        // Persist URL in impostazioni for cross-device sync (with version param to bust cache)
         await supabase.from('impostazioni').upsert(
           { chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id },
           { onConflict: 'chiave,user_id' }
@@ -1257,9 +1257,9 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
       if (!error) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
-        const logoUrl = urlData.publicUrl + '?t=' + Date.now();
+        const logoUrl = urlData.publicUrl + '?v=' + Date.now();
         await supabase.from('impostazioni').upsert(
-          { chiave: 'logo_salone_url', valore: urlData.publicUrl, user_id: user.id },
+          { chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id },
           { onConflict: 'chiave,user_id' }
         );
         setRegPageLogo(logoUrl);

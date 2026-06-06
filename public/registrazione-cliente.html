@@ -196,12 +196,14 @@ var EF = SU + "/functions/v1/registrazione-cliente";
 
 (function loadLogo() {
   fetch(SU + "/rest/v1/impostazioni?chiave=eq.logo_salone_url&select=valore&limit=1", {
-    headers: { "apikey": SK, "Authorization": "Bearer " + SK }
+    headers: { "apikey": SK, "Authorization": "Bearer " + SK },
+    cache: "no-store"
   }).then(function(r) { return r.json(); }).then(function(rows) {
     if (rows && rows.length > 0 && rows[0].valore) {
+      var url = rows[0].valore;
       var img = document.getElementById('logoImg');
       if (img) {
-        img.src = rows[0].valore;
+        img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_v=' + Date.now();
         img.style.width = '40px';
         img.style.height = '40px';
         img.style.objectFit = 'cover';
