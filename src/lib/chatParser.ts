@@ -97,7 +97,9 @@ function extractGiorni(text: string, def = 60): number {
 
 function extractOra(text: string): string | null {
   // "alle 10", "alle 10:30", "10:30", "ore 10"
-  const m = text.match(/(?:alle?|ore?)\s*(\d{1,2})(?::(\d{2}))?/) || text.match(/\b(\d{1,2}):(\d{2})\b/);
+  const m = text.match(/(?:alle?|ore?)\s*(\d{1,2})(?::(\d{2}))?/)
+    || text.match(/\b(\d{1,2}):(\d{2})\b/)
+    || text.match(/\b([89]|1\d|20)\b/); // numero standalone 8-20 = ora
   if (!m) return null;
   const h = m[1].padStart(2, '0');
   const min = (m[2] || '00').padStart(2, '0');
@@ -186,9 +188,11 @@ function parseFissaAppuntamento(raw: string, text: string, parrucchieriNomi: str
 
   // Costruisci un testo "pulito" rimuovendo tutto tranne i nomi propri
   let cleaned = text
-    .replace(/\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea)\b/gi, '')
+    .replace(/\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea|vorrei|voglio|posso|puoi)\b/gi, '')
     .replace(/\bappuntamento\b/gi, '')
     .replace(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/gi, '')
+    .replace(/\b\d{1,2}:\d{2}\b/gi, '') // "10:30"
+    .replace(/\b([89]|1\d|20)\b/gi, '') // numero ora standalone 8-20
     .replace(/\bdomani\b|\boggi\b|\bdopodomani\b|\bieri\b/gi, '')
     .replace(/\b(lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)\b/gi, '')
     .replace(/\bprossim[oa]\b/gi, '');
