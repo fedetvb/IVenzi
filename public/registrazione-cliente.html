@@ -6,11 +6,11 @@
 <title>Scheda Cliente</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#fafaf9 0%,#f0f7f4 100%);min-height:100vh;color:#1c1917}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#fafaf9 0%,#edf5e8 100%);min-height:100vh;color:#1c1917}
 .header{background:white;border-bottom:1.5px solid #e7e5e4;padding:20px 24px;text-align:center;position:sticky;top:0;z-index:10}
 .hi{display:inline-flex;align-items:center;gap:10px;margin-bottom:4px}
-.logo{width:36px;height:36px;background:#4a7c6a;border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(74,124,106,.3)}
-.logo svg{width:18px;height:18px;fill:none;stroke:white;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.logo{width:40px;height:40px;background:#254d1a;border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(37,77,26,.35);overflow:hidden}
+.logo img{width:28px;height:28px;object-fit:contain}
 .header h1{font-size:18px;font-weight:700;color:#1c1917}
 .header p{font-size:13px;color:#78716c}
 .container{max-width:460px;margin:0 auto;padding:28px 20px 48px}
@@ -21,30 +21,30 @@ label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;lett
 .ii{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:16px;height:16px;fill:none;stroke:#a8a29e;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 .ti{top:14px;transform:none}
 input,textarea,select{width:100%;padding:13px 16px 13px 44px;background:white;border:1.5px solid #e7e5e4;border-radius:14px;font-size:14px;color:#1c1917;outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;font-family:inherit}
-input:focus,textarea:focus{border-color:#4a7c6a;box-shadow:0 0 0 3px rgba(74,124,106,.15)}
+input:focus,textarea:focus{border-color:#254d1a;box-shadow:0 0 0 3px rgba(37,77,26,.15)}
 input::placeholder,textarea::placeholder{color:#c4bfbb}
 textarea{resize:none;padding-top:13px;line-height:1.5}
 
 /* Photo */
 .photo-area{display:flex;flex-direction:column;align-items:center;gap:12px;padding:4px 0}
 .photo-circle{width:100px;height:100px;border-radius:50%;background:#f5f5f4;border:2.5px dashed #d6d3d1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .15s,background .15s;overflow:hidden;flex-shrink:0}
-.photo-circle:hover{border-color:#4a7c6a;background:#f0f7f4}
+.photo-circle:hover{border-color:#254d1a;background:#edf5e8}
 .photo-circle svg{width:28px;height:28px;fill:none;stroke:#a8a29e;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .photo-circle span{font-size:11px;color:#a8a29e;font-weight:600;text-align:center;line-height:1.3}
-.photo-circle.has-photo{border-style:solid;border-color:#4a7c6a}
+.photo-circle.has-photo{border-style:solid;border-color:#254d1a}
 #photoPreview{width:100%;height:100%;object-fit:cover;display:none}
 .photo-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .pbtn{padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:1.5px solid #e7e5e4;background:white;color:#57534e;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;font-family:inherit}
 .pbtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.pbtn:hover{border-color:#4a7c6a;color:#3d6b5a;background:#f0f7f4}
+.pbtn:hover{border-color:#254d1a;color:#1e3f14;background:#edf5e8}
 .pbtn.del{border-color:#fecaca;color:#dc2626}
 .pbtn.del:hover{background:#fef2f2}
 .prog{width:100%;height:4px;background:#e7e5e4;border-radius:4px;overflow:hidden;display:none}
-.prog-bar{height:100%;background:#4a7c6a;border-radius:4px;transition:width .3s}
+.prog-bar{height:100%;background:#254d1a;border-radius:4px;transition:width .3s}
 
 .privacy{font-size:12px;color:#a8a29e;line-height:1.7;margin-bottom:22px;padding:12px 14px;background:#fafaf9;border-radius:10px;border:1px solid #f0ece8}
-.btn{width:100%;padding:16px;background:#4a7c6a;color:white;font-size:15px;font-weight:700;border:none;border-radius:14px;cursor:pointer;transition:background .15s,transform .1s,box-shadow .15s;box-shadow:0 4px 14px rgba(74,124,106,.35);letter-spacing:.01em;font-family:inherit}
-.btn:hover{background:#3d6b5a;box-shadow:0 6px 18px rgba(74,124,106,.4)}
+.btn{width:100%;padding:16px;background:#254d1a;color:white;font-size:15px;font-weight:700;border:none;border-radius:14px;cursor:pointer;transition:background .15s,transform .1s,box-shadow .15s;box-shadow:0 4px 14px rgba(37,77,26,.35);letter-spacing:.01em;font-family:inherit}
+.btn:hover{background:#1e3f14;box-shadow:0 6px 18px rgba(37,77,26,.4)}
 .btn:active{transform:scale(.98)}
 .btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
 .eb{display:flex;align-items:center;gap:10px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#dc2626}
@@ -54,20 +54,20 @@ textarea{resize:none;padding-top:13px;line-height:1.5}
 .si svg{width:40px;height:40px;fill:none;stroke:#16a34a;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 .ss h2{font-size:28px;font-weight:800;color:#1c1917;margin-bottom:12px}
 .ss p{font-size:15px;color:#78716c;line-height:1.7;max-width:290px}
-.sf{margin-top:32px;display:inline-flex;align-items:center;gap:8px;color:#4a7c6a;font-size:14px;font-weight:700;background:#f0f7f4;padding:10px 20px;border-radius:50px;border:1.5px solid #c5dfd8}
+.sf{margin-top:32px;display:inline-flex;align-items:center;gap:8px;color:#254d1a;font-size:14px;font-weight:700;background:#edf5e8;padding:10px 20px;border-radius:50px;border:1.5px solid #a8cfa0}
 .sf svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .divider{height:1px;background:#f0ece8;margin:8px 0 22px}
 .section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;margin-bottom:14px;margin-top:6px}
-.photo-intro{background:linear-gradient(135deg,#f0f7f4,#e8f5f1);border:1.5px solid #c5dfd8;border-radius:16px;padding:16px 18px;margin-bottom:20px;text-align:center}
+.photo-intro{background:linear-gradient(135deg,#edf5e8,#ddecd5);border:1.5px solid #a8cfa0;border-radius:16px;padding:16px 18px;margin-bottom:20px;text-align:center}
 .photo-intro-text{font-size:14px;color:#78716c;line-height:1.65;font-style:italic;margin-bottom:8px}
-.photo-badge{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3d6b5a;background:#daf0e9;border:1px solid #c5dfd8;border-radius:20px;padding:3px 10px}
+.photo-badge{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#1e3f14;background:#cce8c4;border:1px solid #a8cfa0;border-radius:20px;padding:3px 10px}
 </style>
 </head>
 <body>
 <div class="header">
   <div class="hi">
     <div class="logo">
-      <svg viewBox="0 0 24 24"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>
+      <img src="/icons/I_Venzi_iniziali.png" alt="I·V" />
     </div>
     <h1>Scheda Cliente</h1>
   </div>
