@@ -753,8 +753,20 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
       const result = await saveFile('backup', suggestedName, jsonStr);
       if (result?.filePath) {
         setFeedback({ tipo: 'ok', msg: `Backup salvato in: ${result.filePath}` });
+      } else if (isElectronEnv()) {
+        // In Electron senza cartella configurata: dialogo nativo di salvataggio
+        const api = (window as any).electronAPI;
+        const saved = await api.saveBackupFile(suggestedName, jsonStr);
+        if (saved?.ok && saved?.filePath) {
+          setFeedback({ tipo: 'ok', msg: `Backup salvato in: ${saved.filePath}` });
+        } else if (saved?.ok === false && !saved?.filePath) {
+          // Utente ha annullato il dialogo
+          setFeedback(null);
+        } else {
+          setFeedback({ tipo: 'err', msg: 'Salvataggio annullato o non riuscito.' });
+        }
       } else {
-        // Nessuna cartella configurata o web: fallback al download del browser
+        // Web: fallback download browser
         browserDownload(suggestedName, jsonStr);
         setFeedback({ tipo: 'ok', msg: 'Backup scaricato con successo.' });
       }
