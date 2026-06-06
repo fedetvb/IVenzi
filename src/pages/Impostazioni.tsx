@@ -1172,6 +1172,7 @@ async function buildQrWithLogo(qrImgUrl: string, logo: string | null): Promise<s
 }
 
 function PaginaQRCode({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
   const [registrazioneUrl, setRegistrazioneUrl] = useState('https://silver-kitsune-3a0339.netlify.app/');
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
@@ -1182,6 +1183,9 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(QR_LOGO_DEFAULT);
   const [qrComposite, setQrComposite] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [regPageLogo, setRegPageLogo] = useState<string | null>(null);
+  const [regLogoUploading, setRegLogoUploading] = useState(false);
+  const regLogoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -1189,6 +1193,8 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       if (val) setRegistrazioneUrl(val);
       const saved = localStorage.getItem(QR_LOGO_KEY);
       setLogoDataUrl(saved || QR_LOGO_DEFAULT);
+      const { data } = await supabase.from('impostazioni').select('valore').eq('chiave', 'logo_salone_url').maybeSingle();
+      if (data?.valore) setRegPageLogo(data.valore);
     })();
   }, []);
 
@@ -1196,8 +1202,8 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     const trimmed = urlDraft.trim();
     if (!trimmed) return;
     setSavingUrl(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    await setImpostazione('registrazione_url', trimmed, user?.id);
+    const { data: { user: u } } = await supabase.auth.getUser();
+    await setImpostazione('registrazione_url', trimmed, u?.id);
     setRegistrazioneUrl(trimmed);
     setEditingUrl(false);
     setSavingUrl(false);
@@ -1226,6 +1232,38 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   function handleRemoveLogo() {
     setLogoDataUrl(QR_LOGO_DEFAULT);
     localStorage.removeItem(QR_LOGO_KEY);
+  }
+
+  async function handleRegLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    e.target.value = '';
+    setRegLogoUploading(true);
+    try {
+      const blob = await compressImage(file);
+      const path = `logo/${user.id}/salone-logo.jpg`;
+      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+        const logoUrl = urlData.publicUrl + '?t=' + Date.now();
+        await supabase.from('impostazioni').upsert(
+          { chiave: 'logo_salone_url', valore: urlData.publicUrl, user_id: user.id },
+          { onConflict: 'chiave,user_id' }
+        );
+        setRegPageLogo(logoUrl);
+      }
+    } finally {
+      setRegLogoUploading(false);
+    }
+  }
+
+  async function handleRegLogoRemove() {
+    if (!user) return;
+    await supabase.from('impostazioni').upsert(
+      { chiave: 'logo_salone_url', valore: '', user_id: user.id },
+      { onConflict: 'chiave,user_id' }
+    );
+    setRegPageLogo(null);
   }
 
   async function handleDownloadPdf() {
@@ -1625,6 +1663,54 @@ document.getElementById("f").onsubmit=async function(e){
             )}
           </div>
         </div>
+      </div>
+
+      {/* Logo pagina registrazione */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+        <p className="text-sm font-bold text-stone-800 mb-1">Logo pagina registrazione</p>
+        <p className="text-xs text-stone-400 mb-4">Questa icona compare nell'intestazione della pagina che le clienti vedono quando compilano il modulo di registrazione.</p>
+        <input ref={regLogoInputRef} type="file" accept="image/*" className="hidden" onChange={handleRegLogoUpload} />
+        {regPageLogo ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl border border-stone-200 overflow-hidden flex-shrink-0 bg-stone-50">
+              <img src={regPageLogo} alt="Logo registrazione" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-stone-700 mb-2">Logo attivo</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => regLogoInputRef.current?.click()}
+                  disabled={regLogoUploading}
+                  className="px-3 py-1.5 text-xs font-semibold border border-stone-200 rounded-lg text-stone-600 hover:border-amber-300 hover:text-amber-700 transition-colors disabled:opacity-40"
+                >
+                  {regLogoUploading ? 'Caricamento...' : 'Cambia'}
+                </button>
+                <button
+                  onClick={handleRegLogoRemove}
+                  className="px-3 py-1.5 text-xs font-semibold border border-stone-200 rounded-lg text-stone-500 hover:bg-stone-50 transition-colors"
+                >
+                  Rimuovi
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => regLogoInputRef.current?.click()}
+            disabled={regLogoUploading}
+            className="w-full flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-stone-200 rounded-xl hover:border-amber-300 hover:bg-amber-50 transition-all group disabled:opacity-40"
+          >
+            <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center transition-colors">
+              <ImagePlus size={18} className="text-stone-400 group-hover:text-amber-600 transition-colors" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-stone-600 group-hover:text-amber-700 transition-colors">
+                {regLogoUploading ? 'Caricamento...' : 'Carica logo'}
+              </p>
+              <p className="text-xs text-stone-400">PNG, JPG — verrà mostrato sulla pagina di registrazione clienti</p>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Logo QR */}
