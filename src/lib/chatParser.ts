@@ -132,7 +132,7 @@ const PAROLE_FUNZIONE = new Set([
 ]);
 
 function parseFissaAppuntamento(raw: string, text: string, parrucchieriNomi: string[] = []): ParsedIntent | null {
-  const KW_VERBI = /\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea|vorrei|voglio|posso|puoi)\b/i;
+  const KW_VERBI = /\b(fissa|fissiamo|prenota|prenotare|prendi|prendimi|metti|mettimi|segna|segnami|crea|scrivi|scrivimi|inserisci|aggiungi|vorrei|voglio|posso|puoi)\b/i;
   const hasVerbo = KW_VERBI.test(text);
   const hasAppuntamento = /\bappuntament[oi]?\b/.test(text);
   if (!hasVerbo && !hasAppuntamento) return null;
@@ -188,7 +188,7 @@ function parseFissaAppuntamento(raw: string, text: string, parrucchieriNomi: str
 
   // Costruisci un testo "pulito" rimuovendo tutto tranne i nomi propri
   let cleaned = text
-    .replace(/\b(fissa|fissiamo|prenota|prenotare|prendi|metti|segna|crea|vorrei|voglio|posso|puoi)\b/gi, '')
+    .replace(/\b(fissa|fissiamo|prenota|prenotare|prendi|prendimi|metti|mettimi|segna|segnami|crea|scrivi|scrivimi|inserisci|aggiungi|vorrei|voglio|posso|puoi)\b/gi, '')
     .replace(/\bappuntamento\b/gi, '')
     .replace(/(?:alle?|ore?)\s*\d{1,2}(?::\d{2})?/gi, '')
     .replace(/\b\d{1,2}:\d{2}\b/gi, '') // "10:30"
