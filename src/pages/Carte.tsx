@@ -344,6 +344,16 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
           ordine: 0,
           user_id: user?.id,
         }});
+        if (tipoPagamento !== 'contanti_nero' && prezzoCliente > 0) {
+          await dbInsert({ table: 'incassi_giornalieri', data: {
+            data: localDateStr(),
+            fiche_id: ficheId,
+            cliente_nome: clienteNome,
+            importo: prezzoCliente,
+            note: `Carta premium ${form.codice} - carica iniziale`,
+            user_id: user?.id,
+          }});
+        }
       }
     }
     setSaving(false);
@@ -536,6 +546,16 @@ function RicaricaModal({ carta, onClose, onSaved }: {
           ordine: 0,
           user_id: user?.id,
         }});
+        if (tipoPagamento !== 'contanti_nero' && prezzoCliente > 0) {
+          await dbInsert({ table: 'incassi_giornalieri', data: {
+            data: oggi,
+            fiche_id: ficheId,
+            cliente_nome: clienteNome,
+            importo: prezzoCliente,
+            note: `Ricarica carta premium ${carta.codice}`,
+            user_id: user?.id,
+          }});
+        }
       }
     }
     setSaving(false);
