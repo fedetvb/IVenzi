@@ -11,6 +11,8 @@ import { saveFile } from '../lib/fileSaver';
 
 interface Props {
   onSelectCliente: (id: string) => void;
+  openSchedaId?: string | null;
+  onSchedaOpened?: () => void;
 }
 
 interface SchedaDaConfermare {
@@ -26,7 +28,7 @@ interface SchedaDaConfermare {
   created_at: string;
 }
 
-export default function Clienti({ onSelectCliente }: Props) {
+export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened }: Props) {
   const { user } = useAuth();
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [clientiCarteMap, setClientiCarteMap] = useState<Map<string, Set<string>>>(new Map());
@@ -80,6 +82,36 @@ export default function Clienti({ onSelectCliente }: Props) {
 
   // Carica schede in attesa all'avvio
   useEffect(() => { loadSchede(); }, [loadSchede]);
+
+  // Apri automaticamente una scheda specifica quando richiesto dal banner
+  useEffect(() => {
+    if (!openSchedaId) return;
+    setTab('da_confermare');
+    // Se le schede sono già caricate, aprila subito; altrimenti aspetta il load
+    const found = schede.find(s => s.id === openSchedaId);
+    if (found) {
+      setSchedaAperta(found);
+      onSchedaOpened?.();
+    } else {
+      // Ricarica e poi apri
+      supabase
+        .from('schede_clienti_da_confermare')
+        .select('*')
+        .eq('id', openSchedaId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            setSchede(prev => {
+              if (prev.find(s => s.id === data.id)) return prev;
+              return [data as SchedaDaConfermare, ...prev];
+            });
+            setSchedaAperta(data as SchedaDaConfermare);
+          }
+          onSchedaOpened?.();
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSchedaId]);
 
   // Realtime: aggiorna il conteggio quando arriva una nuova scheda
   useEffect(() => {

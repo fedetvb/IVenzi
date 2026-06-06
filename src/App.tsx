@@ -80,6 +80,7 @@ export default function App() {
   const [showNuovaSchedaBanner, setShowNuovaSchedaBanner] = useState(false);
   const [nuovaSchedaNome, setNuovaSchedaNome] = useState('');
   const [nuovaSchedaCurrentId, setNuovaSchedaCurrentId] = useState<string | null>(null);
+  const [schedaIdToOpen, setSchedaIdToOpen] = useState<string | null>(null);
 
   const [electronDbReady, setElectronDbReadyState] = useState(false);
   const hasFicheNonConvalidateRef = { current: false };
@@ -348,8 +349,17 @@ export default function App() {
     if (nuovaSchedaCurrentId) markSchedaDismissed(nuovaSchedaCurrentId);
     setShowNuovaSchedaBanner(false);
     setNuovaSchedaCurrentId(null);
-    // Controlla se ci sono altre schede pendenti non ancora viste
     setTimeout(checkAndShowPendingScheda, 400);
+  }
+
+  function apriSchedaDalBanner() {
+    if (!nuovaSchedaCurrentId) return;
+    const id = nuovaSchedaCurrentId;
+    markSchedaDismissed(id);
+    setShowNuovaSchedaBanner(false);
+    setNuovaSchedaCurrentId(null);
+    setSchedaIdToOpen(id);
+    navigateTo('clienti');
   }
 
   // Realtime + polling: avviso nuova scheda cliente da confermare
@@ -487,12 +497,13 @@ export default function App() {
             <div className="w-9 h-9 rounded-xl bg-pink-100 flex items-center justify-center flex-shrink-0 mt-0.5">
               <ClipboardList size={16} className="text-pink-500" />
             </div>
-            <div className="flex-1">
+            <button className="flex-1 text-left" onClick={apriSchedaDalBanner}>
               <p className="text-sm font-bold text-pink-900">Nuova scheda da confermare!</p>
               <p className="text-xs text-pink-700 mt-0.5">
-                <span className="font-semibold">{nuovaSchedaNome}</span> ha inviato i suoi dati tramite il form. Vai su Clienti per confermarla.
+                <span className="font-semibold">{nuovaSchedaNome}</span> ha inviato i suoi dati.{' '}
+                <span className="underline font-semibold">Tocca per aprirla.</span>
               </p>
-            </div>
+            </button>
             <button
               onClick={dismissSchedaBanner}
               className="p-1 hover:bg-pink-100 rounded-lg transition-colors text-pink-400 hover:text-pink-600 flex-shrink-0"
@@ -540,7 +551,11 @@ export default function App() {
         )}
         {page === 'agenda' && <Agenda selectedDay={agendaSelectedDay} setSelectedDay={handleSetAgendaDay} />}
         {page === 'clienti' && !selectedCliente && (
-          <Clienti onSelectCliente={handleSelectCliente} />
+          <Clienti
+            onSelectCliente={handleSelectCliente}
+            openSchedaId={schedaIdToOpen}
+            onSchedaOpened={() => setSchedaIdToOpen(null)}
+          />
         )}
         {page === 'clienti' && selectedCliente && (
           <SchedaCliente
