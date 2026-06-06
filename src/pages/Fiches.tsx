@@ -3167,9 +3167,7 @@ function VociExtraTab() {
                   <h3 className="font-semibold text-stone-800 text-sm leading-tight">{v.nome}</h3>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button onClick={() => openEdit(v)} className="p-1 text-stone-400 hover:text-amber-600 transition-colors rounded"><Pencil size={13} /></button>
-                    {!v.nome.toLowerCase().includes('rivendita') && (
-                      <button onClick={() => handleDelete(v.id)} className="p-1 text-stone-400 hover:text-red-500 transition-colors rounded"><Trash2 size={13} /></button>
-                    )}
+                    <button onClick={() => handleDelete(v.id)} className="p-1 text-stone-400 hover:text-red-500 transition-colors rounded"><Trash2 size={13} /></button>
                   </div>
                 </div>
                 {v.descrizione && <p className="text-xs text-stone-400 mb-3 line-clamp-2">{v.descrizione}</p>}

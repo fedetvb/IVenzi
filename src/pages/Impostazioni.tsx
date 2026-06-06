@@ -3,7 +3,7 @@ import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLef
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
-import { saveFile } from '../lib/fileSaver';
+import { saveFile, browserDownload } from '../lib/fileSaver';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle';
@@ -440,10 +440,12 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
       const suggestedName = `backup-salone-${localDateStr()}.json`;
 
       const result = await saveFile('backup', suggestedName, jsonStr);
-      if (result) {
-        setFeedback({ tipo: 'ok', msg: result.filePath ? `Backup salvato in: ${result.filePath}` : 'Backup esportato con successo.' });
+      if (result?.filePath) {
+        setFeedback({ tipo: 'ok', msg: `Backup salvato in: ${result.filePath}` });
       } else {
-        setFeedback({ tipo: 'ok', msg: 'Backup esportato con successo.' });
+        // Nessuna cartella configurata o web: fallback al download del browser
+        browserDownload(suggestedName, jsonStr);
+        setFeedback({ tipo: 'ok', msg: 'Backup scaricato con successo.' });
       }
     } catch (e) {
       setFeedback({ tipo: 'err', msg: String(e) });
