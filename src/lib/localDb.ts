@@ -467,6 +467,24 @@ export async function dbRpc(fn: string, params: Record<string, unknown>): Promis
       return { error: null };
     }
   }
+  // Web: aggiorna la cache IndexedDB per aggiorna_stock_catalogo (stesso pattern di Electron)
+  if (fn === 'aggiorna_stock_catalogo') {
+    const id = params.p_id as string;
+    const stockDelta = (params.p_stock_delta as number) ?? 0;
+    const vendutaDelta = (params.p_venduta_delta as number) ?? 0;
+    const cur = await dbSelect<{ id: string; quantita_stock: number; quantita_venduta: number }>({
+      table: 'prodotti_rivendita_catalogo',
+      filters: [{ col: 'id', op: 'eq', val: id }],
+      limit: 1,
+    });
+    if (cur.data && cur.data.length > 0) {
+      const row = cur.data[0];
+      await cacheUpdate('prodotti_rivendita_catalogo', _currentUserId!, id, {
+        quantita_stock: Math.max(0, (row.quantita_stock ?? 0) + stockDelta),
+        quantita_venduta: Math.max(0, (row.quantita_venduta ?? 0) + vendutaDelta),
+      });
+    }
+  }
   try {
     const { error } = await supabase.rpc(fn, params);
     return { error: error as Error | null };
