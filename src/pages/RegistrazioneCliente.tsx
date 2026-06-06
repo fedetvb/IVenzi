@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, Phone, Mail, Calendar, FileText, Check, Scissors, AlertCircle } from 'lucide-react';
 
@@ -22,6 +22,18 @@ export default function RegistrazioneCliente() {
   });
   const [stato, setStato] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errore, setErrore] = useState('');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from('impostazioni')
+      .select('valore')
+      .eq('chiave', 'logo_salone_url')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.valore) setLogoUrl(data.valore);
+      });
+  }, []);
 
   function setField(k: keyof Form, v: string) {
     const val = (k === 'nome' || k === 'cognome') && v ? v.charAt(0).toUpperCase() + v.slice(1) : v;
@@ -81,9 +93,13 @@ export default function RegistrazioneCliente() {
       {/* Header */}
       <div className="bg-white border-b border-stone-200 px-6 py-5 text-center">
         <div className="flex items-center justify-center gap-2 mb-1">
-          <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
-            <Scissors size={16} className="text-white" />
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo salone" className="w-8 h-8 rounded-lg object-cover" />
+          ) : (
+            <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
+              <Scissors size={16} className="text-white" />
+            </div>
+          )}
           <span className="text-lg font-bold text-stone-800">Scheda Cliente</span>
         </div>
         <p className="text-sm text-stone-500">Compila il modulo per registrarti</p>
