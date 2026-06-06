@@ -1363,14 +1363,23 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoMatch[1], p_stock_delta: 1, p_venduta_delta: -1 });
       }
 
-      // Rimuovi voci rivendita generate dalla fiche
-      await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      // Rimuovi voci rivendita generate dalla fiche (per id per sicurezza cache)
+      const { data: rivVoci } = await dbSelect({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      for (const rv of rivVoci || []) {
+        await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'id', op: 'eq', val: (rv as any).id }] });
+      }
 
       // Rimuovi trattamenti generati dalla fiche
-      await dbDelete({ table: 'trattamenti_eseguiti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      const { data: trattVoci } = await dbSelect({ table: 'trattamenti_eseguiti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      for (const tv of trattVoci || []) {
+        await dbDelete({ table: 'trattamenti_eseguiti', filters: [{ col: 'id', op: 'eq', val: (tv as any).id }] });
+      }
 
-      // Rimuovi incasso giornaliero
-      await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      // Rimuovi incasso giornaliero (per id per garantire rimozione dalla cache)
+      const { data: incassi } = await dbSelect({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      for (const inc of incassi || []) {
+        await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'id', op: 'eq', val: (inc as any).id }] });
+      }
 
       // Riporta fiche a non-convalidata
       await dbUpdate({ table: 'fiches', id: ficheId, data: { convalidata: false, convalidata_at: null, importo_convalidato: 0 } });
@@ -1427,13 +1436,24 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
             if (rpcErr) console.error('[handleElimina] ripristino stock fallito:', catalogoMatch[1], rpcErr);
           }
 
-          // Rimuovi voci rivendita e trattamenti generati
-          const rivRes = await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
-          if (rivRes.error) console.error('[handleElimina] delete rivendita_prodotti:', rivRes.error);
-          await dbDelete({ table: 'trattamenti_eseguiti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          // Rimuovi voci rivendita (per id per garantire rimozione dalla cache)
+          const { data: rivVociE } = await dbSelect({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          for (const rv of rivVociE || []) {
+            const r = await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'id', op: 'eq', val: (rv as any).id }] });
+            if (r.error) console.error('[handleElimina] delete rivendita_prodotti:', r.error);
+          }
 
-          // Rimuovi incasso giornaliero
-          await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          // Rimuovi trattamenti generati
+          const { data: trattVociE } = await dbSelect({ table: 'trattamenti_eseguiti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          for (const tv of trattVociE || []) {
+            await dbDelete({ table: 'trattamenti_eseguiti', filters: [{ col: 'id', op: 'eq', val: (tv as any).id }] });
+          }
+
+          // Rimuovi incasso giornaliero (per id per garantire rimozione dalla cache)
+          const { data: incassiE } = await dbSelect({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          for (const inc of incassiE || []) {
+            await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'id', op: 'eq', val: (inc as any).id }] });
+          }
         }
 
         // Elimina fiche_voci prima (per sicurezza) poi la fiche
