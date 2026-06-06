@@ -70,6 +70,8 @@ export interface DbAPI {
   syncUpsert: (args: { table: string; rows: Record<string, unknown>[] }) => Promise<DbIpcResult>;
   getDirty: (table: string) => Promise<DbIpcResult>;
   markSynced: (table: string, ids: string[]) => Promise<DbIpcResult>;
+  getPendingDeletes: (table: string) => Promise<DbIpcResult>;
+  markDeletesSynced: (ids: string[]) => Promise<DbIpcResult>;
   export: () => Promise<DbIpcResult<Record<string, unknown[]>>>;
   importBackup: (data: Record<string, unknown>) => Promise<DbIpcResult & { success?: boolean; results?: Record<string, unknown> }>;
   getPath: () => Promise<{ path: string; exists: boolean }>;

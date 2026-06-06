@@ -199,6 +199,21 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione spese_voci→spese:', e.message); }
 
+  // Create pending_deletes table if missing (for offline delete sync)
+  try {
+    const pdExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_deletes'").get();
+    if (!pdExists) {
+      db.exec(`
+        CREATE TABLE pending_deletes (
+          id TEXT PRIMARY KEY, table_name TEXT NOT NULL, record_id TEXT NOT NULL,
+          deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_pending_deletes_table ON pending_deletes(table_name);
+      `);
+      console.log('[DB] Migrazione: creata tabella pending_deletes');
+    }
+  } catch(e) { console.warn('[DB] migrazione pending_deletes:', e.message); }
+
   // Create incassi_giornalieri table if missing (was previously named 'incassi')
   try {
     const igExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='incassi_giornalieri'").get();
@@ -405,6 +420,11 @@ function createSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS pending_deletes (
+      id TEXT PRIMARY KEY, table_name TEXT NOT NULL, record_id TEXT NOT NULL,
+      deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_pending_deletes_table ON pending_deletes(table_name);
     CREATE INDEX IF NOT EXISTS idx_appuntamenti_data ON appuntamenti(data_ora);
     CREATE INDEX IF NOT EXISTS idx_fiches_app ON fiches(appuntamento_id);
     CREATE INDEX IF NOT EXISTS idx_fiche_voci_fiche ON fiche_voci(fiche_id);
@@ -481,9 +501,34 @@ function dbDelete({ table, filters }) {
   try {
     const wp = [], params = [];
     applyFilters(wp, params, filters);
+    // Track deleted IDs in pending_deletes so sync can push the deletion to Supabase
+    try {
+      const toDelete = db.prepare(`SELECT id FROM ${table} WHERE ${wp.join(' AND ')}`).all(...params);
+      if (toDelete.length > 0) {
+        const insertPending = db.prepare('INSERT OR IGNORE INTO pending_deletes (id, table_name, record_id, deleted_at) VALUES (?,?,?,?)');
+        const ts = nowIso();
+        for (const row of toDelete) {
+          if (row.id) insertPending.run(generateId(), table, row.id, ts);
+        }
+      }
+    } catch (e2) { console.warn('[DB] pending_deletes insert:', e2.message); }
     db.prepare(`DELETE FROM ${table} WHERE ${wp.join(' AND ')}`).run(...params);
     return true;
   } catch (e) { console.error(`[DB] DELETE ${table}:`, e.message); return false; }
+}
+
+function getPendingDeletes(table) {
+  if (!db) return [];
+  try { return db.prepare('SELECT * FROM pending_deletes WHERE table_name = ?').all(table); }
+  catch { return []; }
+}
+
+function markDeletesSynced(ids) {
+  if (!db || !ids || !ids.length) return;
+  try {
+    const ph = ids.map(() => '?').join(',');
+    db.prepare(`DELETE FROM pending_deletes WHERE id IN (${ph})`).run(...ids);
+  } catch (e) { console.error('[DB] markDeletesSynced:', e.message); }
 }
 
 function dbUpsert({ table, data, onConflict, userId }) {
@@ -765,6 +810,14 @@ ipcMain.handle('db:get-dirty', (_e, { table }) => {
 });
 ipcMain.handle('db:mark-synced', (_e, { table, ids }) => {
   try { markSynced(table, ids); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:get-pending-deletes', (_e, { table }) => {
+  try { return { ok: true, data: getPendingDeletes(table) }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:mark-deletes-synced', (_e, { ids }) => {
+  try { markDeletesSynced(ids); return { ok: true }; }
   catch (e) { return { ok: false, error: String(e) }; }
 });
 ipcMain.handle('db:export', () => {

@@ -290,6 +290,18 @@ export async function dbDelete(args: {
   if (isElectron()) {
     const res = await window.electronAPI!.db!.delete(args);
     if (!res.ok) return { data: null, error: res.error ?? 'Errore DB' };
+    // Se online, propaga subito il delete a Supabase (best-effort; il pending_deletes garantisce il fallback)
+    if (navigator.onLine) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q: any = supabase.from(args.table).delete();
+        for (const f of args.filters) {
+          if (f.op === 'eq' || f.op === '=') q = q.eq(f.col, f.val);
+          else if (f.op === 'in') q = q.in(f.col, f.val as unknown[]);
+        }
+        await q;
+      } catch { /* handled by pending_deletes sync */ }
+    }
     return { data: null, error: null };
   }
   // LOCAL-FIRST: rimuove subito da IndexedDB, poi invia a Supabase in background.

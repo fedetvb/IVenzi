@@ -87,6 +87,12 @@ export async function syncSupabaseToLocal(userId: string): Promise<void> {
 
   for (const table of SYNC_TABLES) {
     try {
+      // Carica gli ID in attesa di cancellazione per non re-scaricarli da Supabase
+      const pdRes = await window.electronAPI.db.getPendingDeletes(table);
+      const pendingDeleteIds = new Set<string>(
+        ((pdRes.ok && pdRes.data as unknown[]) || []).map((p: unknown) => (p as { record_id: string }).record_id)
+      );
+
       const { data, error } = await supabase
         .from(table)
         .select('*')
@@ -97,12 +103,19 @@ export async function syncSupabaseToLocal(userId: string): Promise<void> {
         continue;
       }
 
-      // Salva sempre in IndexedDB come fallback
-      await setTableCache(table, userId, data);
+      // Filtra le righe che sono pendenti di cancellazione locale
+      const filteredData = pendingDeleteIds.size > 0
+        ? (data as Record<string, unknown>[]).filter(r => !pendingDeleteIds.has(r.id as string))
+        : (data as Record<string, unknown>[]);
+
+      // Salva sempre in IndexedDB come fallback (solo righe filtrate)
+      await setTableCache(table, userId, filteredData);
+
+      if (filteredData.length === 0) continue;
 
       // Scarica immagini come base64 per uso offline
       const rows = await Promise.all(
-        (data as Record<string, unknown>[]).map(async (row) => {
+        filteredData.map(async (row) => {
           if (table === 'clienti' && row.foto_url && typeof row.foto_url === 'string') {
             const b64 = await fetchImageAsBase64(row.foto_url);
             return { ...row, foto_base64: b64 };
@@ -139,11 +152,27 @@ export async function syncLocalToSupabase(userId: string): Promise<void> {
   for (const table of SYNC_TABLES) {
     try {
       const res = await window.electronAPI.db.getDirty(table);
-      if (!res.ok || !res.data || (res.data as unknown[]).length === 0) continue;
-
-      await _pushDirtyRows(table, res.data as Record<string, unknown>[], userId);
+      if (res.ok && res.data && (res.data as unknown[]).length > 0) {
+        await _pushDirtyRows(table, res.data as Record<string, unknown>[], userId);
+      }
     } catch (e) {
       console.warn(`[Sync] Errore upload ${table}:`, e);
+    }
+
+    // Propaga le cancellazioni pendenti a Supabase
+    try {
+      const pdRes = await window.electronAPI.db.getPendingDeletes(table);
+      if (!pdRes.ok || !pdRes.data || (pdRes.data as unknown[]).length === 0) continue;
+      const pending = pdRes.data as { id: string; record_id: string }[];
+      const recordIds = pending.map(p => p.record_id);
+      const { error } = await supabase.from(table).delete().in('id', recordIds);
+      if (!error) {
+        await window.electronAPI.db.markDeletesSynced(pending.map(p => p.id));
+      } else {
+        console.warn(`[Sync] Errore push deletes ${table}:`, error.message);
+      }
+    } catch (e) {
+      console.warn(`[Sync] Errore upload deletes ${table}:`, e);
     }
   }
 }
