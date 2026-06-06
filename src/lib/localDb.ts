@@ -184,7 +184,10 @@ export async function dbSelect<T = Record<string, unknown>>(args: {
 
   // LOCAL-FIRST: legge sempre da IndexedDB se la cache esiste.
   // Questo garantisce funzionamento offline a vita dopo il primo uso online.
-  if (_currentUserId) {
+  // Skip cache when query uses join notation (columns with "!" or nested relations):
+  // cached rows are flat and don't contain nested join data.
+  const hasJoin = args.columns ? /[!(]/.test(args.columns) : false;
+  if (_currentUserId && !hasJoin) {
     try {
       const cached = await getTableCache(args.table, _currentUserId);
       if (cached !== null) {
