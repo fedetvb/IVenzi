@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Palette, Scissors, Zap, Heart, Flame, Crown, Sparkles, Gem, ImagePlus, RotateCcw } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Palette, Scissors, Droplets, Wind, Leaf, Sun, Smile, Sparkles, ImagePlus, RotateCcw } from 'lucide-react';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -275,7 +275,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
 // ─── Tema e Personalizzazione ─────────────────────────────────────────────────
 
 const ICON_COMPONENTS: Record<string, React.ElementType> = {
-  Scissors, Star, Zap, Heart, Flame, Crown, Sparkles, Gem,
+  Scissors, Droplets, Wind, Leaf, Sun, Smile, Palette, Sparkles,
 };
 
 function PaginaTema({ onBack }: { onBack: () => void }) {
@@ -385,11 +385,9 @@ function PaginaTema({ onBack }: { onBack: () => void }) {
           >
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
-              style={{ backgroundColor: logoPreview ? 'transparent' : theme.accentColor }}
+              style={{ backgroundColor: theme.accentColor }}
             >
-              {logoPreview
-                ? <img src={logoPreview} alt="logo" className="w-full h-full object-cover" />
-                : <SidebarIconComp size={16} className="text-white" />}
+              <SidebarIconComp size={16} className="text-white" />
             </div>
             <div>
               <p className="font-bold text-sm text-white">Salone</p>

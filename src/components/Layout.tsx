@@ -25,13 +25,13 @@ import {
   Download,
   WifiOff,
   RefreshCw,
-  Star,
-  Zap,
-  Heart,
-  Flame,
-  Crown,
+  Droplets,
+  Wind,
+  Leaf,
+  Sun,
+  Smile,
+  Palette,
   Sparkles,
-  Gem,
   Wifi,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
@@ -78,7 +78,7 @@ const navItems = [
 ];
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Scissors, Star, Zap, Heart, Flame, Crown, Sparkles, Gem,
+  Scissors, Droplets, Wind, Leaf, Sun, Smile, Palette, Sparkles,
 };
 
 function isMobile() {
@@ -301,14 +301,10 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
         style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
       >
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
-          style={{ backgroundColor: logoSrc ? 'transparent' : theme.accentColor }}
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: theme.accentColor }}
         >
-          {logoSrc ? (
-            <img src={logoSrc} alt="Logo salone" className="w-full h-full object-cover" />
-          ) : (
-            <SidebarIcon size={16} className="text-white" />
-          )}
+          <SidebarIcon size={16} className="text-white" />
         </div>
         {showLabels && (
           <div className="flex-1 min-w-0">

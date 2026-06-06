@@ -44,7 +44,7 @@ export const ACCENT_PRESETS = [
 ];
 
 export const ICON_PRESETS = [
-  'Scissors', 'Star', 'Zap', 'Heart', 'Flame', 'Crown', 'Sparkles', 'Gem',
+  'Scissors', 'Droplets', 'Wind', 'Leaf', 'Sun', 'Smile', 'Palette', 'Sparkles',
 ];
 
 export function getTheme(): ThemeSettings {
