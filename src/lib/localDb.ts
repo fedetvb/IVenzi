@@ -249,7 +249,10 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
 
   try {
     const { data, error } = await supabase.from(args.table).insert({ ...args.data, id: localId }).select();
-    if (error) return { data: localRow as T, error: null }; // gia' in cache, ritorna comunque
+    if (error) {
+      console.error(`[dbInsert] ${args.table}:`, error.message, args.data);
+      return { data: localRow as T, error: null };
+    }
     const row = Array.isArray(data) ? data[0] : data;
     return { data: (row ?? localRow) as T, error: null };
   } catch {
@@ -276,7 +279,10 @@ export async function dbUpdate<T = Record<string, unknown>>(args: {
 
   try {
     const { data, error } = await supabase.from(args.table).update(args.data).eq('id', args.id).select();
-    if (error) return { data: { id: args.id, ...args.data } as T, error: null };
+    if (error) {
+      console.error(`[dbUpdate] ${args.table} id=${args.id}:`, error.message, args.data);
+      return { data: { id: args.id, ...args.data } as T, error: null };
+    }
     const row = Array.isArray(data) ? data[0] : data;
     return { data: (row ?? { id: args.id, ...args.data }) as T, error: null };
   } catch {

@@ -442,7 +442,8 @@ function FichesTab() {
 
           // Scala lo stock atomicamente (safe multi-device)
           if (catalogoId) {
-            await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoId, p_stock_delta: -1, p_venduta_delta: 1 });
+            const { error: rpcErr } = await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoId, p_stock_delta: -1, p_venduta_delta: 1 });
+            if (rpcErr) console.error('[bulkConvalida] scala stock fallito:', catalogoId, rpcErr);
           }
         }
 
@@ -1258,7 +1259,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
 
         // Scala lo stock atomicamente (safe multi-device)
         if (catalogoId) {
-          await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoId, p_stock_delta: -1, p_venduta_delta: 1 });
+          const { error: rpcErr } = await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoId, p_stock_delta: -1, p_venduta_delta: 1 });
+          if (rpcErr) console.error('[handleConvalida] scala stock fallito:', catalogoId, rpcErr);
         }
       }
 
@@ -1421,11 +1423,13 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           for (const vf of vociFiche || []) {
             const catalogoMatch = (vf as any).note?.match(/^__catalogo_id__:([0-9a-f-]{36})$/i);
             if (!catalogoMatch) continue;
-            await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoMatch[1], p_stock_delta: 1, p_venduta_delta: -1 });
+            const { error: rpcErr } = await dbRpc('aggiorna_stock_catalogo', { p_id: catalogoMatch[1], p_stock_delta: 1, p_venduta_delta: -1 });
+            if (rpcErr) console.error('[handleElimina] ripristino stock fallito:', catalogoMatch[1], rpcErr);
           }
 
           // Rimuovi voci rivendita e trattamenti generati
-          await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          const rivRes = await dbDelete({ table: 'rivendita_prodotti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          if (rivRes.error) console.error('[handleElimina] delete rivendita_prodotti:', rivRes.error);
           await dbDelete({ table: 'trattamenti_eseguiti', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
 
           // Rimuovi incasso giornaliero
