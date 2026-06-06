@@ -28,6 +28,7 @@ import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
 import { flushPendingSync } from './lib/offlineFetch';
+import { supabase } from './lib/supabase';
 
 // Registra il push immediato una volta sola al caricamento del modulo
 registerPushRowNow(pushRowNow);
@@ -42,7 +43,7 @@ interface ClienteCompleanno {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, isOfflineSession } = useAuth();
   const [page, setPage] = useState<Page>('dashboard');
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState<string | null>(null);
@@ -162,6 +163,23 @@ export default function App() {
     });
     // La risposta arriva tramite l'evento 'db:ready' gia' ascoltato nell'effect sopra
   }, [user]);
+
+  // Quando l'utente e' in sessione offline e la connessione torna,
+  // mostra un banner discreto che invita a fare login per sincronizzare.
+  const [showReconnectBanner, setShowReconnectBanner] = useState(false);
+  useEffect(() => {
+    if (!isOfflineSession) return;
+
+    function handleOnlineForReconnect() {
+      if (navigator.onLine) setShowReconnectBanner(true);
+    }
+
+    // Se gia' online al momento dell'attivazione della sessione offline, mostra subito
+    if (navigator.onLine) setShowReconnectBanner(true);
+
+    window.addEventListener('online', handleOnlineForReconnect);
+    return () => window.removeEventListener('online', handleOnlineForReconnect);
+  }, [isOfflineSession]);
 
   // Prefetch dati in IndexedDB — garantisce disponibilita' offline
   // Funziona anche senza SQLite. Si avvia subito dopo login e ogni 3 minuti.
@@ -476,6 +494,29 @@ export default function App() {
 
   return (
     <>
+      {/* Banner riconnessione: sessione offline attiva ma internet disponibile */}
+      {showReconnectBanner && isOfflineSession && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[102] w-full max-w-md px-4">
+          <div className="bg-blue-50 border border-blue-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Wifi size={16} className="text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-blue-900">Internet disponibile</p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Sei in modalita' offline. Esci e accedi di nuovo per sincronizzare i dati con il cloud.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowReconnectBanner(false)}
+              className="p-1 hover:bg-blue-100 rounded-lg transition-colors text-blue-400 hover:text-blue-600 flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Banner promemoria convalida fiches (orario configurato) */}
       {showReminderBanner && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">

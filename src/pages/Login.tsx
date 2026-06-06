@@ -107,7 +107,23 @@ export default function Login() {
       setError(res.error ?? 'Credenziali non valide.');
       return;
     }
+
+    // Accesso locale garantito: apre subito il database con i dati locali
     offlineSignIn(res.userId, res.email);
+
+    // Se internet e' disponibile, usa la stessa password per rinnovare
+    // il token Supabase in background. Se riesce, la sessione offline
+    // viene automaticamente sostituita da quella cloud e la sync riparte
+    // senza che l'utente debba fare nulla.
+    if (navigator.onLine) {
+      supabase.auth.signInWithPassword({ email, password }).then(async ({ data }) => {
+        if (data?.user) {
+          // Aggiorna il profilo locale (gestisce anche la migrazione UUID se necessaria)
+          await saveLocalProfile(data.user.id, email, password);
+          // onAuthStateChange in AuthContext aggiornera' automaticamente la sessione
+        }
+      }).catch(() => { /* fallimento silenzioso: l'accesso offline rimane attivo */ });
+    }
   }
 
   async function handleSendOtp() {
