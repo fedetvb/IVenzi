@@ -101,11 +101,34 @@ export default function Login() {
         await handleOfflineLogin();
       }
     } else if (mode === 'register') {
-      const { data, error: err } = await supabase.auth.signUp({ email, password });
-      if (err) setError(translateError(err.message));
-      else {
-        if (data.user) await saveLocalProfile(data.user.id, email, password);
-        setSuccessMsg('Account creato! Controlla la tua email per confermare la registrazione.');
+      // Se siamo in Electron e offline, registrazione locale con SQLite
+      if (window.electronAPI?.auth && !navigator.onLine) {
+        await handleOfflineRegister();
+      } else {
+        let regNetworkError = false;
+        try {
+          const { data, error: err } = await supabase.auth.signUp({ email, password });
+          if (err) {
+            const isNetworkErr = err.message.toLowerCase().includes('fetch') ||
+              err.message.toLowerCase().includes('network') ||
+              err.message.toLowerCase().includes('failed') ||
+              !navigator.onLine;
+            if (isNetworkErr && window.electronAPI?.auth) {
+              regNetworkError = true;
+            } else {
+              setError(translateError(err.message));
+            }
+          } else {
+            if (data.user) await saveLocalProfile(data.user.id, email, password);
+            setSuccessMsg('Account creato! Controlla la tua email per confermare la registrazione.');
+          }
+        } catch {
+          if (window.electronAPI?.auth) regNetworkError = true;
+          else setError('Errore di connessione. Verifica la tua connessione internet.');
+        }
+        if (regNetworkError) {
+          await handleOfflineRegister();
+        }
       }
     } else if (mode === 'reset-email') {
       await handleSendOtp();
@@ -114,6 +137,37 @@ export default function Login() {
     }
 
     setLoading(false);
+  }
+
+  async function handleOfflineRegister() {
+    if (!window.electronAPI?.auth) {
+      setError('Registrazione offline non disponibile in questa versione.');
+      return;
+    }
+    // Controlla che non esista già un profilo con questa email
+    const existing = await window.electronAPI.auth.verifyPassword(email, password).catch(() => ({ ok: false }));
+    if ((existing as { ok: boolean }).ok) {
+      setError('Esiste già un account locale con questa email. Accedi direttamente.');
+      return;
+    }
+    // Genera un UUID locale e salva il profilo
+    const localUserId = crypto.randomUUID();
+    const res = await window.electronAPI.auth.saveProfile(localUserId, email, password);
+    if (!res.ok) {
+      setError(res.error ?? 'Impossibile creare il profilo locale.');
+      return;
+    }
+    // Entra subito con il profilo locale
+    offlineSignIn(localUserId, email);
+
+    // Quando torna online, crea l'account Supabase e migra i dati
+    if (navigator.onLine) {
+      supabase.auth.signUp({ email, password }).then(async ({ data }) => {
+        if (data?.user) {
+          await saveLocalProfile(data.user.id, email, password);
+        }
+      }).catch(() => { /* migrazione posticipata al prossimo login online */ });
+    }
   }
 
   async function handleOfflineLogin() {
@@ -213,6 +267,7 @@ export default function Login() {
   }
 
   const isOfflineMode = mode === 'offline';
+  const isElectronOfflineRegister = mode === 'register' && isOffline && !!window.electronAPI?.auth;
 
   return (
     <div className="min-h-screen bg-stone-50 flex">
@@ -259,11 +314,13 @@ export default function Login() {
           </div>
 
           {/* Banner offline */}
-          {isOfflineMode && (
+          {(isOfflineMode || isElectronOfflineRegister) && (
             <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
               <WifiOff size={15} className="text-amber-600 flex-shrink-0" />
               <p className="text-sm text-amber-800">
-                Sei offline. Accedi con le credenziali salvate localmente.
+                {isElectronOfflineRegister
+                  ? 'Sei offline. L\'account verrà creato localmente e sincronizzato con il cloud al primo accesso online.'
+                  : 'Sei offline. Accedi con le credenziali salvate localmente.'}
               </p>
             </div>
           )}
@@ -272,21 +329,22 @@ export default function Login() {
             <h2 className="text-2xl font-bold text-stone-800">
               {isOfflineMode && 'Accesso offline'}
               {mode === 'login' && 'Accedi al tuo account'}
-              {mode === 'register' && 'Crea un account'}
+              {mode === 'register' && (isElectronOfflineRegister ? 'Crea un account locale' : 'Crea un account')}
               {mode === 'reset-email' && 'Password dimenticata'}
               {mode === 'reset-otp' && 'Inserisci il codice'}
             </h2>
             <p className="text-stone-500 text-sm mt-1">
               {isOfflineMode && 'Inserisci le tue credenziali per continuare in modalita\' locale'}
               {mode === 'login' && 'Inserisci le tue credenziali per continuare'}
-              {mode === 'register' && 'Crea il tuo account per iniziare'}
+              {mode === 'register' && !isElectronOfflineRegister && 'Crea il tuo account per iniziare'}
+              {mode === 'register' && isElectronOfflineRegister && 'I tuoi dati rimarranno locali fino alla sincronizzazione online'}
               {mode === 'reset-email' && 'Inserisci la tua email per ricevere il codice di verifica'}
               {mode === 'reset-otp' && `Abbiamo inviato un codice a 6 cifre a ${resetEmail}`}
             </p>
           </div>
 
           {/* Google OAuth — solo online */}
-          {(mode === 'login' || mode === 'register') && (
+          {(mode === 'login' || mode === 'register') && !isOffline && (
             <>
               <button
                 onClick={handleGoogleLogin}
@@ -472,7 +530,7 @@ export default function Login() {
                   : mode === 'login'
                   ? 'Accedi'
                   : mode === 'register'
-                  ? 'Crea account'
+                  ? (isElectronOfflineRegister ? 'Crea account locale' : 'Crea account')
                   : mode === 'reset-email'
                   ? 'Invia codice via email'
                   : 'Reimposta password'}
