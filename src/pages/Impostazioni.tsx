@@ -731,17 +731,41 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
     'Content-Type': 'application/json',
   };
 
+  const BACKUP_TABLES = [
+    'parrucchieri', 'clienti', 'trattamenti_catalogo', 'voci_extra_catalogo',
+    'impostazioni', 'appuntamenti', 'appuntamento_trattamenti', 'schede_colore',
+    'giorni_parrucchieri', 'fiches', 'fiche_voci', 'incassi_giornalieri',
+    'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium', 'ricariche_carta_premium',
+    'utilizzi_carta_premium', 'rivendita_prodotti', 'template_messaggi_carta_sconto',
+    'template_messaggi_comunicazioni', 'schede_clienti_da_confermare',
+    'magazzino_categorie', 'magazzino_prodotti', 'magazzino_schede_salvate', 'assenze_parrucchieri',
+  ];
+
+  async function exportFromSupabaseClient(): Promise<Record<string, unknown>> {
+    const backup: Record<string, unknown[]> = {};
+    for (const table of BACKUP_TABLES) {
+      const { data } = await supabase.from(table).select('*');
+      backup[table] = data ?? [];
+    }
+    return { version: 1, created_at: new Date().toISOString(), tables: BACKUP_TABLES, data: backup };
+  }
+
   async function handleExport() {
     setExporting(true);
     setFeedback(null);
+    const inElectron = !!window.electronAPI;
     try {
       let data: Record<string, unknown> | null = null;
 
-      // In Electron: usa DB locale (funziona anche offline)
       if (isElectronEnv()) {
+        // Electron + SQLite locale (modalità offline)
         data = await exportBackup();
         if (!data) throw new Error('Esportazione locale non riuscita');
+      } else if (inElectron) {
+        // Electron + Supabase: legge direttamente dal client JS (evita fetch da file://)
+        data = await exportFromSupabaseClient();
       } else {
+        // Web: usa edge function con service_role
         const res = await fetch(cloudApiUrl, { headers: cloudHeaders });
         if (!res.ok) throw new Error('Errore durante l\'esportazione');
         data = await res.json();
@@ -753,7 +777,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
       const result = await saveFile('backup', suggestedName, jsonStr);
       if (result?.filePath) {
         setFeedback({ tipo: 'ok', msg: `Backup salvato in: ${result.filePath}` });
-      } else if (isElectronEnv()) {
+      } else if (inElectron) {
         // In Electron senza cartella configurata: dialogo nativo di salvataggio
         const api = (window as any).electronAPI;
         const saved = await api.saveBackupFile(suggestedName, jsonStr);
