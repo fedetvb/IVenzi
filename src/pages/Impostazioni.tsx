@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
@@ -9,7 +9,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -44,6 +44,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'connessione') return <PaginaConnessione onBack={() => setSub(null)} />;
   if (sub === 'cartelle') return <PaginaCartelleSalvataggio onBack={() => setSub(null)} />;
   if (sub === 'keepalive') return <PaginaKeepAlive onBack={() => setSub(null)} />;
+  if (sub === 'prenotazioni_online') return <PaginaPrenotazioniOnline onBack={() => setSub(null)} />;
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -210,6 +211,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
 
+        {/* Prenotazioni Online */}
+        <button
+          onClick={() => setSub('prenotazioni_online')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <CalendarClock size={18} className="text-stone-500 group-hover:text-emerald-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Prenotazioni Online</p>
+            <p className="text-xs text-stone-400 mt-0.5">Attiva/disattiva la pagina pubblica di prenotazione e personalizza i messaggi</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
         {/* Backup e Ripristino */}
         <button
           onClick={() => setSub('backup')}
@@ -270,6 +286,161 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Prenotazioni Online ──────────────────────────────────────────────────────
+
+function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [attiva, setAttiva] = useState(true);
+  const [msgConferma, setMsgConferma] = useState('Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!');
+  const [msgRifiuto, setMsgRifiuto] = useState('Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const bookingUrl = user
+    ? `${window.location.origin}${window.location.pathname}?prenota=1&uid=${user.id}`
+    : '';
+
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([
+      getImpostazione('prenotazioni_online_attive'),
+      getImpostazione('msg_conferma_appuntamento_online'),
+      getImpostazione('msg_rifiuto_appuntamento_online'),
+    ]).then(([a, mc, mr]) => {
+      if (a !== null) setAttiva(a !== 'false');
+      if (mc) setMsgConferma(mc);
+      if (mr) setMsgRifiuto(mr);
+      setLoading(false);
+    });
+  }, [user]);
+
+  async function handleSave() {
+    setSaving(true);
+    await Promise.all([
+      setImpostazione('prenotazioni_online_attive', attiva ? 'true' : 'false', user?.id),
+      setImpostazione('msg_conferma_appuntamento_online', msgConferma, user?.id),
+      setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, user?.id),
+    ]);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function copyLink() {
+    navigator.clipboard.writeText(bookingUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Prenotazioni Online</h2>
+          <p className="text-sm text-stone-400 mt-0.5">Gestisci la pagina pubblica di prenotazione</p>
+        </div>
+      </div>
+
+      {/* Toggle attiva/disattiva */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-stone-800">Prenotazioni online</p>
+            <p className="text-xs text-stone-400 mt-0.5">
+              {attiva ? 'Le clienti possono richiedere appuntamenti online' : 'La pagina mostra un avviso di servizio sospeso'}
+            </p>
+          </div>
+          <button
+            onClick={() => setAttiva(v => !v)}
+            className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${attiva ? 'bg-emerald-500' : 'bg-stone-200'}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${attiva ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+
+        {/* Link e QR */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Link pagina prenotazioni</p>
+          <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5">
+            <Globe size={14} className="text-stone-400 flex-shrink-0" />
+            <p className="flex-1 text-sm text-stone-600 truncate font-mono text-xs">{bookingUrl}</p>
+            <button
+              onClick={copyLink}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex-shrink-0 ${copied ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-200 hover:bg-stone-300 text-stone-700'}`}
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+              {copied ? 'Copiato!' : 'Copia'}
+            </button>
+          </div>
+          <p className="text-xs text-stone-400">Invialo via WhatsApp alle clienti o stampalo come QR code</p>
+        </div>
+      </div>
+
+      {/* Message templates */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
+        <p className="font-semibold text-stone-800">Messaggi WhatsApp automatici</p>
+        <p className="text-xs text-stone-400">
+          Variabili disponibili: <code className="bg-stone-100 px-1 rounded">{'{nome}'}</code>{' '}
+          <code className="bg-stone-100 px-1 rounded">{'{cognome}'}</code>{' '}
+          <code className="bg-stone-100 px-1 rounded">{'{servizio}'}</code>{' '}
+          <code className="bg-stone-100 px-1 rounded">{'{data}'}</code>{' '}
+          <code className="bg-stone-100 px-1 rounded">{'{ora}'}</code>
+        </p>
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+            Messaggio di CONFERMA
+          </label>
+          <textarea
+            value={msgConferma}
+            onChange={e => setMsgConferma(e.target.value)}
+            rows={4}
+            className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none text-stone-700"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+            Messaggio di RIFIUTO
+          </label>
+          <textarea
+            value={msgRifiuto}
+            onChange={e => setMsgRifiuto(e.target.value)}
+            rows={4}
+            className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none text-stone-700"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className={`w-full py-3.5 rounded-2xl font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${saved ? 'bg-emerald-500 text-white' : 'bg-stone-800 hover:bg-stone-900 text-white'} disabled:opacity-60`}
+      >
+        {saving ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : saved ? (
+          <><Check size={16} /> Salvato!</>
+        ) : (
+          'Salva impostazioni'
+        )}
+      </button>
     </div>
   );
 }

@@ -15,6 +15,7 @@ if ('serviceWorker' in navigator && !window.location.protocol.startsWith('file')
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import RegistrazioneCliente from './pages/RegistrazioneCliente.tsx';
+import PrenotazioneOnline from './pages/PrenotazioneOnline.tsx';
 import { AuthProvider } from './lib/AuthContext.tsx';
 import { startAutoBackupWatcher, startAutoFichesWatcher } from './pages/Impostazioni.tsx';
 import './index.css';
@@ -26,7 +27,15 @@ const isRegistrazione =
   window.location.hash.startsWith('#/registrazione?') ||
   params.get('registrazione') === '1';
 
-if (!isRegistrazione) {
+const isPrenotazione =
+  window.location.pathname === '/prenota' ||
+  window.location.hash === '#/prenota' ||
+  window.location.hash.startsWith('#/prenota?') ||
+  params.get('prenota') === '1';
+
+const prenotaUserId = params.get('uid') ?? window.location.hash.match(/[?&]uid=([^&]+)/)?.[1] ?? '';
+
+if (!isRegistrazione && !isPrenotazione) {
   startAutoBackupWatcher();
   startAutoFichesWatcher();
 }
@@ -35,6 +44,8 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isRegistrazione ? (
       <RegistrazioneCliente />
+    ) : isPrenotazione ? (
+      <PrenotazioneOnline userId={prenotaUserId} />
     ) : (
       <AuthProvider>
         <App />

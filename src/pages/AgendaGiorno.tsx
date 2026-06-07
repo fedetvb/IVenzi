@@ -1,8 +1,27 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check, Settings, ZoomIn, ZoomOut, Type } from 'lucide-react';
+import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check, Settings, ZoomIn, ZoomOut, Type, CalendarClock, Phone, User } from 'lucide-react';
 import { supabase, type Appuntamento, type Parrucchiere } from '../lib/supabase';
 import { dbSelect, dbSelectWithRelated, dbUpdate, dbDelete, dbUpsert, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
+
+interface RichiestaAppuntamento {
+  id: string;
+  nome: string;
+  cognome: string;
+  telefono: string;
+  parrucchiere_id: string;
+  servizio_id: string;
+  data_ora: string;
+  parrucchiere2_id: string | null;
+  servizio2_id: string | null;
+  data_ora2: string | null;
+  stato: 'in_attesa' | 'confermata' | 'rifiutata';
+  cliente_id: string | null;
+  servizio_nome?: string;
+  servizio2_nome?: string;
+  durata_minuti?: number;
+  durata2_minuti?: number;
+}
 
 const SLOT_DURATION = 15;
 const START_HOUR = 8;
@@ -88,6 +107,10 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [assenzeMap, setAssenzeMap] = useState<Map<string, string | null>>(new Map());
   const [catalogoPosa, setCatalogoPosa] = useState<Map<string, { inizio_posa: number; durata_posa: number }>>(new Map());
+
+  const [richieste, setRichieste] = useState<RichiestaAppuntamento[]>([]);
+  const [richiestaModal, setRichiestaModal] = useState<{ open: boolean; r: RichiestaAppuntamento | null }>({ open: false, r: null });
+  const [processingRichiesta, setProcessingRichiesta] = useState(false);
 
   const [appModal, setAppModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [multiModal, setMultiModal] = useState<{ open: boolean; date?: Date }>({ open: false });
@@ -199,7 +222,40 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     setLoading(false);
   }, [date]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadRichieste = useCallback(async () => {
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date); dayEnd.setHours(23, 59, 59, 999);
+
+    const { data } = await supabase
+      .from('richieste_appuntamento')
+      .select('*, trattamenti_catalogo_main:servizio_id(nome,durata_minuti), trattamenti_catalogo_2:servizio2_id(nome,durata_minuti)')
+      .eq('stato', 'in_attesa')
+      .gte('data_ora', dayStart.toISOString())
+      .lte('data_ora', dayEnd.toISOString());
+
+    const mapped: RichiestaAppuntamento[] = (data || []).map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      nome: r.nome as string,
+      cognome: r.cognome as string,
+      telefono: r.telefono as string,
+      parrucchiere_id: r.parrucchiere_id as string,
+      servizio_id: r.servizio_id as string,
+      data_ora: r.data_ora as string,
+      parrucchiere2_id: r.parrucchiere2_id as string | null,
+      servizio2_id: r.servizio2_id as string | null,
+      data_ora2: r.data_ora2 as string | null,
+      stato: r.stato as 'in_attesa',
+      cliente_id: r.cliente_id as string | null,
+      servizio_nome: (r.trattamenti_catalogo_main as { nome?: string } | null)?.nome,
+      servizio2_nome: (r.trattamenti_catalogo_2 as { nome?: string } | null)?.nome,
+      durata_minuti: (r.trattamenti_catalogo_main as { durata_minuti?: number } | null)?.durata_minuti ?? 60,
+      durata2_minuti: (r.trattamenti_catalogo_2 as { durata_minuti?: number } | null)?.durata_minuti ?? 30,
+    }));
+    setRichieste(mapped);
+  }, [date]);
+
+  useEffect(() => { load(); loadRichieste(); }, [load, loadRichieste]);
 
   async function saveMessaggio() {
     setSavingMsg(true);
@@ -263,6 +319,121 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     }
 
     return filtered;
+  }
+
+  async function confermaRichiesta(r: RichiestaAppuntamento) {
+    setProcessingRichiesta(true);
+
+    // Get message templates from impostazioni
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: msgData } = await supabase
+      .from('impostazioni')
+      .select('chiave,valore')
+      .in('chiave', ['msg_conferma_appuntamento_online', 'msg_rifiuto_appuntamento_online'])
+      .eq('user_id', user?.id ?? '');
+
+    const templates: Record<string, string> = {};
+    for (const row of msgData ?? []) templates[row.chiave] = row.valore;
+
+    const msgTemplate = templates['msg_conferma_appuntamento_online'] ||
+      'Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!';
+
+    const dataFmt = new Date(r.data_ora).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+    const oraFmt = new Date(r.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    const msg = msgTemplate
+      .replace(/\{nome\}/g, r.nome)
+      .replace(/\{cognome\}/g, r.cognome)
+      .replace(/\{servizio\}/g, r.servizio_nome ?? 'appuntamento')
+      .replace(/\{data\}/g, dataFmt)
+      .replace(/\{ora\}/g, oraFmt);
+
+    // Create real appointments
+    const { data: appData } = await supabase.from('appuntamenti').insert({
+      cliente_id: r.cliente_id ?? null,
+      parrucchiere_id: r.parrucchiere_id,
+      data_ora: r.data_ora,
+      durata_minuti: r.durata_minuti ?? 60,
+      stato: 'confermato',
+      note: `Prenotazione online — ${r.nome} ${r.cognome} (${r.telefono})`,
+      prezzo_totale: 0,
+      user_id: user?.id,
+    }).select('id').single();
+
+    if (appData?.id && r.servizio_nome) {
+      await supabase.from('appuntamento_trattamenti').insert({
+        appuntamento_id: appData.id,
+        trattamento_id: r.servizio_id,
+        nome_trattamento: r.servizio_nome,
+        prezzo: 0,
+      });
+    }
+
+    if (r.parrucchiere2_id && r.data_ora2) {
+      const { data: app2Data } = await supabase.from('appuntamenti').insert({
+        cliente_id: r.cliente_id ?? null,
+        parrucchiere_id: r.parrucchiere2_id,
+        data_ora: r.data_ora2,
+        durata_minuti: r.durata2_minuti ?? 30,
+        stato: 'confermato',
+        note: `Prenotazione online (abbinato) — ${r.nome} ${r.cognome}`,
+        prezzo_totale: 0,
+        user_id: user?.id,
+      }).select('id').single();
+
+      if (app2Data?.id && r.servizio2_nome) {
+        await supabase.from('appuntamento_trattamenti').insert({
+          appuntamento_id: app2Data.id,
+          trattamento_id: r.servizio2_id,
+          nome_trattamento: r.servizio2_nome,
+          prezzo: 0,
+        });
+      }
+    }
+
+    // Mark as confirmed
+    await supabase.from('richieste_appuntamento').update({ stato: 'confermata' }).eq('id', r.id);
+
+    setProcessingRichiesta(false);
+    setRichiestaModal({ open: false, r: null });
+    loadRichieste();
+    load();
+
+    // Open WhatsApp
+    const tel = r.telefono.replace(/\s+/g, '').replace(/^00/, '+').replace(/^0/, '+39');
+    const waNum = tel.startsWith('+') ? tel.replace('+', '') : `39${tel}`;
+    window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+
+  async function rifiutaRichiesta(r: RichiestaAppuntamento) {
+    setProcessingRichiesta(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: msgData } = await supabase
+      .from('impostazioni')
+      .select('chiave,valore')
+      .in('chiave', ['msg_rifiuto_appuntamento_online'])
+      .eq('user_id', user?.id ?? '');
+
+    const templates: Record<string, string> = {};
+    for (const row of msgData ?? []) templates[row.chiave] = row.valore;
+
+    const msgTemplate = templates['msg_rifiuto_appuntamento_online'] ||
+      'Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.';
+
+    const msg = msgTemplate
+      .replace(/\{nome\}/g, r.nome)
+      .replace(/\{cognome\}/g, r.cognome)
+      .replace(/\{servizio\}/g, r.servizio_nome ?? 'appuntamento');
+
+    await supabase.from('richieste_appuntamento').update({ stato: 'rifiutata' }).eq('id', r.id);
+
+    setProcessingRichiesta(false);
+    setRichiestaModal({ open: false, r: null });
+    loadRichieste();
+
+    const tel = r.telefono.replace(/\s+/g, '').replace(/^00/, '+').replace(/^0/, '+39');
+    const waNum = tel.startsWith('+') ? tel.replace('+', '') : `39${tel}`;
+    window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
   }
 
   async function deleteAppuntamento(id: string) {
@@ -821,6 +992,46 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                       />
                     )}
 
+                    {/* Pending booking request blocks (blinking) */}
+                    {richieste.filter(r => r.parrucchiere_id === p.id || r.parrucchiere2_id === p.id).map(r => {
+                      const isPrimary = r.parrucchiere_id === p.id;
+                      const dataOra = isPrimary ? r.data_ora : r.data_ora2!;
+                      const durata = isPrimary ? (r.durata_minuti ?? 60) : (r.durata2_minuti ?? 30);
+                      const servNome = isPrimary ? r.servizio_nome : r.servizio2_nome;
+                      const t = new Date(dataOra);
+                      const startMin = t.getHours() * 60 + t.getMinutes();
+                      const dayStart = START_HOUR * 60;
+                      const topPx = Math.max(0, ((startMin - dayStart) / SLOT_DURATION) * slotHeight);
+                      const heightPx = Math.max((durata / SLOT_DURATION) * slotHeight, slotHeight * 2);
+                      return (
+                        <div
+                          key={`r-${r.id}-${isPrimary ? '1' : '2'}`}
+                          className="absolute left-1 right-1 rounded-lg overflow-hidden cursor-pointer z-20 border-2 border-dashed border-emerald-500"
+                          style={{
+                            top: topPx + 1,
+                            height: heightPx - 2,
+                            background: 'rgba(16,185,129,0.15)',
+                            animation: 'richiestaBlinking 1.5s ease-in-out infinite',
+                          }}
+                          onClick={() => setRichiestaModal({ open: true, r })}
+                        >
+                          <div className="px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
+                            <div>
+                              <p className="font-bold text-emerald-800 leading-tight truncate" style={{ fontSize: `${0.72 * (fontSize / 100)}rem` }}>
+                                {r.nome} {r.cognome}
+                              </p>
+                              {servNome && (
+                                <p className="text-emerald-700 truncate" style={{ fontSize: `${0.62 * (fontSize / 100)}rem` }}>{servNome}</p>
+                              )}
+                            </div>
+                            <p className="text-emerald-600 font-semibold" style={{ fontSize: `${0.6 * (fontSize / 100)}rem` }}>
+                              {t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · Richiesta
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+
                     {/* Appointment blocks */}
                     {apps.map(app => {
                       const isDragged = drag?.appId === app.id;
@@ -1108,6 +1319,96 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           onSaved={() => { setAppModal({ open: false, id: null }); load(); }}
         />
       )}
+
+      {/* Richiesta prenotazione online modal */}
+      {richiestaModal.open && richiestaModal.r && (() => {
+        const r = richiestaModal.r;
+        const parrPrimario = parrucchieri.find(p => p.id === r.parrucchiere_id);
+        const parrSecondario = r.parrucchiere2_id ? parrucchieri.find(p => p.id === r.parrucchiere2_id) : null;
+        const dataFmt = new Date(r.data_ora).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+        const oraFmt = new Date(r.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        const ora2Fmt = r.data_ora2 ? new Date(r.data_ora2).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <CalendarClock size={18} className="text-emerald-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-emerald-900">Richiesta di prenotazione</p>
+                  <p className="text-xs text-emerald-600">{dataFmt} alle {oraFmt}</p>
+                </div>
+                <button onClick={() => setRichiestaModal({ open: false, r: null })} className="text-emerald-400 hover:text-emerald-700">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-4">
+                {/* Client info */}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-stone-100 flex items-center justify-center flex-shrink-0">
+                    <User size={16} className="text-stone-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-stone-800">{r.nome} {r.cognome}</p>
+                    <p className="text-sm text-stone-500 flex items-center gap-1"><Phone size={11} />{r.telefono}</p>
+                  </div>
+                  {r.cliente_id && (
+                    <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 font-medium px-2 py-0.5 rounded-full">Cliente registrata</span>
+                  )}
+                </div>
+
+                {/* Appointment 1 */}
+                <div className="bg-stone-50 rounded-2xl p-4 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: parrPrimario?.colore ?? '#ccc' }} />
+                    <span className="font-medium text-stone-700 text-sm">{parrPrimario?.nome}</span>
+                  </div>
+                  <p className="text-sm text-stone-600 font-medium">{r.servizio_nome}</p>
+                  <p className="text-xs text-stone-400">{oraFmt} · {r.durata_minuti} min</p>
+                </div>
+
+                {/* Appointment 2 (abbinato) */}
+                {parrSecondario && r.data_ora2 && (
+                  <div className="bg-emerald-50 rounded-2xl p-4 space-y-1.5 border border-emerald-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: parrSecondario.colore }} />
+                      <span className="font-medium text-stone-700 text-sm">{parrSecondario.nome}</span>
+                      <span className="text-xs text-emerald-600 font-medium">abbinato</span>
+                    </div>
+                    <p className="text-sm text-stone-600 font-medium">{r.servizio2_nome}</p>
+                    <p className="text-xs text-stone-400">{ora2Fmt} · {r.durata2_minuti} min</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="px-6 pb-6 grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => rifiutaRichiesta(r)}
+                  disabled={processingRichiesta}
+                  className="py-3.5 rounded-2xl border-2 border-red-200 bg-red-50 text-red-700 font-semibold text-sm hover:bg-red-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <X size={16} /> Rifiuta
+                </button>
+                <button
+                  onClick={() => confermaRichiesta(r)}
+                  disabled={processingRichiesta}
+                  className="py-3.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {processingRichiesta ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <><Check size={16} /> Conferma</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -23,7 +23,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
-import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList } from 'lucide-react';
+import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock } from 'lucide-react';
 import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
@@ -81,6 +81,12 @@ export default function App() {
   const [nuovaSchedaNome, setNuovaSchedaNome] = useState('');
   const [nuovaSchedaCurrentId, setNuovaSchedaCurrentId] = useState<string | null>(null);
   const [schedaIdToOpen, setSchedaIdToOpen] = useState<string | null>(null);
+
+  // Banner nuova richiesta prenotazione online
+  const [showRichiestaPrenotaBanner, setShowRichiestaPrenotaBanner] = useState(false);
+  const [richiestaPrenotaNome, setRichiestaPrenotaNome] = useState('');
+  const [richiestaPrenotaData, setRichiestaPrenotaData] = useState<Date | null>(null);
+  const [richiestaPrenotaId, setRichiestaPrenotaId] = useState<string | null>(null);
 
   const [electronDbReady, setElectronDbReadyState] = useState(false);
   const hasFicheNonConvalidateRef = { current: false };
@@ -389,6 +395,52 @@ export default function App() {
     navigateTo('clienti');
   }
 
+  // Prenotazione online helpers
+  function getRichiesteDismissed(): Set<string> {
+    try { return new Set(JSON.parse(localStorage.getItem('richiesta_prenota_dismissed') || '[]')); }
+    catch { return new Set(); }
+  }
+  function markRichiestaDismissed(id: string) {
+    const s = getRichiesteDismissed();
+    s.add(id);
+    localStorage.setItem('richiesta_prenota_dismissed', JSON.stringify([...s]));
+  }
+
+  function mostraRichiestaBanner(id: string, nome: string, cognome: string, dataOra: string) {
+    const n = [nome, cognome].filter(Boolean).join(' ') || 'Una cliente';
+    setRichiestaPrenotaId(id);
+    setRichiestaPrenotaNome(n);
+    setRichiestaPrenotaData(new Date(dataOra));
+    setShowRichiestaPrenotaBanner(true);
+  }
+
+  async function checkAndShowPendingRichiesta() {
+    const dismissed = getRichiesteDismissed();
+    const { data } = await supabase
+      .from('richieste_appuntamento')
+      .select('id, nome, cognome, data_ora')
+      .eq('stato', 'in_attesa')
+      .order('created_at', { ascending: false });
+    const unseen = (data || []).find(r => !dismissed.has(r.id));
+    if (unseen) mostraRichiestaBanner(unseen.id, unseen.nome, unseen.cognome, unseen.data_ora);
+  }
+
+  function dismissRichiestaBanner() {
+    if (richiestaPrenotaId) markRichiestaDismissed(richiestaPrenotaId);
+    setShowRichiestaPrenotaBanner(false);
+    setRichiestaPrenotaId(null);
+    setTimeout(checkAndShowPendingRichiesta, 400);
+  }
+
+  function apriRichiestaDalBanner() {
+    if (!richiestaPrenotaId || !richiestaPrenotaData) return;
+    markRichiestaDismissed(richiestaPrenotaId);
+    setShowRichiestaPrenotaBanner(false);
+    setRichiestaPrenotaId(null);
+    setAgendaSelectedDay(richiestaPrenotaData);
+    navigateTo('agenda');
+  }
+
   // Realtime + polling: avviso nuova scheda cliente da confermare
   useEffect(() => {
     if (!user) return;
@@ -443,6 +495,58 @@ export default function App() {
 
     // Polling ogni 10 secondi — piu' aggressivo per non perdere nulla
     const interval = setInterval(checkAndShowPendingScheda, 10_000);
+
+    return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (channelRef) supabase.removeChannel(channelRef);
+      clearInterval(interval);
+    };
+  }, [user]);
+
+  // Realtime + polling: avviso nuova richiesta prenotazione online
+  useEffect(() => {
+    if (!user) return;
+
+    let channelRef: ReturnType<typeof supabase.channel> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
+
+    function setupChannel() {
+      if (destroyed) return;
+      if (channelRef) { supabase.removeChannel(channelRef); channelRef = null; }
+
+      channelRef = supabase
+        .channel(`richiesta_prenota_${Date.now()}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'richieste_appuntamento',
+        }, (payload) => {
+          const row = payload.new as { id?: string; nome?: string; cognome?: string; data_ora?: string };
+          if (row.id) {
+            const dismissed = getRichiesteDismissed();
+            if (!dismissed.has(row.id)) {
+              mostraRichiestaBanner(row.id, row.nome ?? '', row.cognome ?? '', row.data_ora ?? new Date().toISOString());
+            }
+          }
+        })
+        .on('system', {}, (status) => {
+          if ((status as unknown as { status: string })?.status === 'CHANNEL_ERROR' ||
+              (status as unknown as { status: string })?.status === 'TIMED_OUT') {
+            if (!destroyed) reconnectTimer = setTimeout(setupChannel, 5000);
+          }
+        })
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            if (!destroyed) reconnectTimer = setTimeout(setupChannel, 5000);
+          }
+        });
+    }
+
+    checkAndShowPendingRichiesta();
+    setupChannel();
+    const interval = setInterval(checkAndShowPendingRichiesta, 15_000);
 
     return () => {
       destroyed = true;
@@ -557,6 +661,33 @@ export default function App() {
             <button
               onClick={dismissSchedaBanner}
               className="p-1 hover:bg-pink-100 rounded-lg transition-colors text-pink-400 hover:text-pink-600 flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner nuova richiesta prenotazione online */}
+      {showRichiestaPrenotaBanner && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[103] w-full max-w-md px-4 transition-all duration-300"
+          style={{ top: showNuovaSchedaBanner || showReminderBanner ? '8rem' : '1rem' }}
+        >
+          <div className="bg-emerald-50 border border-emerald-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <CalendarClock size={16} className="text-emerald-600" />
+            </div>
+            <button className="flex-1 text-left" onClick={apriRichiestaDalBanner}>
+              <p className="text-sm font-bold text-emerald-900">Nuova richiesta di prenotazione!</p>
+              <p className="text-xs text-emerald-700 mt-0.5">
+                <span className="font-semibold">{richiestaPrenotaNome}</span> ha richiesto un appuntamento.{' '}
+                <span className="underline font-semibold">Tocca per aprire l'agenda.</span>
+              </p>
+            </button>
+            <button
+              onClick={dismissRichiestaBanner}
+              className="p-1 hover:bg-emerald-100 rounded-lg transition-colors text-emerald-400 hover:text-emerald-600 flex-shrink-0"
             >
               <X size={15} />
             </button>

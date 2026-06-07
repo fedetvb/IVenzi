@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, CreditCard as Edit2, Trash2, X, Clock, Euro, BookOpen, Pencil, ShoppingBag, Check, Scissors } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, X, Clock, Euro, BookOpen, Pencil, ShoppingBag, Check, Scissors, Globe } from 'lucide-react';
 import { supabase, localDateStr, type TrattamentoCatalogo } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
@@ -13,6 +13,8 @@ interface ServiceForm {
   attivo: boolean;
   inizio_posa: number | null;
   durata_posa: number | null;
+  prenotazione_online_abilitata: boolean;
+  servizio_abbinato_online_id: string | null;
 }
 
 interface VoceExtra {
@@ -103,7 +105,7 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
   const [servizi, setServizi] = useState<TrattamentoCatalogo[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ open: boolean; id?: string }>({ open: false });
-  const [form, setForm] = useState<ServiceForm>({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true, inizio_posa: null, durata_posa: null });
+  const [form, setForm] = useState<ServiceForm>({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true, inizio_posa: null, durata_posa: null, prenotazione_online_abilitata: false, servizio_abbinato_online_id: null });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -120,7 +122,7 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
   useEffect(() => { load(); }, [load]);
 
   function openNew() {
-    setForm({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true, inizio_posa: null, durata_posa: null });
+    setForm({ nome: '', descrizione: '', durata_minuti: 30, prezzo: 0, colore: '#F59E0B', attivo: true, inizio_posa: null, durata_posa: null, prenotazione_online_abilitata: false, servizio_abbinato_online_id: null });
     setError('');
     setModal({ open: true });
   }
@@ -129,8 +131,8 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
     const res = await dbSelect({ table: 'trattamenti_catalogo', columns: '*', filters: [{col:'id', op:'eq', val:id}] });
     const data = res.data?.[0];
     if (!data) return;
-    const s = data as TrattamentoCatalogo;
-    setForm({ nome: s.nome, descrizione: s.descrizione ?? '', durata_minuti: s.durata_minuti, prezzo: s.prezzo, colore: s.colore, attivo: s.attivo, inizio_posa: s.inizio_posa ?? null, durata_posa: s.durata_posa ?? null });
+    const s = data as TrattamentoCatalogo & { prenotazione_online_abilitata?: boolean; servizio_abbinato_online_id?: string | null };
+    setForm({ nome: s.nome, descrizione: s.descrizione ?? '', durata_minuti: s.durata_minuti, prezzo: s.prezzo, colore: s.colore, attivo: s.attivo, inizio_posa: s.inizio_posa ?? null, durata_posa: s.durata_posa ?? null, prenotazione_online_abilitata: s.prenotazione_online_abilitata ?? false, servizio_abbinato_online_id: s.servizio_abbinato_online_id ?? null });
     setError('');
     setModal({ open: true, id });
   }
@@ -139,7 +141,7 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
     if (!form.nome.trim()) { setError('Il nome del servizio è obbligatorio'); return; }
     setSaving(true);
     setError('');
-    const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), durata_minuti: form.durata_minuti, prezzo: form.prezzo, colore: form.colore, attivo: form.attivo, tipo, inizio_posa: form.inizio_posa, durata_posa: form.durata_posa };
+    const payload = { nome: form.nome.trim(), descrizione: form.descrizione.trim(), durata_minuti: form.durata_minuti, prezzo: form.prezzo, colore: form.colore, attivo: form.attivo, tipo, inizio_posa: form.inizio_posa, durata_posa: form.durata_posa, prenotazione_online_abilitata: form.prenotazione_online_abilitata, servizio_abbinato_online_id: form.servizio_abbinato_online_id || null };
     if (modal.id) {
       await dbUpdate({ table: 'trattamenti_catalogo', id: modal.id, data: payload });
     } else {
@@ -205,6 +207,11 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
                       <span className="flex items-center gap-1 text-xs text-violet-500" title={`Posa: min ${s.inizio_posa}–${s.inizio_posa + s.durata_posa}`}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                         Posa {s.durata_posa}min
+                      </span>
+                    )}
+                    {(s as TrattamentoCatalogo & { prenotazione_online_abilitata?: boolean }).prenotazione_online_abilitata && (
+                      <span className="flex items-center gap-1 text-xs text-emerald-600" title="Prenotabile online">
+                        <Globe size={11} /> Online
                       </span>
                     )}
                   </div>
@@ -298,6 +305,38 @@ function ServiziTab({ tipo }: { tipo: 'servizio' | 'trattamento' }) {
                   className="w-4 h-4 accent-amber-500"
                 />
                 <label htmlFor="attivo-s" className="text-sm text-stone-700">{tipo === 'trattamento' ? 'Trattamento attivo' : 'Servizio attivo'} (visibile nelle fiches)</label>
+              </div>
+              <div className="border-t border-stone-100 pt-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Globe size={14} className="text-emerald-600" />
+                  <span className="text-xs font-semibold text-stone-600 uppercase tracking-wide">Prenotazione online</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="online-s"
+                    checked={form.prenotazione_online_abilitata}
+                    onChange={e => setForm(f => ({ ...f, prenotazione_online_abilitata: e.target.checked, servizio_abbinato_online_id: e.target.checked ? f.servizio_abbinato_online_id : null }))}
+                    className="w-4 h-4 accent-emerald-500"
+                  />
+                  <label htmlFor="online-s" className="text-sm text-stone-700">Visibile nella pagina prenotazioni online</label>
+                </div>
+                {form.prenotazione_online_abilitata && (
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1.5">Servizio abbinato automaticamente (opzionale)</label>
+                    <select
+                      value={form.servizio_abbinato_online_id ?? ''}
+                      onChange={e => setForm(f => ({ ...f, servizio_abbinato_online_id: e.target.value || null }))}
+                      className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    >
+                      <option value="">Nessun servizio abbinato</option>
+                      {servizi.filter(s => s.id !== modal.id).map(s => (
+                        <option key={s.id} value={s.id}>{s.nome} ({s.durata_minuti} min)</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-stone-400 mt-1.5">Es. seleziona "Piega" per aggiungerla automaticamente dopo la Colorazione</p>
+                  </div>
+                )}
               </div>
               <div className="border-t border-stone-100 pt-4">
                 <label className="block text-xs font-semibold text-stone-600 mb-3 uppercase tracking-wide">Tempo di posa (opzionale)</label>
