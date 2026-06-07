@@ -935,9 +935,33 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   useEffect(() => {
     if (!isOpen || initialized) return;
     setTipoPagamento(gruppo.tipoPagamento ?? null);
+    setNote(gruppo.noteEsistenti);
     if (gruppo.voci.length > 0) {
-      setVoci(gruppo.voci);
-      setNote(gruppo.noteEsistenti);
+      // Merge voci salvate con eventuali trattamenti in agenda non ancora presenti
+      const merged = [...gruppo.voci];
+      const claimed = new Set<string>();
+      for (const app of gruppo.appuntamenti) {
+        const parr = app.parrucchieri;
+        for (const t of app.appuntamento_trattamenti || []) {
+          const match = merged.find(v =>
+            !claimed.has(v.id) &&
+            v.tipo === 'servizio' &&
+            v.nome_voce.toLowerCase() === t.nome_trattamento.toLowerCase() &&
+            v.parrucchiere_id === (parr?.id ?? null)
+          );
+          if (match) {
+            claimed.add(match.id);
+          } else {
+            merged.push({
+              id: crypto.randomUUID(), tipo: 'servizio',
+              nome_voce: t.nome_trattamento,
+              parrucchiere_id: parr?.id ?? null, nome_parrucchiere: parr?.nome ?? '',
+              prezzo: t.prezzo, note: '', ordine: merged.length,
+            });
+          }
+        }
+      }
+      setVoci(merged);
     } else {
       const initVoci: FicheVoce[] = [];
       let ordine = 0;
@@ -953,7 +977,6 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         }
       }
       setVoci(initVoci);
-      setNote('');
     }
     // Carica telefono cliente
     const rawId = gruppo.clienteId;
