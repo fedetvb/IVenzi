@@ -566,7 +566,41 @@ function PaginaTema({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ─── Backup automatico: chiavi localStorage ───────────────────────────────────
+// ─── Backup automatico ────────────────────────────────────────────────────────
+const BACKUP_TABLES = [
+  'parrucchieri', 'clienti', 'trattamenti_catalogo', 'voci_extra_catalogo',
+  'impostazioni', 'appuntamenti', 'appuntamento_trattamenti', 'schede_colore',
+  'giorni_parrucchieri', 'fiches', 'fiche_voci', 'incassi_giornalieri',
+  'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium', 'ricariche_carta_premium',
+  'utilizzi_carta_premium', 'rivendita_prodotti', 'template_messaggi_carta_sconto',
+  'template_messaggi_comunicazioni', 'schede_clienti_da_confermare',
+  'magazzino_categorie', 'magazzino_prodotti', 'magazzino_schede_salvate', 'assenze_parrucchieri',
+];
+
+async function exportDataForAutoBackup(todayStr: string): Promise<string | null> {
+  // 1. Prova SQLite locale (funziona offline in Electron)
+  if (window.electronAPI?.db) {
+    const localRes = await window.electronAPI.db.export();
+    if (localRes?.ok && localRes?.data) {
+      return JSON.stringify(localRes.data, null, 2);
+    }
+  }
+  // 2. Fallback: Supabase JS client (richiede internet, no problemi CORS in Electron)
+  try {
+    const backup: Record<string, unknown[]> = {};
+    for (const table of BACKUP_TABLES) {
+      const { data } = await supabase.from(table).select('*');
+      backup[table] = data ?? [];
+    }
+    return JSON.stringify(
+      { version: 1, created_at: `${todayStr}T00:00:00.000Z`, tables: BACKUP_TABLES, data: backup },
+      null, 2
+    );
+  } catch {
+    return null;
+  }
+}
+
 const AB_ENABLED_KEY = 'auto_backup_enabled';
 const AB_TIME_KEY = 'auto_backup_time';     // "HH:MM"
 const AB_DAYS_KEY = 'auto_backup_days';     // "0,1,2,3,4,5,6" (0=dom)
@@ -638,24 +672,19 @@ async function runAutoBackupIfDue(): Promise<boolean> {
  */
 export function startAutoBackupWatcher() {
   if (window.electronAPI) {
-    // Electron: ascolta l'evento dal processo main
+    // Electron: ascolta l'evento dal processo main (scheduler in main.js ogni 60s)
     window.electronAPI.onTriggerAutoBackup(async ({ todayStr }) => {
-      const sbUrl = import.meta.env.VITE_SUPABASE_URL;
-      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       try {
-        const res = await fetch(`${sbUrl}/functions/v1/backup-database`, {
-          headers: { Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const jsonStr = JSON.stringify(data, null, 2);
+        // Esporta da SQLite locale (offline) o Supabase client (online)
+        const jsonStr = await exportDataForAutoBackup(todayStr);
+        if (!jsonStr) return;
         const filename = `backup-salone-${todayStr}.json`;
-        // Prova prima il salvataggio silenzioso nella cartella configurata
+        // Salva silenziosamente nella cartella configurata
         const result = await window.electronAPI!.saveBackupAuto(filename, jsonStr);
         if (result.ok) {
           await window.electronAPI!.markBackupDone(todayStr);
         } else if (result.reason === 'no-folder') {
-          // Nessuna cartella configurata: apri "Salva come" come fallback
+          // Nessuna cartella: apri dialogo "Salva come"
           const manual = await window.electronAPI!.saveBackupFile(filename, jsonStr);
           if (manual.ok) await window.electronAPI!.markBackupDone(todayStr);
         }
@@ -730,16 +759,6 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
     'Authorization': `Bearer ${localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
     'Content-Type': 'application/json',
   };
-
-  const BACKUP_TABLES = [
-    'parrucchieri', 'clienti', 'trattamenti_catalogo', 'voci_extra_catalogo',
-    'impostazioni', 'appuntamenti', 'appuntamento_trattamenti', 'schede_colore',
-    'giorni_parrucchieri', 'fiches', 'fiche_voci', 'incassi_giornalieri',
-    'carte_sconto', 'utilizzi_carta_sconto', 'carte_premium', 'ricariche_carta_premium',
-    'utilizzi_carta_premium', 'rivendita_prodotti', 'template_messaggi_carta_sconto',
-    'template_messaggi_comunicazioni', 'schede_clienti_da_confermare',
-    'magazzino_categorie', 'magazzino_prodotti', 'magazzino_schede_salvate', 'assenze_parrucchieri',
-  ];
 
   async function exportFromSupabaseClient(): Promise<Record<string, unknown>> {
     const backup: Record<string, unknown[]> = {};
