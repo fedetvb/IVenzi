@@ -67,7 +67,8 @@ textarea{resize:none;padding-top:13px;line-height:1.5}
 <div class="header">
   <div class="hi">
     <div class="logo" id="logoBox">
-      <img id="logoImg" src="/icons/I_Venzi_iniziali.png" alt="I·V" />
+      <svg id="logoSvg" viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:white;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>
+      <img id="logoImg" src="" alt="" style="display:none;width:40px;height:40px;object-fit:cover;border-radius:10px;" />
     </div>
     <h1>Scheda Cliente</h1>
   </div>
@@ -194,25 +195,35 @@ var SU = "https://cfsourwsjhhriytkdnuw.supabase.co";
 var SK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmc291cndzamhocml5dGtkbnV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjEzMDksImV4cCI6MjA5NDQ5NzMwOX0.XXTX5NYTIYF-Dn9-iA-YgJQd8G4CVKPTedoBscD1OOI";
 var EF = SU + "/functions/v1/registrazione-cliente";
 
+function applyLogo(url) {
+  if (!url) return;
+  var img = document.getElementById('logoImg');
+  var svg = document.getElementById('logoSvg');
+  var box = document.getElementById('logoBox');
+  if (img) { img.src = url; img.style.display = 'block'; }
+  if (svg) svg.style.display = 'none';
+  if (box) { box.style.background = 'transparent'; box.style.boxShadow = 'none'; box.style.padding = '0'; }
+}
+
 (function loadLogo() {
-  var logoEndpoint = SU + "/functions/v1/registrazione-cliente?logo=1";
-  fetch(logoEndpoint, { cache: "no-store" })
+  // Prima prova: Supabase REST API diretta con chiave anon
+  var restUrl = SU + "/rest/v1/impostazioni?select=valore&chiave=eq.logo_salone_url";
+  fetch(restUrl, { headers: { 'apikey': SK, 'Authorization': 'Bearer ' + SK } })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data && data.url) {
-        var url = data.url;
-        var img = document.getElementById('logoImg');
-        if (img) {
-          img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_v=' + Date.now();
-          img.style.width = '40px';
-          img.style.height = '40px';
-          img.style.objectFit = 'cover';
-          img.style.borderRadius = '10px';
-          var box = document.getElementById('logoBox');
-          if (box) { box.style.background = 'transparent'; box.style.boxShadow = 'none'; }
-        }
+      if (Array.isArray(data) && data.length > 0 && data[0].valore) {
+        applyLogo(data[0].valore);
+      } else {
+        throw new Error('no logo');
       }
-    }).catch(function() {});
+    })
+    .catch(function() {
+      // Fallback: edge function ?logo=1
+      fetch(SU + "/functions/v1/registrazione-cliente?logo=1", { cache: "no-store" })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d && d.url) applyLogo(d.url); })
+        .catch(function() {});
+    });
 })();
 
 var photoBase64 = null;
