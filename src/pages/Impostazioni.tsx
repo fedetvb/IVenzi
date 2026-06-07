@@ -757,13 +757,15 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
     try {
       let data: Record<string, unknown> | null = null;
 
-      if (isElectronEnv()) {
-        // Electron + SQLite locale (modalità offline)
-        data = await exportBackup();
-        if (!data) throw new Error('Esportazione locale non riuscita');
-      } else if (inElectron) {
-        // Electron + Supabase: legge direttamente dal client JS (evita fetch da file://)
-        data = await exportFromSupabaseClient();
+      if (inElectron) {
+        // Electron: prova prima il DB locale SQLite (funziona offline)
+        const localRes = await window.electronAPI!.db!.export();
+        if (localRes?.ok && localRes?.data) {
+          data = localRes.data as Record<string, unknown>;
+        } else {
+          // SQLite non disponibile: legge da Supabase (richiede connessione)
+          data = await exportFromSupabaseClient();
+        }
       } else {
         // Web: usa edge function con service_role
         const res = await fetch(cloudApiUrl, { headers: cloudHeaders });
