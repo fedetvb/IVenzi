@@ -1185,7 +1185,7 @@ async function buildQrWithLogo(qrImgUrl: string, logo: string | null): Promise<s
 
 function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  const [registrazioneUrl, setRegistrazioneUrl] = useState('https://silver-kitsune-3a0339.netlify.app/?registrazione=1');
+  const [registrazioneUrl, setRegistrazioneUrl] = useState('https://silver-kitsune-3a0339-3a0339.netlify.app/?registrazione=1');
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
   const [savingUrl, setSavingUrl] = useState(false);
