@@ -611,6 +611,7 @@ const FS_ENABLED_KEY = 'fiches_sched_enabled';
 const FS_TIME_KEY    = 'fiches_sched_time';   // "HH:MM"
 const FS_DAYS_KEY    = 'fiches_sched_days';   // "1,2,3,4,5"
 const FS_LAST_KEY    = 'fiches_sched_last';   // "YYYY-MM-DD"
+const FS_XLS_KEY     = 'fiches_sched_xls';    // "1" = also save XLS
 
 const GIORNI_SETTIMANA = [
   { label: 'Dom', value: 0 },
@@ -762,7 +763,7 @@ async function saveFicheFileAuto(type: string, filename: string, content: Blob |
   }
 }
 
-async function runAutoFichesForDate(dateStr: string): Promise<void> {
+async function runAutoFichesForDate(dateStr: string, saveXls: boolean): Promise<void> {
   const italDate = dateStr.split('-').reverse().join('-');
   const { tutte, dichiarate, nonDichiarate } = await fetchFichesForDate(dateStr);
 
@@ -776,8 +777,10 @@ async function runAutoFichesForDate(dateStr: string): Promise<void> {
     if (g.rows.length === 0) continue;
     const pdf = generateFichesPdf(g.rows, italDate, g.title);
     await saveFicheFileAuto(g.pdfType, `fiches-${g.slug}-${italDate}.pdf`, pdf);
-    const xls = generateFichesXls(g.rows, italDate, g.title);
-    await saveFicheFileAuto(g.xlsType, `fiches-${g.slug}-${italDate}.xls`, xls);
+    if (saveXls) {
+      const xls = generateFichesXls(g.rows, italDate, g.title);
+      await saveFicheFileAuto(g.xlsType, `fiches-${g.slug}-${italDate}.xls`, xls);
+    }
   }
 }
 
@@ -800,8 +803,9 @@ async function runAutoFichesIfDue(): Promise<void> {
   });
 
   if (filteredDates.length === 0) return;
+  const saveXls = localStorage.getItem(FS_XLS_KEY) === '1';
   for (const dateStr of filteredDates) {
-    await runAutoFichesForDate(dateStr);
+    await runAutoFichesForDate(dateStr, saveXls);
   }
   const latestDate = filteredDates[filteredDates.length - 1];
   localStorage.setItem(FS_LAST_KEY, latestDate);
@@ -813,8 +817,9 @@ export function startAutoFichesWatcher() {
   if (window.electronAPI) {
     window.electronAPI.onTriggerAutoFiches(async ({ dates, latestDate }) => {
       try {
+        const saveXls = localStorage.getItem(FS_XLS_KEY) === '1';
         for (const dateStr of dates) {
-          await runAutoFichesForDate(dateStr);
+          await runAutoFichesForDate(dateStr, saveXls);
         }
         await window.electronAPI!.markFichesDone(latestDate);
       } catch { /* silenzioso */ }
@@ -4220,31 +4225,72 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 
 // ─── Cartelle di salvataggio ──────────────────────────────────────────────────
 
-const SAVE_PATH_LABELS: Record<string, { label: string; desc: string }> = {
-  backup:                    { label: 'Backup',                            desc: 'File JSON backup del database' },
-  fiches_tutte:              { label: 'PDF Fiches — Tutte',                desc: 'PDF automatico con tutte le fiches convalidate del giorno' },
-  fiches_dichiarate:         { label: 'PDF Fiches — Dichiarate',           desc: 'PDF automatico con le fiches a pagamento dichiarato (bancomat/contanti verdi)' },
-  fiches_non_dichiarate:     { label: 'PDF Fiches — Non dichiarate',       desc: 'PDF automatico con le fiches pagate in contanti non dichiarati' },
-  fiches_xls_tutte:          { label: 'Excel Fiches — Tutte',              desc: 'File Excel con tutte le fiches convalidate del giorno (formato italiano)' },
-  fiches_xls_dichiarate:     { label: 'Excel Fiches — Dichiarate',         desc: 'File Excel con le fiches a pagamento dichiarato (formato italiano)' },
-  fiches_xls_non_dichiarate: { label: 'Excel Fiches — Non dichiarate',     desc: 'File Excel con le fiches in contanti non dichiarati (formato italiano)' },
-  fiches:                    { label: 'Fiches (salvataggio manuale)',       desc: 'PDF fiches da salvataggio manuale in stampa' },
-  fiches_nero:               { label: 'Fiches manuale (non dichiarate)',    desc: 'PDF fiches manuali pagate in contanti non dichiarati' },
-  clienti:                   { label: 'Clienti',                           desc: 'CSV e PDF esportazione clienti' },
-  magazzino:                 { label: 'Magazzino',                         desc: 'CSV, PDF e HTML inventario magazzino' },
-  rivendita:                 { label: 'Rivendita',                         desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
-  statistiche:               { label: 'Statistiche',                       desc: 'PDF report statistiche e schede' },
-  qrcode:                    { label: 'QR Code',                           desc: 'PDF QR code registrazione clienti' },
-  comunicazioni:             { label: 'Comunicazioni',                     desc: 'HTML guida e materiali comunicazione' },
-};
+const CARTELLE_GENERALI: Array<{ key: string; label: string; desc: string }> = [
+  { key: 'backup',        label: 'Backup',                         desc: 'File JSON backup del database' },
+  { key: 'clienti',       label: 'Clienti',                        desc: 'CSV e PDF esportazione clienti' },
+  { key: 'magazzino',     label: 'Magazzino',                      desc: 'CSV, PDF e HTML inventario magazzino' },
+  { key: 'rivendita',     label: 'Rivendita',                      desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
+  { key: 'statistiche',   label: 'Statistiche',                    desc: 'PDF report statistiche e schede' },
+  { key: 'qrcode',        label: 'QR Code',                        desc: 'PDF QR code registrazione clienti' },
+  { key: 'comunicazioni', label: 'Comunicazioni',                   desc: 'HTML guida e materiali comunicazione' },
+];
+
+const CARTELLE_FICHES: Array<{ key: string; label: string; desc: string }> = [
+  { key: 'fiches',               label: 'PDF — Salvataggio manuale',      desc: 'PDF fiches stampate manualmente' },
+  { key: 'fiches_nero',          label: 'PDF — Manuale (non dichiarate)',  desc: 'PDF fiches manuali in contanti non dichiarati' },
+  { key: 'fiches_tutte',         label: 'PDF — Tutte',                    desc: 'PDF automatico con tutte le fiches del giorno' },
+  { key: 'fiches_dichiarate',    label: 'PDF — Dichiarate',               desc: 'PDF automatico con le fiches dichiarate (bancomat/contanti verdi)' },
+  { key: 'fiches_non_dichiarate',label: 'PDF — Non dichiarate',           desc: 'PDF automatico con le fiches in contanti non dichiarati' },
+  { key: 'fiches_xls_tutte',         label: 'Excel — Tutte',              desc: 'File Excel con tutte le fiches del giorno (formato italiano)' },
+  { key: 'fiches_xls_dichiarate',    label: 'Excel — Dichiarate',         desc: 'File Excel con le fiches dichiarate (formato italiano)' },
+  { key: 'fiches_xls_non_dichiarate',label: 'Excel — Non dichiarate',     desc: 'File Excel con le fiches non dichiarate (formato italiano)' },
+];
+
+function PathRow({ label, desc, path, onPick, onOpen, onClear, disabled }: {
+  label: string; desc: string; path: string;
+  onPick: () => void; onOpen: () => void; onClear: () => void; disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-4 px-6 py-4">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-stone-800">{label}</p>
+        <p className="text-xs text-stone-400 mt-0.5">{desc}</p>
+        {path
+          ? <p className="text-xs text-emerald-600 font-mono mt-1 truncate" title={path}>{path}</p>
+          : <p className="text-xs text-stone-300 italic mt-1">Nessuna cartella — userà "Salva come"</p>
+        }
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {path && <button onClick={onOpen} title="Apri cartella" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"><FolderOpen size={14} /></button>}
+        <button onClick={onPick} disabled={disabled} className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-amber-100 text-stone-600 hover:text-amber-700 rounded-lg transition-colors disabled:opacity-40">Scegli</button>
+        {path && <button onClick={onClear} title="Rimuovi" className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors"><X size={13} /></button>}
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${on ? 'bg-amber-500' : 'bg-stone-200'}`}>
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-6' : 'translate-x-1'}`} />
+    </button>
+  );
+}
 
 function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
   const isElectronApp = !!(window as any).electronAPI;
   const [paths, setPaths] = useState<Record<string, string>>({});
-  const [fichesSched, setFichesSched] = useState({ enabled: false, time: '20:00', days: [1, 2, 3, 4, 5] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [fichesOpen, setFichesOpen] = useState(false);
+
+  // Fiches scheduler
+  const [fsEnabled, setFsEnabled] = useState(false);
+  const [fsTime, setFsTime]   = useState('20:00');
+  const [fsDays, setFsDays]   = useState<number[]>([1, 2, 3, 4, 5]);
+  const [fsXls,  setFsXls]    = useState(false);
+  const [fsLast, setFsLast]   = useState('');
 
   useEffect(() => {
     (async () => {
@@ -4254,57 +4300,60 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
           (window as any).electronAPI.getFichesSched(),
         ]);
         setPaths(p || {});
-        if (s) setFichesSched({ enabled: s.enabled, time: s.time, days: s.days ?? [1, 2, 3, 4, 5] });
+        if (s) { setFsEnabled(s.enabled); setFsTime(s.time); setFsDays(s.days ?? [1, 2, 3, 4, 5]); setFsLast(s.last ?? ''); }
       } else {
-        const enabled = localStorage.getItem(FS_ENABLED_KEY) === '1';
-        const time = localStorage.getItem(FS_TIME_KEY) ?? '20:00';
-        const daysStr = localStorage.getItem(FS_DAYS_KEY);
-        const days = daysStr ? daysStr.split(',').map(Number) : [1, 2, 3, 4, 5];
-        setFichesSched({ enabled, time, days });
+        setFsEnabled(localStorage.getItem(FS_ENABLED_KEY) === '1');
+        setFsTime(localStorage.getItem(FS_TIME_KEY) ?? '20:00');
+        const dr = localStorage.getItem(FS_DAYS_KEY);
+        setFsDays(dr ? dr.split(',').map(Number) : [1, 2, 3, 4, 5]);
+        setFsLast(localStorage.getItem(FS_LAST_KEY) ?? '');
       }
+      setFsXls(localStorage.getItem(FS_XLS_KEY) === '1');
       setLoading(false);
     })();
   }, [isElectronApp]);
 
-  async function pickFolder(type: string) {
+  async function pickFolder(key: string, label: string) {
     if (!isElectronApp) return;
-    const label = SAVE_PATH_LABELS[type]?.label ?? type;
     const res = await (window as any).electronAPI.pickFolder(`Scegli cartella per: ${label}`);
     if (res.ok && res.folder) {
-      const newPaths = { ...paths, [type]: res.folder };
-      setPaths(newPaths);
-      await (window as any).electronAPI.setFilePaths(newPaths);
+      const np = { ...paths, [key]: res.folder };
+      setPaths(np);
+      await (window as any).electronAPI.setFilePaths(np);
       showFlash('Cartella aggiornata');
     }
   }
 
-  function toggleFichesDay(d: number) {
-    setFichesSched(s => ({
-      ...s,
-      days: s.days.includes(d) ? s.days.filter(x => x !== d) : [...s.days, d].sort(),
-    }));
+  async function clearFolder(key: string) {
+    if (!isElectronApp) return;
+    const np = { ...paths, [key]: '' };
+    setPaths(np);
+    await (window as any).electronAPI.setFilePaths(np);
   }
 
-  async function saveFichesSched() {
+  function toggleDay(d: number) {
+    setFsDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort());
+  }
+
+  async function saveSched() {
     setSaving(true);
     if (isElectronApp) {
-      await (window as any).electronAPI.setFichesSched({ ...fichesSched, last: '' });
+      await (window as any).electronAPI.setFichesSched({ enabled: fsEnabled, time: fsTime, days: fsDays, last: '' });
     } else {
-      localStorage.setItem(FS_ENABLED_KEY, fichesSched.enabled ? '1' : '0');
-      localStorage.setItem(FS_TIME_KEY, fichesSched.time);
-      localStorage.setItem(FS_DAYS_KEY, fichesSched.days.join(','));
+      localStorage.setItem(FS_ENABLED_KEY, fsEnabled ? '1' : '0');
+      localStorage.setItem(FS_TIME_KEY, fsTime);
+      localStorage.setItem(FS_DAYS_KEY, fsDays.join(','));
     }
+    localStorage.setItem(FS_XLS_KEY, fsXls ? '1' : '0');
     setSaving(false);
     showFlash('Impostazioni salvate');
   }
 
-  function showFlash(msg: string) {
-    setFlash(msg);
-    setTimeout(() => setFlash(null), 3000);
-  }
+  function showFlash(msg: string) { setFlash(msg); setTimeout(() => setFlash(null), 3000); }
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="p-2 rounded-xl hover:bg-stone-100 transition-colors text-stone-500 hover:text-stone-700">
           <ArrowLeft size={18} />
@@ -4318,100 +4367,134 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
       {!isElectronApp && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
           <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-700">Nella versione web le cartelle non sono selezionabili — i file vengono scaricati direttamente dal browser. Nell'app installata (Electron) potrai configurare le cartelle di destinazione.</p>
+          <p className="text-sm text-amber-700">Nella versione web le cartelle non sono selezionabili. I file vengono scaricati tramite il browser. Puoi comunque configurare l'orario di salvataggio automatico.</p>
         </div>
       )}
 
       {!loading && (
         <>
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-stone-100">
-              <h3 className="font-semibold text-stone-800 text-sm">Cartelle per tipo di file</h3>
-              <p className="text-xs text-stone-400 mt-0.5">Clicca "Scegli" per selezionare la cartella di destinazione. Se non configurata, viene usato il download standard del browser.</p>
+          {/* Cartelle generali */}
+          {isElectronApp && (
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-stone-100">
+                <h3 className="font-semibold text-stone-800 text-sm">Cartelle generali</h3>
+                <p className="text-xs text-stone-400 mt-0.5">Cartella di destinazione per ogni tipo di file.</p>
+              </div>
+              <div className="divide-y divide-stone-100">
+                {CARTELLE_GENERALI.map(c => (
+                  <PathRow key={c.key} label={c.label} desc={c.desc} path={paths[c.key] ?? ''}
+                    onPick={() => pickFolder(c.key, c.label)}
+                    onOpen={() => (window as any).electronAPI.showFolder(paths[c.key])}
+                    onClear={() => clearFolder(c.key)}
+                  />
+                ))}
+              </div>
             </div>
-            <div className="divide-y divide-stone-100">
-              {Object.entries(SAVE_PATH_LABELS).map(([type, info]) => (
-                <div key={type} className="flex items-center gap-4 px-6 py-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-stone-800">{info.label}</p>
-                    <p className="text-xs text-stone-400 mt-0.5">{info.desc}</p>
-                    {paths[type] ? (
-                      <p className="text-xs text-emerald-600 font-mono mt-1 truncate" title={paths[type]}>{paths[type]}</p>
-                    ) : (
-                      <p className="text-xs text-stone-300 italic mt-1">Download standard — nessuna cartella configurata</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {paths[type] && (
-                      <button onClick={() => (window as any).electronAPI.showFolder(paths[type])} title="Apri cartella" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors">
-                        <FolderOpen size={14} />
-                      </button>
-                    )}
-                    <button onClick={() => pickFolder(type)} className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-amber-100 text-stone-600 hover:text-amber-700 rounded-lg transition-colors">
-                      Scegli
-                    </button>
-                    {paths[type] && (
-                      <button onClick={async () => { const np = { ...paths, [type]: '' }; setPaths(np); await (window as any).electronAPI.setFilePaths(np); }} title="Rimuovi" className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors">
-                        <X size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
 
+          {/* Cartelle fiches — accordion */}
+          {isElectronApp && (
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setFichesOpen(v => !v)}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-stone-50 transition-colors"
+              >
+                <div className="text-left">
+                  <h3 className="font-semibold text-stone-800 text-sm">Fiches</h3>
+                  <p className="text-xs text-stone-400 mt-0.5">Cartelle PDF ed Excel per fiches (manuale e automatico)</p>
+                </div>
+                <ChevronDown size={16} className={`text-stone-400 transition-transform ${fichesOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {fichesOpen && (
+                <div className="divide-y divide-stone-100 border-t border-stone-100">
+                  {CARTELLE_FICHES.map(c => (
+                    <PathRow key={c.key} label={c.label} desc={c.desc} path={paths[c.key] ?? ''}
+                      onPick={() => pickFolder(c.key, c.label)}
+                      onOpen={() => (window as any).electronAPI.showFolder(paths[c.key])}
+                      onClear={() => clearFolder(c.key)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Salvataggio automatico fiches — stile backup */}
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-stone-100">
               <h3 className="font-semibold text-stone-800 text-sm">Salvataggio automatico fiches</h3>
-              <p className="text-xs text-stone-400 mt-0.5">All'orario impostato salva 3 PDF (Tutte, Dichiarate, Non dichiarate) con le fiches convalidate del giorno. Se il programma era spento, recupera automaticamente i giorni mancanti alla prima apertura.</p>
+              <p className="text-xs text-stone-400 mt-0.5">Genera PDF (ed Excel) con le fiches del giorno all'orario impostato. Recupera automaticamente i giorni mancanti alla riapertura.</p>
             </div>
-            <div className="px-6 py-5 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="px-6 py-5 space-y-5">
+
+              {/* Toggle abilitato */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                    <CalendarDays size={16} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-stone-800">Salvataggio automatico fiches</p>
+                    <p className="text-xs text-stone-400 mt-0.5">{isElectronApp ? "L'app deve essere aperta o nel tray" : 'La pagina deve essere aperta nel browser'}</p>
+                  </div>
+                </div>
+                <Toggle on={fsEnabled} onToggle={() => setFsEnabled(v => !v)} />
+              </div>
+
+              {/* Toggle Excel */}
+              <div className="flex items-center justify-between gap-4 py-3 border-t border-stone-100">
                 <div>
-                  <p className="text-sm font-semibold text-stone-800">Attivo</p>
-                  <p className="text-xs text-stone-400 mt-0.5">{isElectronApp ? "L'app deve essere aperta o minimizzata nel tray di sistema" : 'La pagina deve essere aperta nel browser — non funziona su mobile'}</p>
+                  <p className="text-sm font-semibold text-stone-800">Includi file Excel</p>
+                  <p className="text-xs text-stone-400 mt-0.5">Oltre al PDF genera anche il file Excel (.xls) in formato italiano</p>
                 </div>
-                <button onClick={() => setFichesSched(s => ({ ...s, enabled: !s.enabled }))} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${fichesSched.enabled ? 'bg-amber-500' : 'bg-stone-200'}`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${fichesSched.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
+                <Toggle on={fsXls} onToggle={() => setFsXls(v => !v)} />
               </div>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <label className="text-xs font-semibold text-stone-600 block mb-1.5">Orario salvataggio</label>
-                  <input type="time" value={fichesSched.time} onChange={e => setFichesSched(s => ({ ...s, time: e.target.value }))} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300" />
+
+              {/* Orario */}
+              <div className="border-t border-stone-100 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock size={14} className="text-stone-400" />
+                  <span className="text-sm font-semibold text-stone-700">Orario del salvataggio</span>
                 </div>
-                <div className="flex-1 pt-5">
-                  <p className="text-xs text-stone-400">Scarica le fiches del giorno corrente all'orario indicato. Il nome file include la data italiana (es. fiches-tutte-07-06-2026.pdf).</p>
-                </div>
+                <input
+                  type="time"
+                  value={fsTime}
+                  onChange={e => setFsTime(e.target.value)}
+                  className="border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300 w-36"
+                />
+                <p className="text-xs text-stone-400 mt-2">Il salvataggio avviene all'orario impostato se il programma è aperto, oppure al primo avvio dopo quell'ora.</p>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-stone-600 block mb-2">Giorni attivi</label>
+
+              {/* Giorni della settimana */}
+              <div className="border-t border-stone-100 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <CalendarDays size={14} className="text-stone-400" />
+                  <span className="text-sm font-semibold text-stone-700">Giorni della settimana</span>
+                </div>
                 <div className="flex gap-1.5 flex-wrap">
                   {GIORNI_SETTIMANA.map(g => (
-                    <button key={g.value} onClick={() => toggleFichesDay(g.value)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${fichesSched.days.includes(g.value) ? 'bg-amber-500 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}>
+                    <button key={g.value} onClick={() => toggleDay(g.value)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${fsDays.includes(g.value) ? 'bg-amber-500 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}>
                       {g.label}
                     </button>
                   ))}
                 </div>
               </div>
-              {fichesSched.enabled && !paths.fiches_tutte && isElectronApp && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2 text-xs text-amber-700">
-                  <AlertTriangle size={13} className="flex-shrink-0" />
-                  Configura la cartella "Fiches — Tutte" qui sopra per il salvataggio automatico. Le altre due cartelle sono opzionali.
-                </div>
+
+              {/* Ultimo salvataggio */}
+              {fsLast && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1.5 border-t border-stone-100 pt-3">
+                  <Check size={13} /> Ultimo salvataggio automatico: {fsLast}
+                </p>
               )}
-              {fichesSched.enabled && paths.fiches_tutte && (!paths.fiches_dichiarate || !paths.fiches_non_dichiarate) && isElectronApp && (
-                <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 flex items-center gap-2 text-xs text-stone-600">
-                  <AlertTriangle size={13} className="flex-shrink-0 text-stone-400" />
-                  Opzionale: configura "Fiches — Dichiarate" e "Fiches — Non dichiarate" per salvare le categorie separatamente. Se non configurate, viene aperto il dialogo di salvataggio.
-                </div>
-              )}
-              <button onClick={saveFichesSched} disabled={saving} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors">
-                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+
+              {/* Salva */}
+              <button onClick={saveSched} disabled={saving}
+                className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors">
+                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Settings size={14} />}
                 {saving ? 'Salvataggio...' : 'Salva impostazioni'}
               </button>
+
               {flash && <p className="text-sm text-emerald-600 font-medium flex items-center gap-1.5"><Check size={14} /> {flash}</p>}
             </div>
           </div>

@@ -157,12 +157,17 @@ export function generateFichesPdf(rows: FicheAutoRow[], dateLabel: string, title
     return [nome, row.orari || '—', vociStr, pag, `\u20AC${row.totale.toFixed(2)}`];
   });
 
+  const totale = rows.reduce((s, r) => s + r.totale, 0);
+
   autoTable(doc, {
     head: [['Cliente', 'Orario', 'Servizi', 'Pagamento', 'Totale']],
     body: tableBody,
+    foot: [['', '', '', 'Totale incasso', `\u20AC${totale.toFixed(2)}`]],
+    showFoot: 'lastPage',
     startY: 35,
     styles: { fontSize: 8, cellPadding: 2.5, lineColor: [231, 229, 228] as [number, number, number] },
     headStyles: { fillColor: [28, 25, 23] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontStyle: 'bold', fontSize: 8 },
+    footStyles: { fillColor: [240, 253, 244] as [number, number, number], textColor: [22, 163, 74] as [number, number, number], fontStyle: 'bold', fontSize: 9 },
     alternateRowStyles: { fillColor: [250, 250, 249] as [number, number, number] },
     columnStyles: {
       0: { cellWidth: 42 },
@@ -172,9 +177,6 @@ export function generateFichesPdf(rows: FicheAutoRow[], dateLabel: string, title
       4: { cellWidth: 22, halign: 'right' as const },
     },
   });
-
-  // Riepilogo
-  const totale = rows.reduce((s, r) => s + r.totale, 0);
   doc.addPage();
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
