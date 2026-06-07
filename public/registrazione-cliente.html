@@ -195,24 +195,24 @@ var SK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6I
 var EF = SU + "/functions/v1/registrazione-cliente";
 
 (function loadLogo() {
-  fetch(SU + "/rest/v1/impostazioni?chiave=eq.logo_salone_url&select=valore&limit=1", {
-    headers: { "apikey": SK, "Authorization": "Bearer " + SK },
-    cache: "no-store"
-  }).then(function(r) { return r.json(); }).then(function(rows) {
-    if (rows && rows.length > 0 && rows[0].valore) {
-      var url = rows[0].valore;
-      var img = document.getElementById('logoImg');
-      if (img) {
-        img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_v=' + Date.now();
-        img.style.width = '40px';
-        img.style.height = '40px';
-        img.style.objectFit = 'cover';
-        img.style.borderRadius = '10px';
-        var box = document.getElementById('logoBox');
-        if (box) { box.style.background = 'transparent'; box.style.boxShadow = 'none'; }
+  var logoEndpoint = SU + "/functions/v1/registrazione-cliente?logo=1";
+  fetch(logoEndpoint, { cache: "no-store" })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data.url) {
+        var url = data.url;
+        var img = document.getElementById('logoImg');
+        if (img) {
+          img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_v=' + Date.now();
+          img.style.width = '40px';
+          img.style.height = '40px';
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '10px';
+          var box = document.getElementById('logoBox');
+          if (box) { box.style.background = 'transparent'; box.style.boxShadow = 'none'; }
+        }
       }
-    }
-  }).catch(function() {});
+    }).catch(function() {});
 })();
 
 var photoBase64 = null;

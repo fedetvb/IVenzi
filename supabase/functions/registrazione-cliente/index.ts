@@ -230,6 +230,27 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const efUrl = `${su}/functions/v1/registrazione-cliente`;
 
+  // GET ?logo=1 → restituisce il logo URL del salone (usato dalla pagina statica Netlify)
+  if (req.method === "GET" && new URL(req.url).searchParams.get("logo") === "1") {
+    try {
+      const admin = createClient(su, serviceKey);
+      const { data } = await admin
+        .from("impostazioni")
+        .select("valore")
+        .eq("chiave", "logo_salone_url")
+        .maybeSingle();
+      return new Response(JSON.stringify({ url: data?.valore ?? null }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch {
+      return new Response(JSON.stringify({ url: null }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   // GET: serve la pagina HTML
   if (req.method === "GET") {
     const html = HTML
