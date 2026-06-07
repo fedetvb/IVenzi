@@ -274,11 +274,11 @@ document.getElementById("f").onsubmit=async function(e){
     if(!r.ok||res.error)throw new Error(res.error||"HTTP "+r.status);
     if(photoBase64)progBar.style.width='100%';
     setTimeout(function(){
-      document.getElementById("app").innerHTML='<div class="ss"><div class="si"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><h2>Grazie!</h2><p>I tuoi dati sono stati inviati correttamente.<br/>Il nostro staff creer\u00e0 la tua scheda al pi\u00f9 presto.</p><div class="sf"><svg viewBox="0 0 24 24"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>Ti aspettiamo!</div></div>';
+      document.getElementById("app").innerHTML='<div class="ss"><div class="si"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><h2>Grazie!</h2><p>I tuoi dati sono stati inviati correttamente.<br/>Il nostro staff creer\\u00e0 la tua scheda al pi\\u00f9 presto.</p><div class="sf"><svg viewBox="0 0 24 24"><path d="M6 3c1.5 0 3 1.5 3 3S6 12 6 12 3 9 3 6s1.5-3 3-3z"/><path d="M18 3c1.5 0 3 1.5 3 3s-3 6-3 6-3-3-3-6 1.5-3 3-3z"/><path d="M6 12l6 9 6-9"/></svg>Ti aspettiamo!</div></div>';
     },300);
   }catch(x){
     btn.disabled=false;btn.textContent="Invia la mia scheda";
-    showErr(x.message||"Si \u00e8 verificato un errore. Riprova tra qualche secondo.");
+    showErr(x.message||"Si \\u00e8 verificato un errore. Riprova tra qualche secondo.");
     prog.style.display='none';
   }
 };
