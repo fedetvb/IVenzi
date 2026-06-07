@@ -52,7 +52,10 @@ export async function compressImage(source: File | Blob | string): Promise<Blob>
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
 
   return new Promise<Blob>((res, rej) =>
     canvas.toBlob(b => b ? res(b) : rej(new Error('canvas toBlob failed')), 'image/jpeg', IMG_QUALITY)
