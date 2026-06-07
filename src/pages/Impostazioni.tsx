@@ -6,7 +6,7 @@ import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione, compressImage } from '../lib/localDb';
 import { saveFile, browserDownload } from '../lib/fileSaver';
-import { fetchFichesForDate, generateFichesPdf } from '../lib/fichesPdfGenerator';
+import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema';
@@ -743,18 +743,22 @@ function getMissingFichesDates(lastStr: string, now: Date, hh: number, mm: numbe
   return dates;
 }
 
-async function saveFichePdfAuto(type: string, filename: string, pdf: Blob): Promise<void> {
+async function saveFicheFileAuto(type: string, filename: string, content: Blob | string): Promise<void> {
   const api = (window as any).electronAPI;
   if (api?.saveFileTo) {
-    const buf = await pdf.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const b64 = btoa(binary);
-    const result = await api.saveFileTo(type, filename, b64, 'base64');
-    if (!result.ok) browserDownload(filename, pdf);
+    if (content instanceof Blob) {
+      const buf = await content.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      const result = await api.saveFileTo(type, filename, btoa(binary), 'base64');
+      if (!result.ok) browserDownload(filename, content);
+    } else {
+      const result = await api.saveFileTo(type, filename, content, 'utf8');
+      if (!result.ok) browserDownload(filename, content);
+    }
   } else {
-    browserDownload(filename, pdf);
+    browserDownload(filename, content);
   }
 }
 
@@ -762,17 +766,18 @@ async function runAutoFichesForDate(dateStr: string): Promise<void> {
   const italDate = dateStr.split('-').reverse().join('-');
   const { tutte, dichiarate, nonDichiarate } = await fetchFichesForDate(dateStr);
 
-  if (tutte.length > 0) {
-    const pdf = generateFichesPdf(tutte, italDate, 'Fiches — Tutte');
-    await saveFichePdfAuto('fiches_tutte', `fiches-tutte-${italDate}.pdf`, pdf);
-  }
-  if (dichiarate.length > 0) {
-    const pdf = generateFichesPdf(dichiarate, italDate, 'Fiches — Dichiarate');
-    await saveFichePdfAuto('fiches_dichiarate', `fiches-dichiarate-${italDate}.pdf`, pdf);
-  }
-  if (nonDichiarate.length > 0) {
-    const pdf = generateFichesPdf(nonDichiarate, italDate, 'Fiches — Non dichiarate');
-    await saveFichePdfAuto('fiches_non_dichiarate', `fiches-non-dichiarate-${italDate}.pdf`, pdf);
+  const groups: Array<{ rows: typeof tutte; slug: string; pdfType: string; xlsType: string; title: string }> = [
+    { rows: tutte,         slug: 'tutte',          pdfType: 'fiches_tutte',          xlsType: 'fiches_xls_tutte',          title: 'Fiches \u2014 Tutte' },
+    { rows: dichiarate,    slug: 'dichiarate',      pdfType: 'fiches_dichiarate',     xlsType: 'fiches_xls_dichiarate',     title: 'Fiches \u2014 Dichiarate' },
+    { rows: nonDichiarate, slug: 'non-dichiarate',  pdfType: 'fiches_non_dichiarate', xlsType: 'fiches_xls_non_dichiarate', title: 'Fiches \u2014 Non dichiarate' },
+  ];
+
+  for (const g of groups) {
+    if (g.rows.length === 0) continue;
+    const pdf = generateFichesPdf(g.rows, italDate, g.title);
+    await saveFicheFileAuto(g.pdfType, `fiches-${g.slug}-${italDate}.pdf`, pdf);
+    const xls = generateFichesXls(g.rows, italDate, g.title);
+    await saveFicheFileAuto(g.xlsType, `fiches-${g.slug}-${italDate}.xls`, xls);
   }
 }
 
@@ -4216,18 +4221,21 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 // ─── Cartelle di salvataggio ──────────────────────────────────────────────────
 
 const SAVE_PATH_LABELS: Record<string, { label: string; desc: string }> = {
-  backup:               { label: 'Backup',                          desc: 'File JSON backup del database' },
-  fiches_tutte:         { label: 'Fiches — Tutte',                  desc: 'PDF automatico con tutte le fiches convalidate del giorno' },
-  fiches_dichiarate:    { label: 'Fiches — Dichiarate',             desc: 'PDF automatico con le fiches a pagamento dichiarato (bancomat/contanti verdi)' },
-  fiches_non_dichiarate:{ label: 'Fiches — Non dichiarate',         desc: 'PDF automatico con le fiches pagate in contanti non dichiarati' },
-  fiches:               { label: 'Fiches (salvataggio manuale)',    desc: 'PDF fiches da salvataggio manuale in stampa' },
-  fiches_nero:          { label: 'Fiches manuale (non dichiarate)', desc: 'PDF fiches manuali pagate in contanti non dichiarati' },
-  clienti:              { label: 'Clienti',                         desc: 'CSV e PDF esportazione clienti' },
-  magazzino:            { label: 'Magazzino',                       desc: 'CSV, PDF e HTML inventario magazzino' },
-  rivendita:            { label: 'Rivendita',                       desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
-  statistiche:          { label: 'Statistiche',                     desc: 'PDF report statistiche e schede' },
-  qrcode:               { label: 'QR Code',                         desc: 'PDF QR code registrazione clienti' },
-  comunicazioni:        { label: 'Comunicazioni',                   desc: 'HTML guida e materiali comunicazione' },
+  backup:                    { label: 'Backup',                            desc: 'File JSON backup del database' },
+  fiches_tutte:              { label: 'PDF Fiches — Tutte',                desc: 'PDF automatico con tutte le fiches convalidate del giorno' },
+  fiches_dichiarate:         { label: 'PDF Fiches — Dichiarate',           desc: 'PDF automatico con le fiches a pagamento dichiarato (bancomat/contanti verdi)' },
+  fiches_non_dichiarate:     { label: 'PDF Fiches — Non dichiarate',       desc: 'PDF automatico con le fiches pagate in contanti non dichiarati' },
+  fiches_xls_tutte:          { label: 'Excel Fiches — Tutte',              desc: 'File Excel con tutte le fiches convalidate del giorno (formato italiano)' },
+  fiches_xls_dichiarate:     { label: 'Excel Fiches — Dichiarate',         desc: 'File Excel con le fiches a pagamento dichiarato (formato italiano)' },
+  fiches_xls_non_dichiarate: { label: 'Excel Fiches — Non dichiarate',     desc: 'File Excel con le fiches in contanti non dichiarati (formato italiano)' },
+  fiches:                    { label: 'Fiches (salvataggio manuale)',       desc: 'PDF fiches da salvataggio manuale in stampa' },
+  fiches_nero:               { label: 'Fiches manuale (non dichiarate)',    desc: 'PDF fiches manuali pagate in contanti non dichiarati' },
+  clienti:                   { label: 'Clienti',                           desc: 'CSV e PDF esportazione clienti' },
+  magazzino:                 { label: 'Magazzino',                         desc: 'CSV, PDF e HTML inventario magazzino' },
+  rivendita:                 { label: 'Rivendita',                         desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
+  statistiche:               { label: 'Statistiche',                       desc: 'PDF report statistiche e schede' },
+  qrcode:                    { label: 'QR Code',                           desc: 'PDF QR code registrazione clienti' },
+  comunicazioni:             { label: 'Comunicazioni',                     desc: 'HTML guida e materiali comunicazione' },
 };
 
 function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {

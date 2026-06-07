@@ -209,3 +209,53 @@ export function generateFichesPdf(rows: FicheAutoRow[], dateLabel: string, title
 
   return doc.output('blob');
 }
+
+const TIPO_PAGAMENTO_LABEL: Record<string, string> = {
+  cc_bancomat: 'Bancomat/CC',
+  contanti_verde: 'Contanti',
+  contanti_nero: 'Contanti (non dich.)',
+};
+
+function xlsEsc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function xlsStr(v: string): string { return `<Cell><Data ss:Type="String">${xlsEsc(v)}</Data></Cell>`; }
+function xlsNum(v: number): string { return `<Cell><Data ss:Type="Number">${v.toFixed(2)}</Data></Cell>`; }
+
+export function generateFichesXls(rows: FicheAutoRow[], dateLabel: string, title: string): string {
+  const eur = (n: number) => n.toFixed(2).replace('.', ',');
+
+  const headerRow = `<Row>
+    ${xlsStr('Cliente')}${xlsStr('Orario')}${xlsStr('Servizi')}${xlsStr('Pagamento')}${xlsStr('Totale (€)')}
+  </Row>`;
+
+  const dataRows = rows.map(row => {
+    const nome = `${row.clienteNome} ${row.clienteCognome}`.trim() || 'Sconosciuto';
+    const vociStr = row.voci.map(v => `${v.nome}  ${eur(v.prezzo)} €`).join('; ');
+    const pag = row.tipoPagamento ? (TIPO_PAGAMENTO_LABEL[row.tipoPagamento] ?? row.tipoPagamento) : '—';
+    return `<Row>
+      ${xlsStr(nome)}${xlsStr(row.orari || '—')}${xlsStr(vociStr || '—')}${xlsStr(pag)}${xlsNum(row.totale)}
+    </Row>`;
+  }).join('\n');
+
+  const totale = rows.reduce((s, r) => s + r.totale, 0);
+  const totaleRow = `<Row>
+    ${xlsStr('')}${xlsStr('')}${xlsStr('')}${xlsStr('Totale incasso')}${xlsNum(totale)}
+  </Row>`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+          xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Fiches">
+    <Table>
+      <Row>${xlsStr(`${title} \u2014 ${dateLabel}`)}</Row>
+      <Row></Row>
+      ${headerRow}
+      ${dataRows}
+      <Row></Row>
+      ${totaleRow}
+    </Table>
+  </Worksheet>
+</Workbook>`;
+}

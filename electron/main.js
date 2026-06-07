@@ -51,7 +51,7 @@ function writeConfig(cfg) { writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null,
 
 // ─── Config cartelle di salvataggio ──────────────────────────────────────────
 const SAVE_PATHS_CONFIG_PATH = join(USER_DATA, 'save-paths-config.json');
-const DEFAULT_SAVE_PATHS = { backup: '', fiches: '', fiches_nero: '', clienti: '', magazzino: '', rivendita: '', statistiche: '', qrcode: '', comunicazioni: '' };
+const DEFAULT_SAVE_PATHS = { backup: '', fiches: '', fiches_nero: '', fiches_tutte: '', fiches_dichiarate: '', fiches_non_dichiarate: '', fiches_xls_tutte: '', fiches_xls_dichiarate: '', fiches_xls_non_dichiarate: '', clienti: '', magazzino: '', rivendita: '', statistiche: '', qrcode: '', comunicazioni: '' };
 
 function readSavePaths() {
   try { if (existsSync(SAVE_PATHS_CONFIG_PATH)) return { ...DEFAULT_SAVE_PATHS, ...JSON.parse(readFileSync(SAVE_PATHS_CONFIG_PATH, 'utf8')) }; }
