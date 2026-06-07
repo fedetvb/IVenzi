@@ -21,6 +21,7 @@ import StatisticheGate from './components/StatisticheGate';
 import BirthdayModal from './components/BirthdayModal';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
+import RegistrazioneCliente from './pages/RegistrazioneCliente';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList } from 'lucide-react';
@@ -469,6 +470,10 @@ export default function App() {
     });
     return cleanup;
   }, []);
+
+  if (new URLSearchParams(window.location.search).get('registrazione') === '1') {
+    return <RegistrazioneCliente />;
+  }
 
   if (loading) {
     return (

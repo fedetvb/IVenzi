@@ -323,7 +323,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Redirect alla pagina statica Netlify (che il browser renderizza correttamente)
-    return Response.redirect("https://silver-kitsune-3a0339.netlify.app/registrazione-cliente.html", 302);
+    return Response.redirect("https://silver-kitsune-3a0339.netlify.app/?registrazione=1", 302);
   }
 
   // POST: riceve dati + eventuale foto, inserisce nel DB
