@@ -312,10 +312,11 @@ Deno.serve(async (req: Request) => {
       // nessun logo, usa default
     }
     const html = buildHtml(su, sk, efUrl, logoUrl);
-    return new Response(html, {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-    });
+    const htmlHeaders = new Headers();
+    htmlHeaders.set("Content-Type", "text/html; charset=utf-8");
+    htmlHeaders.set("Cache-Control", "no-store");
+    htmlHeaders.set("Access-Control-Allow-Origin", "*");
+    return new Response(html, { status: 200, headers: htmlHeaders });
   }
 
   // POST: riceve dati + eventuale foto, inserisce nel DB
