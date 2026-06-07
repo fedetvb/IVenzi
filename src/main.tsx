@@ -19,10 +19,12 @@ import { AuthProvider } from './lib/AuthContext.tsx';
 import { startAutoBackupWatcher } from './pages/Impostazioni.tsx';
 import './index.css';
 
+const params = new URLSearchParams(window.location.search);
 const isRegistrazione =
   window.location.pathname === '/registrazione' ||
   window.location.hash === '#/registrazione' ||
-  window.location.hash.startsWith('#/registrazione?');
+  window.location.hash.startsWith('#/registrazione?') ||
+  params.get('registrazione') === '1';
 
 if (!isRegistrazione) {
   startAutoBackupWatcher();

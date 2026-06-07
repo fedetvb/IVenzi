@@ -25,14 +25,11 @@ export default function RegistrazioneCliente() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('impostazioni')
-      .select('valore')
-      .eq('chiave', 'logo_salone_url')
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.valore) setLogoUrl(data.valore);
-      });
+    const supabaseUrl = 'https://cfsourwsjhhriytkdnuw.supabase.co';
+    fetch(`${supabaseUrl}/functions/v1/registrazione-cliente?logo=1`)
+      .then(r => r.json())
+      .then((d: { url?: string }) => { if (d?.url) setLogoUrl(d.url); })
+      .catch(() => {});
   }, []);
 
   function setField(k: keyof Form, v: string) {
