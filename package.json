@@ -14,15 +14,16 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "electron:dev": "concurrently \"vite\" \"electron .\"",
-    "electron:build": "cross-env ELECTRON=true vite build && electron-builder",
-    "electron:build:win": "cross-env ELECTRON=true vite build && electron-builder --win",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
-    "electron:build:win:cmd": "set ELECTRON=true && npx vite build && npx electron-builder --win",
-    "electron:build:mac": "cross-env ELECTRON=true vite build && electron-builder --mac",
-    "electron:build:linux": "cross-env ELECTRON=true vite build && electron-builder --linux"
+    "electron:build": "cross-env ELECTRON=true vite build && electron-rebuild -f -w better-sqlite3 && electron-builder",
+    "electron:build:win": "cross-env ELECTRON=true vite build && electron-rebuild -f -w better-sqlite3 && electron-builder --win",
+    "electron:build:win:cmd": "set ELECTRON=true && npx vite build && npx electron-rebuild -f -w better-sqlite3 && npx electron-builder --win",
+    "electron:build:mac": "cross-env ELECTRON=true vite build && electron-rebuild -f -w better-sqlite3 && electron-builder --mac",
+    "electron:build:linux": "cross-env ELECTRON=true vite build && electron-rebuild -f -w better-sqlite3 && electron-builder --linux"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "better-sqlite3": "^9.4.3",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
@@ -41,12 +42,16 @@
       "electron/main.js",
       "electron/preload.cjs",
       "package.json",
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3/**/*",
+      "!node_modules/better-sqlite3/src/**",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/prebuilds/**"
     ],
     "extraMetadata": {
       "main": "electron/main.js"
     },
     "asar": false,
+    "npmRebuild": true,
     "icon": "public/icons/icon-512x512.png",
     "win": {
       "target": [
@@ -61,9 +66,6 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
-  },
-  "optionalDependencies": {
-    "better-sqlite3": "^9.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

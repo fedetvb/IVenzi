@@ -168,27 +168,36 @@ let db = null;
 let dbReady = false;
 
 function loadBetterSqlite3() {
-  if (app.isPackaged) {
-    const candidates = [
-      join(app.getAppPath(), 'node_modules', 'better-sqlite3'),
-      join(process.resourcesPath, 'app', 'node_modules', 'better-sqlite3'),
-      join(__dirname, '..', 'node_modules', 'better-sqlite3'),
-    ];
-    for (const p of candidates) {
-      try {
-        if (existsSync(p)) return require(p);
-      } catch { /* prova il prossimo */ }
+  const candidates = app.isPackaged ? [
+    // asar: false → risorse nella cartella app/
+    join(app.getAppPath(), 'node_modules', 'better-sqlite3'),
+    join(process.resourcesPath, 'app', 'node_modules', 'better-sqlite3'),
+    join(__dirname, '..', 'node_modules', 'better-sqlite3'),
+    // asar: true → risorse in app.asar.unpacked/
+    join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'better-sqlite3'),
+  ] : [];
+  for (const p of candidates) {
+    try {
+      if (existsSync(p)) {
+        const mod = require(p);
+        console.log('[DB] better-sqlite3 caricato da:', p);
+        return mod;
+      }
+    } catch (e) {
+      console.warn('[DB] Percorso non valido:', p, e.message);
     }
   }
-  return require('better-sqlite3');
+  // Fallback: richiesta diretta (funziona in dev)
+  try { return require('better-sqlite3'); } catch (e) {
+    console.error('[DB] better-sqlite3 non disponibile:', e.message);
+    return null;
+  }
 }
 
 function openDatabase(userId) {
-  let Database;
-  try {
-    Database = loadBetterSqlite3();
-  } catch (e) {
-    console.warn('[DB] better-sqlite3 non disponibile (modalita\' IndexedDB attiva):', e.message);
+  const Database = loadBetterSqlite3();
+  if (!Database) {
+    console.warn('[DB] better-sqlite3 non disponibile — esegui "npm run electron:rebuild" prima del build.');
     return false;
   }
   try {
