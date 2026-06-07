@@ -16,7 +16,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import RegistrazioneCliente from './pages/RegistrazioneCliente.tsx';
 import { AuthProvider } from './lib/AuthContext.tsx';
-import { startAutoBackupWatcher } from './pages/Impostazioni.tsx';
+import { startAutoBackupWatcher, startAutoFichesWatcher } from './pages/Impostazioni.tsx';
 import './index.css';
 
 const params = new URLSearchParams(window.location.search);
@@ -28,6 +28,7 @@ const isRegistrazione =
 
 if (!isRegistrazione) {
   startAutoBackupWatcher();
+  startAutoFichesWatcher();
 }
 
 createRoot(document.getElementById('root')!).render(

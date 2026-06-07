@@ -78,13 +78,14 @@ export interface DbAPI {
   setUserProfile: (userId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
-export type SavePathType = 'backup' | 'fiches' | 'fiches_nero' | 'clienti' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
+export type SavePathType = 'backup' | 'fiches' | 'fiches_nero' | 'fiches_tutte' | 'fiches_dichiarate' | 'fiches_non_dichiarate' | 'clienti' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
 export type SavePaths = Record<SavePathType, string>;
 
 export interface FichesSchedConfig {
   enabled: boolean;
-  time: string;   // "HH:MM"
-  last: string;   // "YYYY-MM-DD"
+  time: string;     // "HH:MM"
+  days: number[];   // 0=dom … 6=sab
+  last: string;     // "YYYY-MM-DD"
 }
 
 export interface LocalProfile {
@@ -119,7 +120,7 @@ export interface ElectronAPI {
   getFichesSched: () => Promise<FichesSchedConfig>;
   setFichesSched: (cfg: FichesSchedConfig) => Promise<{ ok: boolean }>;
   markFichesDone: (todayStr: string) => Promise<{ ok: boolean }>;
-  onTriggerAutoFiches: (cb: (data: { dateStr: string; todayStr: string }) => void) => () => void;
+  onTriggerAutoFiches: (cb: (data: { dates: string[]; latestDate: string }) => void) => () => void;
   db?: DbAPI;
   auth?: AuthAPI;
 }

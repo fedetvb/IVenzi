@@ -159,7 +159,7 @@ const FICHES_SCHED_PATH = join(USER_DATA, 'fiches-sched-config.json');
 function readFichesSched() {
   try { if (existsSync(FICHES_SCHED_PATH)) return JSON.parse(readFileSync(FICHES_SCHED_PATH, 'utf8')); }
   catch { /* ignore */ }
-  return { enabled: false, time: '08:00', last: '' };
+  return { enabled: false, time: '20:00', days: [1, 2, 3, 4, 5], last: '' };
 }
 function writeFichesSched(cfg) { writeFileSync(FICHES_SCHED_PATH, JSON.stringify(cfg, null, 2), 'utf8'); }
 
@@ -823,6 +823,7 @@ app.on('before-quit', () => { isQuitting = true; });
 
 // ─── Scheduler backup automatico ─────────────────────────────────────────────
 let schedulerInterval = null;
+let backupSchedPending = false;
 
 function startBackupScheduler() {
   if (schedulerInterval) clearInterval(schedulerInterval);
@@ -831,15 +832,31 @@ function startBackupScheduler() {
 }
 
 async function checkAndRunBackup() {
+  if (backupSchedPending) return;
   const cfg = readConfig();
   if (!cfg.enabled) return;
   const n = new Date();
   const todayStr = toLocalDateStr(n);
   if (cfg.last === todayStr) return;
-  if (!cfg.days.includes(n.getDay())) return;
   const [hh, mm] = cfg.time.split(':').map(Number);
-  if (n.getHours() < hh || (n.getHours() === hh && n.getMinutes() < mm)) return;
-  if (mainWindow) mainWindow.webContents.send('trigger-auto-backup', { todayStr });
+  const timePassed = n.getHours() > hh || (n.getHours() === hh && n.getMinutes() >= mm);
+  if (!timePassed) return;
+
+  // Catch-up: if last < yesterday, backup yesterday first (only last missing day)
+  const yesterday = new Date(n);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = toLocalDateStr(yesterday);
+
+  let targetDate;
+  if (cfg.last < yesterdayStr) {
+    targetDate = yesterdayStr;
+  } else {
+    if (!cfg.days.includes(n.getDay())) return;
+    targetDate = todayStr;
+  }
+
+  backupSchedPending = true;
+  if (mainWindow) mainWindow.webContents.send('trigger-auto-backup', { todayStr: targetDate });
 }
 
 function toLocalDateStr(d) {
@@ -848,6 +865,7 @@ function toLocalDateStr(d) {
 
 // ─── Scheduler auto-salvataggio fiches ───────────────────────────────────────
 let fichesSchedInterval = null;
+let fichesSchedPending = false;
 
 function startFichesScheduler() {
   if (fichesSchedInterval) clearInterval(fichesSchedInterval);
@@ -856,17 +874,43 @@ function startFichesScheduler() {
 }
 
 function checkAndRunFiches() {
+  if (fichesSchedPending) return;
   const cfg = readFichesSched();
   if (!cfg.enabled) return;
   const n = new Date();
   const todayStr = toLocalDateStr(n);
-  if (cfg.last === todayStr) return;
   const [hh, mm] = cfg.time.split(':').map(Number);
-  if (n.getHours() < hh || (n.getHours() === hh && n.getMinutes() < mm)) return;
-  const yesterday = new Date(n);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = toLocalDateStr(yesterday);
-  if (mainWindow) mainWindow.webContents.send('trigger-auto-fiches', { dateStr: yesterdayStr, todayStr });
+  const todayTimePassed = n.getHours() > hh || (n.getHours() === hh && n.getMinutes() >= mm);
+  const allowedDays = cfg.days || [1, 2, 3, 4, 5];
+
+  // Collect all missing dates from (last+1) up to today
+  let cursor;
+  if (cfg.last) {
+    cursor = new Date(cfg.last + 'T12:00:00');
+    cursor.setDate(cursor.getDate() + 1);
+  } else {
+    cursor = new Date(todayStr + 'T12:00:00');
+  }
+
+  const dates = [];
+  while (true) {
+    const dateStr = toLocalDateStr(cursor);
+    if (dateStr > todayStr) break;
+    if (dateStr === todayStr) {
+      // Include today only if scheduled time has passed and day is allowed
+      if (todayTimePassed && allowedDays.includes(cursor.getDay())) dates.push(dateStr);
+      break;
+    } else {
+      // Past dates: always include (catch-up, regardless of allowed days)
+      dates.push(dateStr);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (dates.length === 0) return;
+  const latestDate = dates[dates.length - 1];
+  fichesSchedPending = true;
+  if (mainWindow) mainWindow.webContents.send('trigger-auto-fiches', { dates, latestDate });
 }
 
 // ─── IPC: backup file ─────────────────────────────────────────────────────────
@@ -892,7 +936,7 @@ ipcMain.handle('backup:save-file', async (_e, { filename, content }) => {
   try { writeFileSync(filePath, content, 'utf8'); return { ok: true, filePath }; }
   catch (err) { return { ok: false, reason: String(err) }; }
 });
-ipcMain.handle('backup:mark-done', (_e, { todayStr }) => { const cfg = readConfig(); cfg.last = todayStr; writeConfig(cfg); return { ok: true }; });
+ipcMain.handle('backup:mark-done', (_e, { todayStr }) => { backupSchedPending = false; const cfg = readConfig(); cfg.last = todayStr; writeConfig(cfg); return { ok: true }; });
 ipcMain.handle('shell:show-folder', (_e, fp) => shell.openPath(fp));
 ipcMain.handle('shell:show-item', (_e, fp) => shell.showItemInFolder(fp));
 
@@ -922,7 +966,7 @@ ipcMain.handle('files:save-auto', async (_e, { type, filename, content, encoding
 // ─── IPC: scheduler fiches ───────────────────────────────────────────────────
 ipcMain.handle('fiches:get-sched', () => readFichesSched());
 ipcMain.handle('fiches:set-sched', (_e, cfg) => { writeFichesSched(cfg); startFichesScheduler(); return { ok: true }; });
-ipcMain.handle('fiches:mark-done', (_e, { todayStr }) => { const cfg = readFichesSched(); cfg.last = todayStr; writeFichesSched(cfg); return { ok: true }; });
+ipcMain.handle('fiches:mark-done', (_e, { todayStr }) => { fichesSchedPending = false; const cfg = readFichesSched(); cfg.last = todayStr; writeFichesSched(cfg); return { ok: true }; });
 
 // ─── IPC: database locale ─────────────────────────────────────────────────────
 ipcMain.handle('db:is-ready', () => dbReady);

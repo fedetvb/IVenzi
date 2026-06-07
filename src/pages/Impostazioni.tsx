@@ -6,6 +6,7 @@ import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione, compressImage } from '../lib/localDb';
 import { saveFile, browserDownload } from '../lib/fileSaver';
+import { fetchFichesForDate, generateFichesPdf } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema';
@@ -606,6 +607,11 @@ const AB_TIME_KEY = 'auto_backup_time';     // "HH:MM"
 const AB_DAYS_KEY = 'auto_backup_days';     // "0,1,2,3,4,5,6" (0=dom)
 const AB_LAST_KEY = 'auto_backup_last';     // "YYYY-MM-DD"
 
+const FS_ENABLED_KEY = 'fiches_sched_enabled';
+const FS_TIME_KEY    = 'fiches_sched_time';   // "HH:MM"
+const FS_DAYS_KEY    = 'fiches_sched_days';   // "1,2,3,4,5"
+const FS_LAST_KEY    = 'fiches_sched_last';   // "YYYY-MM-DD"
+
 const GIORNI_SETTIMANA = [
   { label: 'Dom', value: 0 },
   { label: 'Lun', value: 1 },
@@ -624,15 +630,26 @@ async function runAutoBackupIfDue(): Promise<boolean> {
 
   const now = new Date();
   const todayStr = localDateStr(now);
-  if (lastStr === todayStr) return false; // già fatto oggi
-
-  const allowedDays = daysStr.split(',').map(Number);
-  if (!allowedDays.includes(now.getDay())) return false;
+  if (lastStr === todayStr) return false;
 
   const [hh, mm] = timeStr.split(':').map(Number);
-  const scheduled = new Date(now);
-  scheduled.setHours(hh, mm, 0, 0);
-  if (now < scheduled) return false; // orario non ancora raggiunto
+  const timePassed = now.getHours() > hh || (now.getHours() === hh && now.getMinutes() >= mm);
+  if (!timePassed) return false;
+
+  const allowedDays = daysStr.split(',').map(Number);
+
+  // Catch-up: if last < yesterday, backup yesterday first (only last missing day)
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = localDateStr(yesterday);
+
+  let targetDate: string;
+  if (lastStr < yesterdayStr) {
+    targetDate = yesterdayStr;
+  } else {
+    if (!allowedDays.includes(now.getDay())) return false;
+    targetDate = todayStr;
+  }
 
   try {
     const sbUrl = localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL;
@@ -644,17 +661,16 @@ async function runAutoBackupIfDue(): Promise<boolean> {
     if (!res.ok) return false;
     const data = await res.json();
     const jsonStr = JSON.stringify(data, null, 2);
-    const filename = `backup-salone-${todayStr}.json`;
+    const italDate = targetDate.split('-').reverse().join('-');
+    const filename = `backup-salone-${italDate}.json`;
 
-    // Backup automatico: usa sempre il download silenzioso (a.click) perché
-    // showSaveFilePicker richiede un gesto utente e viene bloccato da setInterval.
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
 
-    localStorage.setItem(AB_LAST_KEY, todayStr);
+    localStorage.setItem(AB_LAST_KEY, targetDate);
     return true;
   } catch {
     return false;
@@ -672,28 +688,135 @@ async function runAutoBackupIfDue(): Promise<boolean> {
  */
 export function startAutoBackupWatcher() {
   if (window.electronAPI) {
-    // Electron: ascolta l'evento dal processo main (scheduler in main.js ogni 60s)
     window.electronAPI.onTriggerAutoBackup(async ({ todayStr }) => {
       try {
-        // Esporta da SQLite locale (offline) o Supabase client (online)
         const jsonStr = await exportDataForAutoBackup(todayStr);
         if (!jsonStr) return;
-        const filename = `backup-salone-${todayStr}.json`;
-        // Salva silenziosamente nella cartella configurata
+        const italDate = todayStr.split('-').reverse().join('-');
+        const filename = `backup-salone-${italDate}.json`;
         const result = await window.electronAPI!.saveBackupAuto(filename, jsonStr);
         if (result.ok) {
           await window.electronAPI!.markBackupDone(todayStr);
         } else if (result.reason === 'no-folder') {
-          // Nessuna cartella: apri dialogo "Salva come"
           const manual = await window.electronAPI!.saveBackupFile(filename, jsonStr);
           if (manual.ok) await window.electronAPI!.markBackupDone(todayStr);
         }
       } catch { /* silenzioso */ }
     });
   } else {
-    // Browser: polling ogni minuto
     runAutoBackupIfDue();
     setInterval(runAutoBackupIfDue, 60_000);
+  }
+}
+
+function isMobileDevice(): boolean {
+  return navigator.maxTouchPoints > 1 && window.innerWidth < 1024;
+}
+
+function toLocalDateStrSimple(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getMissingFichesDates(lastStr: string, now: Date, hh: number, mm: number): string[] {
+  const todayStr = toLocalDateStrSimple(now);
+  const todayTimePassed = now.getHours() > hh || (now.getHours() === hh && now.getMinutes() >= mm);
+  const dates: string[] = [];
+
+  let cursor: Date;
+  if (lastStr) {
+    cursor = new Date(lastStr + 'T12:00:00');
+    cursor.setDate(cursor.getDate() + 1);
+  } else {
+    cursor = new Date(todayStr + 'T12:00:00');
+  }
+
+  while (true) {
+    const dateStr = toLocalDateStrSimple(cursor);
+    if (dateStr > todayStr) break;
+    if (dateStr === todayStr) {
+      if (todayTimePassed) dates.push(dateStr);
+      break;
+    }
+    dates.push(dateStr);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+async function saveFichePdfAuto(type: string, filename: string, pdf: Blob): Promise<void> {
+  const api = (window as any).electronAPI;
+  if (api?.saveFileTo) {
+    const buf = await pdf.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const b64 = btoa(binary);
+    const result = await api.saveFileTo(type, filename, b64, 'base64');
+    if (!result.ok) browserDownload(filename, pdf);
+  } else {
+    browserDownload(filename, pdf);
+  }
+}
+
+async function runAutoFichesForDate(dateStr: string): Promise<void> {
+  const italDate = dateStr.split('-').reverse().join('-');
+  const { tutte, dichiarate, nonDichiarate } = await fetchFichesForDate(dateStr);
+
+  if (tutte.length > 0) {
+    const pdf = generateFichesPdf(tutte, italDate, 'Fiches — Tutte');
+    await saveFichePdfAuto('fiches_tutte', `fiches-tutte-${italDate}.pdf`, pdf);
+  }
+  if (dichiarate.length > 0) {
+    const pdf = generateFichesPdf(dichiarate, italDate, 'Fiches — Dichiarate');
+    await saveFichePdfAuto('fiches_dichiarate', `fiches-dichiarate-${italDate}.pdf`, pdf);
+  }
+  if (nonDichiarate.length > 0) {
+    const pdf = generateFichesPdf(nonDichiarate, italDate, 'Fiches — Non dichiarate');
+    await saveFichePdfAuto('fiches_non_dichiarate', `fiches-non-dichiarate-${italDate}.pdf`, pdf);
+  }
+}
+
+async function runAutoFichesIfDue(): Promise<void> {
+  if (isMobileDevice()) return;
+  if (localStorage.getItem(FS_ENABLED_KEY) !== '1') return;
+  const timeStr = localStorage.getItem(FS_TIME_KEY) ?? '20:00';
+  const daysStr = localStorage.getItem(FS_DAYS_KEY) ?? '1,2,3,4,5';
+  const lastStr = localStorage.getItem(FS_LAST_KEY) ?? '';
+  const [hh, mm] = timeStr.split(':').map(Number);
+  const now = new Date();
+  const allowedDays = daysStr.split(',').map(Number);
+
+  const dates = getMissingFichesDates(lastStr, now, hh, mm);
+  // For today, also check allowed days
+  const filteredDates = dates.filter(d => {
+    const todayStr = toLocalDateStrSimple(now);
+    if (d < todayStr) return true; // past dates always included
+    return allowedDays.includes(new Date(d + 'T12:00:00').getDay());
+  });
+
+  if (filteredDates.length === 0) return;
+  for (const dateStr of filteredDates) {
+    await runAutoFichesForDate(dateStr);
+  }
+  const latestDate = filteredDates[filteredDates.length - 1];
+  localStorage.setItem(FS_LAST_KEY, latestDate);
+}
+
+export function startAutoFichesWatcher() {
+  if (isMobileDevice()) return;
+
+  if (window.electronAPI) {
+    window.electronAPI.onTriggerAutoFiches(async ({ dates, latestDate }) => {
+      try {
+        for (const dateStr of dates) {
+          await runAutoFichesForDate(dateStr);
+        }
+        await window.electronAPI!.markFichesDone(latestDate);
+      } catch { /* silenzioso */ }
+    });
+  } else {
+    runAutoFichesIfDue();
+    setInterval(runAutoFichesIfDue, 60_000);
   }
 }
 
@@ -4093,21 +4216,24 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 // ─── Cartelle di salvataggio ──────────────────────────────────────────────────
 
 const SAVE_PATH_LABELS: Record<string, { label: string; desc: string }> = {
-  backup:        { label: 'Backup',         desc: 'File JSON backup del database' },
-  fiches:        { label: 'Fiches',         desc: 'PDF fiches giornaliere (auto e manuale)' },
-  clienti:       { label: 'Clienti',        desc: 'CSV e PDF esportazione clienti' },
-  magazzino:     { label: 'Magazzino',      desc: 'CSV, PDF e HTML inventario magazzino' },
-  rivendita:     { label: 'Rivendita',      desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
-  statistiche:   { label: 'Statistiche',    desc: 'PDF report statistiche e schede' },
-  qrcode:        { label: 'QR Code',        desc: 'PDF QR code registrazione clienti' },
-  comunicazioni: { label: 'Comunicazioni',  desc: 'HTML guida e materiali comunicazione' },
-  fiches_nero: { label: 'Fiches (contanti non registrati)', desc: 'Cartella separata per PDF fiches pagate in contanti non dichiarati' },
+  backup:               { label: 'Backup',                          desc: 'File JSON backup del database' },
+  fiches_tutte:         { label: 'Fiches — Tutte',                  desc: 'PDF automatico con tutte le fiches convalidate del giorno' },
+  fiches_dichiarate:    { label: 'Fiches — Dichiarate',             desc: 'PDF automatico con le fiches a pagamento dichiarato (bancomat/contanti verdi)' },
+  fiches_non_dichiarate:{ label: 'Fiches — Non dichiarate',         desc: 'PDF automatico con le fiches pagate in contanti non dichiarati' },
+  fiches:               { label: 'Fiches (salvataggio manuale)',    desc: 'PDF fiches da salvataggio manuale in stampa' },
+  fiches_nero:          { label: 'Fiches manuale (non dichiarate)', desc: 'PDF fiches manuali pagate in contanti non dichiarati' },
+  clienti:              { label: 'Clienti',                         desc: 'CSV e PDF esportazione clienti' },
+  magazzino:            { label: 'Magazzino',                       desc: 'CSV, PDF e HTML inventario magazzino' },
+  rivendita:            { label: 'Rivendita',                       desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
+  statistiche:          { label: 'Statistiche',                     desc: 'PDF report statistiche e schede' },
+  qrcode:               { label: 'QR Code',                         desc: 'PDF QR code registrazione clienti' },
+  comunicazioni:        { label: 'Comunicazioni',                   desc: 'HTML guida e materiali comunicazione' },
 };
 
 function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
   const isElectronApp = !!(window as any).electronAPI;
   const [paths, setPaths] = useState<Record<string, string>>({});
-  const [fichesSched, setFichesSched] = useState({ enabled: false, time: '08:00' });
+  const [fichesSched, setFichesSched] = useState({ enabled: false, time: '20:00', days: [1, 2, 3, 4, 5] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -4120,7 +4246,13 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
           (window as any).electronAPI.getFichesSched(),
         ]);
         setPaths(p || {});
-        if (s) setFichesSched({ enabled: s.enabled, time: s.time });
+        if (s) setFichesSched({ enabled: s.enabled, time: s.time, days: s.days ?? [1, 2, 3, 4, 5] });
+      } else {
+        const enabled = localStorage.getItem(FS_ENABLED_KEY) === '1';
+        const time = localStorage.getItem(FS_TIME_KEY) ?? '20:00';
+        const daysStr = localStorage.getItem(FS_DAYS_KEY);
+        const days = daysStr ? daysStr.split(',').map(Number) : [1, 2, 3, 4, 5];
+        setFichesSched({ enabled, time, days });
       }
       setLoading(false);
     })();
@@ -4138,10 +4270,22 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
     }
   }
 
+  function toggleFichesDay(d: number) {
+    setFichesSched(s => ({
+      ...s,
+      days: s.days.includes(d) ? s.days.filter(x => x !== d) : [...s.days, d].sort(),
+    }));
+  }
+
   async function saveFichesSched() {
-    if (!isElectronApp) return;
     setSaving(true);
-    await (window as any).electronAPI.setFichesSched({ ...fichesSched, last: '' });
+    if (isElectronApp) {
+      await (window as any).electronAPI.setFichesSched({ ...fichesSched, last: '' });
+    } else {
+      localStorage.setItem(FS_ENABLED_KEY, fichesSched.enabled ? '1' : '0');
+      localStorage.setItem(FS_TIME_KEY, fichesSched.time);
+      localStorage.setItem(FS_DAYS_KEY, fichesSched.days.join(','));
+    }
     setSaving(false);
     showFlash('Impostazioni salvate');
   }
@@ -4212,13 +4356,13 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-stone-100">
               <h3 className="font-semibold text-stone-800 text-sm">Salvataggio automatico fiches</h3>
-              <p className="text-xs text-stone-400 mt-0.5">Ogni giorno all'orario impostato salva automaticamente un PDF con le fiches del giorno precedente nella cartella Fiches</p>
+              <p className="text-xs text-stone-400 mt-0.5">All'orario impostato salva 3 PDF (Tutte, Dichiarate, Non dichiarate) con le fiches convalidate del giorno. Se il programma era spento, recupera automaticamente i giorni mancanti alla prima apertura.</p>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-stone-800">Attivo</p>
-                  <p className="text-xs text-stone-400 mt-0.5">L'app deve essere aperta o minimizzata nel tray di sistema</p>
+                  <p className="text-xs text-stone-400 mt-0.5">{isElectronApp ? "L'app deve essere aperta o minimizzata nel tray di sistema" : 'La pagina deve essere aperta nel browser — non funziona su mobile'}</p>
                 </div>
                 <button onClick={() => setFichesSched(s => ({ ...s, enabled: !s.enabled }))} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${fichesSched.enabled ? 'bg-amber-500' : 'bg-stone-200'}`}>
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${fichesSched.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -4230,19 +4374,30 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
                   <input type="time" value={fichesSched.time} onChange={e => setFichesSched(s => ({ ...s, time: e.target.value }))} className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300" />
                 </div>
                 <div className="flex-1 pt-5">
-                  <p className="text-xs text-stone-400">Il PDF viene generato ogni mattina a quest'ora con le fiches del giorno precedente.</p>
+                  <p className="text-xs text-stone-400">Scarica le fiches del giorno corrente all'orario indicato. Il nome file include la data italiana (es. fiches-tutte-07-06-2026.pdf).</p>
                 </div>
               </div>
-              {!paths.fiches && fichesSched.enabled && (
+              <div>
+                <label className="text-xs font-semibold text-stone-600 block mb-2">Giorni attivi</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {GIORNI_SETTIMANA.map(g => (
+                    <button key={g.value} onClick={() => toggleFichesDay(g.value)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${fichesSched.days.includes(g.value) ? 'bg-amber-500 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}>
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {fichesSched.enabled && !paths.fiches_tutte && isElectronApp && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2 text-xs text-amber-700">
                   <AlertTriangle size={13} className="flex-shrink-0" />
-                  Configura prima la cartella "Fiches" qui sopra affinché il salvataggio automatico funzioni.
+                  Configura la cartella "Fiches — Tutte" qui sopra per il salvataggio automatico. Le altre due cartelle sono opzionali.
                 </div>
               )}
-              {fichesSched.enabled && paths.fiches && !paths.fiches_nero && (
+              {fichesSched.enabled && paths.fiches_tutte && (!paths.fiches_dichiarate || !paths.fiches_non_dichiarate) && isElectronApp && (
                 <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 flex items-center gap-2 text-xs text-stone-600">
                   <AlertTriangle size={13} className="flex-shrink-0 text-stone-400" />
-                  Opzionale: configura "Fiches (contanti non registrati)" per salvare separatamente le fiches in contanti non dichiarati.
+                  Opzionale: configura "Fiches — Dichiarate" e "Fiches — Non dichiarate" per salvare le categorie separatamente. Se non configurate, viene aperto il dialogo di salvataggio.
                 </div>
               )}
               <button onClick={saveFichesSched} disabled={saving} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors">
