@@ -297,9 +297,11 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const efUrl = `${su}/functions/v1/registrazione-cliente`;
 
-  // GET: serve la pagina HTML con logo pre-incorporato server-side
+  // GET
   if (req.method === "GET") {
+    const reqUrl = new URL(req.url);
     let logoUrl: string | null = null;
+
     try {
       const admin = createClient(su, serviceKey);
       const { data } = await admin
@@ -309,14 +311,19 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       logoUrl = data?.valore ?? null;
     } catch {
-      // nessun logo, usa default
+      // nessun logo
     }
-    const html = buildHtml(su, sk, efUrl, logoUrl);
-    const htmlHeaders = new Headers();
-    htmlHeaders.set("Content-Type", "text/html; charset=utf-8");
-    htmlHeaders.set("Cache-Control", "no-store");
-    htmlHeaders.set("Access-Control-Allow-Origin", "*");
-    return new Response(html, { status: 200, headers: htmlHeaders });
+
+    // ?logo=1 → risposta JSON usata dalla pagina Netlify per caricare il logo client-side
+    if (reqUrl.searchParams.has("logo")) {
+      return new Response(JSON.stringify({ url: logoUrl }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    }
+
+    // Redirect alla pagina statica Netlify (che il browser renderizza correttamente)
+    return Response.redirect("https://silver-kitsune-3a0339.netlify.app/", 302);
   }
 
   // POST: riceve dati + eventuale foto, inserisce nel DB
