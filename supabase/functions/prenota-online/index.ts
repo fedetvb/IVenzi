@@ -88,12 +88,22 @@ Deno.serve(async (req: Request) => {
       serviziAbbinati = abbRes ?? [];
     }
 
+    // Merge abbinati into servizi so old clients can find them via servizi.find()
+    // The frontend uses serviziAbbinati to filter them out of the selection UI
+    const abbinatiNotAlreadyInServizi = serviziAbbinati.filter(
+      (a) => !serviziAbilitati.some((s: { id: string }) => s.id === a.id)
+    );
+    const serviziConAbbinati = [
+      ...serviziAbilitati,
+      ...abbinatiNotAlreadyInServizi.map((a) => ({ ...a, servizio_abbinato_online_id: null })),
+    ];
+
     return json({
       prenotazioniAttive,
       nomeSalone: impostazioni["nome_salone"] ?? "",
       logoUrl: impostazioni["logo_salone_url"] ?? null,
       parrucchieri: pRes.data ?? [],
-      servizi: serviziAbilitati,
+      servizi: serviziConAbbinati,
       serviziAbbinati,
     });
   }

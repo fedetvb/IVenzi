@@ -497,10 +497,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         {step === 'servizio' && (
           <Card title="Scegli il servizio" subtitle={`${parrucchiere?.nome} · ${dataSelezionata ? dateLabel(dataSelezionata) : ''}`}>
             <div className="space-y-3">
-              {info.servizi.length === 0 && (
-                <p className="text-sm text-stone-500 text-center py-6">Nessun servizio disponibile online al momento.</p>
-              )}
-              {info.servizi.map(s => (
+              {(() => {
+                const abbinatiIds = new Set((info.serviziAbbinati ?? []).map(a => a.id));
+                const serviziSelezionabili = info.servizi.filter(s => !abbinatiIds.has(s.id));
+                return serviziSelezionabili.length === 0 ? (
+                  <p className="text-sm text-stone-500 text-center py-6">Nessun servizio disponibile online al momento.</p>
+                ) : serviziSelezionabili.map(s => (
                 <button
                   key={s.id}
                   onClick={() => handleServizioSelect(s)}
@@ -514,14 +516,15 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                       <span>€ {s.prezzo.toFixed(2)}</span>
                       {s.servizio_abbinato_online_id && (
                         <span className="text-emerald-600 flex items-center gap-1">
-                          <Scissors size={10} /> + {info.servizi.find(x => x.id === s.servizio_abbinato_online_id)?.nome ?? 'abbinato'}
+                          <Scissors size={10} /> + {(info.servizi.find(x => x.id === s.servizio_abbinato_online_id) ?? info.serviziAbbinati?.find(x => x.id === s.servizio_abbinato_online_id))?.nome ?? 'abbinato'}
                         </span>
                       )}
                     </div>
                   </div>
                   <ChevronRight size={16} className="text-stone-400 flex-shrink-0" />
                 </button>
-              ))}
+              ));
+              })()}
               <BackBtn onClick={() => setStep('data')} />
             </div>
           </Card>
