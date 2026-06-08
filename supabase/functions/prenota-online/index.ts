@@ -110,6 +110,7 @@ Deno.serve(async (req: Request) => {
 
   // GET /disponibilita?user_id=...&parrucchiere_id=...&data=YYYY-MM-DD&durata_minuti=...
   if (req.method === "GET" && path === "/disponibilita") {
+    try {
     const userId = url.searchParams.get("user_id");
     const parrId = url.searchParams.get("parrucchiere_id");
     const data = url.searchParams.get("data");
@@ -184,10 +185,15 @@ Deno.serve(async (req: Request) => {
     }
 
     return json({ slot_disponibili: slots });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg, slot_disponibili: [] }, 500);
+    }
   }
 
   // GET /parrucchieri-liberi?user_id=...&data=YYYY-MM-DD&ora=HH:MM&durata_minuti=...&escludi_id=...
   if (req.method === "GET" && path === "/parrucchieri-liberi") {
+    try {
     const userId = url.searchParams.get("user_id");
     const data = url.searchParams.get("data");
     const ora = url.searchParams.get("ora"); // HH:MM Italian local
@@ -253,6 +259,10 @@ Deno.serve(async (req: Request) => {
     });
 
     return json({ parrucchieri: liberi });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg, parrucchieri: [] }, 500);
+    }
   }
 
   // POST /richiesta — submit booking request

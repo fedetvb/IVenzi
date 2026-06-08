@@ -161,21 +161,31 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const loadSlots = useCallback(async (parrId: string, data: string, durata: number) => {
     setLoadingSlot(true);
     setSlotDisponibili([]);
-    const res = await fetch(`${EDGE_URL}/disponibilita?user_id=${userId}&parrucchiere_id=${parrId}&data=${data}&durata_minuti=${durata}`);
-    const d = await res.json();
-    setSlotDisponibili(d.slot_disponibili ?? []);
-    setLoadingSlot(false);
+    try {
+      const res = await fetch(`${EDGE_URL}/disponibilita?user_id=${userId}&parrucchiere_id=${parrId}&data=${data}&durata_minuti=${durata}`);
+      const d = await res.json();
+      setSlotDisponibili(d.slot_disponibili ?? []);
+    } catch {
+      setSlotDisponibili([]);
+    } finally {
+      setLoadingSlot(false);
+    }
   }, [userId]);
 
   async function loadParrLiberi(data: string, ora: string, durata: number, escludiId: string) {
     setLoadingParr2(true);
     setParrLiberi([]);
-    const startMin = parseInt(ora.split(':')[0]) * 60 + parseInt(ora.split(':')[1]);
-    const endTime = `${pad(Math.floor((startMin + durata) / 60))}:${pad((startMin + durata) % 60)}`;
-    const res = await fetch(`${EDGE_URL}/parrucchieri-liberi?user_id=${userId}&data=${data}&ora=${endTime}&durata_minuti=${durata}&escludi_id=${escludiId}`);
-    const d = await res.json();
-    setParrLiberi(d.parrucchieri ?? []);
-    setLoadingParr2(false);
+    try {
+      const startMin = parseInt(ora.split(':')[0]) * 60 + parseInt(ora.split(':')[1]);
+      const endTime = `${pad(Math.floor((startMin + durata) / 60))}:${pad((startMin + durata) % 60)}`;
+      const res = await fetch(`${EDGE_URL}/parrucchieri-liberi?user_id=${userId}&data=${data}&ora=${endTime}&durata_minuti=${durata}&escludi_id=${escludiId}`);
+      const d = await res.json();
+      setParrLiberi(d.parrucchieri ?? []);
+    } catch {
+      setParrLiberi([]);
+    } finally {
+      setLoadingParr2(false);
+    }
   }
 
   function handleDatiNext() {
