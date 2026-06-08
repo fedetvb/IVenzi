@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
 import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share } from 'lucide-react';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/prenota-online`;
@@ -346,7 +345,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <p className="font-bold text-sm leading-snug">Aggiungila alla schermata home!</p>
               <p className="text-xs text-emerald-100 mt-0.5 leading-snug">
                 {deviceType === 'ios'
-                  ? <>Tocca <span className="font-bold">\u2191 Condividi</span> in basso, poi <span className="font-bold">"Aggiungi a schermata Home"</span>. Prenota con un tap, senza aprire il browser!</>
+                  ? <>Tocca <span className="font-bold">{'↑'} Condividi</span> in basso, poi <span className="font-bold">"Aggiungi a schermata Home"</span>. Prenota con un tap, senza aprire il browser!</>
                   : deviceType === 'android'
                   ? <>Tocca il menu del browser e scegli <span className="font-bold">"Aggiungi a schermata Home"</span>. Prenota con un tap, sempre a portata di mano!</>
                   : <>Aggiungi questa pagina ai segnalibri o salvala sulla schermata home. Prenota con un click, senza cercarla ogni volta!</>
@@ -791,4 +790,3 @@ function BackBtn({ onClick }: { onClick: () => void }) {
 }
 
 
-export default PrenotazioneOnline
