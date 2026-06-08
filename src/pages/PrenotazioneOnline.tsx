@@ -278,7 +278,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       data_ora: dataOraBase.toISOString(),
       parrucchiere2_id: parrucchiere2?.id ?? null,
       servizio2_id: servizio.servizio_abbinato_online_id ?? null,
-      data_ora2,
+      data_ora2: dataOra2,
     };
 
     try {
