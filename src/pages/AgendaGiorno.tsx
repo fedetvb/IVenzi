@@ -348,52 +348,69 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       .replace(/\{data\}/g, dataFmt)
       .replace(/\{ora\}/g, oraFmt);
 
-    // Create real appointments
-    const { data: appData } = await supabase.from('appuntamenti').insert({
-      cliente_id: r.cliente_id ?? null,
-      parrucchiere_id: r.parrucchiere_id,
-      data_ora: r.data_ora,
-      durata_minuti: r.durata_minuti ?? 60,
-      stato: 'confermato',
-      note: `Prenotazione online — ${r.nome} ${r.cognome} (${r.telefono})`,
-      prezzo_totale: 0,
-      user_id: user?.id,
-    }).select('id').single();
-
-    if (appData?.id && r.servizio_nome) {
-      await supabase.from('appuntamento_trattamenti').insert({
-        appuntamento_id: appData.id,
-        trattamento_id: r.servizio_id,
-        nome_trattamento: r.servizio_nome,
-        prezzo: 0,
+    // Crea appuntamento con lo stesso flusso di AppuntamentoModal.handleSave
+    // (dbInsert gestisce sia SQLite/Electron che IndexedDB+Supabase/browser)
+    const { data: app1Data } = await dbInsert({
+      table: 'appuntamenti',
+      data: {
+        cliente_id: r.cliente_id ?? null,
+        parrucchiere_id: r.parrucchiere_id,
+        data_ora: r.data_ora,
+        durata_minuti: r.durata_minuti ?? 60,
+        stato: 'confermato',
+        note: `Prenotazione online — ${r.nome} ${r.cognome} (${r.telefono})`,
+        prezzo_totale: 0,
         user_id: user?.id,
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+    const app1Id = (app1Data as Record<string, unknown> | null)?.id as string | undefined;
+    if (app1Id && r.servizio_nome) {
+      await dbInsert({
+        table: 'appuntamento_trattamenti',
+        data: {
+          appuntamento_id: app1Id,
+          trattamento_id: r.servizio_id || null,
+          nome_trattamento: r.servizio_nome,
+          prezzo: 0,
+          user_id: user?.id,
+        },
       });
     }
 
     if (r.parrucchiere2_id && r.data_ora2) {
-      const { data: app2Data } = await supabase.from('appuntamenti').insert({
-        cliente_id: r.cliente_id ?? null,
-        parrucchiere_id: r.parrucchiere2_id,
-        data_ora: r.data_ora2,
-        durata_minuti: r.durata2_minuti ?? 30,
-        stato: 'confermato',
-        note: `Prenotazione online (abbinato) — ${r.nome} ${r.cognome}`,
-        prezzo_totale: 0,
-        user_id: user?.id,
-      }).select('id').single();
-
-      if (app2Data?.id && r.servizio2_nome) {
-        await supabase.from('appuntamento_trattamenti').insert({
-          appuntamento_id: app2Data.id,
-          trattamento_id: r.servizio2_id,
-          nome_trattamento: r.servizio2_nome,
-          prezzo: 0,
+      const { data: app2Data } = await dbInsert({
+        table: 'appuntamenti',
+        data: {
+          cliente_id: r.cliente_id ?? null,
+          parrucchiere_id: r.parrucchiere2_id,
+          data_ora: r.data_ora2,
+          durata_minuti: r.durata2_minuti ?? 30,
+          stato: 'confermato',
+          note: `Prenotazione online (abbinato) — ${r.nome} ${r.cognome}`,
+          prezzo_totale: 0,
           user_id: user?.id,
+          updated_at: new Date().toISOString(),
+        },
+      });
+
+      const app2Id = (app2Data as Record<string, unknown> | null)?.id as string | undefined;
+      if (app2Id && r.servizio2_nome) {
+        await dbInsert({
+          table: 'appuntamento_trattamenti',
+          data: {
+            appuntamento_id: app2Id,
+            trattamento_id: r.servizio2_id || null,
+            nome_trattamento: r.servizio2_nome,
+            prezzo: 0,
+            user_id: user?.id,
+          },
         });
       }
     }
 
-    // Mark as confirmed
+    // Segna richiesta come confermata
     await supabase.from('richieste_appuntamento').update({ stato: 'confermata' }).eq('id', r.id);
 
     setProcessingRichiesta(false);
