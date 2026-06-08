@@ -1136,6 +1136,9 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
   const mesiPassatiAnnoCorrente = now.getMonth() + 1;
   const freqAnnoCorrente = visiteAnnoCorrente / mesiPassatiAnnoCorrente;
   const mediaFicheAnnoCorrente = mediaFichePerAnno[annoCorrente] || 0;
+  const startOfYear = new Date(annoCorrente, 0, 1);
+  const settimanePassate = Math.max(1, Math.ceil((now.getTime() - startOfYear.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+  const freqSettimanaleAnnoCorrente = visiteAnnoCorrente / settimanePassate;
 
   // Conteggio giorni unici per mese per bar chart
   const conteggioMesi: Record<string, number> = {};
@@ -1202,13 +1205,16 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
   return (
     <div className="space-y-5">
       {/* Stats cards + bottone grafico */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <button className="text-left w-full" onClick={() => setShowVisite(true)}>
           <StatCard label="Visite totali" value={String(visiteAnnoCorrente)} sub={`${annoCorrente} · clicca per storico`} clickable />
         </button>
         <button className="text-left w-full" onClick={() => setShowFrequenza(true)}>
           <StatCard label="Frequenza mensile" value={freqAnnoCorrente.toFixed(1)} desc="quante volte viene in un mese" sub={`${annoCorrente} · clicca per storico`} highlight clickable />
         </button>
+        <div>
+          <StatCard label="Frequenza settimanale" value={freqSettimanaleAnnoCorrente.toFixed(1)} desc="quante volte viene a settimana" sub={`${annoCorrente}`} />
+        </div>
         <button className="text-left w-full" onClick={() => setShowSpesa(true)}>
           <StatCard label="Spesa totale" value={`€${spesaAnnoCorrente.toFixed(0)}`} sub={`${annoCorrente} · clicca per storico`} clickable />
         </button>
