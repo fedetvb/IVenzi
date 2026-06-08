@@ -1081,7 +1081,7 @@ export default function GestioneFinanziaria() {
             <span className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Uscite</span>
           </div>
           <p className="text-3xl font-bold text-red-500">€{totUscite.toFixed(2)}</p>
-          <p className="text-xs text-stone-400 mt-1">{uscite.length} voci registrate</p>
+          <p className="text-xs text-stone-400 mt-1">IVA inclusa · {uscite.length} voci registrate</p>
         </div>
 
         <div className={`rounded-2xl border p-5 shadow-sm ${saldoFinale >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
