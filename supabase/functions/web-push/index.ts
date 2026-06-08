@@ -284,27 +284,44 @@ async function encryptPayload(
   return out;
 }
 
-async function hkdfExtract(salt: Uint8Array, ikm: Uint8Array): Promise<CryptoKey> {
-  const saltKey = await crypto.subtle.importKey("raw", salt, "HKDF", false, ["deriveKey", "deriveBits"]);
-  // HMAC-SHA256(salt, ikm) — use importKey trick
+// RFC 5869 HKDF-Extract: PRK = HMAC-SHA256(salt, ikm)
+async function hkdfExtract(salt: Uint8Array, ikm: Uint8Array): Promise<Uint8Array> {
+  const effectiveSalt = salt.length > 0 ? salt : new Uint8Array(32); // zero-filled if no salt
   const hmacKey = await crypto.subtle.importKey(
     "raw",
-    salt,
+    effectiveSalt,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
   const prk = await crypto.subtle.sign("HMAC", hmacKey, ikm);
-  return crypto.subtle.importKey("raw", prk, { name: "HKDF" }, false, ["deriveBits"]);
+  return new Uint8Array(prk);
 }
 
-async function hkdfExpand(prk: CryptoKey, info: Uint8Array, length: number): Promise<Uint8Array> {
-  const bits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info },
+// RFC 5869 HKDF-Expand: OKM = T(1) || T(2) || ...
+// T(i) = HMAC-SHA256(PRK, T(i-1) || info || i)
+async function hkdfExpand(prk: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> {
+  const hmacKey = await crypto.subtle.importKey(
+    "raw",
     prk,
-    length * 8,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
   );
-  return new Uint8Array(bits);
+  const result = new Uint8Array(length);
+  let prev = new Uint8Array(0);
+  let offset = 0;
+  for (let i = 1; offset < length; i++) {
+    const input = new Uint8Array(prev.length + info.length + 1);
+    input.set(prev, 0);
+    input.set(info, prev.length);
+    input[prev.length + info.length] = i;
+    prev = new Uint8Array(await crypto.subtle.sign("HMAC", hmacKey, input));
+    const toCopy = Math.min(prev.length, length - offset);
+    result.set(prev.subarray(0, toCopy), offset);
+    offset += toCopy;
+  }
+  return result;
 }
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
