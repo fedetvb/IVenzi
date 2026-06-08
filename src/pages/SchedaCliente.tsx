@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image, Send, ChevronUp } from 'lucide-react';
 import { localDateStr, type Cliente, type SchedaColore, type Appuntamento, supabase } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated, getImpostazione } from '../lib/localDb';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
@@ -1168,6 +1168,16 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
   onDeleteAll: () => void;
   onFotoZoom: (url: string) => void;
 }) {
+  const [rispostaAperta, setRispostaAperta] = useState<string | null>(null);
+  const [testiRisposta, setTestiRisposta] = useState<Record<string, string>>({});
+
+  function apriWhatsApp(telefono: string, testo: string) {
+    const tel = telefono.replace(/\D/g, '');
+    const telFormatted = tel.startsWith('0') ? `39${tel.slice(1)}` : tel.startsWith('39') ? tel : `39${tel}`;
+    const url = `https://wa.me/${telFormatted}?text=${encodeURIComponent(testo)}`;
+    window.open(url, '_blank');
+  }
+
   if (messaggi.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-10 text-center">
@@ -1190,52 +1200,123 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
           <Trash2 size={12} /> Elimina tutti i messaggi
         </button>
       </div>
+
       {messaggi.map(m => (
         <div
           key={m.id}
-          className={`bg-white rounded-2xl border shadow-sm p-5 transition-all ${m.letto ? 'border-stone-200' : 'border-sky-300 bg-sky-50/30'}`}
+          className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${m.letto ? 'border-stone-200' : 'border-sky-300 bg-sky-50/30'}`}
         >
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2">
-              {!m.letto && <span className="w-2 h-2 rounded-full bg-sky-500 flex-shrink-0" />}
-              <span className="text-xs text-stone-400">{new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {!m.letto && (
+          {/* Header messaggio */}
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                {!m.letto && <span className="w-2 h-2 rounded-full bg-sky-500 flex-shrink-0" />}
+                <div>
+                  <span className="text-xs font-semibold text-stone-600">{m.nome} {m.cognome}</span>
+                  {m.telefono && (
+                    <span className="text-xs text-stone-400 ml-2">· {m.telefono}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {!m.letto && (
+                  <button
+                    onClick={() => onMarkRead(m.id)}
+                    className="text-xs text-sky-600 hover:text-sky-800 border border-sky-200 rounded-lg px-2.5 py-1 hover:bg-sky-50 transition-colors font-medium"
+                  >
+                    Letto
+                  </button>
+                )}
                 <button
-                  onClick={() => onMarkRead(m.id)}
-                  className="text-xs text-sky-600 hover:text-sky-800 border border-sky-200 rounded-lg px-2.5 py-1 hover:bg-sky-50 transition-colors font-medium"
+                  onClick={() => onDelete(m.id)}
+                  className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                 >
-                  Segna come letto
+                  <Trash2 size={14} />
                 </button>
-              )}
-              <button
-                onClick={() => onDelete(m.id)}
-                className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-              >
-                <Trash2 size={14} />
-              </button>
+              </div>
             </div>
+
+            <p className="text-[11px] text-stone-400 mb-3">
+              {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
+
+            {m.testo && (
+              <p className="text-sm text-stone-700 leading-relaxed mb-4 bg-stone-50 rounded-xl px-4 py-3">{m.testo}</p>
+            )}
+
+            {(m.foto_url_1 || m.foto_url_2 || m.foto_url_3) && (
+              <div className="flex gap-3 flex-wrap mb-4">
+                {[m.foto_url_1, m.foto_url_2, m.foto_url_3].filter(Boolean).map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onFotoZoom(url)}
+                    className="w-24 h-24 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 hover:border-sky-400 transition-colors group relative"
+                  >
+                    <img src={url} className="w-full h-full object-cover" alt={`foto ${i+1}`} />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                      <Image size={18} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Pulsante Rispondi */}
+            <button
+              onClick={() => {
+                const isOpen = rispostaAperta === m.id;
+                setRispostaAperta(isOpen ? null : m.id);
+                if (!isOpen && !testiRisposta[m.id]) {
+                  setTestiRisposta(prev => ({ ...prev, [m.id]: '' }));
+                }
+              }}
+              className={`flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-xl border transition-all ${
+                rispostaAperta === m.id
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                  : 'border-stone-200 text-stone-600 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
+              }`}
+            >
+              {rispostaAperta === m.id ? <ChevronUp size={15} /> : <Send size={15} />}
+              {rispostaAperta === m.id ? 'Chiudi risposta' : 'Rispondi via WhatsApp'}
+            </button>
           </div>
 
-          {m.testo && (
-            <p className="text-sm text-stone-700 leading-relaxed mb-4 bg-stone-50 rounded-xl px-4 py-3">{m.testo}</p>
-          )}
-
-          {(m.foto_url_1 || m.foto_url_2 || m.foto_url_3) && (
-            <div className="flex gap-3 flex-wrap">
-              {[m.foto_url_1, m.foto_url_2, m.foto_url_3].filter(Boolean).map((url, i) => (
-                <button
-                  key={i}
-                  onClick={() => onFotoZoom(url)}
-                  className="w-24 h-24 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 hover:border-sky-400 transition-colors group relative"
-                >
-                  <img src={url} className="w-full h-full object-cover" alt={`foto ${i+1}`} />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
-                    <Image size={18} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </button>
-              ))}
+          {/* Pannello risposta */}
+          {rispostaAperta === m.id && (
+            <div className="border-t border-emerald-100 bg-emerald-50/50 px-5 pb-5 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 bg-emerald-100 rounded-lg flex items-center justify-center">
+                  <Send size={12} className="text-emerald-600" />
+                </div>
+                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+                  Rispondi a {m.nome}
+                  {m.telefono && <span className="font-normal text-emerald-500 ml-1">· {m.telefono}</span>}
+                </p>
+              </div>
+              <textarea
+                value={testiRisposta[m.id] ?? ''}
+                onChange={e => setTestiRisposta(prev => ({ ...prev, [m.id]: e.target.value }))}
+                placeholder={`Scrivi il tuo messaggio per ${m.nome}...`}
+                rows={4}
+                className="w-full border border-emerald-200 rounded-xl px-4 py-3 text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none focus:border-emerald-400 bg-white resize-none mb-3"
+                autoFocus
+              />
+              <button
+                onClick={() => {
+                  if (!m.telefono) return;
+                  apriWhatsApp(m.telefono, testiRisposta[m.id] ?? '');
+                }}
+                disabled={!m.telefono || !(testiRisposta[m.id] ?? '').trim()}
+                className="w-full py-3 bg-[#25D366] text-white font-semibold rounded-xl hover:bg-[#1ebe5d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                </svg>
+                Invia tramite WhatsApp
+              </button>
+              {!m.telefono && (
+                <p className="text-xs text-amber-600 mt-2 text-center">Nessun numero di telefono disponibile per questa cliente.</p>
+              )}
             </div>
           )}
         </div>
