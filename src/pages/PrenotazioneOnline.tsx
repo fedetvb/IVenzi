@@ -96,31 +96,27 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // PWA install prompt
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [isIos, setIsIos] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
 
   useEffect(() => {
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const ua = navigator.userAgent;
+    const ios = /iphone|ipad|ipod/i.test(ua);
+    const android = /android/i.test(ua);
     const installed = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    setIsIos(ios);
-    setIsInstalled(installed);
-    if (!installed && !sessionStorage.getItem('pwa_banner_dismissed')) {
-      if (ios) {
-        setShowInstallBanner(true);
-      } else {
-        const handler = (e: Event) => {
-          e.preventDefault();
-          setInstallPrompt(e);
-          setShowInstallBanner(true);
-        };
-        window.addEventListener('beforeinstallprompt', handler);
-        return () => window.removeEventListener('beforeinstallprompt', handler);
-      }
+    setDeviceType(ios ? 'ios' : android ? 'android' : 'other');
+    if (!installed && !localStorage.getItem('pwa_banner_dismissed_v2')) {
+      setShowInstallBanner(true);
     }
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   function dismissInstallBanner() {
-    sessionStorage.setItem('pwa_banner_dismissed', '1');
+    localStorage.setItem('pwa_banner_dismissed_v2', '1');
     setShowInstallBanner(false);
   }
 
@@ -129,8 +125,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const prompt = installPrompt as Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> };
     prompt.prompt();
     const { outcome } = await prompt.userChoice;
-    if (outcome === 'accepted') setIsInstalled(true);
-    dismissInstallBanner();
+    if (outcome === 'accepted') dismissInstallBanner();
+    else setInstallPrompt(null);
   }
 
   // Pre-fill from localStorage
@@ -320,29 +316,32 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       <SalonHeader info={info} />
 
       {/* PWA install banner */}
-      {showInstallBanner && !isInstalled && (
-        <div className="bg-emerald-700 text-white px-4 py-3">
-          <div className="max-w-lg mx-auto flex items-start gap-3">
-            <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
-              {isIos ? <Share size={18} /> : <Download size={18} />}
+      {showInstallBanner && (
+        <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 text-white">
+          <div className="max-w-lg mx-auto px-4 py-3.5 flex items-start gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+              {deviceType === 'ios' ? <Share size={20} /> : <Download size={20} />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm leading-snug">Aggiungila alla schermata home!</p>
+              <p className="font-bold text-sm leading-snug">Aggiungila alla schermata home!</p>
               <p className="text-xs text-emerald-100 mt-0.5 leading-snug">
-                {isIos
-                  ? 'Tocca \u2191 in basso, poi "Aggiungi a schermata Home" — prenota con un solo click!'
-                  : 'Installala come app e prenota con un solo click, senza aprire il browser.'}
+                {deviceType === 'ios'
+                  ? <>Tocca <span className="font-bold">\u2191 Condividi</span> in basso, poi <span className="font-bold">"Aggiungi a schermata Home"</span>. Prenota con un tap, senza aprire il browser!</>
+                  : deviceType === 'android'
+                  ? <>Tocca il menu del browser e scegli <span className="font-bold">"Aggiungi a schermata Home"</span>. Prenota con un tap, sempre a portata di mano!</>
+                  : <>Aggiungi questa pagina ai segnalibri o salvala sulla schermata home. Prenota con un click, senza cercarla ogni volta!</>
+                }
               </p>
-              {!isIos && (
+              {installPrompt && (
                 <button
                   onClick={handleInstall}
-                  className="mt-2 px-3 py-1.5 bg-white text-emerald-700 text-xs font-semibold rounded-lg hover:bg-emerald-50 transition-colors"
+                  className="mt-2 px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
                 >
-                  Installa app
+                  Installa ora
                 </button>
               )}
             </div>
-            <button onClick={dismissInstallBanner} className="text-emerald-200 hover:text-white transition-colors flex-shrink-0 mt-0.5">
+            <button onClick={dismissInstallBanner} className="text-emerald-200 hover:text-white transition-colors flex-shrink-0 pt-0.5">
               <X size={18} />
             </button>
           </div>
