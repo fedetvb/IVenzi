@@ -146,9 +146,9 @@ Deno.serve(async (req: Request) => {
     const fullDayAbsent = (assenzeRes.data ?? []).some((a) => !a.ora_inizio);
     if (fullDayAbsent) return json({ slot_disponibili: [] });
 
-    // Build available 15-min slots 8:00–20:00 Italian local time
+    // Build available 15-min slots 9:00–18:00 Italian local time
     const slots: string[] = [];
-    for (let m = 8 * 60; m + durata <= 20 * 60; m += 15) {
+    for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
       const overlaps = busy.some((b) => m < b.end && m + durata > b.start);
       if (!overlaps) {
         const hh = String(Math.floor(m / 60)).padStart(2, "0");
