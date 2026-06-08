@@ -93,6 +93,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [loadingSlot, setLoadingSlot] = useState(false);
   const [parrLiberi, setParrLiberi] = useState<Parrucchiere[]>([]);
   const [loadingParr2, setLoadingParr2] = useState(false);
+  const [parrPrimarioOccupato, setParrPrimarioOccupato] = useState(false);
 
   // Calendar nav
   const [calMonth, setCalMonth] = useState(new Date());
@@ -172,17 +173,44 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
   }, [userId]);
 
-  async function loadParrLiberi(data: string, ora: string, durata: number, escludiId: string) {
+  async function loadParrLiberiPerAbbinato(
+    data: string,
+    firstServiceStartOra: string,
+    firstServiceDurata: number,
+    abbinato_durata: number,
+    parrucchierePrimario: Parrucchiere,
+  ) {
     setLoadingParr2(true);
     setParrLiberi([]);
+    setParrPrimarioOccupato(false);
     try {
-      const startMin = parseInt(ora.split(':')[0]) * 60 + parseInt(ora.split(':')[1]);
-      const endTime = `${pad(Math.floor((startMin + durata) / 60))}:${pad((startMin + durata) % 60)}`;
-      const res = await fetch(`${EDGE_URL}/parrucchieri-liberi?user_id=${userId}&data=${data}&ora=${endTime}&durata_minuti=${durata}&escludi_id=${escludiId}`);
+      // Abbinato starts exactly when first service ends
+      const [h, m] = firstServiceStartOra.split(':').map(Number);
+      const abbinatoStartMin = h * 60 + m + firstServiceDurata;
+      const abbinatoOra = `${pad(Math.floor(abbinatoStartMin / 60))}:${pad(abbinatoStartMin % 60)}`;
+
+      // Fetch ALL free hairdressers (no escludi_id) so we can check if primary is also free
+      const res = await fetch(
+        `${EDGE_URL}/parrucchieri-liberi?user_id=${userId}&data=${data}&ora=${abbinatoOra}&durata_minuti=${abbinato_durata}`
+      );
       const d = await res.json();
-      setParrLiberi(d.parrucchieri ?? []);
+      const tuttiLiberi: Parrucchiere[] = d.parrucchieri ?? [];
+
+      const primarioLibero = tuttiLiberi.find(p => p.id === parrucchierePrimario.id);
+      if (primarioLibero) {
+        // Primary hairdresser is free — assign automatically, skip abbinato step
+        setParrucchiere2(parrucchierePrimario);
+        return 'auto';
+      } else {
+        // Primary is busy — show choice screen
+        setParrLiberi(tuttiLiberi);
+        setParrPrimarioOccupato(true);
+        return 'scegli';
+      }
     } catch {
       setParrLiberi([]);
+      setParrPrimarioOccupato(true);
+      return 'scegli';
     } finally {
       setLoadingParr2(false);
     }
@@ -208,6 +236,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setOraSelezionata('');
     setServizio(null);
     setParrucchiere2(null);
+    setParrPrimarioOccupato(false);
     setCalMonth(new Date());
     setStep('data');
   }
@@ -218,6 +247,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setOraSelezionata('');
     setServizio(null);
     setParrucchiere2(null);
+    setParrPrimarioOccupato(false);
     setStep('ora_servizio');
     // We go to servizio selection first, then load slots
     setStep('servizio');
@@ -227,6 +257,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setServizio(s);
     setOraSelezionata('');
     setParrucchiere2(null);
+    setParrPrimarioOccupato(false);
     if (parrucchiere && dataSelezionata) {
       loadSlots(parrucchiere.id, dataSelezionata, s.durata_minuti);
     }
@@ -238,14 +269,22 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     if (!servizio) return;
 
     if (servizio.servizio_abbinato_online_id) {
-      // Look in both main servizi and serviziAbbinati (abbinati may not be booking-enabled)
       const servAbbinato =
         info?.servizi.find(s => s.id === servizio!.servizio_abbinato_online_id) ??
         info?.serviziAbbinati?.find(s => s.id === servizio!.servizio_abbinato_online_id);
       if (servAbbinato && parrucchiere && dataSelezionata) {
-        // Pass abbinato duration so second hairdresser is checked for the right slot length
-        await loadParrLiberi(dataSelezionata, ora, servAbbinato.durata_minuti, parrucchiere.id);
-        setStep('abbinato');
+        const esito = await loadParrLiberiPerAbbinato(
+          dataSelezionata,
+          ora,
+          servizio.durata_minuti,
+          servAbbinato.durata_minuti,
+          parrucchiere,
+        );
+        if (esito === 'auto') {
+          setStep('riepilogo');
+        } else {
+          setStep('abbinato');
+        }
         return;
       }
     }
@@ -579,13 +618,16 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         {step === 'abbinato' && servizioAbbinato && (
           <Card
             title={`Chi fa la ${servizioAbbinato.nome}?`}
-            subtitle={`Inizia alle ${
-              (() => {
-                const [h,m] = oraSelezionata.split(':').map(Number);
-                const tot = h*60 + m + servizio!.durata_minuti;
-                return `${pad(Math.floor(tot/60))}:${pad(tot%60)}`;
-              })()
-            }`}
+            subtitle={parrPrimarioOccupato
+              ? `${parrucchiere?.nome} sarà lieto di servirti per ${servizio?.nome}, purtroppo dopo è occupato con un altro appuntamento e non potrà farti la ${servizioAbbinato.nome}. Scegli il parrucchiere per la tua ${servizioAbbinato.nome}.`
+              : `Inizia alle ${
+                  (() => {
+                    const [h,m] = oraSelezionata.split(':').map(Number);
+                    const tot = h*60 + m + servizio!.durata_minuti;
+                    return `${pad(Math.floor(tot/60))}:${pad(tot%60)}`;
+                  })()
+                }`
+            }
           >
             {loadingParr2 ? (
               <div className="flex items-center justify-center py-12">
@@ -717,6 +759,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 setOraSelezionata('');
                 setServizio(null);
                 setParrucchiere2(null);
+    setParrPrimarioOccupato(false);
               }}
               className="px-8 py-3 bg-stone-800 text-white font-medium rounded-2xl hover:bg-stone-900 transition-colors"
             >
