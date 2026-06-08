@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
@@ -9,7 +9,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -44,6 +44,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'connessione') return <PaginaConnessione onBack={() => setSub(null)} />;
   if (sub === 'cartelle') return <PaginaCartelleSalvataggio onBack={() => setSub(null)} />;
   if (sub === 'keepalive') return <PaginaKeepAlive onBack={() => setSub(null)} />;
+  if (sub === 'notifiche_push') return <PaginaNotifichePush onBack={() => setSub(null)} />;
   if (sub === 'prenotazioni_online') return <PaginaPrenotazioniOnline onBack={() => setSub(null)} />;
 
   return (
@@ -252,6 +253,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Connessione Cloud</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica le chiavi API per connettere il gestionale al database</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Notifiche Push */}
+        <button
+          onClick={() => setSub('notifiche_push')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Bell size={18} className="text-stone-500 group-hover:text-blue-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Notifiche Push</p>
+            <p className="text-xs text-stone-400 mt-0.5">Ricevi notifiche sul telefono quando arriva una prenotazione online</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -4292,6 +4308,154 @@ const KEEPALIVE_INTERVAL_DAYS = 2;
 
 const LS_NOTIF_ENABLED = 'keepalive_notif_enabled';
 const LS_NOTIF_DAYS = 'keepalive_notif_days';
+
+// ── Notifiche Push ────────────────────────────────────────────────────────────
+
+import { isPushSupported, getPushPermission, requestPushPermission, subscribePush, unsubscribePush } from '../lib/webPush';
+
+function PaginaNotifichePush({ onBack }: { onBack: () => void }) {
+  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
+  const [subscribed, setSubscribed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!isPushSupported()) { setPermission('unsupported'); return; }
+    const perm = getPushPermission();
+    setPermission(perm);
+    if (perm === 'granted') {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setSubscribed(!!sub);
+      } catch { setSubscribed(false); }
+    } else {
+      setSubscribed(false);
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function handleEnable() {
+    setLoading(true);
+    setMsg(null);
+    try {
+      const perm = await requestPushPermission();
+      setPermission(perm);
+      if (perm === 'granted') {
+        const ok = await subscribePush();
+        setSubscribed(ok);
+        setMsg(ok ? { type: 'ok', text: 'Notifiche attivate! Riceverai un avviso ad ogni nuova prenotazione.' } : { type: 'err', text: 'Iscrizione fallita. Riprova.' });
+      } else {
+        setMsg({ type: 'err', text: 'Permesso negato. Abilitalo nelle impostazioni del browser/sistema.' });
+      }
+    } catch (e) {
+      setMsg({ type: 'err', text: 'Errore durante l\'attivazione.' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDisable() {
+    setLoading(true);
+    setMsg(null);
+    try {
+      await unsubscribePush();
+      setSubscribed(false);
+      setMsg({ type: 'ok', text: 'Notifiche disattivate.' });
+    } catch {
+      setMsg({ type: 'err', text: 'Errore durante la disattivazione.' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const statusColor = permission === 'granted' && subscribed ? 'bg-emerald-100 text-emerald-700' :
+    permission === 'denied' ? 'bg-red-100 text-red-700' : 'bg-stone-100 text-stone-600';
+  const statusLabel = permission === 'unsupported' ? 'Non supportato' :
+    permission === 'denied' ? 'Bloccato dal browser' :
+    permission === 'granted' && subscribed ? 'Attivo' :
+    permission === 'granted' && !subscribed ? 'Permesso concesso, non iscritto' : 'Non attivato';
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={20} className="text-stone-600" />
+        </button>
+        <div>
+          <h2 className="text-lg font-bold text-stone-900">Notifiche Push</h2>
+          <p className="text-xs text-stone-400">Avvisi in tempo reale per nuove prenotazioni</p>
+        </div>
+      </div>
+
+      {/* Stato */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-stone-700">Stato notifiche</p>
+          <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusColor}`}>{statusLabel}</span>
+        </div>
+
+        {msg && (
+          <div className={`flex items-start gap-2 p-3 rounded-xl text-sm ${msg.type === 'ok' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+            {msg.type === 'ok' ? <Check size={15} className="mt-0.5 flex-shrink-0" /> : <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />}
+            <span>{msg.text}</span>
+          </div>
+        )}
+
+        {permission === 'unsupported' ? (
+          <p className="text-sm text-stone-500">Il tuo browser non supporta le notifiche push. Usa Chrome su Android o Safari su iOS 16.4+ con l'app installata come PWA.</p>
+        ) : permission === 'denied' ? (
+          <div className="space-y-2">
+            <p className="text-sm text-stone-600">Il browser ha bloccato le notifiche. Per riattivarle:</p>
+            <ol className="text-xs text-stone-500 list-decimal list-inside space-y-1">
+              <li><strong>Android Chrome</strong>: Impostazioni → Sito → Notifiche → Consenti</li>
+              <li><strong>iOS Safari</strong>: Impostazioni iPhone → App → Safari → Avanzate → Sito → Consenti</li>
+            </ol>
+            <p className="text-xs text-stone-400">Dopo aver abilitato nel browser, torna qui e premi "Attiva".</p>
+            <button
+              onClick={handleEnable}
+              disabled={loading}
+              className="w-full mt-2 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Attivazione...' : 'Riprova ad attivare'}
+            </button>
+          </div>
+        ) : subscribed ? (
+          <div className="space-y-3">
+            <p className="text-sm text-stone-600">Riceverai una notifica push ogni volta che una cliente invia una richiesta di prenotazione online.</p>
+            <button
+              onClick={handleDisable}
+              disabled={loading}
+              className="w-full py-2.5 bg-stone-100 text-stone-700 text-sm font-semibold rounded-xl hover:bg-stone-200 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Disattivazione...' : 'Disattiva notifiche'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-stone-600">Attiva le notifiche push per ricevere un avviso immediato sul telefono ogni volta che una cliente prenota online, anche quando il gestionale è chiuso.</p>
+            <button
+              onClick={handleEnable}
+              disabled={loading}
+              className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Attivazione...' : 'Attiva notifiche'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Info PWA */}
+      {permission !== 'unsupported' && (
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-1">
+          <p className="text-xs font-semibold text-blue-800">Consiglio per iPhone</p>
+          <p className="text-xs text-blue-700">Su iOS le notifiche push funzionano solo se il gestionale è installato come app: apri il sito in Safari, premi il pulsante di condivisione e scegli "Aggiungi a schermata Home".</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
   const [lastPing, setLastPing] = useState<string | null>(null);
