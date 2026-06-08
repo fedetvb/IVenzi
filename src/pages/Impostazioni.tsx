@@ -302,6 +302,10 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [downloadingQr, setDownloadingQr] = useState(false);
+  const [qrLogoUrl, setQrLogoUrl] = useState<string | null>(null);
+  const [qrLogoUploading, setQrLogoUploading] = useState(false);
+  const [qrPreviewDataUrl, setQrPreviewDataUrl] = useState<string | null>(null);
+  const qrLogoInputRef = useRef<HTMLInputElement>(null);
 
   const bookingUrl = user
     ? `${window.location.origin}${window.location.pathname}?prenota=1&uid=${user.id}`
@@ -313,13 +317,46 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       getImpostazione('prenotazioni_online_attive'),
       getImpostazione('msg_conferma_appuntamento_online'),
       getImpostazione('msg_rifiuto_appuntamento_online'),
-    ]).then(([a, mc, mr]) => {
+      getImpostazione('qr_prenotazioni_logo_url'),
+    ]).then(([a, mc, mr, logo]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (mc) setMsgConferma(mc);
       if (mr) setMsgRifiuto(mr);
+      if (logo) setQrLogoUrl(logo);
       setLoading(false);
     });
   }, [user]);
+
+  // Regenerate QR preview whenever URL or logo changes
+  useEffect(() => {
+    if (!bookingUrl) return;
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&ecc=H&data=${encodeURIComponent(bookingUrl)}`;
+    buildQrWithLogo(qrApiUrl, qrLogoUrl).then(setQrPreviewDataUrl).catch(() => {});
+  }, [bookingUrl, qrLogoUrl]);
+
+  async function handleQrLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setQrLogoUploading(true);
+    try {
+      const compressed = await compressImage(file, 400);
+      const path = `logo/${user.id}/qr-prenotazioni-logo.jpg`;
+      await supabase.storage.from('foto-clienti').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const publicUrl = urlData.publicUrl + '?t=' + Date.now();
+      setQrLogoUrl(publicUrl);
+      await setImpostazione('qr_prenotazioni_logo_url', publicUrl, user.id);
+    } finally {
+      setQrLogoUploading(false);
+      if (qrLogoInputRef.current) qrLogoInputRef.current.value = '';
+    }
+  }
+
+  async function handleRemoveQrLogo() {
+    if (!user) return;
+    setQrLogoUrl(null);
+    await setImpostazione('qr_prenotazioni_logo_url', '', user.id);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -344,15 +381,12 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     if (!bookingUrl || downloadingQr) return;
     setDownloadingQr(true);
     try {
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&ecc=H&data=${encodeURIComponent(bookingUrl)}`;
-      const res = await fetch(qrApiUrl);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=800x800&margin=20&ecc=H&data=${encodeURIComponent(bookingUrl)}`;
+      const dataUrl = await buildQrWithLogo(qrApiUrl, qrLogoUrl);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = dataUrl;
       a.download = 'qr-prenotazioni.png';
       a.click();
-      URL.revokeObjectURL(url);
     } finally {
       setDownloadingQr(false);
     }
@@ -409,22 +443,65 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           </div>
           {/* QR preview + download */}
           {bookingUrl && (
-            <div className="flex items-center gap-4 pt-1">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=8&ecc=H&data=${encodeURIComponent(bookingUrl)}`}
-                alt="QR prenotazioni"
-                className="w-24 h-24 rounded-xl border border-stone-200 bg-white p-1 flex-shrink-0"
-              />
-              <div className="flex-1 space-y-2">
-                <p className="text-xs text-stone-500">Scansiona per aprire la pagina di prenotazione, oppure scarica il QR da condividere o stampare.</p>
-                <button
-                  onClick={downloadQr}
-                  disabled={downloadingQr}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-semibold transition-colors"
-                >
-                  <Download size={13} />
-                  {downloadingQr ? 'Scaricando…' : 'Scarica QR Code'}
-                </button>
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center gap-4">
+                <div className="w-24 h-24 rounded-xl border border-stone-200 bg-white p-1 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  {qrPreviewDataUrl
+                    ? <img src={qrPreviewDataUrl} alt="QR prenotazioni" className="w-full h-full object-contain" />
+                    : <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  }
+                </div>
+                <div className="flex-1 space-y-2">
+                  <p className="text-xs text-stone-500">Scansiona per aprire la pagina di prenotazione, oppure scarica il QR da condividere o stampare.</p>
+                  <button
+                    onClick={downloadQr}
+                    disabled={downloadingQr}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-semibold transition-colors"
+                  >
+                    <Download size={13} />
+                    {downloadingQr ? 'Scaricando…' : 'Scarica QR Code'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Logo per QR */}
+              <div className="pt-1">
+                <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Logo al centro del QR</p>
+                <div className="flex items-center gap-3">
+                  {qrLogoUrl ? (
+                    <>
+                      <img src={qrLogoUrl} alt="Logo QR" className="w-12 h-12 rounded-lg border border-stone-200 object-contain bg-white p-1 flex-shrink-0" />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => qrLogoInputRef.current?.click()}
+                          disabled={qrLogoUploading}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <ImagePlus size={13} />
+                          Cambia
+                        </button>
+                        <button
+                          onClick={handleRemoveQrLogo}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition-colors"
+                        >
+                          <X size={13} />
+                          Rimuovi
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => qrLogoInputRef.current?.click()}
+                      disabled={qrLogoUploading}
+                      className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-stone-300 hover:border-emerald-400 hover:bg-emerald-50 rounded-xl text-xs font-semibold text-stone-500 hover:text-emerald-700 transition-colors disabled:opacity-50"
+                    >
+                      {qrLogoUploading ? <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /> : <ImagePlus size={14} />}
+                      {qrLogoUploading ? 'Caricamento…' : 'Aggiungi logo al QR'}
+                    </button>
+                  )}
+                  <input ref={qrLogoInputRef} type="file" accept="image/*" className="hidden" onChange={handleQrLogoUpload} />
+                </div>
+                <p className="text-xs text-stone-400 mt-1.5">Il logo compare al centro del QR. Usa un'immagine quadrata con sfondo bianco o trasparente.</p>
               </div>
             </div>
           )}
