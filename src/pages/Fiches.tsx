@@ -485,7 +485,7 @@ function FichesTab() {
           onChange={e => setSelectedDate(e.target.value)}
           className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
-        <span className="text-sm text-stone-400">{gruppi.length} client{gruppi.length === 1 ? 'e' : 'i'}</span>
+        <span className="text-sm text-stone-400">{gruppi.filter(g => g.ficheIds.length > 0).length} client{gruppi.filter(g => g.ficheIds.length > 0).length === 1 ? 'e' : 'i'}</span>
 
         {/* Incasso live */}
         {convalidate > 0 && (
@@ -555,8 +555,8 @@ function FichesTab() {
           </button>
         </div>
       ) : (() => {
-        const daCon = gruppi.filter(g => !g.ficheConvalidata);
-        const convalidate = gruppi.filter(g => g.ficheConvalidata);
+        const daCon = gruppi.filter(g => !g.ficheConvalidata && g.ficheIds.length > 0);
+        const convalidate = gruppi.filter(g => g.ficheConvalidata && g.ficheIds.length > 0);
         const renderCard = (g: ClienteGruppo) => {
           const realId = g.clienteId.startsWith('__manuale__')
             ? g.clienteId.replace('__manuale__', '')
