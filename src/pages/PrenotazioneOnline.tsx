@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Globe } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share } from 'lucide-react';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/prenota-online`;
 
@@ -92,6 +92,46 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // Submit
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+
+  // PWA install prompt
+  const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const installed = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setIsIos(ios);
+    setIsInstalled(installed);
+    if (!installed && !sessionStorage.getItem('pwa_banner_dismissed')) {
+      if (ios) {
+        setShowInstallBanner(true);
+      } else {
+        const handler = (e: Event) => {
+          e.preventDefault();
+          setInstallPrompt(e);
+          setShowInstallBanner(true);
+        };
+        window.addEventListener('beforeinstallprompt', handler);
+        return () => window.removeEventListener('beforeinstallprompt', handler);
+      }
+    }
+  }, []);
+
+  function dismissInstallBanner() {
+    sessionStorage.setItem('pwa_banner_dismissed', '1');
+    setShowInstallBanner(false);
+  }
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    const prompt = installPrompt as Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> };
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') setIsInstalled(true);
+    dismissInstallBanner();
+  }
 
   // Pre-fill from localStorage
   useEffect(() => {
@@ -278,6 +318,36 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   return (
     <div className="min-h-screen bg-stone-50">
       <SalonHeader info={info} />
+
+      {/* PWA install banner */}
+      {showInstallBanner && !isInstalled && (
+        <div className="bg-emerald-700 text-white px-4 py-3">
+          <div className="max-w-lg mx-auto flex items-start gap-3">
+            <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
+              {isIos ? <Share size={18} /> : <Download size={18} />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm leading-snug">Aggiungila alla schermata home!</p>
+              <p className="text-xs text-emerald-100 mt-0.5 leading-snug">
+                {isIos
+                  ? 'Tocca \u2191 in basso, poi "Aggiungi a schermata Home" — prenota con un solo click!'
+                  : 'Installala come app e prenota con un solo click, senza aprire il browser.'}
+              </p>
+              {!isIos && (
+                <button
+                  onClick={handleInstall}
+                  className="mt-2 px-3 py-1.5 bg-white text-emerald-700 text-xs font-semibold rounded-lg hover:bg-emerald-50 transition-colors"
+                >
+                  Installa app
+                </button>
+              )}
+            </div>
+            <button onClick={dismissInstallBanner} className="text-emerald-200 hover:text-white transition-colors flex-shrink-0 mt-0.5">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-24">
         {/* Progress indicator */}
