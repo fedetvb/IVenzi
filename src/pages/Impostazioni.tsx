@@ -1687,11 +1687,10 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       let y = margin;
 
       if (layout === 'con_frase') {
-        // icona cerchio dorato
-        const r = Math.min(w * 0.055, 7);
-        doc.setFillColor(37, 77, 26);
-        doc.circle(cx, y + r, r, 'F');
-        y += r * 2 + 9;
+        // icona quadratino QR
+        const bSize = Math.min(w * 0.12, 15);
+        _drawQrBadge(doc, cx - bSize / 2, y, bSize);
+        y += bSize + 5;
 
         // titolo
         doc.setFont('helvetica', 'bold');
@@ -1735,11 +1734,10 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
 
       } else if (layout === 'solo_punti') {
         // solo QR + 4 punti (no bella frase, no titolo)
-        // piccolo logo
-        const r = Math.min(w * 0.045, 6);
-        doc.setFillColor(37, 77, 26);
-        doc.circle(cx, y + r, r, 'F');
-        y += r * 2 + 9;
+        // icona quadratino QR
+        const bSize2 = Math.min(w * 0.10, 13);
+        _drawQrBadge(doc, cx - bSize2 / 2, y, bSize2);
+        y += bSize2 + 5;
 
         // titolo compatto
         doc.setFont('helvetica', 'bold');
@@ -1794,6 +1792,54 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
       await saveFile('qrcode', `qr-registrazione-${formatoLabel}.pdf`, doc.output('blob'));
     } finally {
       setGenerando(false);
+    }
+  }
+
+  function _drawQrBadge(doc: InstanceType<typeof import('jspdf').jsPDF>, x: number, y: number, size: number) {
+    const r = size * 0.22;
+    // sfondo verde arrotondato
+    doc.setFillColor(37, 77, 26);
+    doc.roundedRect(x, y, size, size, r, r, 'F');
+
+    const p = size * 0.15; // padding interno
+    const inner = size - p * 2;
+    const sq = inner * 0.36; // dimensione angolini
+    const dot = sq * 0.55;  // quadratino interno angolino
+    const sw = size * 0.05; // spessore bordo angolino
+
+    doc.setDrawColor(255, 255, 255);
+    doc.setFillColor(255, 255, 255);
+    doc.setLineWidth(sw);
+
+    // tre angolini (top-left, top-right, bottom-left)
+    const corners = [
+      [x + p, y + p],
+      [x + p + inner - sq, y + p],
+      [x + p, y + p + inner - sq],
+    ] as [number, number][];
+
+    const cr = sq * 0.22;
+    for (const [cx2, cy2] of corners) {
+      doc.roundedRect(cx2, cy2, sq, sq, cr, cr, 'S');
+      const dotX = cx2 + (sq - dot) / 2;
+      const dotY = cy2 + (sq - dot) / 2;
+      doc.roundedRect(dotX, dotY, dot, dot, cr * 0.5, cr * 0.5, 'F');
+    }
+
+    // pattern centrale (griglia 3x3 di puntini piccoli)
+    const gridStart = x + p + sq + size * 0.04;
+    const gridEnd = x + p + inner - sq - size * 0.04;
+    const gridTop = y + p + sq + size * 0.04;
+    const gridBot = y + p + inner - sq - size * 0.04;
+    const cell = Math.min((gridEnd - gridStart) / 2, (gridBot - gridTop) / 2);
+    const dotSm = cell * 0.55;
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) {
+        if (row === 2 && col === 2) continue;
+        const dx = gridStart + col * cell + (cell - dotSm) / 2;
+        const dy = gridTop + row * cell + (cell - dotSm) / 2;
+        doc.rect(dx, dy, dotSm, dotSm, 'F');
+      }
     }
   }
 
