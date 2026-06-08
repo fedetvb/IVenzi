@@ -23,7 +23,8 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
-import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock } from 'lucide-react';
+import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing } from 'lucide-react';
+import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
 import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
@@ -87,6 +88,9 @@ export default function App() {
   const [richiestaPrenotaNome, setRichiestaPrenotaNome] = useState('');
   const [richiestaPrenotaData, setRichiestaPrenotaData] = useState<Date | null>(null);
   const [richiestaPrenotaId, setRichiestaPrenotaId] = useState<string | null>(null);
+
+  // Banner richiesta permesso notifiche push
+  const [showPushBanner, setShowPushBanner] = useState(false);
 
   const [electronDbReady, setElectronDbReadyState] = useState(false);
   const hasFicheNonConvalidateRef = { current: false };
@@ -556,6 +560,45 @@ export default function App() {
     };
   }, [user]);
 
+  // Push notification setup
+  useEffect(() => {
+    if (!user || !isPushSupported()) return;
+
+    const perm = getPushPermission();
+
+    if (perm === 'granted') {
+      // Already granted — ensure subscription is active
+      subscribePush().catch(() => {});
+    } else if (perm === 'default') {
+      // Show our banner after a 3s delay to avoid overwhelming the user on login
+      const t = setTimeout(() => setShowPushBanner(true), 3000);
+      return () => clearTimeout(t);
+    }
+    // perm === 'denied' — respect the user's choice, do nothing
+  }, [user]);
+
+  // Listen for service worker messages (push notification click → open agenda)
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    function handleMessage(event: MessageEvent) {
+      if (event.data?.type === 'OPEN_AGENDA') {
+        navigateTo('agenda');
+      }
+    }
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+  }, []);
+
+  async function handleEnablePush() {
+    setShowPushBanner(false);
+    const perm = await requestPushPermission();
+    if (perm === 'granted') {
+      await subscribePush();
+    }
+  }
+
   // Deep link handler per reset password (Electron)
   useEffect(() => {
     if (!window.electronAPI?.onDeepLink) return;
@@ -663,6 +706,43 @@ export default function App() {
               className="p-1 hover:bg-pink-100 rounded-lg transition-colors text-pink-400 hover:text-pink-600 flex-shrink-0"
             >
               <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner richiesta permesso notifiche push */}
+      {showPushBanner && (
+        <div className="fixed left-1/2 -translate-x-1/2 z-[104] w-full max-w-md px-4 top-4 transition-all duration-300">
+          <div className="bg-white border border-stone-200 rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <BellRing size={16} className="text-emerald-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-stone-900">Attiva le notifiche push</p>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Ricevi una notifica sul telefono anche quando l'app è chiusa, ogni volta che arriva una prenotazione online.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleEnablePush}
+                  className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
+                >
+                  Attiva
+                </button>
+                <button
+                  onClick={() => setShowPushBanner(false)}
+                  className="px-4 py-1.5 bg-stone-100 text-stone-600 text-xs font-medium rounded-lg hover:bg-stone-200 transition-colors"
+                >
+                  Non ora
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPushBanner(false)}
+              className="p-1 hover:bg-stone-100 rounded-lg transition-colors text-stone-300 hover:text-stone-500 flex-shrink-0"
+            >
+              <X size={14} />
             </button>
           </div>
         </div>

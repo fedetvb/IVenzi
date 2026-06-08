@@ -242,6 +242,30 @@ Deno.serve(async (req: Request) => {
     });
 
     if (error) return json({ error: "Errore nel salvataggio della richiesta." }, 500);
+
+    // Send push notification (fire-and-forget — never block the client response)
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const dataOraFmt = new Date(data_ora).toLocaleDateString("it-IT", {
+      weekday: "short", day: "numeric", month: "short",
+    });
+    const oraFmt = new Date(data_ora).toLocaleTimeString("it-IT", {
+      hour: "2-digit", minute: "2-digit",
+    });
+    fetch(`${supabaseUrl}/functions/v1/web-push/notify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        user_id,
+        title: "Nuova prenotazione!",
+        message: `${nome.trim()} ${cognome.trim()} – ${dataOraFmt} alle ${oraFmt}`,
+        data: { type: "richiesta_prenotazione" },
+      }),
+    }).catch(() => {/* ignore push errors */});
+
     return json({ success: true });
   }
 
