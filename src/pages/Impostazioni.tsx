@@ -301,6 +301,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [downloadingQr, setDownloadingQr] = useState(false);
 
   const bookingUrl = user
     ? `${window.location.origin}${window.location.pathname}?prenota=1&uid=${user.id}`
@@ -337,6 +338,24 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     });
+  }
+
+  async function downloadQr() {
+    if (!bookingUrl || downloadingQr) return;
+    setDownloadingQr(true);
+    try {
+      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&ecc=H&data=${encodeURIComponent(bookingUrl)}`;
+      const res = await fetch(qrApiUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'qr-prenotazioni.png';
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingQr(false);
+    }
   }
 
   if (loading) return (
@@ -388,7 +407,27 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
               {copied ? 'Copiato!' : 'Copia'}
             </button>
           </div>
-          <p className="text-xs text-stone-400">Invialo via WhatsApp alle clienti o stampalo come QR code</p>
+          {/* QR preview + download */}
+          {bookingUrl && (
+            <div className="flex items-center gap-4 pt-1">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=8&ecc=H&data=${encodeURIComponent(bookingUrl)}`}
+                alt="QR prenotazioni"
+                className="w-24 h-24 rounded-xl border border-stone-200 bg-white p-1 flex-shrink-0"
+              />
+              <div className="flex-1 space-y-2">
+                <p className="text-xs text-stone-500">Scansiona per aprire la pagina di prenotazione, oppure scarica il QR da condividere o stampare.</p>
+                <button
+                  onClick={downloadQr}
+                  disabled={downloadingQr}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-semibold transition-colors"
+                >
+                  <Download size={13} />
+                  {downloadingQr ? 'Scaricando…' : 'Scarica QR Code'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
