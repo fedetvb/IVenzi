@@ -19,12 +19,21 @@ interface Servizio {
   servizio_abbinato_online_id: string | null;
 }
 
+interface ServizioAbbinato {
+  id: string;
+  nome: string;
+  durata_minuti: number;
+  prezzo: number;
+  colore: string;
+}
+
 interface SalonInfo {
   prenotazioniAttive: boolean;
   nomeSalone: string;
   logoUrl: string | null;
   parrucchieri: Parrucchiere[];
   servizi: Servizio[];
+  serviziAbbinati: ServizioAbbinato[];
 }
 
 type Step = 'dati' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo';
@@ -220,9 +229,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     if (!servizio) return;
 
     if (servizio.servizio_abbinato_online_id) {
-      const servAbbinato = info?.servizi.find(s => s.id === servizio!.servizio_abbinato_online_id);
+      // Look in both main servizi and serviziAbbinati (abbinati may not be booking-enabled)
+      const servAbbinato =
+        info?.servizi.find(s => s.id === servizio!.servizio_abbinato_online_id) ??
+        info?.serviziAbbinati?.find(s => s.id === servizio!.servizio_abbinato_online_id);
       if (servAbbinato && parrucchiere && dataSelezionata) {
-        await loadParrLiberi(dataSelezionata, ora, servizio.durata_minuti, parrucchiere.id);
+        // Pass abbinato duration so second hairdresser is checked for the right slot length
+        await loadParrLiberi(dataSelezionata, ora, servAbbinato.durata_minuti, parrucchiere.id);
         setStep('abbinato');
         return;
       }
@@ -259,21 +272,26 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       data_ora2,
     };
 
-    const res = await fetch(`${EDGE_URL}/richiesta`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
+    try {
+      const res = await fetch(`${EDGE_URL}/richiesta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
 
-    if (!res.ok || data.error) {
-      setSubmitError(data.error ?? 'Errore durante l\'invio. Riprova.');
+      if (!res.ok || data.error) {
+        setSubmitError(data.error ?? 'Errore durante l\'invio. Riprova.');
+        setSubmitting(false);
+        return;
+      }
+
+      setStep('successo');
+    } catch {
+      setSubmitError('Errore di rete. Controlla la connessione e riprova.');
+    } finally {
       setSubmitting(false);
-      return;
     }
-
-    setStep('successo');
-    setSubmitting(false);
   }
 
   if (loadingInfo) {
@@ -308,7 +326,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }
 
   const servizioAbbinato = servizio?.servizio_abbinato_online_id
-    ? info.servizi.find(s => s.id === servizio.servizio_abbinato_online_id) ?? null
+    ? (info.servizi.find(s => s.id === servizio.servizio_abbinato_online_id) ??
+       info.serviziAbbinati?.find(s => s.id === servizio.servizio_abbinato_online_id) ??
+       null)
     : null;
 
   return (
@@ -769,3 +789,6 @@ function BackBtn({ onClick }: { onClick: () => void }) {
     </button>
   );
 }
+
+
+export default PrenotazioneOnline

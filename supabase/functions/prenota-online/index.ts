@@ -73,12 +73,28 @@ Deno.serve(async (req: Request) => {
 
     const prenotazioniAttive = impostazioni["prenotazioni_online_attive"] !== "false";
 
+    // Also fetch abbinati services (may not have prenotazione_online_abilitata=true)
+    const serviziAbilitati = sRes.data ?? [];
+    const abbinatiIds = [...new Set(
+      serviziAbilitati
+        .filter((s: { servizio_abbinato_online_id: string | null }) => s.servizio_abbinato_online_id)
+        .map((s: { servizio_abbinato_online_id: string }) => s.servizio_abbinato_online_id)
+    )];
+    let serviziAbbinati: { id: string; nome: string; durata_minuti: number; prezzo: number; colore: string }[] = [];
+    if (abbinatiIds.length > 0) {
+      const { data: abbRes } = await sb.from("trattamenti_catalogo")
+        .select("id,nome,durata_minuti,prezzo,colore")
+        .in("id", abbinatiIds);
+      serviziAbbinati = abbRes ?? [];
+    }
+
     return json({
       prenotazioniAttive,
       nomeSalone: impostazioni["nome_salone"] ?? "",
       logoUrl: impostazioni["logo_salone_url"] ?? null,
       parrucchieri: pRes.data ?? [],
-      servizi: sRes.data ?? [],
+      servizi: serviziAbilitati,
+      serviziAbbinati,
     });
   }
 
