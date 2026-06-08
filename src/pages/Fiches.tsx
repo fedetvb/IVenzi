@@ -485,7 +485,7 @@ function FichesTab() {
           onChange={e => setSelectedDate(e.target.value)}
           className="border border-stone-200 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
-        <span className="text-sm text-stone-400">{gruppi.filter(g => g.ficheIds.length > 0).length} client{gruppi.filter(g => g.ficheIds.length > 0).length === 1 ? 'e' : 'i'}</span>
+        <span className="text-sm text-stone-400">{gruppi.length} client{gruppi.length === 1 ? 'e' : 'i'}</span>
 
         {/* Incasso live */}
         {convalidate > 0 && (
@@ -555,8 +555,8 @@ function FichesTab() {
           </button>
         </div>
       ) : (() => {
-        const daCon = gruppi.filter(g => !g.ficheConvalidata && g.ficheIds.length > 0);
-        const convalidate = gruppi.filter(g => g.ficheConvalidata && g.ficheIds.length > 0);
+        const daCon = gruppi.filter(g => !g.ficheConvalidata);
+        const convalidate = gruppi.filter(g => g.ficheConvalidata);
         const renderCard = (g: ClienteGruppo) => {
           const realId = g.clienteId.startsWith('__manuale__')
             ? g.clienteId.replace('__manuale__', '')
@@ -576,6 +576,7 @@ function FichesTab() {
             isOpen={openCard === g.clienteId}
             onToggle={() => setOpenCard(prev => prev === g.clienteId ? null : g.clienteId)}
             onSaved={load}
+            onEliminato={() => { setGruppi(prev => prev.filter(p => p.clienteId !== g.clienteId)); setOpenCard(null); load(); }}
             onConvalidata={() => { setOpenCard(null); load(); }}
             showImporti={incassoVisible}
             carteTipi={carteTipi}
@@ -863,6 +864,7 @@ interface FicheCardProps {
   showImporti: boolean;
   onToggle: () => void;
   onSaved: () => void;
+  onEliminato: () => void;
   onConvalidata: () => void;
   carteTipi?: { hasPremium: boolean; hasPremiumEsaurita: boolean; hasSconto: boolean };
 }
@@ -876,7 +878,7 @@ interface CartaPremiumSimple {
   id: string; codice: string; saldo: number; attiva?: boolean;
 }
 
-function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, trattamentiCatalogo, parrucchieri, isOpen, onToggle, onSaved, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
+function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, trattamentiCatalogo, parrucchieri, isOpen, onToggle, onSaved, onEliminato, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
   const { user } = useAuth();
   const [voci, setVoci] = useState<FicheVoce[]>([]);
   const [note, setNote] = useState('');
@@ -1485,7 +1487,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         if (delRes.error) throw new Error(`Errore eliminazione fiche: ${delRes.error}`);
       }
 
-      onSaved();
+      onEliminato();
     } catch (err) {
       console.error('[handleElimina]', err);
       setEliminaError(err instanceof Error ? err.message : 'Errore sconosciuto durante l\'eliminazione.');
