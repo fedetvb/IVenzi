@@ -29,6 +29,7 @@ import {
   Wind,
   Sparkles,
   Wifi,
+  MessageCircle,
 } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { useAuth } from '../lib/AuthContext';
@@ -53,6 +54,8 @@ interface LayoutProps {
   onNavigate: (page: Page) => void;
   children: React.ReactNode;
   user: User | null;
+  messaggiBadge?: number;
+  onMessaggioBadgeClick?: () => void;
 }
 
 const navItems = [
@@ -170,7 +173,7 @@ function daysSinceLastShown(): number {
   return (Date.now() - new Date(last).getTime()) / (1000 * 60 * 60 * 24);
 }
 
-export default function Layout({ currentPage, onNavigate, children, user }: LayoutProps) {
+export default function Layout({ currentPage, onNavigate, children, user, messaggiBadge = 0, onMessaggioBadgeClick }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobile, setMobile] = useState(() => isMobile());
@@ -414,6 +417,20 @@ export default function Layout({ currentPage, onNavigate, children, user }: Layo
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Badge messaggi clienti non letti */}
+            {messaggiBadge > 0 && (
+              <button
+                onClick={onMessaggioBadgeClick}
+                title={`${messaggiBadge} ${messaggiBadge === 1 ? 'messaggio non letto' : 'messaggi non letti'} — clicca per aprire`}
+                className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-colors"
+              >
+                <MessageCircle size={18} className="text-sky-600" />
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-sky-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                  {messaggiBadge > 9 ? '9+' : messaggiBadge}
+                </span>
+              </button>
+            )}
+
             {/* Online/offline status dot */}
             <div
               title={isOnline ? (pendingCount > 0 ? `${pendingCount} modifiche offline in attesa` : 'Online') : 'Offline'}

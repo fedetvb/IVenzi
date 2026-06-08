@@ -90,6 +90,9 @@ export default function App() {
   const [richiestaPrenotaId, setRichiestaPrenotaId] = useState<string | null>(null);
   const [richiestaPrenotaFoto, setRichiestaPrenotaFoto] = useState<string | null>(null);
 
+  // Badge messaggi clienti non letti — coda ordinata per navigazione
+  const [messaggiNonLetti, setMessaggiNonLetti] = useState<Array<{ id: string; cliente_id: string | null; nome: string; cognome: string }>>([]);
+
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
 
@@ -572,6 +575,72 @@ export default function App() {
     };
   }, [user]);
 
+  // Realtime + caricamento iniziale: badge messaggi clienti non letti
+  useEffect(() => {
+    if (!user) return;
+
+    async function loadNonLetti() {
+      const { data } = await supabase
+        .from('messaggi_clienti')
+        .select('id, cliente_id, nome, cognome')
+        .eq('letto', false)
+        .order('created_at', { ascending: true });
+      setMessaggiNonLetti((data ?? []) as Array<{ id: string; cliente_id: string | null; nome: string; cognome: string }>);
+    }
+
+    loadNonLetti();
+
+    let channelRef: ReturnType<typeof supabase.channel> | null = null;
+    let destroyed = false;
+
+    function setupChannel() {
+      if (destroyed) return;
+      if (channelRef) { supabase.removeChannel(channelRef); channelRef = null; }
+      channelRef = supabase
+        .channel(`messaggi_clienti_${Date.now()}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messaggi_clienti' }, (payload) => {
+          const row = payload.new as { id: string; cliente_id: string | null; nome: string; cognome: string; letto: boolean };
+          if (!row.letto) {
+            setMessaggiNonLetti(prev => [...prev, { id: row.id, cliente_id: row.cliente_id, nome: row.nome, cognome: row.cognome }]);
+          }
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messaggi_clienti' }, (payload) => {
+          const row = payload.new as { id: string; letto: boolean };
+          if (row.letto) {
+            setMessaggiNonLetti(prev => prev.filter(m => m.id !== row.id));
+          }
+        })
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messaggi_clienti' }, (payload) => {
+          const row = payload.old as { id: string };
+          setMessaggiNonLetti(prev => prev.filter(m => m.id !== row.id));
+        })
+        .subscribe();
+    }
+
+    setupChannel();
+    const interval = setInterval(loadNonLetti, 30_000);
+
+    return () => {
+      destroyed = true;
+      if (channelRef) supabase.removeChannel(channelRef);
+      clearInterval(interval);
+    };
+  }, [user]);
+
+  function handleMessaggioBadgeClick() {
+    if (messaggiNonLetti.length === 0) return;
+    const first = messaggiNonLetti[0];
+    if (first.cliente_id) {
+      handleSelectCliente(first.cliente_id);
+    } else {
+      navigateTo('clienti');
+    }
+    // Segna come letto il primo della coda
+    supabase.from('messaggi_clienti').update({ letto: true }).eq('id', first.id).then(() => {
+      setMessaggiNonLetti(prev => prev.filter(m => m.id !== first.id));
+    });
+  }
+
   // Push notification setup
   useEffect(() => {
     if (!user || !isPushSupported()) return;
@@ -816,7 +885,7 @@ export default function App() {
 
       <AiChat />
 
-      <Layout currentPage={page} onNavigate={p => navigateTo(p as Page)} user={user}>
+      <Layout currentPage={page} onNavigate={p => navigateTo(p as Page)} user={user} messaggiBadge={messaggiNonLetti.length} onMessaggioBadgeClick={handleMessaggioBadgeClick}>
         {page === 'dashboard' && (
           <Dashboard onNavigate={p => navigateTo(p as Page)} />
         )}

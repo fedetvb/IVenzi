@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2 } from 'lucide-react';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/prenota-online`;
 
@@ -35,7 +35,7 @@ interface SalonInfo {
   serviziAbbinati: ServizioAbbinato[];
 }
 
-type Step = 'dati' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio';
 
 const LS_CLIENTE_KEY = 'prenota_online_cliente_v1';
 const MONTHS_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
@@ -98,9 +98,16 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // Calendar nav
   const [calMonth, setCalMonth] = useState(new Date());
 
-  // Submit
+  // Submit prenotazione
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+
+  // Scrivici form
+  const [msgTesto, setMsgTesto] = useState('');
+  const [msgFotos, setMsgFotos] = useState<Array<{ base64: string; mime: string; preview: string }>>([]);
+  const [msgSubmitting, setMsgSubmitting] = useState(false);
+  const [msgError, setMsgError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // PWA install prompt
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
@@ -219,7 +226,60 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
     localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify({ nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim() }));
     setDatiError('');
-    setStep('parrucchiere');
+    setStep('scelta');
+  }
+
+  function handleFotoAdd(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const remaining = 3 - msgFotos.length;
+    files.slice(0, remaining).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const data = ev.target?.result as string;
+        setMsgFotos(prev => [...prev, {
+          base64: data.split(',')[1],
+          mime: file.type || 'image/jpeg',
+          preview: data,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  }
+
+  async function handleMsgSubmit() {
+    if (!msgTesto.trim() && msgFotos.length === 0) {
+      setMsgError('Scrivi un messaggio o allega almeno una foto.');
+      return;
+    }
+    setMsgSubmitting(true);
+    setMsgError('');
+    try {
+      const SCRIVICI_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/scrivici`;
+      const body: Record<string, string> = {
+        user_id: userId,
+        nome: nome.trim(),
+        cognome: cognome.trim(),
+        telefono: telefono.trim(),
+        testo: msgTesto.trim(),
+      };
+      if (msgFotos[0]) { body.foto1_base64 = msgFotos[0].base64; body.foto1_mime = msgFotos[0].mime; }
+      if (msgFotos[1]) { body.foto2_base64 = msgFotos[1].base64; body.foto2_mime = msgFotos[1].mime; }
+      if (msgFotos[2]) { body.foto3_base64 = msgFotos[2].base64; body.foto3_mime = msgFotos[2].mime; }
+      const res = await fetch(SCRIVICI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante l\'invio');
+      setStep('successo_messaggio');
+    } catch (err) {
+      setMsgError(err instanceof Error ? err.message : 'Errore di rete. Riprova.');
+    } finally {
+      setMsgSubmitting(false);
+    }
   }
 
   function handleParrucchiereSelect(p: Parrucchiere) {
@@ -406,7 +466,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-24">
         {/* Progress indicator */}
-        {step !== 'successo' && (
+        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && (
           <StepProgress step={step} />
         )}
 
@@ -451,6 +511,181 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <NextBtn onClick={handleDatiNext}>Avanti</NextBtn>
             </div>
           </Card>
+        )}
+
+        {/* STEP: Scelta azione */}
+        {step === 'scelta' && (
+          <div className="space-y-4">
+            <div className="text-center mb-6">
+              <p className="text-xl font-bold text-stone-800">Ciao, {nome}!</p>
+              <p className="text-sm text-stone-400 mt-1">Cosa vuoi fare oggi?</p>
+            </div>
+
+            <button
+              onClick={() => setStep('parrucchiere')}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-200 transition-colors">
+                <CalendarPlus size={26} className="text-emerald-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">Richiedi un appuntamento</p>
+                <p className="text-sm text-stone-400 mt-0.5">Scegli data, orario e servizio</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
+              onClick={() => setStep('scrivici')}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-sky-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-sky-100 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-sky-200 transition-colors">
+                <MessageCircle size={26} className="text-sky-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">Scrivici</p>
+                <p className="text-sm text-stone-400 mt-0.5">Invia foto e una richiesta speciale</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-sky-400 transition-colors flex-shrink-0" />
+            </button>
+
+            <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
+              <p className="text-sm text-sky-700 leading-relaxed">
+                <span className="font-semibold">Hai un'idea in testa ma non sai come spiegarla?</span><br />
+                Mandaci le foto che ti ispirano — un taglio, un colore, uno stile. Ti aiuteremo a trasformare il tuo sogno in realtà. ✨
+              </p>
+            </div>
+
+            <BackBtn onClick={() => setStep('dati')} />
+          </div>
+        )}
+
+        {/* STEP: Scrivici */}
+        {step === 'scrivici' && (
+          <Card title="Scrivici" subtitle={`${nome} ${cognome}`}>
+            <div className="space-y-4">
+              {msgError && (
+                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{msgError}</p>
+              )}
+
+              <div className="bg-sky-50 border border-sky-200 rounded-2xl px-4 py-3.5">
+                <p className="text-sm text-sky-700 leading-relaxed">
+                  <span className="font-semibold">Hai un'ispirazione? Condividila con noi!</span><br />
+                  Allega fino a 3 foto — un look che ami, un colore che ti ha colpita, uno stile che ti rappresenta. Aggiungi un messaggio e ti risponderemo al piu presto.
+                </p>
+              </div>
+
+              {/* Foto */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">
+                  Foto <span className="text-stone-300 font-normal normal-case">(max 3)</span>
+                </label>
+                <div className="flex gap-3 flex-wrap">
+                  {msgFotos.map((f, i) => (
+                    <div key={i} className="relative w-24 h-24 rounded-2xl overflow-hidden border border-stone-200 flex-shrink-0">
+                      <img src={f.preview} className="w-full h-full object-cover" alt={`foto ${i+1}`} />
+                      <button
+                        onClick={() => setMsgFotos(prev => prev.filter((_, idx) => idx !== i))}
+                        className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {msgFotos.length < 3 && (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-24 h-24 rounded-2xl border-2 border-dashed border-stone-300 flex flex-col items-center justify-center gap-1.5 text-stone-400 hover:border-sky-400 hover:text-sky-500 hover:bg-sky-50 transition-all flex-shrink-0"
+                    >
+                      <Image size={22} />
+                      <span className="text-[10px] font-semibold">Aggiungi</span>
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleFotoAdd}
+                  />
+                </div>
+              </div>
+
+              {/* Testo */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">
+                  Messaggio <span className="text-stone-300 font-normal normal-case">(opzionale se invii foto)</span>
+                </label>
+                <textarea
+                  value={msgTesto}
+                  onChange={e => setMsgTesto(e.target.value)}
+                  placeholder="Scrivi qui la tua richiesta o descrivi il look che desideri..."
+                  rows={4}
+                  className="w-full border border-stone-200 rounded-2xl px-4 py-3 text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none focus:border-sky-400 resize-none"
+                />
+              </div>
+
+              <button
+                onClick={handleMsgSubmit}
+                disabled={msgSubmitting}
+                className="w-full py-4 bg-sky-500 text-white font-semibold rounded-2xl hover:bg-sky-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {msgSubmitting ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <><MessageCircle size={18} />Invia messaggio</>
+                )}
+              </button>
+
+              <BackBtn onClick={() => setStep('scelta')} />
+            </div>
+          </Card>
+        )}
+
+        {/* STEP: Successo messaggio */}
+        {step === 'successo_messaggio' && (
+          <div className="text-center py-12">
+            <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Check size={36} className="text-sky-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-stone-800 mb-3">Messaggio inviato!</h2>
+            <p className="text-stone-500 max-w-xs mx-auto mb-8">
+              Abbiamo ricevuto il tuo messaggio{msgFotos.length > 0 ? ' e le tue foto' : ''}. Ti risponderemo al piu presto.
+            </p>
+            <div className="flex flex-col gap-3 max-w-xs mx-auto">
+              <button
+                onClick={() => {
+                  setMsgTesto('');
+                  setMsgFotos([]);
+                  setMsgError('');
+                  setStep('scelta');
+                }}
+                className="px-8 py-3 bg-sky-500 text-white font-medium rounded-2xl hover:bg-sky-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <MessageCircle size={16} />
+                Scrivi di nuovo
+              </button>
+              <button
+                onClick={() => {
+                  setMsgTesto('');
+                  setMsgFotos([]);
+                  setMsgError('');
+                  setParrucchiere(null);
+                  setDataSelezionata('');
+                  setOraSelezionata('');
+                  setServizio(null);
+                  setParrucchiere2(null);
+                  setParrPrimarioOccupato(false);
+                  setStep('parrucchiere');
+                }}
+                className="px-8 py-3 bg-stone-800 text-white font-medium rounded-2xl hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+              >
+                <CalendarPlus size={16} />
+                Richiedi appuntamento
+              </button>
+            </div>
+          </div>
         )}
 
         {/* STEP: Parrucchiere */}
@@ -738,20 +973,35 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             <p className="text-stone-500 max-w-xs mx-auto mb-8">
               La tua richiesta per {servizio?.nome} il {dateLabel(dataSelezionata)} alle {oraSelezionata} è stata inviata. Attendi la conferma via WhatsApp.
             </p>
-            <button
-              onClick={() => {
-                setStep('dati');
-                setParrucchiere(null);
-                setDataSelezionata('');
-                setOraSelezionata('');
-                setServizio(null);
-                setParrucchiere2(null);
-    setParrPrimarioOccupato(false);
-              }}
-              className="px-8 py-3 bg-stone-800 text-white font-medium rounded-2xl hover:bg-stone-900 transition-colors"
-            >
-              Nuova prenotazione
-            </button>
+            <div className="flex flex-col gap-3 max-w-xs mx-auto">
+              <button
+                onClick={() => {
+                  setParrucchiere(null);
+                  setDataSelezionata('');
+                  setOraSelezionata('');
+                  setServizio(null);
+                  setParrucchiere2(null);
+                  setParrPrimarioOccupato(false);
+                  setStep('parrucchiere');
+                }}
+                className="px-8 py-3 bg-stone-800 text-white font-medium rounded-2xl hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+              >
+                <CalendarPlus size={16} />
+                Nuova prenotazione
+              </button>
+              <button
+                onClick={() => {
+                  setMsgTesto('');
+                  setMsgFotos([]);
+                  setMsgError('');
+                  setStep('scrivici');
+                }}
+                className="px-8 py-3 bg-sky-500 text-white font-medium rounded-2xl hover:bg-sky-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <MessageCircle size={16} />
+                Scrivici
+              </button>
+            </div>
           </div>
         )}
       </div>

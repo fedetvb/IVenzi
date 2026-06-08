@@ -9,7 +9,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -46,6 +46,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'keepalive') return <PaginaKeepAlive onBack={() => setSub(null)} />;
   if (sub === 'notifiche_push') return <PaginaNotifichePush onBack={() => setSub(null)} />;
   if (sub === 'prenotazioni_online') return <PaginaPrenotazioniOnline onBack={() => setSub(null)} />;
+  if (sub === 'messaggi_clienti') return <PaginaMessaggiClienti onBack={() => setSub(null)} userId={user?.id} />;
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -268,6 +269,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Notifiche Push</p>
             <p className="text-xs text-stone-400 mt-0.5">Ricevi notifiche sul telefono quando arriva una prenotazione online</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Messaggi clienti */}
+        <button
+          onClick={() => setSub('messaggi_clienti')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-sky-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <MessageCircle size={18} className="text-stone-500 group-hover:text-sky-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Messaggi clienti</p>
+            <p className="text-xs text-stone-400 mt-0.5">Password eliminazione messaggi e cancellazione globale dello schedario</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -5017,6 +5033,157 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ─── PaginaMessaggiClienti ─────────────────────────────────────────────────────
+
+function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId: string | undefined }) {
+  const [pwd, setPwd] = useState('');
+  const [pwdNew, setPwdNew] = useState('');
+  const [pwdConfirm, setPwdConfirm] = useState('');
+  const [pwdError, setPwdError] = useState('');
+  const [pwdFlash, setPwdFlash] = useState('');
+  const [showPwdVis, setShowPwdVis] = useState(false);
+
+  const [deleteAllPwd, setDeleteAllPwd] = useState('');
+  const [deleteAllError, setDeleteAllError] = useState('');
+  const [deleteAllFlash, setDeleteAllFlash] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    getImpostazione('password_messaggi_clienti').then(v => {
+      if (v) setPwd(v);
+    });
+  }, []);
+
+  async function savePwd() {
+    if (!pwdNew.trim()) { setPwdError('Inserisci una nuova password'); return; }
+    if (pwdNew !== pwdConfirm) { setPwdError('Le password non coincidono'); return; }
+    await setImpostazione('password_messaggi_clienti', pwdNew.trim(), userId);
+    setPwd(pwdNew.trim());
+    setPwdNew('');
+    setPwdConfirm('');
+    setPwdError('');
+    setPwdFlash('Password aggiornata');
+    setTimeout(() => setPwdFlash(''), 3000);
+  }
+
+  async function deleteAll() {
+    const correct = pwd || '1234';
+    if (deleteAllPwd !== correct) { setDeleteAllError('Password non corretta'); return; }
+    setDeleting(true);
+    try {
+      await supabase.from('messaggi_clienti').delete().eq('user_id', userId ?? '');
+      setDeleteAllFlash('Tutti i messaggi sono stati eliminati');
+      setDeleteAllPwd('');
+      setDeleteAllError('');
+      setTimeout(() => setDeleteAllFlash(''), 4000);
+    } catch {
+      setDeleteAllError('Errore durante l\'eliminazione');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={onBack} className="p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <ArrowLeft size={18} className="text-stone-500" />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Messaggi Clienti</h2>
+          <p className="text-sm text-stone-400">Gestione password e cancellazione globale</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-9 h-9 bg-sky-100 rounded-xl flex items-center justify-center">
+            <Lock size={16} className="text-sky-600" />
+          </div>
+          <div>
+            <p className="font-semibold text-stone-800">Password eliminazione messaggi</p>
+            <p className="text-xs text-stone-400">Password attuale: <span className="font-mono text-stone-600">{pwd || '1234 (default)'}</span></p>
+          </div>
+        </div>
+
+        {pwdError && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2">{pwdError}</p>}
+        {pwdFlash && <p className="text-sm text-emerald-600 bg-emerald-50 rounded-xl px-4 py-2 flex items-center gap-1.5"><Check size={14} />{pwdFlash}</p>}
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Nuova password</label>
+            <div className="relative">
+              <input
+                type={showPwdVis ? 'text' : 'password'}
+                value={pwdNew}
+                onChange={e => setPwdNew(e.target.value)}
+                placeholder="Nuova password..."
+                className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-400 pr-10"
+              />
+              <button onClick={() => setShowPwdVis(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                {showPwdVis ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Conferma nuova password</label>
+            <input
+              type={showPwdVis ? 'text' : 'password'}
+              value={pwdConfirm}
+              onChange={e => setPwdConfirm(e.target.value)}
+              placeholder="Ripeti la password..."
+              className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-400"
+            />
+          </div>
+          <button
+            onClick={savePwd}
+            className="w-full py-3 bg-sky-500 text-white font-semibold rounded-xl hover:bg-sky-600 transition-colors flex items-center justify-center gap-2"
+          >
+            <Check size={15} /> Salva nuova password
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center">
+            <Trash2 size={16} className="text-red-500" />
+          </div>
+          <div>
+            <p className="font-semibold text-stone-800">Elimina tutti i messaggi</p>
+            <p className="text-xs text-stone-400">Cancella lo schedario messaggi e foto di tutte le clienti</p>
+          </div>
+        </div>
+
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-red-700">Questa operazione è irreversibile. Tutti i messaggi e le foto inviate dalle clienti saranno eliminati definitivamente.</p>
+        </div>
+
+        {deleteAllError && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2">{deleteAllError}</p>}
+        {deleteAllFlash && <p className="text-sm text-emerald-600 bg-emerald-50 rounded-xl px-4 py-2 flex items-center gap-1.5"><Check size={14} />{deleteAllFlash}</p>}
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Inserisci la password per confermare</label>
+          <input
+            type="password"
+            value={deleteAllPwd}
+            onChange={e => setDeleteAllPwd(e.target.value)}
+            placeholder="Password..."
+            className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-400"
+          />
+        </div>
+        <button
+          onClick={deleteAll}
+          disabled={deleting}
+          className="w-full py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+        >
+          {deleting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Trash2 size={15} /> Elimina tutti i messaggi</>}
+        </button>
+      </div>
     </div>
   );
 }

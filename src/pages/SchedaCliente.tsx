@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn } from 'lucide-react';
-import { localDateStr, type Cliente, type SchedaColore, type Appuntamento } from '../lib/supabase';
-import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated } from '../lib/localDb';
+import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image } from 'lucide-react';
+import { localDateStr, type Cliente, type SchedaColore, type Appuntamento, supabase } from '../lib/supabase';
+import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated, getImpostazione } from '../lib/localDb';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import ClienteModal from '../components/ClienteModal';
 import { useAuth } from '../lib/AuthContext';
@@ -14,7 +14,20 @@ interface Props {
   onBack: () => void;
 }
 
-type Tab = 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte';
+type Tab = 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi';
+
+interface MessaggioCliente {
+  id: string;
+  nome: string;
+  cognome: string;
+  telefono: string;
+  testo: string;
+  foto_url_1: string;
+  foto_url_2: string;
+  foto_url_3: string;
+  letto: boolean;
+  created_at: string;
+}
 
 interface FicheVoceCliente {
   fiche_id: string;
@@ -429,6 +442,12 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
   const [showGraficoGate, setShowGraficoGate] = useState(false);
   const [showGrafico, setShowGrafico] = useState(false);
   const [fotoZoom, setFotoZoom] = useState(false);
+  const [messaggi, setMessaggi] = useState<MessaggioCliente[]>([]);
+  const [msgFotoZoom, setMsgFotoZoom] = useState<string | null>(null);
+  const [deletePasswordInput, setDeletePasswordInput] = useState('');
+  const [deletePasswordError, setDeletePasswordError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<'single' | 'all' | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [clRes, scRes, appRes, cscRes, cprRes] = await Promise.all([
@@ -534,6 +553,14 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
     }
 
     setFicheVoci(vociFlat);
+
+    // Carica messaggi del cliente
+    const { data: msgData } = await supabase
+      .from('messaggi_clienti')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .order('created_at', { ascending: false });
+    setMessaggi((msgData ?? []) as MessaggioCliente[]);
 
     // Carica storico ricariche per tutte le carte premium del cliente
     if (premiumList.length > 0) {
@@ -651,6 +678,7 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
           { id: 'appuntamenti', label: 'Appuntamenti', icon: <Calendar size={14} /> },
           { id: 'storico', label: 'Storico', icon: <TrendingUp size={14} /> },
           { id: 'carte', label: 'Carte', icon: <CreditCard size={14} />, badge: carteSconto.length + cartePremium.length },
+          { id: 'messaggi', label: 'Messaggi', icon: <MessageCircle size={14} />, badge: messaggi.filter(m => !m.letto).length },
         ] as { id: Tab; label: string; icon: React.ReactNode; badge?: number }[]).map(t => (
           <button
             key={t.id}
@@ -1021,6 +1049,91 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
         />
       )}
 
+      {/* Tab: Messaggi */}
+      {tab === 'messaggi' && (
+        <MessaggiTab
+          messaggi={messaggi}
+          onMarkRead={async (id) => {
+            await supabase.from('messaggi_clienti').update({ letto: true }).eq('id', id);
+            setMessaggi(prev => prev.map(m => m.id === id ? { ...m, letto: true } : m));
+          }}
+          onDelete={(id) => {
+            setDeleteTarget('single');
+            setDeleteTargetId(id);
+            setDeletePasswordInput('');
+            setDeletePasswordError('');
+          }}
+          onDeleteAll={() => {
+            setDeleteTarget('all');
+            setDeleteTargetId(null);
+            setDeletePasswordInput('');
+            setDeletePasswordError('');
+          }}
+          onFotoZoom={setMsgFotoZoom}
+        />
+      )}
+
+      {/* Lightbox foto messaggio */}
+      {msgFotoZoom && (
+        <div className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMsgFotoZoom(null)}>
+          <button onClick={() => setMsgFotoZoom(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
+            <X size={20} className="text-white" />
+          </button>
+          <img src={msgFotoZoom} className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" style={{ maxHeight: '90vh', maxWidth: '90vw' }} onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
+      {/* Modal conferma eliminazione con password */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                <Trash2 size={18} className="text-red-500" />
+              </div>
+              <div>
+                <p className="font-bold text-stone-800">Conferma eliminazione</p>
+                <p className="text-xs text-stone-400">{deleteTarget === 'all' ? 'Tutti i messaggi di questa cliente' : 'Questo messaggio'}</p>
+              </div>
+            </div>
+            <p className="text-sm text-stone-600 mb-4">Inserisci la password per procedere. L'operazione non è reversibile.</p>
+            <input
+              type="password"
+              value={deletePasswordInput}
+              onChange={e => setDeletePasswordInput(e.target.value)}
+              placeholder="Password..."
+              className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-400 mb-2"
+              autoFocus
+            />
+            {deletePasswordError && <p className="text-xs text-red-500 mb-3">{deletePasswordError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Annulla</button>
+              <button
+                onClick={async () => {
+                  const pwd = await getImpostazione('password_messaggi_clienti');
+                  const correct = pwd || '1234';
+                  if (deletePasswordInput !== correct) {
+                    setDeletePasswordError('Password non corretta');
+                    return;
+                  }
+                  if (deleteTarget === 'single' && deleteTargetId) {
+                    await supabase.from('messaggi_clienti').delete().eq('id', deleteTargetId);
+                    setMessaggi(prev => prev.filter(m => m.id !== deleteTargetId));
+                  } else if (deleteTarget === 'all') {
+                    await supabase.from('messaggi_clienti').delete().eq('cliente_id', clienteId);
+                    setMessaggi([]);
+                  }
+                  setDeleteTarget(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {fotoZoom && (() => {
         const fotoSrc = ((cliente as Record<string, unknown>).foto_base64 as string) || cliente.foto_url;
         return (
@@ -1044,6 +1157,89 @@ export default function SchedaCliente({ clienteId, onBack }: Props) {
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }: {
+  messaggi: MessaggioCliente[];
+  onMarkRead: (id: string) => void;
+  onDelete: (id: string) => void;
+  onDeleteAll: () => void;
+  onFotoZoom: (url: string) => void;
+}) {
+  if (messaggi.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-10 text-center">
+        <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <MessageCircle size={24} className="text-stone-300" />
+        </div>
+        <p className="font-semibold text-stone-500">Nessun messaggio</p>
+        <p className="text-sm text-stone-400 mt-1">Questa cliente non ha ancora inviato messaggi dal portale.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button
+          onClick={onDeleteAll}
+          className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors"
+        >
+          <Trash2 size={12} /> Elimina tutti i messaggi
+        </button>
+      </div>
+      {messaggi.map(m => (
+        <div
+          key={m.id}
+          className={`bg-white rounded-2xl border shadow-sm p-5 transition-all ${m.letto ? 'border-stone-200' : 'border-sky-300 bg-sky-50/30'}`}
+        >
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              {!m.letto && <span className="w-2 h-2 rounded-full bg-sky-500 flex-shrink-0" />}
+              <span className="text-xs text-stone-400">{new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {!m.letto && (
+                <button
+                  onClick={() => onMarkRead(m.id)}
+                  className="text-xs text-sky-600 hover:text-sky-800 border border-sky-200 rounded-lg px-2.5 py-1 hover:bg-sky-50 transition-colors font-medium"
+                >
+                  Segna come letto
+                </button>
+              )}
+              <button
+                onClick={() => onDelete(m.id)}
+                className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+
+          {m.testo && (
+            <p className="text-sm text-stone-700 leading-relaxed mb-4 bg-stone-50 rounded-xl px-4 py-3">{m.testo}</p>
+          )}
+
+          {(m.foto_url_1 || m.foto_url_2 || m.foto_url_3) && (
+            <div className="flex gap-3 flex-wrap">
+              {[m.foto_url_1, m.foto_url_2, m.foto_url_3].filter(Boolean).map((url, i) => (
+                <button
+                  key={i}
+                  onClick={() => onFotoZoom(url)}
+                  className="w-24 h-24 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 hover:border-sky-400 transition-colors group relative"
+                >
+                  <img src={url} className="w-full h-full object-cover" alt={`foto ${i+1}`} />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                    <Image size={18} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
