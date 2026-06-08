@@ -367,13 +367,18 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
     const app1Id = (app1Data as Record<string, unknown> | null)?.id as string | undefined;
     if (app1Id && r.servizio_nome) {
+      let prezzo1 = 0;
+      if (r.servizio_id) {
+        const { data: cat1 } = await dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'id', op: 'eq', val: r.servizio_id }], limit: 1 });
+        prezzo1 = (cat1?.[0] as Record<string, unknown> | undefined)?.prezzo as number ?? 0;
+      }
       await dbInsert({
         table: 'appuntamento_trattamenti',
         data: {
           appuntamento_id: app1Id,
           trattamento_id: r.servizio_id || null,
           nome_trattamento: r.servizio_nome,
-          prezzo: 0,
+          prezzo: prezzo1,
           user_id: user?.id,
         },
       });
@@ -397,13 +402,18 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
       const app2Id = (app2Data as Record<string, unknown> | null)?.id as string | undefined;
       if (app2Id && r.servizio2_nome) {
+        let prezzo2 = 0;
+        if (r.servizio2_id) {
+          const { data: cat2 } = await dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'id', op: 'eq', val: r.servizio2_id }], limit: 1 });
+          prezzo2 = (cat2?.[0] as Record<string, unknown> | undefined)?.prezzo as number ?? 0;
+        }
         await dbInsert({
           table: 'appuntamento_trattamenti',
           data: {
             appuntamento_id: app2Id,
             trattamento_id: r.servizio2_id || null,
             nome_trattamento: r.servizio2_nome,
-            prezzo: 0,
+            prezzo: prezzo2,
             user_id: user?.id,
           },
         });

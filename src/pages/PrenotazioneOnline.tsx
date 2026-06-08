@@ -550,7 +550,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                     <p className="font-medium text-stone-800">{s.nome}</p>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-stone-400">
                       <span className="flex items-center gap-1"><Clock size={11} /> {s.durata_minuti} min</span>
-                      <span>€ {s.prezzo.toFixed(2)}</span>
                       {s.servizio_abbinato_online_id && (
                         <span className="text-emerald-600 flex items-center gap-1">
                           <Scissors size={10} /> + {(info.servizi.find(x => x.id === s.servizio_abbinato_online_id) ?? info.serviziAbbinati?.find(x => x.id === s.servizio_abbinato_online_id))?.nome ?? 'abbinato'}
