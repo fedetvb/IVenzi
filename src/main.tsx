@@ -21,19 +21,30 @@ import { startAutoBackupWatcher, startAutoFichesWatcher } from './pages/Impostaz
 import './index.css';
 
 const params = new URLSearchParams(window.location.search);
+
+// Supporta anche hash con query string: #/prenota?uid=... oppure #prenota?uid=...
+// e il caso Bolt preview dove l'hash contiene l'intera URL (es: #prenota=1&uid=...)
+const hashRaw = window.location.hash.replace(/^#\/?/, '');
+const hashParams = new URLSearchParams(hashRaw.includes('?') ? hashRaw.split('?')[1] : (hashRaw.includes('=') ? hashRaw : ''));
+const hashPath = hashRaw.split('?')[0];
+
 const isRegistrazione =
   window.location.pathname === '/registrazione' ||
-  window.location.hash === '#/registrazione' ||
-  window.location.hash.startsWith('#/registrazione?') ||
-  params.get('registrazione') === '1';
+  hashPath === 'registrazione' ||
+  params.get('registrazione') === '1' ||
+  hashParams.get('registrazione') === '1';
 
 const isPrenotazione =
   window.location.pathname === '/prenota' ||
-  window.location.hash === '#/prenota' ||
-  window.location.hash.startsWith('#/prenota?') ||
-  params.get('prenota') === '1';
+  hashPath === 'prenota' ||
+  params.get('prenota') === '1' ||
+  hashParams.get('prenota') === '1';
 
-const prenotaUserId = params.get('uid') ?? window.location.hash.match(/[?&]uid=([^&]+)/)?.[1] ?? '';
+const prenotaUserId =
+  params.get('uid') ??
+  hashParams.get('uid') ??
+  window.location.hash.match(/[?&]uid=([^&]+)/)?.[1] ??
+  '';
 
 if (!isRegistrazione && !isPrenotazione) {
   startAutoBackupWatcher();
