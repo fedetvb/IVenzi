@@ -366,6 +366,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
         trattamento_id: r.servizio_id,
         nome_trattamento: r.servizio_nome,
         prezzo: 0,
+        user_id: user?.id,
       });
     }
 
@@ -387,6 +388,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           trattamento_id: r.servizio2_id,
           nome_trattamento: r.servizio2_nome,
           prezzo: 0,
+          user_id: user?.id,
         });
       }
     }
@@ -989,43 +991,47 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     )}
 
                     {/* Pending booking request blocks (blinking) */}
-                    {richieste.filter(r => r.parrucchiere_id === p.id || r.parrucchiere2_id === p.id).map(r => {
-                      const isPrimary = r.parrucchiere_id === p.id;
-                      const dataOra = isPrimary ? r.data_ora : r.data_ora2!;
-                      const durata = isPrimary ? (r.durata_minuti ?? 60) : (r.durata2_minuti ?? 30);
-                      const servNome = isPrimary ? r.servizio_nome : r.servizio2_nome;
-                      const t = new Date(dataOra);
-                      const startMin = t.getHours() * 60 + t.getMinutes();
-                      const dayStart = START_HOUR * 60;
-                      const topPx = Math.max(0, ((startMin - dayStart) / SLOT_DURATION) * slotHeight);
-                      const heightPx = Math.max((durata / SLOT_DURATION) * slotHeight, slotHeight * 2);
-                      return (
-                        <div
-                          key={`r-${r.id}-${isPrimary ? '1' : '2'}`}
-                          className="absolute left-1 right-1 rounded-lg overflow-hidden cursor-pointer z-20 border-2 border-dashed border-emerald-500"
-                          style={{
-                            top: topPx + 1,
-                            height: heightPx - 2,
-                            background: 'rgba(16,185,129,0.15)',
-                            animation: 'richiestaBlinking 1.5s ease-in-out infinite',
-                          }}
-                          onClick={() => setRichiestaModal({ open: true, r })}
-                        >
-                          <div className="px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
-                            <div>
-                              <p className="font-bold text-emerald-800 leading-tight truncate" style={{ fontSize: `${0.72 * (fontSize / 100)}rem` }}>
-                                {r.nome} {r.cognome}
+                    {richieste.flatMap(r => {
+                      const slots: { isPrimary: boolean }[] = [];
+                      if (r.parrucchiere_id === p.id) slots.push({ isPrimary: true });
+                      if (r.parrucchiere2_id === p.id && r.data_ora2) slots.push({ isPrimary: false });
+                      return slots.map(({ isPrimary }) => {
+                        const dataOra = isPrimary ? r.data_ora : r.data_ora2!;
+                        const durata = isPrimary ? (r.durata_minuti ?? 60) : (r.durata2_minuti ?? 30);
+                        const servNome = isPrimary ? r.servizio_nome : r.servizio2_nome;
+                        const t = new Date(dataOra);
+                        const startMin = t.getHours() * 60 + t.getMinutes();
+                        const dayStart = START_HOUR * 60;
+                        const topPx = Math.max(0, ((startMin - dayStart) / SLOT_DURATION) * slotHeight);
+                        const heightPx = Math.max((durata / SLOT_DURATION) * slotHeight, slotHeight * 2);
+                        return (
+                          <div
+                            key={`r-${r.id}-${isPrimary ? '1' : '2'}`}
+                            className="absolute left-1 right-1 rounded-lg overflow-hidden cursor-pointer z-20 border-2 border-dashed border-emerald-500"
+                            style={{
+                              top: topPx + 1,
+                              height: heightPx - 2,
+                              background: 'rgba(16,185,129,0.15)',
+                              animation: 'richiestaBlinking 1.5s ease-in-out infinite',
+                            }}
+                            onClick={() => setRichiestaModal({ open: true, r })}
+                          >
+                            <div className="px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
+                              <div>
+                                <p className="font-bold text-emerald-800 leading-tight truncate" style={{ fontSize: `${0.72 * (fontSize / 100)}rem` }}>
+                                  {r.nome} {r.cognome}
+                                </p>
+                                {servNome && (
+                                  <p className="text-emerald-700 truncate" style={{ fontSize: `${0.62 * (fontSize / 100)}rem` }}>{servNome}</p>
+                                )}
+                              </div>
+                              <p className="text-emerald-600 font-semibold" style={{ fontSize: `${0.6 * (fontSize / 100)}rem` }}>
+                                {t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · Richiesta
                               </p>
-                              {servNome && (
-                                <p className="text-emerald-700 truncate" style={{ fontSize: `${0.62 * (fontSize / 100)}rem` }}>{servNome}</p>
-                              )}
                             </div>
-                            <p className="text-emerald-600 font-semibold" style={{ fontSize: `${0.6 * (fontSize / 100)}rem` }}>
-                              {t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · Richiesta
-                            </p>
                           </div>
-                        </div>
-                      );
+                        );
+                      });
                     })}
 
                     {/* Appointment blocks */}
