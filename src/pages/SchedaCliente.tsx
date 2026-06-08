@@ -1170,12 +1170,34 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
 }) {
   const [rispostaAperta, setRispostaAperta] = useState<string | null>(null);
   const [testiRisposta, setTestiRisposta] = useState<Record<string, string>>({});
+  const [loadingPos, setLoadingPos] = useState(false);
+
+  function formatTel(telefono: string) {
+    const tel = telefono.replace(/\D/g, '');
+    return tel.startsWith('0') ? `39${tel.slice(1)}` : tel.startsWith('39') ? tel : `39${tel}`;
+  }
 
   function apriWhatsApp(telefono: string, testo: string) {
-    const tel = telefono.replace(/\D/g, '');
-    const telFormatted = tel.startsWith('0') ? `39${tel.slice(1)}` : tel.startsWith('39') ? tel : `39${tel}`;
-    const url = `https://wa.me/${telFormatted}?text=${encodeURIComponent(testo)}`;
+    const url = `https://wa.me/${formatTel(telefono)}?text=${encodeURIComponent(testo)}`;
     window.open(url, '_blank');
+  }
+
+  function inviaPosizioneWhatsApp(telefono: string) {
+    if (!navigator.geolocation) return;
+    setLoadingPos(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLoadingPos(false);
+        const { latitude, longitude } = pos.coords;
+        const testo = `https://maps.google.com/?q=${latitude},${longitude}`;
+        apriWhatsApp(telefono, testo);
+      },
+      () => {
+        setLoadingPos(false);
+        alert('Impossibile ottenere la posizione. Controlla i permessi del browser.');
+      },
+      { timeout: 10000 }
+    );
   }
 
   if (messaggi.length === 0) {
@@ -1283,40 +1305,80 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
 
           {/* Pannello risposta */}
           {rispostaAperta === m.id && (
-            <div className="border-t border-emerald-100 bg-emerald-50/50 px-5 pb-5 pt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <Send size={12} className="text-emerald-600" />
+            <div className="border-t border-stone-100 overflow-hidden">
+              {/* WhatsApp-style header */}
+              <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-[#128C7E] flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-sm font-bold">{m.nome?.[0]?.toUpperCase() ?? '?'}</span>
                 </div>
-                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-                  Rispondi a {m.nome}
-                  {m.telefono && <span className="font-normal text-emerald-500 ml-1">· {m.telefono}</span>}
-                </p>
+                <div className="min-w-0">
+                  <p className="text-white text-sm font-semibold truncate">{m.nome} {m.cognome}</p>
+                  {m.telefono
+                    ? <p className="text-[#25D366] text-xs truncate">{m.telefono}</p>
+                    : <p className="text-amber-300 text-xs">Nessun numero disponibile</p>
+                  }
+                </div>
               </div>
-              <textarea
-                value={testiRisposta[m.id] ?? ''}
-                onChange={e => setTestiRisposta(prev => ({ ...prev, [m.id]: e.target.value }))}
-                placeholder={`Scrivi il tuo messaggio per ${m.nome}...`}
-                rows={4}
-                className="w-full border border-emerald-200 rounded-xl px-4 py-3 text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none focus:border-emerald-400 bg-white resize-none mb-3"
-                autoFocus
-              />
-              <button
-                onClick={() => {
-                  if (!m.telefono) return;
-                  apriWhatsApp(m.telefono, testiRisposta[m.id] ?? '');
-                }}
-                disabled={!m.telefono || !(testiRisposta[m.id] ?? '').trim()}
-                className="w-full py-3 bg-[#25D366] text-white font-semibold rounded-xl hover:bg-[#1ebe5d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
-              >
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                </svg>
-                Invia tramite WhatsApp
-              </button>
-              {!m.telefono && (
-                <p className="text-xs text-amber-600 mt-2 text-center">Nessun numero di telefono disponibile per questa cliente.</p>
-              )}
+
+              {/* Chat background */}
+              <div className="bg-[#ECE5DD] px-4 pt-4 pb-3">
+                {/* Preview bubble */}
+                {(testiRisposta[m.id] ?? '').trim() && (
+                  <div className="flex justify-end mb-3">
+                    <div className="bg-[#DCF8C6] rounded-xl rounded-tr-sm px-4 py-2.5 max-w-[85%] shadow-sm">
+                      <p className="text-sm text-[#111B21] whitespace-pre-wrap break-words">{testiRisposta[m.id]}</p>
+                      <p className="text-[10px] text-[#667781] text-right mt-1">Anteprima</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Input row */}
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 bg-white rounded-2xl px-4 py-2 shadow-sm min-h-[44px] flex items-end">
+                    <textarea
+                      value={testiRisposta[m.id] ?? ''}
+                      onChange={e => setTestiRisposta(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      placeholder="Scrivi un messaggio..."
+                      rows={1}
+                      style={{ minHeight: '24px', maxHeight: '120px' }}
+                      className="w-full text-sm text-[#111B21] placeholder:text-[#8696A0] focus:outline-none bg-transparent resize-none leading-relaxed"
+                      autoFocus
+                      onInput={e => {
+                        const el = e.currentTarget;
+                        el.style.height = 'auto';
+                        el.style.height = `${el.scrollHeight}px`;
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!m.telefono) return;
+                      apriWhatsApp(m.telefono, testiRisposta[m.id] ?? '');
+                    }}
+                    disabled={!m.telefono || !(testiRisposta[m.id] ?? '').trim()}
+                    className="w-11 h-11 rounded-full bg-[#25D366] hover:bg-[#1ebe5d] disabled:bg-[#8696A0] transition-colors flex items-center justify-center flex-shrink-0 shadow-sm"
+                    title="Invia tramite WhatsApp"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Invia posizione */}
+                <div className="mt-2 flex justify-center">
+                  <button
+                    onClick={() => { if (m.telefono) inviaPosizioneWhatsApp(m.telefono); }}
+                    disabled={!m.telefono || loadingPos}
+                    className="flex items-center gap-1.5 text-xs text-[#075E54] font-medium px-3 py-1.5 rounded-full bg-white/70 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                    </svg>
+                    {loadingPos ? 'Ricerca posizione...' : 'Invia posizione'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
