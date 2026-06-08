@@ -88,6 +88,7 @@ export default function App() {
   const [richiestaPrenotaNome, setRichiestaPrenotaNome] = useState('');
   const [richiestaPrenotaData, setRichiestaPrenotaData] = useState<Date | null>(null);
   const [richiestaPrenotaId, setRichiestaPrenotaId] = useState<string | null>(null);
+  const [richiestaPrenotaFoto, setRichiestaPrenotaFoto] = useState<string | null>(null);
 
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
@@ -410,11 +411,12 @@ export default function App() {
     localStorage.setItem('richiesta_prenota_dismissed', JSON.stringify([...s]));
   }
 
-  function mostraRichiestaBanner(id: string, nome: string, cognome: string, dataOra: string) {
+  function mostraRichiestaBanner(id: string, nome: string, cognome: string, dataOra: string, fotoUrl?: string | null) {
     const n = [nome, cognome].filter(Boolean).join(' ') || 'Una cliente';
     setRichiestaPrenotaId(id);
     setRichiestaPrenotaNome(n);
     setRichiestaPrenotaData(new Date(dataOra));
+    setRichiestaPrenotaFoto(fotoUrl ?? null);
     setShowRichiestaPrenotaBanner(true);
   }
 
@@ -422,11 +424,14 @@ export default function App() {
     const dismissed = getRichiesteDismissed();
     const { data } = await supabase
       .from('richieste_appuntamento')
-      .select('id, nome, cognome, data_ora')
+      .select('id, nome, cognome, data_ora, clienti(foto_url)')
       .eq('stato', 'in_attesa')
       .order('created_at', { ascending: false });
     const unseen = (data || []).find(r => !dismissed.has(r.id));
-    if (unseen) mostraRichiestaBanner(unseen.id, unseen.nome, unseen.cognome, unseen.data_ora);
+    if (unseen) {
+      const foto = (unseen.clienti as { foto_url?: string } | null)?.foto_url ?? null;
+      mostraRichiestaBanner(unseen.id, unseen.nome, unseen.cognome, unseen.data_ora, foto);
+    }
   }
 
   function dismissRichiestaBanner() {
@@ -526,12 +531,17 @@ export default function App() {
           event: 'INSERT',
           schema: 'public',
           table: 'richieste_appuntamento',
-        }, (payload) => {
-          const row = payload.new as { id?: string; nome?: string; cognome?: string; data_ora?: string };
+        }, async (payload) => {
+          const row = payload.new as { id?: string; nome?: string; cognome?: string; data_ora?: string; cliente_id?: string };
           if (row.id) {
             const dismissed = getRichiesteDismissed();
             if (!dismissed.has(row.id)) {
-              mostraRichiestaBanner(row.id, row.nome ?? '', row.cognome ?? '', row.data_ora ?? new Date().toISOString());
+              let foto: string | null = null;
+              if (row.cliente_id) {
+                const { data: cl } = await supabase.from('clienti').select('foto_url').eq('id', row.cliente_id).maybeSingle();
+                foto = cl?.foto_url ?? null;
+              }
+              mostraRichiestaBanner(row.id, row.nome ?? '', row.cognome ?? '', row.data_ora ?? new Date().toISOString(), foto);
             }
           }
         })
@@ -754,24 +764,22 @@ export default function App() {
           className="fixed left-1/2 -translate-x-1/2 z-[103] w-full max-w-md px-4 transition-all duration-300"
           style={{ top: showNuovaSchedaBanner || showReminderBanner ? '8rem' : '1rem' }}
         >
-          <div className="bg-emerald-50 border border-emerald-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <CalendarClock size={16} className="text-emerald-600" />
-            </div>
-            <button className="flex-1 text-left" onClick={apriRichiestaDalBanner}>
+          <button className="w-full bg-emerald-50 border border-emerald-300 rounded-2xl shadow-xl px-5 py-4 flex items-center gap-3 animate-bounce-once text-left" onClick={apriRichiestaDalBanner}>
+            {richiestaPrenotaFoto ? (
+              <img src={richiestaPrenotaFoto} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <CalendarClock size={17} className="text-emerald-600" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-emerald-900">Nuova richiesta di prenotazione!</p>
               <p className="text-xs text-emerald-700 mt-0.5">
                 <span className="font-semibold">{richiestaPrenotaNome}</span> ha richiesto un appuntamento.{' '}
                 <span className="underline font-semibold">Tocca per aprire l'agenda.</span>
               </p>
-            </button>
-            <button
-              onClick={dismissRichiestaBanner}
-              className="p-1 hover:bg-emerald-100 rounded-lg transition-colors text-emerald-400 hover:text-emerald-600 flex-shrink-0"
-            >
-              <X size={15} />
-            </button>
-          </div>
+            </div>
+          </button>
         </div>
       )}
 
