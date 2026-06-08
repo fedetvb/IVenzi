@@ -195,18 +195,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       );
       const d = await res.json();
       const tuttiLiberi: Parrucchiere[] = d.parrucchieri ?? [];
-
-      const primarioLibero = tuttiLiberi.find(p => p.id === parrucchierePrimario.id);
-      if (primarioLibero) {
-        // Primary hairdresser is free — assign automatically, skip abbinato step
-        setParrucchiere2(parrucchierePrimario);
-        return 'auto';
-      } else {
-        // Primary is busy — show choice screen
-        setParrLiberi(tuttiLiberi);
-        setParrPrimarioOccupato(true);
-        return 'scegli';
-      }
+      const primarioLibero = !!tuttiLiberi.find(p => p.id === parrucchierePrimario.id);
+      setParrLiberi(tuttiLiberi);
+      setParrPrimarioOccupato(!primarioLibero);
+      return 'scegli';
     } catch {
       setParrLiberi([]);
       setParrPrimarioOccupato(true);
@@ -273,18 +265,14 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         info?.servizi.find(s => s.id === servizio!.servizio_abbinato_online_id) ??
         info?.serviziAbbinati?.find(s => s.id === servizio!.servizio_abbinato_online_id);
       if (servAbbinato && parrucchiere && dataSelezionata) {
-        const esito = await loadParrLiberiPerAbbinato(
+        await loadParrLiberiPerAbbinato(
           dataSelezionata,
           ora,
           servizio.durata_minuti,
           servAbbinato.durata_minuti,
           parrucchiere,
         );
-        if (esito === 'auto') {
-          setStep('riepilogo');
-        } else {
-          setStep('abbinato');
-        }
+        setStep('abbinato');
         return;
       }
     }
