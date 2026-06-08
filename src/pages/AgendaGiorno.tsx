@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check, Settings, ZoomIn, ZoomOut, Type, CalendarClock, Phone, User } from 'lucide-react';
 import { supabase, type Appuntamento, type Parrucchiere } from '../lib/supabase';
-import { dbSelect, dbSelectWithRelated, dbUpdate, dbDelete, dbUpsert, getImpostazione, setImpostazione } from '../lib/localDb';
+import { dbSelect, dbSelectWithRelated, dbUpdate, dbDelete, dbUpsert, getImpostazione, setImpostazione, getCurrentUserId } from '../lib/localDb';
+import { invalidateTableCache } from '../lib/indexedDb';
 import MultiBookModal from '../components/MultiBookModal';
 
 interface RichiestaAppuntamento {
@@ -396,10 +397,19 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     // Mark as confirmed
     await supabase.from('richieste_appuntamento').update({ stato: 'confermata' }).eq('id', r.id);
 
+    // Invalida cache IndexedDB così load() ricarica da Supabase
+    const uid = getCurrentUserId();
+    if (uid) {
+      await Promise.all([
+        invalidateTableCache('appuntamenti', uid),
+        invalidateTableCache('appuntamento_trattamenti', uid),
+      ]);
+    }
+
     setProcessingRichiesta(false);
     setRichiestaModal({ open: false, r: null });
     loadRichieste();
-    load();
+    await load();
 
     setWhatsappPreview({ open: true, testo: msg, telefono: r.telefono });
   }

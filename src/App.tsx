@@ -446,8 +446,10 @@ export default function App() {
     markRichiestaDismissed(richiestaPrenotaId);
     setShowRichiestaPrenotaBanner(false);
     setRichiestaPrenotaId(null);
+    // Imposta il giorno PRIMA di navigare, poi setPage direttamente
+    // per evitare che navigateTo() resetti agendaSelectedDay
     setAgendaSelectedDay(richiestaPrenotaData);
-    navigateTo('agenda');
+    setPage('agenda');
   }
 
   // Realtime + polling: avviso nuova scheda cliente da confermare
