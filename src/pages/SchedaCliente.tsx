@@ -1207,7 +1207,7 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
           <StatCard label="Visite totali" value={String(visiteAnnoCorrente)} sub={`${annoCorrente} · clicca per storico`} clickable />
         </button>
         <button className="text-left w-full" onClick={() => setShowFrequenza(true)}>
-          <StatCard label="Frequenza mensile" value={freqAnnoCorrente.toFixed(1)} sub={`${annoCorrente} · clicca per storico`} highlight clickable />
+          <StatCard label="Frequenza mensile" value={freqAnnoCorrente.toFixed(1)} desc="quante volte viene in un mese" sub={`${annoCorrente} · clicca per storico`} highlight clickable />
         </button>
         <button className="text-left w-full" onClick={() => setShowSpesa(true)}>
           <StatCard label="Spesa totale" value={`€${spesaAnnoCorrente.toFixed(0)}`} sub={`${annoCorrente} · clicca per storico`} clickable />
@@ -1827,13 +1827,14 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
   );
 }
 
-function StatCard({ label, value, sub, highlight, warn, clickable }: { label: string; value: string; sub: string; highlight?: boolean; warn?: boolean; clickable?: boolean }) {
+function StatCard({ label, value, sub, desc, highlight, warn, clickable }: { label: string; value: string; sub: string; desc?: string; highlight?: boolean; warn?: boolean; clickable?: boolean }) {
   const isWarn = warn && !highlight;
   return (
     <div className={`rounded-2xl border p-4 transition-all ${highlight ? 'border-amber-200 bg-amber-50' : isWarn ? 'border-red-200 bg-red-50' : 'border-stone-200 bg-white shadow-sm'} ${clickable ? 'cursor-pointer hover:shadow-md hover:scale-[1.02]' : ''}`}>
       <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: highlight ? '#92400e' : isWarn ? '#991b1b' : '#a8a29e' }}>{label}</p>
       <p className={`text-2xl font-bold leading-none ${highlight ? 'text-amber-600' : isWarn ? 'text-red-600' : 'text-stone-800'}`}>{value}</p>
-      <p className="text-[10px] mt-1" style={{ color: highlight ? '#b45309' : isWarn ? '#b91c1c' : '#a8a29e' }}>{sub}</p>
+      {desc && <p className="text-[10px] mt-1 italic" style={{ color: highlight ? '#b45309' : isWarn ? '#b91c1c' : '#a8a29e' }}>{desc}</p>}
+      <p className="text-[10px] mt-0.5" style={{ color: highlight ? '#b45309' : isWarn ? '#b91c1c' : '#a8a29e' }}>{sub}</p>
     </div>
   );
 }
