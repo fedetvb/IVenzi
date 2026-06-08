@@ -257,80 +257,86 @@ Deno.serve(async (req: Request) => {
 
   // POST /richiesta — submit booking request
   if (req.method === "POST" && path === "/richiesta") {
-    const body = await req.json().catch(() => null);
-    if (!body) return json({ error: "Body non valido" }, 400);
+    try {
+      const body = await req.json().catch(() => null);
+      if (!body) return json({ error: "Body non valido" }, 400);
 
-    const { user_id, nome, cognome, telefono, parrucchiere_id, servizio_id, data_ora, parrucchiere2_id, servizio2_id, data_ora2 } = body;
-    if (!user_id || !nome || !cognome || !telefono || !parrucchiere_id || !servizio_id || !data_ora) {
-      return json({ error: "Dati obbligatori mancanti" }, 400);
-    }
+      const { user_id, nome, cognome, telefono, parrucchiere_id, servizio_id, data_ora, parrucchiere2_id, servizio2_id, data_ora2 } = body;
+      if (!user_id || !nome || !cognome || !telefono || !parrucchiere_id || !servizio_id || !data_ora) {
+        return json({ error: "Dati obbligatori mancanti" }, 400);
+      }
 
-    // Blacklist check
-    const { data: cliente } = await sb
-      .from("clienti")
-      .select("id,in_blacklist")
-      .eq("user_id", user_id)
-      .ilike("telefono", telefono.replace(/\s/g, ""))
-      .maybeSingle();
+      // Blacklist check
+      const { data: cliente } = await sb
+        .from("clienti")
+        .select("id,in_blacklist")
+        .eq("user_id", user_id)
+        .ilike("telefono", telefono.replace(/\s/g, ""))
+        .maybeSingle();
 
-    if (cliente?.in_blacklist) {
-      return json({ error: "Non siamo in grado di accettare la tua richiesta al momento." }, 403);
-    }
+      if (cliente?.in_blacklist) {
+        return json({ error: "Non siamo in grado di accettare la tua richiesta al momento." }, 403);
+      }
 
-    // Check prenotazioni online are active
-    const { data: impostazione } = await sb
-      .from("impostazioni")
-      .select("valore")
-      .eq("user_id", user_id)
-      .eq("chiave", "prenotazioni_online_attive")
-      .maybeSingle();
+      // Check prenotazioni online are active
+      const { data: impostazione } = await sb
+        .from("impostazioni")
+        .select("valore")
+        .eq("user_id", user_id)
+        .eq("chiave", "prenotazioni_online_attive")
+        .maybeSingle();
 
-    if (impostazione?.valore === "false") {
-      return json({ error: "Il servizio di prenotazione online è momentaneamente sospeso." }, 403);
-    }
+      if (impostazione?.valore === "false") {
+        return json({ error: "Il servizio di prenotazione online è momentaneamente sospeso." }, 403);
+      }
 
-    const { error } = await sb.from("richieste_appuntamento").insert({
-      user_id,
-      nome: nome.trim(),
-      cognome: cognome.trim(),
-      telefono: telefono.trim(),
-      cliente_id: cliente?.id ?? null,
-      parrucchiere_id,
-      servizio_id,
-      data_ora,
-      parrucchiere2_id: parrucchiere2_id ?? null,
-      servizio2_id: servizio2_id ?? null,
-      data_ora2: data_ora2 ?? null,
-    });
-
-    if (error) return json({ error: "Errore nel salvataggio della richiesta." }, 500);
-
-    // Send push notification (fire-and-forget)
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const dataOraFmt = new Date(data_ora).toLocaleDateString("it-IT", {
-      timeZone: "Europe/Rome",
-      weekday: "short", day: "numeric", month: "short",
-    });
-    const oraFmt = new Date(data_ora).toLocaleTimeString("it-IT", {
-      timeZone: "Europe/Rome",
-      hour: "2-digit", minute: "2-digit",
-    });
-    fetch(`${supabaseUrl}/functions/v1/web-push/notify`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${serviceRoleKey}`,
-      },
-      body: JSON.stringify({
+      const { error: insertErr } = await sb.from("richieste_appuntamento").insert({
         user_id,
-        title: "Nuova prenotazione!",
-        message: `${nome.trim()} ${cognome.trim()} – ${dataOraFmt} alle ${oraFmt}`,
-        data: { type: "richiesta_prenotazione" },
-      }),
-    }).catch(() => {/* ignore push errors */});
+        nome: nome.trim(),
+        cognome: cognome.trim(),
+        telefono: telefono.trim(),
+        cliente_id: cliente?.id ?? null,
+        parrucchiere_id,
+        servizio_id,
+        data_ora,
+        parrucchiere2_id: parrucchiere2_id ?? null,
+        servizio2_id: servizio2_id ?? null,
+        data_ora2: data_ora2 ?? null,
+      });
 
-    return json({ success: true });
+      if (insertErr) return json({ error: "Errore nel salvataggio della richiesta." }, 500);
+
+      // Send push notification — truly fire-and-forget, must not block the response
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      try {
+        const dataOraFmt = new Date(data_ora).toLocaleDateString("it-IT", {
+          timeZone: "Europe/Rome",
+          weekday: "short", day: "numeric", month: "short",
+        });
+        const oraFmt = new Date(data_ora).toLocaleTimeString("it-IT", {
+          timeZone: "Europe/Rome",
+          hour: "2-digit", minute: "2-digit",
+        });
+        fetch(`${supabaseUrl}/functions/v1/web-push/notify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
+          body: JSON.stringify({
+            user_id,
+            title: "Nuova prenotazione!",
+            message: `${nome.trim()} ${cognome.trim()} – ${dataOraFmt} alle ${oraFmt}`,
+            data: { type: "richiesta_prenotazione" },
+          }),
+        }).catch(() => {});
+      } catch {
+        // push errors must never block the booking confirmation
+      }
+
+      return json({ success: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg }, 500);
+    }
   }
 
   return json({ error: "Not found" }, 404);
