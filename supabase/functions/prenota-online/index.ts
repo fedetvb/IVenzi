@@ -12,6 +12,41 @@ const sb = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
+// Convert a UTC Date to minutes-from-midnight in Italian (Europe/Rome) local time
+function toItalianMinutes(date: Date): number {
+  const parts = new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hh = parseInt(parts.find((p) => p.type === "hour")!.value);
+  const mm = parseInt(parts.find((p) => p.type === "minute")!.value);
+  return hh * 60 + mm;
+}
+
+// Return the Italian calendar date string (YYYY-MM-DD) for a UTC Date
+function toItalianDateStr(date: Date): string {
+  const parts = new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year")!.value;
+  const mo = parts.find((p) => p.type === "month")!.value;
+  const d = parts.find((p) => p.type === "day")!.value;
+  return `${y}-${mo}-${d}`;
+}
+
+// Broad UTC query window for an Italian calendar day (covers UTC-12 to UTC+14, overkill but safe)
+function italianDayUtcBounds(data: string): { dayStart: string; dayEnd: string } {
+  return {
+    dayStart: `${data}T00:00:00+02:00`, // Italian midnight (UTC+2 summer, slightly off in winter but safe with 3h buffer)
+    dayEnd: `${data}T23:59:59+01:00`,   // Italian end of day (UTC+1 winter)
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
@@ -25,7 +60,7 @@ Deno.serve(async (req: Request) => {
 
     const [iRes, pRes, sRes] = await Promise.all([
       sb.from("impostazioni").select("chiave,valore").eq("user_id", userId),
-      sb.from("parrucchieri").select("id,nome,colore").eq("user_id", userId).eq("attivo", true),
+      sb.from("parrucchieri").select("id,nome,colore").eq("user_id", userId).eq("attivo", true).order("nome"),
       sb.from("trattamenti_catalogo")
         .select("id,nome,durata_minuti,prezzo,colore,servizio_abbinato_online_id")
         .eq("user_id", userId)
@@ -56,8 +91,7 @@ Deno.serve(async (req: Request) => {
 
     if (!userId || !parrId || !data) return json({ error: "Parametri mancanti" }, 400);
 
-    const dayStart = `${data}T00:00:00+00:00`;
-    const dayEnd = `${data}T23:59:59+00:00`;
+    const { dayStart, dayEnd } = italianDayUtcBounds(data);
 
     const [appRes, assenzeRes, richiesteRes] = await Promise.all([
       sb.from("appuntamenti")
@@ -79,31 +113,32 @@ Deno.serve(async (req: Request) => {
         .lte("data_ora", dayEnd),
     ]);
 
-    // Collect busy intervals (in minutes from midnight)
+    // Collect busy intervals in Italian local minutes from midnight
     const busy: { start: number; end: number }[] = [];
 
     for (const a of appRes.data ?? []) {
       const t = new Date(a.data_ora);
-      const startMin = t.getUTCHours() * 60 + t.getUTCMinutes();
+      // Only count if it falls on this Italian calendar day
+      if (toItalianDateStr(t) !== data) continue;
+      const startMin = toItalianMinutes(t);
       busy.push({ start: startMin, end: startMin + (a.durata_minuti ?? 30) });
     }
 
     // Pending booking requests for this hairdresser
     for (const r of richiesteRes.data ?? []) {
-      // primary
       const t = new Date(r.data_ora);
-      const startMin = t.getUTCHours() * 60 + t.getUTCMinutes();
-      // We need service duration — but we only have service_id here, skip for simplicity
-      // The slot overlap check below handles it
-      busy.push({ start: startMin, end: startMin + 60 }); // conservative 60min block
+      if (toItalianDateStr(t) !== data) continue;
+      const startMin = toItalianMinutes(t);
+      busy.push({ start: startMin, end: startMin + 90 }); // conservative block
     }
 
-    // Also add slots for this hairdresser as parrucchiere2 in pending requests
+    // Also block slots where this hairdresser is parrucchiere2
     for (const r of richiesteRes.data ?? []) {
       if (r.parrucchiere2_id === parrId && r.data_ora2) {
         const t = new Date(r.data_ora2);
-        const startMin = t.getUTCHours() * 60 + t.getUTCMinutes();
-        busy.push({ start: startMin, end: startMin + 60 });
+        if (toItalianDateStr(t) !== data) continue;
+        const startMin = toItalianMinutes(t);
+        busy.push({ start: startMin, end: startMin + 90 });
       }
     }
 
@@ -111,7 +146,7 @@ Deno.serve(async (req: Request) => {
     const fullDayAbsent = (assenzeRes.data ?? []).some((a) => !a.ora_inizio);
     if (fullDayAbsent) return json({ slot_disponibili: [] });
 
-    // Build available 15-min slots 8:00–20:00
+    // Build available 15-min slots 8:00–20:00 Italian local time
     const slots: string[] = [];
     for (let m = 8 * 60; m + durata <= 20 * 60; m += 15) {
       const overlaps = busy.some((b) => m < b.end && m + durata > b.start);
@@ -126,11 +161,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // GET /parrucchieri-liberi?user_id=...&data=YYYY-MM-DD&ora=HH:MM&durata_minuti=...&escludi_id=...
-  // Returns hairdressers free at given time for given duration (for secondary service)
   if (req.method === "GET" && path === "/parrucchieri-liberi") {
     const userId = url.searchParams.get("user_id");
     const data = url.searchParams.get("data");
-    const ora = url.searchParams.get("ora"); // HH:MM
+    const ora = url.searchParams.get("ora"); // HH:MM Italian local
     const durata = parseInt(url.searchParams.get("durata_minuti") ?? "30");
     const escludiId = url.searchParams.get("escludi_id");
 
@@ -140,11 +174,10 @@ Deno.serve(async (req: Request) => {
     const startMin = h * 60 + m2;
     const endMin = startMin + durata;
 
-    const dayStart = `${data}T00:00:00+00:00`;
-    const dayEnd = `${data}T23:59:59+00:00`;
+    const { dayStart, dayEnd } = italianDayUtcBounds(data);
 
     const [parrRes, appRes, richiesteRes] = await Promise.all([
-      sb.from("parrucchieri").select("id,nome,colore").eq("user_id", userId).eq("attivo", true),
+      sb.from("parrucchieri").select("id,nome,colore").eq("user_id", userId).eq("attivo", true).order("nome"),
       sb.from("appuntamenti")
         .select("parrucchiere_id,data_ora,durata_minuti")
         .eq("user_id", userId)
@@ -164,7 +197,8 @@ Deno.serve(async (req: Request) => {
     for (const a of appRes.data ?? []) {
       if (!a.parrucchiere_id) continue;
       const t = new Date(a.data_ora);
-      const s = t.getUTCHours() * 60 + t.getUTCMinutes();
+      if (toItalianDateStr(t) !== data) continue;
+      const s = toItalianMinutes(t);
       if (!busyByParr[a.parrucchiere_id]) busyByParr[a.parrucchiere_id] = [];
       busyByParr[a.parrucchiere_id].push({ start: s, end: s + (a.durata_minuti ?? 30) });
     }
@@ -172,15 +206,17 @@ Deno.serve(async (req: Request) => {
     for (const r of richiesteRes.data ?? []) {
       if (r.parrucchiere_id) {
         const t = new Date(r.data_ora);
-        const s = t.getUTCHours() * 60 + t.getUTCMinutes();
+        if (toItalianDateStr(t) !== data) continue;
+        const s = toItalianMinutes(t);
         if (!busyByParr[r.parrucchiere_id]) busyByParr[r.parrucchiere_id] = [];
-        busyByParr[r.parrucchiere_id].push({ start: s, end: s + 60 });
+        busyByParr[r.parrucchiere_id].push({ start: s, end: s + 90 });
       }
       if (r.parrucchiere2_id && r.data_ora2) {
         const t = new Date(r.data_ora2);
-        const s = t.getUTCHours() * 60 + t.getUTCMinutes();
+        if (toItalianDateStr(t) !== data) continue;
+        const s = toItalianMinutes(t);
         if (!busyByParr[r.parrucchiere2_id]) busyByParr[r.parrucchiere2_id] = [];
-        busyByParr[r.parrucchiere2_id].push({ start: s, end: s + 60 });
+        busyByParr[r.parrucchiere2_id].push({ start: s, end: s + 90 });
       }
     }
 
@@ -243,13 +279,15 @@ Deno.serve(async (req: Request) => {
 
     if (error) return json({ error: "Errore nel salvataggio della richiesta." }, 500);
 
-    // Send push notification (fire-and-forget — never block the client response)
+    // Send push notification (fire-and-forget)
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const dataOraFmt = new Date(data_ora).toLocaleDateString("it-IT", {
+      timeZone: "Europe/Rome",
       weekday: "short", day: "numeric", month: "short",
     });
     const oraFmt = new Date(data_ora).toLocaleTimeString("it-IT", {
+      timeZone: "Europe/Rome",
       hour: "2-digit", minute: "2-digit",
     });
     fetch(`${supabaseUrl}/functions/v1/web-push/notify`, {
