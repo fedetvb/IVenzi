@@ -330,7 +330,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     const { data: msgData } = await supabase
       .from('impostazioni')
       .select('chiave,valore')
-      .in('chiave', ['msg_conferma_appuntamento_online', 'msg_rifiuto_appuntamento_online'])
+      .in('chiave', ['msg_conferma_appuntamento_online', 'msg_rifiuto_appuntamento_online', 'indirizzo_salone'])
       .eq('user_id', user?.id ?? '');
 
     const templates: Record<string, string> = {};
@@ -341,12 +341,14 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
     const dataFmt = new Date(r.data_ora).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
     const oraFmt = new Date(r.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    const posizione = templates['indirizzo_salone'] ?? '';
     const msg = msgTemplate
       .replace(/\{nome\}/g, r.nome)
       .replace(/\{cognome\}/g, r.cognome)
       .replace(/\{servizio\}/g, r.servizio_nome ?? 'appuntamento')
       .replace(/\{data\}/g, dataFmt)
-      .replace(/\{ora\}/g, oraFmt);
+      .replace(/\{ora\}/g, oraFmt)
+      .replace(/\{posizione\}/g, posizione);
 
     // Crea appuntamento con lo stesso flusso di AppuntamentoModal.handleSave
     // (dbInsert gestisce sia SQLite/Electron che IndexedDB+Supabase/browser)

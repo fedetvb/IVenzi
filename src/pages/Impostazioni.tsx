@@ -313,6 +313,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [attiva, setAttiva] = useState(true);
   const [msgConferma, setMsgConferma] = useState('Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!');
   const [msgRifiuto, setMsgRifiuto] = useState('Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.');
+  const [indirizzo, setIndirizzo] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -334,11 +335,13 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       getImpostazione('msg_conferma_appuntamento_online'),
       getImpostazione('msg_rifiuto_appuntamento_online'),
       getImpostazione('qr_prenotazioni_logo_url'),
-    ]).then(([a, mc, mr, logo]) => {
+      getImpostazione('indirizzo_salone'),
+    ]).then(([a, mc, mr, logo, ind]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (mc) setMsgConferma(mc);
       if (mr) setMsgRifiuto(mr);
       if (logo) setQrLogoUrl(logo);
+      if (ind) setIndirizzo(ind);
       setLoading(false);
     });
   }, [user]);
@@ -380,6 +383,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       setImpostazione('prenotazioni_online_attive', attiva ? 'true' : 'false', user?.id),
       setImpostazione('msg_conferma_appuntamento_online', msgConferma, user?.id),
       setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, user?.id),
+      setImpostazione('indirizzo_salone', indirizzo, user?.id),
     ]);
     setSaving(false);
     setSaved(true);
@@ -524,6 +528,21 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
+      {/* Indirizzo salone */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-3">
+        <div>
+          <p className="font-semibold text-stone-800">Posizione salone</p>
+          <p className="text-xs text-stone-400 mt-0.5">Usata come variabile <code className="bg-stone-100 px-1 rounded">{'{posizione}'}</code> nei messaggi automatici</p>
+        </div>
+        <input
+          type="text"
+          value={indirizzo}
+          onChange={e => setIndirizzo(e.target.value)}
+          placeholder="Es: Via Roma 10, Milano — oppure link Google Maps"
+          className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 text-stone-700"
+        />
+      </div>
+
       {/* Message templates */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
         <p className="font-semibold text-stone-800">Messaggi WhatsApp automatici</p>
@@ -532,7 +551,8 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           <code className="bg-stone-100 px-1 rounded">{'{cognome}'}</code>{' '}
           <code className="bg-stone-100 px-1 rounded">{'{servizio}'}</code>{' '}
           <code className="bg-stone-100 px-1 rounded">{'{data}'}</code>{' '}
-          <code className="bg-stone-100 px-1 rounded">{'{ora}'}</code>
+          <code className="bg-stone-100 px-1 rounded">{'{ora}'}</code>{' '}
+          <code className="bg-stone-100 px-1 rounded">{'{posizione}'}</code>
         </p>
 
         <div>
