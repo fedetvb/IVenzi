@@ -13,9 +13,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeAllListeners('trigger-auto-backup');
   },
 
-  // ── File explorer ──────────────────────────────────────────────────────────
+  // ── File explorer / URL esterni ───────────────────────────────────────────
   showFolder: (folderPath) => ipcRenderer.invoke('shell:show-folder', folderPath),
   showItemInFolder: (filePath) => ipcRenderer.invoke('shell:show-item', filePath),
+  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 
   // ── Cartelle di salvataggio ────────────────────────────────────────────────
   getFilePaths: () => ipcRenderer.invoke('files:get-paths'),

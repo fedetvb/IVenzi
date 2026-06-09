@@ -939,6 +939,7 @@ ipcMain.handle('backup:save-file', async (_e, { filename, content }) => {
 ipcMain.handle('backup:mark-done', (_e, { todayStr }) => { backupSchedPending = false; const cfg = readConfig(); cfg.last = todayStr; writeConfig(cfg); return { ok: true }; });
 ipcMain.handle('shell:show-folder', (_e, fp) => shell.openPath(fp));
 ipcMain.handle('shell:show-item', (_e, fp) => shell.showItemInFolder(fp));
+ipcMain.handle('shell:open-external', (_e, url) => shell.openExternal(url));
 
 // ─── IPC: cartelle di salvataggio ────────────────────────────────────────────
 ipcMain.handle('files:get-paths', () => readSavePaths());

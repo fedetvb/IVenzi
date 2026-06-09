@@ -110,6 +110,7 @@ export interface ElectronAPI {
   onTriggerAutoBackup: (cb: (data: { todayStr: string }) => void) => () => void;
   showFolder: (folderPath: string) => void;
   showItemInFolder: (filePath: string) => void;
+  openExternal: (url: string) => Promise<void>;
   onDeepLink: (cb: (url: string) => void) => () => void;
   // Cartelle di salvataggio
   getFilePaths: () => Promise<SavePaths>;
