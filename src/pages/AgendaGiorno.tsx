@@ -352,24 +352,48 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       .replace(/\{ora\}/g, oraFmt)
       .replace(/\{posizione\}/g, posizione);
 
-    // Se la richiesta non aveva un cliente_id, cerca o crea il cliente
+    // Se la richiesta non aveva un cliente_id, cerca il cliente per telefono o nome+cognome
     let clienteId: string | null = r.cliente_id ?? null;
-    if (!clienteId && r.nome && r.telefono) {
-      const telNorm = r.telefono.replace(/\s/g, '');
-      const { data: esistenti } = await dbSelect({
+    if (!clienteId && (r.nome || r.telefono)) {
+      // Normalizza il telefono: solo cifre, senza prefisso internazionale
+      const stripPhone = (t: string) => t.replace(/\D/g, '').replace(/^39/, '');
+      const telKey = r.telefono ? stripPhone(r.telefono) : '';
+
+      // Carica tutti i clienti attivi (senza deleted_at) e cerca manualmente
+      const { data: tuttiClienti } = await dbSelect({
         table: 'clienti',
-        filters: [{ col: 'telefono', op: 'eq', val: telNorm }],
-        limit: 1,
+        filters: [{ col: 'deleted_at', op: 'is_null' }],
       });
-      if (esistenti?.[0]) {
-        clienteId = (esistenti[0] as Record<string, unknown>).id as string;
+      const clienti = (tuttiClienti ?? []) as Record<string, unknown>[];
+
+      // 1. Match per telefono (normalizzato, confronto su ultimi 9 cifre per sicurezza)
+      let trovato: Record<string, unknown> | undefined;
+      if (telKey.length >= 6) {
+        const telSuffix = telKey.slice(-9);
+        trovato = clienti.find(c => {
+          const ct = stripPhone(String(c.telefono ?? '')).slice(-9);
+          return ct.length >= 6 && ct === telSuffix;
+        });
+      }
+      // 2. Fallback: match per nome + cognome (case-insensitive)
+      if (!trovato && r.nome) {
+        const nNorm = r.nome.trim().toLowerCase();
+        const cNorm = (r.cognome ?? '').trim().toLowerCase();
+        trovato = clienti.find(c =>
+          String(c.nome ?? '').toLowerCase() === nNorm &&
+          String(c.cognome ?? '').toLowerCase() === cNorm
+        );
+      }
+
+      if (trovato) {
+        clienteId = trovato.id as string;
       } else {
         const { data: newCliente } = await dbInsert({
           table: 'clienti',
           data: {
-            nome: r.nome.trim(),
-            cognome: r.cognome?.trim() ?? '',
-            telefono: telNorm,
+            nome: (r.nome ?? '').trim(),
+            cognome: (r.cognome ?? '').trim(),
+            telefono: r.telefono?.replace(/\s/g, '') ?? '',
             user_id: user?.id,
           },
         });
