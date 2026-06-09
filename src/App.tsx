@@ -774,7 +774,7 @@ export default function App() {
     if (messaggiNonLetti.length === 0) return;
     const first = messaggiNonLetti[0];
     if (first.cliente_id) {
-      handleSelectCliente(first.cliente_id);
+      handleSelectCliente(first.cliente_id, 'messaggi');
     } else {
       navigateTo('clienti');
     }
