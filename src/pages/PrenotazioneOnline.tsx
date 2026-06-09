@@ -223,8 +223,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(LS_CLIENTE_KEY) ?? '{}');
-      if (saved.nome) setNome(saved.nome);
-      if (saved.cognome) setCognome(saved.cognome);
+      if (saved.nome) setNome(saved.nome.charAt(0).toUpperCase() + saved.nome.slice(1));
+      if (saved.cognome) setCognome(saved.cognome.charAt(0).toUpperCase() + saved.cognome.slice(1));
       if (saved.telefono) setTelefono(saved.telefono);
     } catch { /* ignore */ }
   }, []);
@@ -607,7 +607,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <Field label="Nome *">
                 <input
                   value={nome}
-                  onChange={e => setNome(e.target.value)}
+                  onChange={e => { const v = e.target.value; setNome(v.length > 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v); }}
                   placeholder="Giulia"
                   className="input"
                 />
@@ -615,7 +615,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <Field label="Cognome *">
                 <input
                   value={cognome}
-                  onChange={e => setCognome(e.target.value)}
+                  onChange={e => { const v = e.target.value; setCognome(v.length > 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v); }}
                   placeholder="Rossi"
                   className="input"
                 />
