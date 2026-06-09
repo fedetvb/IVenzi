@@ -1,0 +1,4 @@
+ALTER TABLE messaggi_clienti
+  ADD COLUMN IF NOT EXISTS risposta_foto_url_1 TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS risposta_foto_url_2 TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS risposta_foto_url_3 TEXT DEFAULT NULL;

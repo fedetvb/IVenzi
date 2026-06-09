@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
 
     const { data, error } = await supabase
       .from("messaggi_clienti")
-      .select("id, testo, foto_url_1, foto_url_2, foto_url_3, preferito, risposta_testo, risposta_at, created_at, telefono")
+      .select("id, testo, foto_url_1, foto_url_2, foto_url_3, preferito, risposta_testo, risposta_at, risposta_foto_url_1, risposta_foto_url_2, risposta_foto_url_3, created_at, telefono")
       .eq("user_id", user_id)
       .order("created_at", { ascending: false });
 

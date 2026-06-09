@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image, Send, ChevronUp } from 'lucide-react';
 import { localDateStr, type Cliente, type SchedaColore, type Appuntamento, supabase } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated, getImpostazione } from '../lib/localDb';
@@ -31,6 +31,9 @@ interface MessaggioCliente {
   preferito: boolean;
   risposta_testo: string | null;
   risposta_at: string | null;
+  risposta_foto_url_1: string | null;
+  risposta_foto_url_2: string | null;
+  risposta_foto_url_3: string | null;
   created_at: string;
 }
 
@@ -1067,10 +1070,27 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
             await supabase.from('messaggi_clienti').update({ preferito: val }).eq('id', id);
             setMessaggi(prev => prev.map(m => m.id === id ? { ...m, preferito: val } : m));
           }}
-          onInviaRisposta={async (id, testo) => {
+          onInviaRisposta={async (id, testo, fotos) => {
             const now = new Date().toISOString();
-            await supabase.from('messaggi_clienti').update({ risposta_testo: testo, risposta_at: now }).eq('id', id);
-            setMessaggi(prev => prev.map(m => m.id === id ? { ...m, risposta_testo: testo, risposta_at: now } : m));
+            const fotoUrls: (string | null)[] = [null, null, null];
+            for (let i = 0; i < Math.min(fotos.length, 3); i++) {
+              const file = fotos[i];
+              const path = `risposte/${id}_${i}_${Date.now()}`;
+              const { data: up } = await supabase.storage.from('foto_clienti').upload(path, file, { upsert: true });
+              if (up) {
+                const { data: { publicUrl } } = supabase.storage.from('foto_clienti').getPublicUrl(up.path);
+                fotoUrls[i] = publicUrl;
+              }
+            }
+            const update = {
+              risposta_testo: testo,
+              risposta_at: now,
+              risposta_foto_url_1: fotoUrls[0],
+              risposta_foto_url_2: fotoUrls[1],
+              risposta_foto_url_3: fotoUrls[2],
+            };
+            await supabase.from('messaggi_clienti').update(update).eq('id', id);
+            setMessaggi(prev => prev.map(m => m.id === id ? { ...m, ...update } : m));
           }}
           onDelete={(id) => {
             setDeleteTarget('single');
@@ -1180,7 +1200,7 @@ function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onInviaRisposta,
   messaggi: MessaggioCliente[];
   onMarkRead: (id: string) => void;
   onTogglePreferito: (id: string, val: boolean) => void;
-  onInviaRisposta: (id: string, testo: string) => Promise<void>;
+  onInviaRisposta: (id: string, testo: string, fotos: File[]) => Promise<void>;
   onDelete: (id: string) => void;
   onDeleteAll: () => void;
   onFotoZoom: (url: string) => void;
@@ -1188,6 +1208,9 @@ function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onInviaRisposta,
   const [aperti, setAperti] = useState<Set<string>>(new Set());
   const [rispostaAperta, setRispostaAperta] = useState<string | null>(null);
   const [testiRisposta, setTestiRisposta] = useState<Record<string, string>>({});
+  const [fotoRispostaFiles, setFotoRispostaFiles] = useState<Record<string, File[]>>({});
+  const [fotoRispostaPreviews, setFotoRispostaPreviews] = useState<Record<string, string[]>>({});
+  const fotoInputRef = useRef<HTMLInputElement>(null);
   const [loadingPos, setLoadingPos] = useState(false);
   const [salvandoRisposta, setSalvandoRisposta] = useState<string | null>(null);
   const [soloPreferiti, setSoloPreferiti] = useState(false);
@@ -1344,7 +1367,7 @@ function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onInviaRisposta,
             )}
 
             {/* Risposta già inviata */}
-            {m.risposta_testo && rispostaAperta !== m.id && (
+            {(m.risposta_testo || m.risposta_foto_url_1) && rispostaAperta !== m.id && (
               <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
@@ -1356,7 +1379,18 @@ function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onInviaRisposta,
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-emerald-800 leading-relaxed">{m.risposta_testo}</p>
+                {m.risposta_testo && (
+                  <p className="text-sm text-emerald-800 leading-relaxed mb-2">{m.risposta_testo}</p>
+                )}
+                {[m.risposta_foto_url_1, m.risposta_foto_url_2, m.risposta_foto_url_3].some(Boolean) && (
+                  <div className="flex gap-2 flex-wrap">
+                    {[m.risposta_foto_url_1, m.risposta_foto_url_2, m.risposta_foto_url_3].filter(Boolean).map((url, i) => (
+                      <button key={i} onClick={() => onFotoZoom(url!)} className="w-14 h-14 rounded-lg overflow-hidden border border-emerald-200 hover:border-emerald-400 transition-colors flex-shrink-0">
+                        <img src={url!} className="w-full h-full object-cover" alt={`risposta foto ${i+1}`} />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1411,19 +1445,71 @@ function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onInviaRisposta,
                 />
               </div>
 
+              {/* Foto risposta */}
+              <div className="px-4 pb-3">
+                <div className="flex gap-2 flex-wrap">
+                  {(fotoRispostaPreviews[m.id] ?? []).map((prev, i) => (
+                    <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0">
+                      <img src={prev} className="w-full h-full object-cover" alt={`foto ${i+1}`} />
+                      <button
+                        onClick={() => {
+                          URL.revokeObjectURL(prev);
+                          setFotoRispostaFiles(s => ({ ...s, [m.id]: (s[m.id] ?? []).filter((_, idx) => idx !== i) }));
+                          setFotoRispostaPreviews(s => ({ ...s, [m.id]: (s[m.id] ?? []).filter((_, idx) => idx !== i) }));
+                        }}
+                        className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center"
+                      >
+                        <X size={9} />
+                      </button>
+                    </div>
+                  ))}
+                  {(fotoRispostaPreviews[m.id] ?? []).length < 3 && (
+                    <button
+                      onClick={() => fotoInputRef.current?.click()}
+                      className="w-16 h-16 rounded-xl border-2 border-dashed border-stone-300 flex flex-col items-center justify-center gap-1 text-stone-400 hover:border-emerald-400 hover:text-emerald-500 hover:bg-emerald-50 transition-all flex-shrink-0"
+                    >
+                      <Image size={16} />
+                      <span className="text-[9px] font-semibold">Foto</span>
+                    </button>
+                  )}
+                  <input
+                    ref={fotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      const files = Array.from(e.target.files ?? []);
+                      if (!files.length) return;
+                      const existing = fotoRispostaPreviews[m.id] ?? [];
+                      const remaining = 3 - existing.length;
+                      const toAdd = files.slice(0, remaining);
+                      setFotoRispostaFiles(s => ({ ...s, [m.id]: [...(s[m.id] ?? []), ...toAdd] }));
+                      setFotoRispostaPreviews(s => ({ ...s, [m.id]: [...(s[m.id] ?? []), ...toAdd.map(f => URL.createObjectURL(f))] }));
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+              </div>
+
               {/* Azioni */}
               <div className="px-4 pb-3 flex items-center gap-2 flex-wrap border-t border-stone-100 pt-3">
                 {/* Primario: salva nel gestionale */}
                 <button
                   onClick={async () => {
                     const testo = (testiRisposta[m.id] ?? '').trim();
-                    if (!testo) return;
+                    const fotos = fotoRispostaFiles[m.id] ?? [];
+                    if (!testo && fotos.length === 0) return;
                     setSalvandoRisposta(m.id);
-                    await onInviaRisposta(m.id, testo);
+                    await onInviaRisposta(m.id, testo, fotos);
                     setSalvandoRisposta(null);
                     setRispostaAperta(null);
+                    // Cleanup previews
+                    (fotoRispostaPreviews[m.id] ?? []).forEach(u => URL.revokeObjectURL(u));
+                    setFotoRispostaFiles(s => ({ ...s, [m.id]: [] }));
+                    setFotoRispostaPreviews(s => ({ ...s, [m.id]: [] }));
                   }}
-                  disabled={!(testiRisposta[m.id] ?? '').trim() || salvandoRisposta === m.id}
+                  disabled={(!(testiRisposta[m.id] ?? '').trim() && (fotoRispostaFiles[m.id] ?? []).length === 0) || salvandoRisposta === m.id}
                   className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {salvandoRisposta === m.id

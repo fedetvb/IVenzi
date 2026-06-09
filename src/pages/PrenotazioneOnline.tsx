@@ -47,6 +47,9 @@ interface MioMessaggio {
   preferito: boolean;
   risposta_testo: string | null;
   risposta_at: string | null;
+  risposta_foto_url_1: string | null;
+  risposta_foto_url_2: string | null;
+  risposta_foto_url_3: string | null;
   created_at: string;
 }
 
@@ -1303,7 +1306,7 @@ function MieiMessaggiStep({
                     </div>
                   </button>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {m.risposta_testo && (
+                    {(m.risposta_testo || m.risposta_foto_url_1) && (
                       <span className="w-2 h-2 rounded-full bg-emerald-500" title="Risposta ricevuta" />
                     )}
                     <button
@@ -1347,7 +1350,7 @@ function MieiMessaggiStep({
                       </div>
                     )}
 
-                    {m.risposta_testo && (
+                    {(m.risposta_testo || m.risposta_foto_url_1) && (
                       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
                         <div className="flex items-center gap-1.5 mb-2">
                           <Reply size={13} className="text-emerald-600" />
@@ -1358,7 +1361,25 @@ function MieiMessaggiStep({
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-emerald-800 leading-relaxed">{m.risposta_testo}</p>
+                        {m.risposta_testo && (
+                          <p className="text-sm text-emerald-800 leading-relaxed mb-2">{m.risposta_testo}</p>
+                        )}
+                        {[m.risposta_foto_url_1, m.risposta_foto_url_2, m.risposta_foto_url_3].some(Boolean) && (
+                          <div className="flex gap-2 flex-wrap mt-1">
+                            {[m.risposta_foto_url_1, m.risposta_foto_url_2, m.risposta_foto_url_3].filter(Boolean).map((url, i) => (
+                              <button
+                                key={i}
+                                onClick={() => onFotoZoom(url!)}
+                                className="w-20 h-20 rounded-xl overflow-hidden border border-emerald-200 hover:border-emerald-400 transition-colors flex-shrink-0 group relative"
+                              >
+                                <img src={url!} className="w-full h-full object-cover" alt={`risposta foto ${i+1}`} />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                                  <ZoomIn size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
