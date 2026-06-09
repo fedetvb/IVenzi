@@ -99,6 +99,7 @@ export default function App() {
   const [messaggioPopupFading, setMessaggioPopupFading] = useState(false);
   const msgPopupFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const msgPopupRemoveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPingedRichiestaRef = useRef<string | null>(null);
 
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
@@ -429,7 +430,11 @@ export default function App() {
     setRichiestaPrenotaData(new Date(dataOra));
     setRichiestaPrenotaFoto(fotoUrl ?? null);
     setShowRichiestaPrenotaBanner(true);
-    playPing();
+    // Ping solo se è un appuntamento diverso dall'ultimo già segnalato
+    if (lastPingedRichiestaRef.current !== id) {
+      lastPingedRichiestaRef.current = id;
+      playPing();
+    }
   }
 
   function playPing() {
