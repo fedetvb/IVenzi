@@ -1195,7 +1195,14 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
   function apriWhatsApp(telefono: string, testo: string) {
     const tel = formatTel(telefono);
     const txt = encodeURIComponent(testo);
+    const fallback = `https://wa.me/${tel}?text=${txt}`;
+    const start = Date.now();
     window.location.href = `whatsapp://send?phone=${tel}&text=${txt}`;
+    setTimeout(() => {
+      if (Date.now() - start < 2500) {
+        window.open(fallback, '_blank');
+      }
+    }, 1500);
   }
 
   function inviaPosizioneWhatsApp(telefono: string) {
