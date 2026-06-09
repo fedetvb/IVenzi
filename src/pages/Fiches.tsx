@@ -2816,11 +2816,10 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
         // Helper: build PDF from a subset of previews using a fresh jsPDF
         const buildSplitPdf = async (subset: typeof previews) => {
           const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-          const allPageEls = printPagesRef.current!.querySelectorAll<HTMLElement>('[data-print-page]');
-          for (let i = 0; i < allPageEls.length; i++) {
-            const imgData = await captureA4Page(allPageEls[i]);
+          const pageImgs = await capturePagesFromRoot();
+          for (let i = 0; i < pageImgs.length; i++) {
             if (i > 0) pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+            pdf.addImage(pageImgs[i], 'JPEG', 0, 0, 210, 297);
           }
           const incassoTotale = subset.reduce((sum, p) => sum + p.totale, 0);
           pdf.addPage();
@@ -2874,36 +2873,41 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
     return { display: 'grid', gridTemplateColumns: `repeat(${layout.cols}, 1fr)`, gridTemplateRows: `repeat(${layout.rows}, 1fr)`, gap: '3mm', height: '277mm' };
   }
 
-  async function captureA4Page(el: HTMLElement): Promise<string> {
+  async function capturePagesFromRoot(): Promise<string[]> {
     const A4_W = 794;  // 210mm at 96dpi
     const A4_H = 1123; // 297mm at 96dpi
+    const root = document.getElementById('__fiches_print_root__');
+    if (!root) return [];
 
-    // A wrapper fixed at (0,0) with no negative coordinates so html2canvas has
-    // no scroll-offset issues; z-index keeps it visually hidden behind everything.
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = `position:fixed;left:0;top:0;width:${A4_W}px;height:${A4_H}px;overflow:hidden;z-index:-99999;background:white;pointer-events:none;`;
+    const rAF = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.style.cssText = `width:${A4_W}px;min-height:${A4_H}px;padding:8mm;box-sizing:border-box;background:white;margin:0;box-shadow:none;position:relative;`;
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
+    // Move root off-screen (above viewport) with exact A4 pixel width
+    const origRootStyle = root.style.cssText;
+    root.style.cssText = `position:absolute;top:-${A4_H * 10}px;left:0;width:${A4_W}px;background:white;`;
+    await rAF();
 
-    try {
-      const canvas = await html2canvas(wrapper, {
+    const pageEls = Array.from(root.children) as HTMLElement[];
+    const results: string[] = [];
+
+    for (const pageEl of pageEls) {
+      const origPageStyle = pageEl.style.cssText;
+      pageEl.style.cssText = `width:${A4_W}px;min-height:${A4_H}px;padding:8mm;box-sizing:border-box;background:white;`;
+      await rAF();
+
+      const canvas = await html2canvas(pageEl, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         width: A4_W,
         height: A4_H,
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
+        windowWidth: 1920,
       });
-      return canvas.toDataURL('image/jpeg', 0.92);
-    } finally {
-      document.body.removeChild(wrapper);
+      results.push(canvas.toDataURL('image/jpeg', 0.92));
+      pageEl.style.cssText = origPageStyle;
     }
+
+    root.style.cssText = origRootStyle;
+    return results;
   }
 
   function doPrint() {
@@ -2918,15 +2922,13 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
   }
 
   async function doSavePdf(dateLabel?: string) {
-    if (!printPagesRef.current) return;
     setGeneratingPdf(true);
     try {
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageEls = printPagesRef.current.querySelectorAll<HTMLElement>('[data-print-page]');
-      for (let i = 0; i < pageEls.length; i++) {
-        const imgData = await captureA4Page(pageEls[i]);
+      const pageImgs = await capturePagesFromRoot();
+      for (let i = 0; i < pageImgs.length; i++) {
         if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+        pdf.addImage(pageImgs[i], 'JPEG', 0, 0, 210, 297);
       }
 
       // Pagina riepilogo incasso
