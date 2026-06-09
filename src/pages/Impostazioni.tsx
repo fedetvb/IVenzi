@@ -50,13 +50,13 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
-      <div>
+      <div className="text-center">
         <h2 className="text-2xl font-bold text-stone-800">Impostazioni</h2>
-        <p className="text-sm text-stone-500 mt-1">Gestisci le impostazioni del gestionale</p>
+        <p className="text-xs text-stone-400 mt-1 tracking-wide uppercase font-medium">In ordine alfabetico</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden divide-y divide-stone-100">
-        {/* Account */}
+        {/* Account e Credenziali */}
         <button
           onClick={() => setSub('account')}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
@@ -67,163 +67,6 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Account e Credenziali</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica email e password di accesso al gestionale</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
-
-        {/* Tema e Personalizzazione */}
-        <button
-          onClick={() => setSub('tema')}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-violet-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <Palette size={18} className="text-stone-500 group-hover:text-violet-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Tema e Personalizzazione</p>
-            <p className="text-xs text-stone-400 mt-0.5">Colori sidebar, icona e logo del salone (per questo dispositivo)</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
-
-        {/* Password */}
-        <button
-          onClick={() => setSub('password')}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <KeyRound size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Password</p>
-            <p className="text-xs text-stone-400 mt-0.5">Gestisci le password di accesso alle sezioni protette</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
-
-        {/* Promemoria */}
-        <button
-          onClick={() => setSub('promemoria')}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <Bell size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Promemoria Convalida Fiches</p>
-            <p className="text-xs text-stone-400 mt-0.5">Configura giorni e orario per il promemoria di convalida giornaliero</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
-
-        {/* Gruppo Messaggi e Comunicazioni */}
-        <div>
-          <button
-            onClick={() => setMsgOpen(o => !o)}
-            className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${msgOpen ? 'bg-emerald-100' : 'bg-stone-100 group-hover:bg-emerald-100'}`}>
-              <MessageSquare size={18} className={`transition-colors ${msgOpen ? 'text-emerald-600' : 'text-stone-500 group-hover:text-emerald-600'}`} />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-semibold text-stone-800">Messaggi e Comunicazioni</p>
-              <p className="text-xs text-stone-400 mt-0.5">Avvisi appuntamento, template carta sconto e messaggi comunicazioni</p>
-            </div>
-            <ChevronDown size={16} className={`text-stone-400 transition-transform duration-200 ${msgOpen ? 'rotate-180' : ''}`} />
-          </button>
-
-          {msgOpen && (
-            <div className="border-t border-stone-100 divide-y divide-stone-50 bg-stone-50/60">
-              {/* Toggle WhatsApp avvisi */}
-              <div className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5">
-                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${whatsappDisabilitato ? 'bg-white border-stone-200' : 'bg-white border-emerald-200'}`}>
-                  <MessageCircle size={15} className={whatsappDisabilitato ? 'text-stone-300' : 'text-emerald-500'} />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Messaggi WhatsApp automatici</p>
-                  <p className="text-xs text-stone-400 mt-0.5">
-                    {whatsappDisabilitato ? 'Pulsante avviso clienti nascosto nell\'agenda' : 'Pulsante avviso clienti visibile nell\'agenda'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => toggleWhatsapp(!whatsappDisabilitato)}
-                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${whatsappDisabilitato ? 'bg-stone-200' : 'bg-emerald-500'}`}
-                >
-                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${whatsappDisabilitato ? 'translate-x-0.5' : 'translate-x-5'}`} />
-                </button>
-              </div>
-
-              <button
-                onClick={() => setSub('messaggio_avviso')}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-emerald-300 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <MessageCircle size={15} className="text-stone-400 group-hover:text-emerald-600 transition-colors" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Messaggio Avviso Appuntamento</p>
-                  <p className="text-xs text-stone-400 mt-0.5">Personalizza il testo WhatsApp per il promemoria appuntamento</p>
-                </div>
-                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
-              </button>
-
-              <button
-                onClick={() => setSub('template_carta')}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-rose-300 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <Tag size={15} className="text-stone-400 group-hover:text-rose-500 transition-colors" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Template Messaggi Carta Sconto</p>
-                  <p className="text-xs text-stone-400 mt-0.5">Modelli per carte sconto (Natale, compleanno, regalo...)</p>
-                </div>
-                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
-              </button>
-
-              <button
-                onClick={() => setSub('template_comunicazioni')}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-sky-300 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <Send size={15} className="text-stone-400 group-hover:text-sky-500 transition-colors" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Template Messaggi Comunicazioni</p>
-                  <p className="text-xs text-stone-400 mt-0.5">Messaggi predefiniti per comunicazioni (compleanno, feste, promo...)</p>
-                </div>
-                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* QR Code registrazione */}
-        <button
-          onClick={() => setSub('qrcode')}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <QrCode size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">QR Code Registrazione Clienti</p>
-            <p className="text-xs text-stone-400 mt-0.5">Stampa il QR code da esporre in salone per le nuove clienti</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
-
-        {/* Prenotazioni Online */}
-        <button
-          onClick={() => setSub('prenotazioni_online')}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <CalendarClock size={18} className="text-stone-500 group-hover:text-emerald-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Prenotazioni Online</p>
-            <p className="text-xs text-stone-400 mt-0.5">Attiva/disattiva la pagina pubblica di prenotazione e personalizza i messaggi</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -243,6 +86,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
 
+        {/* Cartelle di salvataggio */}
+        <button
+          onClick={() => setSub('cartelle')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <FolderOpen size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Cartelle di salvataggio</p>
+            <p className="text-xs text-stone-400 mt-0.5">Configura le cartelle di destinazione per file scaricabili e salvataggio automatico</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
         {/* Connessione Cloud */}
         <button
           onClick={() => setSub('connessione')}
@@ -254,36 +112,6 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Connessione Cloud</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica le chiavi API per connettere il gestionale al database</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
-
-        {/* Notifiche Push */}
-        <button
-          onClick={() => setSub('notifiche_push')}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <Bell size={18} className="text-stone-500 group-hover:text-blue-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Notifiche Push</p>
-            <p className="text-xs text-stone-400 mt-0.5">Ricevi notifiche sul telefono quando arriva una prenotazione online</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
-
-        {/* Messaggi clienti */}
-        <button
-          onClick={() => setSub('messaggi_clienti')}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-sky-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <MessageCircle size={18} className="text-stone-500 group-hover:text-sky-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Messaggi clienti</p>
-            <p className="text-xs text-stone-400 mt-0.5">Password eliminazione messaggi e cancellazione globale dello schedario</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -303,17 +131,192 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
 
-        {/* Cartelle di salvataggio */}
+        {/* Messaggi clienti */}
         <button
-          onClick={() => setSub('cartelle')}
+          onClick={() => setSub('messaggi_clienti')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-sky-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <MessageCircle size={18} className="text-stone-500 group-hover:text-sky-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Messaggi clienti</p>
+            <p className="text-xs text-stone-400 mt-0.5">Password eliminazione messaggi e cancellazione globale dello schedario</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Messaggi e Comunicazioni */}
+        <div>
+          <button
+            onClick={() => setMsgOpen(o => !o)}
+            className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${msgOpen ? 'bg-emerald-100' : 'bg-stone-100 group-hover:bg-emerald-100'}`}>
+              <MessageSquare size={18} className={`transition-colors ${msgOpen ? 'text-emerald-600' : 'text-stone-500 group-hover:text-emerald-600'}`} />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-stone-800">Messaggi e Comunicazioni</p>
+              <p className="text-xs text-stone-400 mt-0.5">Avvisi appuntamento, template carta sconto e messaggi comunicazioni</p>
+            </div>
+            <ChevronDown size={16} className={`text-stone-400 transition-transform duration-200 ${msgOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {msgOpen && (
+            <div className="border-t border-stone-100 divide-y divide-stone-50 bg-stone-50/60">
+              {/* Messaggio Avviso Appuntamento */}
+              <button
+                onClick={() => setSub('messaggio_avviso')}
+                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-emerald-300 flex items-center justify-center flex-shrink-0 transition-colors">
+                  <MessageCircle size={15} className="text-stone-400 group-hover:text-emerald-600 transition-colors" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-stone-700">Messaggio Avviso Appuntamento</p>
+                  <p className="text-xs text-stone-400 mt-0.5">Personalizza il testo WhatsApp per il promemoria appuntamento</p>
+                </div>
+                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
+              </button>
+
+              {/* Messaggi WhatsApp automatici */}
+              <div className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5">
+                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${whatsappDisabilitato ? 'bg-white border-stone-200' : 'bg-white border-emerald-200'}`}>
+                  <MessageCircle size={15} className={whatsappDisabilitato ? 'text-stone-300' : 'text-emerald-500'} />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-stone-700">Messaggi WhatsApp automatici</p>
+                  <p className="text-xs text-stone-400 mt-0.5">
+                    {whatsappDisabilitato ? 'Pulsante avviso clienti nascosto nell\'agenda' : 'Pulsante avviso clienti visibile nell\'agenda'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => toggleWhatsapp(!whatsappDisabilitato)}
+                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${whatsappDisabilitato ? 'bg-stone-200' : 'bg-emerald-500'}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${whatsappDisabilitato ? 'translate-x-0.5' : 'translate-x-5'}`} />
+                </button>
+              </div>
+
+              {/* Template Messaggi Carta Sconto */}
+              <button
+                onClick={() => setSub('template_carta')}
+                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-rose-300 flex items-center justify-center flex-shrink-0 transition-colors">
+                  <Tag size={15} className="text-stone-400 group-hover:text-rose-500 transition-colors" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-stone-700">Template Messaggi Carta Sconto</p>
+                  <p className="text-xs text-stone-400 mt-0.5">Modelli per carte sconto (Natale, compleanno, regalo...)</p>
+                </div>
+                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
+              </button>
+
+              {/* Template Messaggi Comunicazioni */}
+              <button
+                onClick={() => setSub('template_comunicazioni')}
+                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-sky-300 flex items-center justify-center flex-shrink-0 transition-colors">
+                  <Send size={15} className="text-stone-400 group-hover:text-sky-500 transition-colors" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-stone-700">Template Messaggi Comunicazioni</p>
+                  <p className="text-xs text-stone-400 mt-0.5">Messaggi predefiniti per comunicazioni (compleanno, feste, promo...)</p>
+                </div>
+                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Notifiche Push */}
+        <button
+          onClick={() => setSub('notifiche_push')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Bell size={18} className="text-stone-500 group-hover:text-blue-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Notifiche Push</p>
+            <p className="text-xs text-stone-400 mt-0.5">Ricevi notifiche sul telefono quando arriva una prenotazione online</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Password */}
+        <button
+          onClick={() => setSub('password')}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <FolderOpen size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
+            <KeyRound size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
           </div>
           <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Cartelle di salvataggio</p>
-            <p className="text-xs text-stone-400 mt-0.5">Configura le cartelle di destinazione per file scaricabili e salvataggio automatico</p>
+            <p className="text-sm font-semibold text-stone-800">Password</p>
+            <p className="text-xs text-stone-400 mt-0.5">Gestisci le password di accesso alle sezioni protette</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Prenotazioni Online */}
+        <button
+          onClick={() => setSub('prenotazioni_online')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <CalendarClock size={18} className="text-stone-500 group-hover:text-emerald-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Prenotazioni Online</p>
+            <p className="text-xs text-stone-400 mt-0.5">Attiva/disattiva la pagina pubblica di prenotazione e personalizza i messaggi</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Promemoria Convalida Fiches */}
+        <button
+          onClick={() => setSub('promemoria')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Bell size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Promemoria Convalida Fiches</p>
+            <p className="text-xs text-stone-400 mt-0.5">Configura giorni e orario per il promemoria di convalida giornaliero</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* QR Code Registrazione Clienti */}
+        <button
+          onClick={() => setSub('qrcode')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <QrCode size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">QR Code Registrazione Clienti</p>
+            <p className="text-xs text-stone-400 mt-0.5">Stampa il QR code da esporre in salone per le nuove clienti</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Tema e Personalizzazione */}
+        <button
+          onClick={() => setSub('tema')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-violet-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Palette size={18} className="text-stone-500 group-hover:text-violet-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Tema e Personalizzazione</p>
+            <p className="text-xs text-stone-400 mt-0.5">Colori sidebar, icona e logo del salone (per questo dispositivo)</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
