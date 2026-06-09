@@ -2818,7 +2818,8 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
           const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
           const allPageEls = printPagesRef.current!.querySelectorAll<HTMLElement>('[data-print-page]');
           for (let i = 0; i < allPageEls.length; i++) {
-            const canvas = await html2canvas(allPageEls[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+            const el = allPageEls[i];
+            const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: el.scrollWidth, height: el.scrollHeight, windowWidth: Math.max(window.innerWidth, el.scrollWidth) });
             const imgData = canvas.toDataURL('image/jpeg', 0.92);
             if (i > 0) pdf.addPage();
             pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
@@ -2893,7 +2894,8 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageEls = printPagesRef.current.querySelectorAll<HTMLElement>('[data-print-page]');
       for (let i = 0; i < pageEls.length; i++) {
-        const canvas = await html2canvas(pageEls[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const el = pageEls[i];
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: el.scrollWidth, height: el.scrollHeight, windowWidth: Math.max(window.innerWidth, el.scrollWidth) });
         const imgData = canvas.toDataURL('image/jpeg', 0.92);
         if (i > 0) pdf.addPage();
         pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
