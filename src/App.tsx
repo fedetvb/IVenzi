@@ -447,15 +447,35 @@ export default function App() {
     } catch (_) {}
   }
 
+  function playPingMessaggio() {
+    try {
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      // Due note brevi discendenti — suono "messaggio" distinto dalla prenotazione
+      const note = (freq: number, start: number, dur: number) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        g.gain.setValueAtTime(0.4, ctx.currentTime + start);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+        o.start(ctx.currentTime + start);
+        o.stop(ctx.currentTime + start + dur);
+      };
+      note(1046, 0, 0.18);    // Do6
+      note(784, 0.2, 0.22);   // Sol5
+    } catch (_) {}
+  }
+
   function mostraMessaggioPopup(nome: string, cognome: string, fotoUrl: string | null, clienteId: string | null) {
     const n = [nome, cognome].filter(Boolean).join(' ') || 'Una cliente';
     if (msgPopupFadeRef.current) clearTimeout(msgPopupFadeRef.current);
     if (msgPopupRemoveRef.current) clearTimeout(msgPopupRemoveRef.current);
     setMessaggioPopupFading(false);
     setMessaggioPopup({ nome: n, fotoUrl, clienteId });
-    playPing();
+    playPingMessaggio();
     msgPopupFadeRef.current = setTimeout(() => setMessaggioPopupFading(true), 5000);
-    msgPopupRemoveRef.current = setTimeout(() => { setMessaggioPopup(null); setMessaggioPopupFading(false); }, 5800);
+    msgPopupRemoveRef.current = setTimeout(() => { setMessaggioPopup(null); setMessaggioPopupFading(false); }, 7000);
   }
 
   async function checkAndShowPendingRichiesta() {
@@ -610,33 +630,33 @@ export default function App() {
     };
   }, [user]);
 
-  // Realtime + caricamento iniziale: badge messaggi clienti non letti
+  // Polling + Realtime: badge e popup messaggi clienti non letti
   useEffect(() => {
     if (!user) return;
 
-    async function loadNonLetti() {
+    const seenIds = new Set<string>();
+    let firstLoad = true;
+    let destroyed = false;
+
+    async function pollNonLetti() {
+      if (destroyed) return;
       const { data } = await supabase
         .from('messaggi_clienti')
         .select('id, cliente_id, nome, cognome')
         .eq('letto', false)
         .order('created_at', { ascending: true });
-      setMessaggiNonLetti((data ?? []) as Array<{ id: string; cliente_id: string | null; nome: string; cognome: string }>);
-    }
+      const rows = (data ?? []) as Array<{ id: string; cliente_id: string | null; nome: string; cognome: string }>;
+      setMessaggiNonLetti(rows);
 
-    loadNonLetti();
-
-    let channelRef: ReturnType<typeof supabase.channel> | null = null;
-    let destroyed = false;
-
-    function setupChannel() {
-      if (destroyed) return;
-      if (channelRef) { supabase.removeChannel(channelRef); channelRef = null; }
-      channelRef = supabase
-        .channel(`messaggi_clienti_${Date.now()}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messaggi_clienti' }, async (payload) => {
-          const row = payload.new as { id: string; cliente_id: string | null; nome: string; cognome: string; letto: boolean };
-          if (!row.letto) {
-            setMessaggiNonLetti(prev => [...prev, { id: row.id, cliente_id: row.cliente_id, nome: row.nome, cognome: row.cognome }]);
+      if (firstLoad) {
+        // Primo caricamento: popola seenIds senza mostrare popup
+        rows.forEach(r => seenIds.add(r.id));
+        firstLoad = false;
+      } else {
+        // Caricamenti successivi: mostra popup per righe nuove
+        for (const row of rows) {
+          if (!seenIds.has(row.id)) {
+            seenIds.add(row.id);
             let fotoUrl: string | null = null;
             if (row.cliente_id) {
               const { data: cl } = await supabase.from('clienti').select('foto_url').eq('id', row.cliente_id).maybeSingle();
@@ -644,22 +664,27 @@ export default function App() {
             }
             mostraMessaggioPopup(row.nome, row.cognome, fotoUrl, row.cliente_id);
           }
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messaggi_clienti' }, (payload) => {
-          const row = payload.new as { id: string; letto: boolean };
-          if (row.letto) {
-            setMessaggiNonLetti(prev => prev.filter(m => m.id !== row.id));
-          }
-        })
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messaggi_clienti' }, (payload) => {
-          const row = payload.old as { id: string };
-          setMessaggiNonLetti(prev => prev.filter(m => m.id !== row.id));
-        })
-        .subscribe();
+        }
+      }
     }
 
-    setupChannel();
-    const interval = setInterval(loadNonLetti, 30_000);
+    pollNonLetti();
+    const interval = setInterval(pollNonLetti, 4_000);
+
+    // Realtime come trigger aggiuntivo (riduce latenza)
+    let channelRef: ReturnType<typeof supabase.channel> | null = null;
+    channelRef = supabase
+      .channel(`messaggi_clienti_rt_${Date.now()}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messaggi_clienti' }, () => {
+        pollNonLetti();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messaggi_clienti' }, () => {
+        pollNonLetti();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messaggi_clienti' }, () => {
+        pollNonLetti();
+      })
+      .subscribe();
 
     return () => {
       destroyed = true;
@@ -909,10 +934,11 @@ export default function App() {
       {/* Popup notifica nuovo messaggio cliente */}
       {messaggioPopup && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-[105] w-full max-w-md px-4 transition-all duration-700"
+          className="fixed left-1/2 -translate-x-1/2 z-[105] w-full max-w-md px-4"
           style={{
             top: showNuovaSchedaBanner || showRichiestaPrenotaBanner ? '12rem' : '1rem',
             opacity: messaggioPopupFading ? 0 : 1,
+            transition: 'opacity 2000ms ease',
             pointerEvents: messaggioPopupFading ? 'none' : 'auto',
           }}
         >
