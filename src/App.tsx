@@ -90,6 +90,7 @@ export default function App() {
   const [richiestaPrenotaData, setRichiestaPrenotaData] = useState<Date | null>(null);
   const [richiestaPrenotaId, setRichiestaPrenotaId] = useState<string | null>(null);
   const [richiestaPrenotaFoto, setRichiestaPrenotaFoto] = useState<string | null>(null);
+  richiestaPrenotaIdRef.current = richiestaPrenotaId;
 
   // Badge messaggi clienti non letti — coda ordinata per navigazione
   const [messaggiNonLetti, setMessaggiNonLetti] = useState<Array<{ id: string; cliente_id: string | null; nome: string; cognome: string }>>([]);
@@ -100,6 +101,7 @@ export default function App() {
   const msgPopupFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const msgPopupRemoveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPingedRichiestaRef = useRef<string | null>(null);
+  const richiestaPrenotaIdRef = useRef<string | null>(null);
   const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
   const [volumeNotifiche, setVolumeNotifiche] = useState(70);
@@ -560,7 +562,16 @@ export default function App() {
       .select('id, nome, cognome, data_ora, clienti(foto_url)')
       .eq('stato', 'in_attesa')
       .order('created_at', { ascending: false });
-    const unseen = (data || []).find(r => !dismissed.has(r.id));
+    const pendingIds = new Set((data || []).map((r: { id: string }) => r.id));
+    // Se il banner e' aperto ma la richiesta e' gia' stata gestita da un altro dispositivo, chiudi
+    const currentId = richiestaPrenotaIdRef.current;
+    if (currentId && !pendingIds.has(currentId)) {
+      stopRing();
+      markRichiestaDismissed(currentId);
+      setShowRichiestaPrenotaBanner(false);
+      setRichiestaPrenotaId(null);
+    }
+    const unseen = (data || []).find((r: { id: string }) => !dismissed.has(r.id));
     if (unseen) {
       const foto = (unseen.clienti as { foto_url?: string } | null)?.foto_url ?? null;
       mostraRichiestaBanner(unseen.id, unseen.nome, unseen.cognome, unseen.data_ora, foto);
@@ -680,6 +691,20 @@ export default function App() {
               }
               mostraRichiestaBanner(row.id, row.nome ?? '', row.cognome ?? '', row.data_ora ?? new Date().toISOString(), foto);
             }
+          }
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'richieste_appuntamento',
+        }, (payload) => {
+          const row = payload.new as { id?: string; stato?: string };
+          // Se la richiesta mostrata e' stata gestita da un altro dispositivo, chiudi subito
+          if (row.id && row.id === richiestaPrenotaIdRef.current && row.stato !== 'in_attesa') {
+            stopRing();
+            markRichiestaDismissed(row.id);
+            setShowRichiestaPrenotaBanner(false);
+            setRichiestaPrenotaId(null);
           }
         })
         .on('system', {}, (status) => {
