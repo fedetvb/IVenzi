@@ -2875,31 +2875,34 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
   }
 
   async function captureA4Page(el: HTMLElement): Promise<string> {
-    // Clone off-screen so no parent container clips the 210mm A4 width
+    const A4_W = 794;  // 210mm at 96dpi
+    const A4_H = 1123; // 297mm at 96dpi
+
+    // A wrapper fixed at (0,0) with no negative coordinates so html2canvas has
+    // no scroll-offset issues; z-index keeps it visually hidden behind everything.
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `position:fixed;left:0;top:0;width:${A4_W}px;height:${A4_H}px;overflow:hidden;z-index:-99999;background:white;pointer-events:none;`;
+
     const clone = el.cloneNode(true) as HTMLElement;
-    Object.assign(clone.style, {
-      position: 'fixed',
-      left: '-9999px',
-      top: '0',
-      width: '794px',   // 210mm at 96dpi
-      height: '1123px', // 297mm at 96dpi
-      overflow: 'visible',
-      zIndex: '-9999',
-      boxSizing: 'border-box',
-    });
-    document.body.appendChild(clone);
+    clone.style.cssText = `width:${A4_W}px;min-height:${A4_H}px;padding:8mm;box-sizing:border-box;background:white;margin:0;box-shadow:none;position:relative;`;
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
     try {
-      const canvas = await html2canvas(clone, {
+      const canvas = await html2canvas(wrapper, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        width: 794,
-        height: 1123,
-        windowWidth: 794,
+        width: A4_W,
+        height: A4_H,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
       });
       return canvas.toDataURL('image/jpeg', 0.92);
     } finally {
-      document.body.removeChild(clone);
+      document.body.removeChild(wrapper);
     }
   }
 
