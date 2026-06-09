@@ -1259,6 +1259,13 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {!aperti.has(m.id) && [m.foto_url_1, m.foto_url_2, m.foto_url_3].filter(Boolean).length > 0 && (
+                <div className="flex items-center gap-1">
+                  {[m.foto_url_1, m.foto_url_2, m.foto_url_3].filter(Boolean).map((url, i) => (
+                    <img key={i} src={url} className="w-7 h-7 rounded-md object-cover border border-stone-200 flex-shrink-0" />
+                  ))}
+                </div>
+              )}
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(m.id); }}
                 className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
