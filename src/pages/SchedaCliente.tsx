@@ -1193,8 +1193,9 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
   }
 
   function apriWhatsApp(telefono: string, testo: string) {
-    const url = `https://wa.me/${formatTel(telefono)}?text=${encodeURIComponent(testo)}`;
-    window.open(url, '_blank');
+    const tel = formatTel(telefono);
+    const txt = encodeURIComponent(testo);
+    window.location.href = `whatsapp://send?phone=${tel}&text=${txt}`;
   }
 
   function inviaPosizioneWhatsApp(telefono: string) {
