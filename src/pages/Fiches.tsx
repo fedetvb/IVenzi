@@ -2818,9 +2818,7 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
           const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
           const allPageEls = printPagesRef.current!.querySelectorAll<HTMLElement>('[data-print-page]');
           for (let i = 0; i < allPageEls.length; i++) {
-            const el = allPageEls[i];
-            const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: el.scrollWidth, height: el.scrollHeight, windowWidth: Math.max(window.innerWidth, el.scrollWidth) });
-            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+            const imgData = await captureA4Page(allPageEls[i]);
             if (i > 0) pdf.addPage();
             pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
           }
@@ -2876,6 +2874,35 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
     return { display: 'grid', gridTemplateColumns: `repeat(${layout.cols}, 1fr)`, gridTemplateRows: `repeat(${layout.rows}, 1fr)`, gap: '3mm', height: '277mm' };
   }
 
+  async function captureA4Page(el: HTMLElement): Promise<string> {
+    // Clone off-screen so no parent container clips the 210mm A4 width
+    const clone = el.cloneNode(true) as HTMLElement;
+    Object.assign(clone.style, {
+      position: 'fixed',
+      left: '-9999px',
+      top: '0',
+      width: '794px',   // 210mm at 96dpi
+      height: '1123px', // 297mm at 96dpi
+      overflow: 'visible',
+      zIndex: '-9999',
+      boxSizing: 'border-box',
+    });
+    document.body.appendChild(clone);
+    try {
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: 794,
+        height: 1123,
+        windowWidth: 794,
+      });
+      return canvas.toDataURL('image/jpeg', 0.92);
+    } finally {
+      document.body.removeChild(clone);
+    }
+  }
+
   function doPrint() {
     const styleEl = document.createElement('style');
     styleEl.innerHTML = `@media print { body > *:not(#__fiches_print_root__) { display: none !important; } #__fiches_print_root__ { display: block !important; } @page { size: A4 portrait; margin: 8mm; } }`;
@@ -2894,9 +2921,7 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageEls = printPagesRef.current.querySelectorAll<HTMLElement>('[data-print-page]');
       for (let i = 0; i < pageEls.length; i++) {
-        const el = pageEls[i];
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: el.scrollWidth, height: el.scrollHeight, windowWidth: Math.max(window.innerWidth, el.scrollWidth) });
-        const imgData = canvas.toDataURL('image/jpeg', 0.92);
+        const imgData = await captureA4Page(pageEls[i]);
         if (i > 0) pdf.addPage();
         pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
       }
