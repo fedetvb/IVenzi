@@ -12,6 +12,7 @@ import PasswordGateModal from '../components/PasswordGateModal';
 interface Props {
   clienteId: string;
   onBack: () => void;
+  initialTab?: Tab;
 }
 
 type Tab = 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi';
@@ -424,11 +425,11 @@ function GraficoServiziModal({ voci, onClose }: { voci: FicheVoceCliente[]; onCl
   );
 }
 
-export default function SchedaCliente({ clienteId, onBack }: Props) {
+export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [schede, setSchede] = useState<SchedaColore[]>([]);
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
-  const [tab, setTab] = useState<Tab>('info');
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'info');
   const [editCliente, setEditCliente] = useState(false);
   const [schedaModal, setSchedaModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [appModal, setAppModal] = useState<{ open: boolean; id?: string }>({ open: false });

@@ -47,6 +47,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState<string | null>(null);
+  const [selectedClienteTab, setSelectedClienteTab] = useState<'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi' | undefined>(undefined);
   const [agendaSelectedDay, setAgendaSelectedDay] = useState<Date | null>(null);
 
   function handleSetAgendaDay(d: Date | null) {
@@ -113,8 +114,9 @@ export default function App() {
     setShowReminderBanner(true);
   }
 
-  function handleSelectCliente(id: string) {
+  function handleSelectCliente(id: string, tab?: 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi') {
     setSelectedCliente(id);
+    setSelectedClienteTab(tab);
     setPage('clienti');
   }
 
@@ -955,7 +957,7 @@ export default function App() {
               onClick={() => {
                 if (msgPopupFadeRef.current) clearTimeout(msgPopupFadeRef.current);
                 if (msgPopupRemoveRef.current) clearTimeout(msgPopupRemoveRef.current);
-                if (messaggioPopup.clienteId) handleSelectCliente(messaggioPopup.clienteId);
+                if (messaggioPopup.clienteId) handleSelectCliente(messaggioPopup.clienteId, 'messaggi');
                 else navigateTo('clienti');
                 setMessaggioPopup(null);
               }}
@@ -1026,7 +1028,8 @@ export default function App() {
         {page === 'clienti' && selectedCliente && (
           <SchedaCliente
             clienteId={selectedCliente}
-            onBack={() => setSelectedCliente(null)}
+            onBack={() => { setSelectedCliente(null); setSelectedClienteTab(undefined); }}
+            initialTab={selectedClienteTab}
           />
         )}
         {page === 'servizi' && <Servizi />}
