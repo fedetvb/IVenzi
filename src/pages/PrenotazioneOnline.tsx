@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff } from 'lucide-react';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/prenota-online`;
 const MIEI_MSG_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/miei-messaggi`;
@@ -127,6 +127,34 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [loadingMieiMsg, setLoadingMieiMsg] = useState(false);
   const [mieiMsgError, setMieiMsgError] = useState('');
   const [msgZoomUrl, setMsgZoomUrl] = useState<string | null>(null);
+  const [suonoAttivo, setSuonoAttivoState] = useState(() => localStorage.getItem('prenota_suono_v1') !== 'off');
+  const suonoAttivoRef = useRef(suonoAttivo);
+  const stepRef = useRef<Step>('dati');
+  const risposteConosciute = useRef<Map<string, string | null>>(new Map());
+
+  function setSuonoAttivo(val: boolean) {
+    suonoAttivoRef.current = val;
+    setSuonoAttivoState(val);
+    localStorage.setItem('prenota_suono_v1', val ? 'on' : 'off');
+  }
+
+  function playPing() {
+    try {
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1047, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 1.2);
+    } catch { /* ignora se AudioContext non disponibile */ }
+  }
 
   // PWA install prompt
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
@@ -163,6 +191,30 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     if (outcome === 'accepted') dismissInstallBanner();
     else setInstallPrompt(null);
   }
+
+  // Tieni stepRef sincronizzato
+  useEffect(() => { stepRef.current = step; }, [step]);
+
+  // Polling risposte in background (ogni 30s, dopo che l'utente ha inserito i dati)
+  useEffect(() => {
+    const tel = telefono.trim();
+    if (!tel || !userId) return;
+
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const messaggi = await fetchMieiMessaggi(true);
+        if (active && stepRef.current === 'miei_messaggi') {
+          setMieiMsg(messaggi);
+        }
+      } catch { /* ignora errori di rete */ }
+    };
+
+    const id = setInterval(poll, 30000);
+    return () => { active = false; clearInterval(id); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telefono, userId]);
 
   // Pre-fill from localStorage
   useEffect(() => {
@@ -309,14 +361,31 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
   }
 
+  async function fetchMieiMessaggi(playSound: boolean): Promise<MioMessaggio[]> {
+    const res = await fetch(`${MIEI_MSG_URL}?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+    const messaggi: MioMessaggio[] = data.messaggi ?? [];
+
+    let nuovaRisposta = false;
+    for (const m of messaggi) {
+      const prev = risposteConosciute.current.get(m.id);
+      if (playSound && m.risposta_testo && prev === null && risposteConosciute.current.has(m.id)) {
+        nuovaRisposta = true;
+      }
+      risposteConosciute.current.set(m.id, m.risposta_testo);
+    }
+    if (nuovaRisposta && suonoAttivoRef.current) playPing();
+
+    return messaggi;
+  }
+
   async function loadMieiMessaggi() {
     setLoadingMieiMsg(true);
     setMieiMsgError('');
     try {
-      const res = await fetch(`${MIEI_MSG_URL}?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
-      setMieiMsg(data.messaggi ?? []);
+      const messaggi = await fetchMieiMessaggi(false);
+      setMieiMsg(messaggi);
     } catch {
       setMieiMsgError('Impossibile caricare i messaggi. Riprova.');
     } finally {
@@ -767,6 +836,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             onFotoZoom={setMsgZoomUrl}
             onBack={() => setStep('scelta')}
             onRetry={loadMieiMessaggi}
+            suonoAttivo={suonoAttivo}
+            onToggleSuono={() => setSuonoAttivo(!suonoAttivo)}
           />
         )}
 
@@ -1113,7 +1184,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 }
 
 function MieiMessaggiStep({
-  messaggi, loading, error, onTogglePreferito, onFotoZoom, onBack, onRetry,
+  messaggi, loading, error, onTogglePreferito, onFotoZoom, onBack, onRetry, suonoAttivo, onToggleSuono,
 }: {
   messaggi: MioMessaggio[];
   loading: boolean;
@@ -1122,6 +1193,8 @@ function MieiMessaggiStep({
   onFotoZoom: (url: string) => void;
   onBack: () => void;
   onRetry: () => void;
+  suonoAttivo: boolean;
+  onToggleSuono: () => void;
 }) {
   const [aperti, setAperti] = useState<Set<string>>(new Set());
   const [soloPreferiti, setSoloPreferiti] = useState(false);
@@ -1138,9 +1211,23 @@ function MieiMessaggiStep({
 
   return (
     <div className="space-y-4">
-      <div className="text-center mb-2">
-        <p className="text-xl font-bold text-stone-800">I miei messaggi</p>
-        <p className="text-sm text-stone-400 mt-1">Le tue richieste inviate al salone</p>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <p className="text-xl font-bold text-stone-800">I miei messaggi</p>
+          <p className="text-sm text-stone-400 mt-0.5">Le tue richieste inviate al salone</p>
+        </div>
+        <button
+          onClick={onToggleSuono}
+          className={`flex flex-col items-center gap-0.5 p-2 rounded-xl border transition-all ${
+            suonoAttivo
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+              : 'border-stone-200 bg-stone-50 text-stone-400'
+          }`}
+          title={suonoAttivo ? 'Avviso sonoro attivo — tocca per disattivare' : 'Avviso sonoro disattivato — tocca per attivare'}
+        >
+          {suonoAttivo ? <Bell size={18} /> : <BellOff size={18} />}
+          <span className="text-[9px] font-medium leading-none">{suonoAttivo ? 'Suono on' : 'Suono off'}</span>
+        </button>
       </div>
 
       {loading && (
