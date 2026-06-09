@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image, Send, ChevronUp } from 'lucide-react';
 import { localDateStr, type Cliente, type SchedaColore, type Appuntamento, supabase } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated, getImpostazione } from '../lib/localDb';
+import { apriWhatsApp as apriWA } from '../lib/waUtils';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import ClienteModal from '../components/ClienteModal';
 import { useAuth } from '../lib/AuthContext';
@@ -1193,16 +1194,7 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
   }
 
   function apriWhatsApp(telefono: string, testo: string) {
-    const tel = formatTel(telefono);
-    const txt = encodeURIComponent(testo);
-    const fallback = `https://wa.me/${tel}?text=${txt}`;
-    const start = Date.now();
-    window.location.href = `whatsapp://send?phone=${tel}&text=${txt}`;
-    setTimeout(() => {
-      if (Date.now() - start < 2500) {
-        window.open(fallback, '_blank');
-      }
-    }, 1500);
+    apriWA(telefono, testo);
   }
 
   function inviaPosizioneWhatsApp(telefono: string) {

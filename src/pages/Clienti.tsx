@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar, ShieldOff, Ban } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione } from '../lib/localDb';
+import { apriWhatsApp, apriWhatsAppSenzaNumero } from '../lib/waUtils';
 import ClienteModal from '../components/ClienteModal';
 import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
@@ -988,12 +989,11 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
             <div className="px-6 pb-5 flex gap-2">
               <button
                 onClick={() => {
-                  const phone = messaggioConferma.telefono.replace(/\D/g, '');
-                  const numero = phone.startsWith('39') ? phone : phone ? `39${phone}` : '';
-                  const url = numero
-                    ? `https://wa.me/${numero}?text=${encodeURIComponent(messaggioConferma.testo)}`
-                    : `https://wa.me/?text=${encodeURIComponent(messaggioConferma.testo)}`;
-                  window.open(url, '_blank');
+                  if (messaggioConferma.telefono?.trim()) {
+                    apriWhatsApp(messaggioConferma.telefono, messaggioConferma.testo);
+                  } else {
+                    apriWhatsAppSenzaNumero(messaggioConferma.testo);
+                  }
                   setMessaggioConferma(null);
                 }}
                 className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-green-500 hover:bg-green-600 text-white transition-colors"

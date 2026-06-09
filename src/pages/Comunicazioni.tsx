@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Search, Send, CheckSquare, Square, MessageSquare, Users, Phone, List, X, BookOpen, ChevronDown } from 'lucide-react';
 import { dbSelect } from '../lib/localDb';
+import { apriWhatsApp } from '../lib/waUtils';
 
 interface Cliente {
   id: string;
@@ -101,9 +102,8 @@ export default function Comunicazioni() {
   }
 
   function sendAll() {
-    const testo = encodeURIComponent(messaggio);
     for (const c of targets) {
-      window.open(`https://wa.me/${normalizePhone(c.telefono)}?text=${testo}`, '_blank');
+      apriWhatsApp(c.telefono, messaggio);
     }
   }
 
@@ -114,8 +114,7 @@ export default function Comunicazioni() {
 
   function openCurrentAndAdvance() {
     const c = targets[queueIndex];
-    const testo = encodeURIComponent(messaggio);
-    window.open(`https://wa.me/${normalizePhone(c.telefono)}?text=${testo}`, '_blank');
+    apriWhatsApp(c.telefono, messaggio);
     if (queueIndex < targets.length - 1) {
       setQueueIndex(prev => prev + 1);
     } else {
@@ -140,10 +139,9 @@ export default function Comunicazioni() {
       return;
     }
 
-    // più clienti: apre una finestra WhatsApp per ognuna con nome personalizzato
+    // più clienti: apre WhatsApp per ognuna con nome personalizzato
     for (const c of selectedClients) {
-      const testo = encodeURIComponent(t.testo.replace(/\{nome\}/g, c.nome));
-      window.open(`https://wa.me/${normalizePhone(c.telefono)}?text=${testo}`, '_blank');
+      apriWhatsApp(c.telefono, t.testo.replace(/\{nome\}/g, c.nome));
     }
   }
 

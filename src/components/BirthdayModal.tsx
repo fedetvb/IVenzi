@@ -3,6 +3,7 @@ import { X, Gift, Send, CreditCard, ChevronDown, Check, Loader, Euro, Percent } 
 import { supabase } from '../lib/supabase';
 import SmsCartaModal from './SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
+import { apriWhatsApp } from '../lib/waUtils';
 
 interface ClienteCompleanno {
   id: string;
@@ -203,16 +204,14 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
 
   function sendAuguri(c: ClienteCompleanno) {
     if (!c.telefono) return;
-    const testo = encodeURIComponent(buildMessaggio(c));
-    window.open(`https://wa.me/${normalizePhone(c.telefono)}?text=${testo}`, '_blank');
+    apriWhatsApp(c.telefono, buildMessaggio(c));
     setSentIds(prev => new Set([...prev, c.id]));
   }
 
   function sendTutti() {
     const daInviare = clienti.filter(c => c.telefono && !sentIds.has(c.id));
     for (const c of daInviare) {
-      const testo = encodeURIComponent(buildMessaggio(c));
-      window.open(`https://wa.me/${normalizePhone(c.telefono!)}?text=${testo}`, '_blank');
+      apriWhatsApp(c.telefono!, buildMessaggio(c));
     }
     setSentIds(prev => new Set([...prev, ...daInviare.map(c => c.id)]));
   }

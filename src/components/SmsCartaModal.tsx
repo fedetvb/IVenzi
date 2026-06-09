@@ -1,6 +1,7 @@
 import { Copy, Check, X, MessageSquare, Send, ChevronDown, CreditCard as Edit3, Loader } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { dbSelect, getImpostazione } from '../lib/localDb';
+import { apriWhatsApp } from '../lib/waUtils';
 
 export type AzioneCarta =
   | { tipo: 'creazione'; credito: number }
@@ -329,8 +330,7 @@ export default function SmsCartaModal({ nominativo, codice, telefono, azione, on
     azione.tipo === 'sconto_utilizzo' ? 'Sconto applicato' : 'Utilizzo registrato';
 
   function openWhatsapp(messaggio: string) {
-    const testo = encodeURIComponent(messaggio);
-    window.open(`https://wa.me/${normalizePhone(telefono)}?text=${testo}`, '_blank');
+    apriWhatsApp(telefono, messaggio);
     onClose();
   }
 

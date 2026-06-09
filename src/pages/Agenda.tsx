@@ -5,6 +5,7 @@ import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione } from '../lib
 import MultiBookModal from '../components/MultiBookModal';
 import AgendaGiorno from './AgendaGiorno';
 import BirthdayModal from '../components/BirthdayModal';
+import { apriWhatsApp } from '../lib/waUtils';
 
 function useItalianTime() {
   const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -452,10 +453,8 @@ function applyTemplate(template: string, vars: { nome: string; data: string; ora
     .replace(/\{ora\}/g, vars.ora);
 }
 
-function buildWhatsAppUrl(telefono: string, testo: string, mapUrl: string): string {
-  const numero = telefono.replace(/\s+/g, '').replace(/^\+/, '').replace(/^00/, '');
-  const testoCompleto = mapUrl ? `${testo}\n\n${mapUrl}` : testo;
-  return `https://wa.me/${numero}?text=${encodeURIComponent(testoCompleto)}`;
+function buildWhatsAppTesto(testo: string, mapUrl: string): string {
+  return mapUrl ? `${testo}\n\n${mapUrl}` : testo;
 }
 
 interface AvvisoModalProps {
@@ -529,7 +528,7 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
               </p>
               {clienti.map((c, i) => {
                 const testo = applyTemplate(template, { nome: c.nome, data: c.data, ora: c.ora });
-                const waUrl = buildWhatsAppUrl(c.telefono, testo, mapUrl);
+                const testoCompleto = buildWhatsAppTesto(testo, mapUrl);
                 return (
                   <div key={i} className="bg-stone-50 border border-stone-200 rounded-xl overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3">
@@ -540,16 +539,14 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
                         <p className="text-sm font-semibold text-stone-800">{c.nome}</p>
                         <p className="text-xs text-stone-400">{c.telefono} · ore {c.ora}</p>
                       </div>
-                      <a
-                        href={waUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        onClick={() => apriWhatsApp(c.telefono, testoCompleto)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
                       >
                         <MessageCircle size={13} />
                         WhatsApp
                         <ExternalLink size={10} className="opacity-70" />
-                      </a>
+                      </button>
                     </div>
                     {/* Anteprima messaggio */}
                     <div className="px-4 pb-3">

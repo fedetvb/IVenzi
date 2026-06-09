@@ -3,6 +3,7 @@ import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check,
 import { supabase, type Appuntamento, type Parrucchiere } from '../lib/supabase';
 import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete, dbUpsert, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
+import { apriWhatsApp } from '../lib/waUtils';
 
 interface RichiestaAppuntamento {
   id: string;
@@ -352,21 +353,34 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       .replace(/\{ora\}/g, oraFmt)
       .replace(/\{posizione\}/g, posizione);
 
-    // Se la richiesta non aveva un cliente_id, cerca il cliente per telefono o nome+cognome
+    // Risolvi il cliente_id locale: verifica che esista in SQLite,
+    // perché l'UUID Supabase potrebbe non corrispondere a quello locale se la sync è incompleta
+    const stripPhone = (t: string) => t.replace(/\D/g, '').replace(/^39/, '');
     let clienteId: string | null = r.cliente_id ?? null;
-    if (!clienteId && (r.nome || r.telefono)) {
-      // Normalizza il telefono: solo cifre, senza prefisso internazionale
-      const stripPhone = (t: string) => t.replace(/\D/g, '').replace(/^39/, '');
+
+    // Se abbiamo un cliente_id da Supabase, verifica che esista anche localmente
+    let clienteLocaleVerificato = false;
+    if (clienteId) {
+      const { data: check } = await dbSelect({
+        table: 'clienti',
+        filters: [{ col: 'id', op: 'eq', val: clienteId }],
+        limit: 1,
+      });
+      clienteLocaleVerificato = !!check?.[0];
+      if (!clienteLocaleVerificato) clienteId = null; // UUID non trovato localmente, cerca per altri criteri
+    }
+
+    // Se non abbiamo un cliente_id valido localmente, cerca per telefono o nome+cognome
+    if (!clienteLocaleVerificato && (r.nome || r.telefono)) {
       const telKey = r.telefono ? stripPhone(r.telefono) : '';
 
-      // Carica tutti i clienti attivi (senza deleted_at) e cerca manualmente
       const { data: tuttiClienti } = await dbSelect({
         table: 'clienti',
         filters: [{ col: 'deleted_at', op: 'is_null' }],
       });
       const clienti = (tuttiClienti ?? []) as Record<string, unknown>[];
 
-      // 1. Match per telefono (normalizzato, confronto su ultimi 9 cifre per sicurezza)
+      // 1. Match per telefono (ultimi 9 cifre normalizzate)
       let trovato: Record<string, unknown> | undefined;
       if (telKey.length >= 6) {
         const telSuffix = telKey.slice(-9);
@@ -387,7 +401,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
       if (trovato) {
         clienteId = trovato.id as string;
-      } else {
+      } else if (!clienteId) {
+        // Crea nuovo cliente solo se non trovato in nessun modo
         const { data: newCliente } = await dbInsert({
           table: 'clienti',
           data: {
@@ -706,22 +721,20 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                 const tel = c.telefono?.replace(/\s+/g, '').replace(/^00/, '+').replace(/^0/, '+39');
                 const waNum = tel?.startsWith('+') ? tel.replace('+', '') : tel ? `39${tel}` : null;
                 const testo = messaggioAuguri.replace(/\{nome\}/g, c.nome).replace(/\{cognome\}/g, c.cognome).replace(/\{nome_cognome\}/g, `${c.nome} ${c.cognome}`);
-                const waUrl = waNum ? `https://wa.me/${waNum}?text=${encodeURIComponent(testo)}` : null;
+                const hasTel = !!waNum;
                 return (
                   <div key={i} className="flex items-center gap-2 bg-white border border-rose-200 rounded-lg px-3 py-1.5">
                     <span className="text-sm font-medium text-rose-800">{c.nome} {c.cognome}</span>
-                    {waUrl ? (
-                      <a
-                        href={waUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    {hasTel ? (
+                      <button
+                        onClick={() => apriWhatsApp(c.telefono!, testo)}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-semibold transition-colors"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                         </svg>
                         Auguri
-                      </a>
+                      </button>
                     ) : (
                       <span className="text-xs text-rose-400 italic">nessun numero</span>
                     )}
@@ -1541,10 +1554,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                 <button
                   disabled={wpLoadingPos}
                   onClick={() => {
-                    const tel = whatsappPreview.telefono.replace(/\s+/g, '').replace(/^00/, '+').replace(/^0/, '+39');
-                    const waNum = tel.startsWith('+') ? tel.replace('+', '') : `39${tel}`;
-                    const sendMsg = () => {
-                      window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(whatsappPreview.testo)}`, '_blank');
+                    const sendMsg = (testo: string) => {
+                      apriWhatsApp(whatsappPreview.telefono, testo);
                       setWhatsappPreview(null);
                       setWpInviaPosizione(false);
                     };
@@ -1554,16 +1565,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                         (pos) => {
                           setWpLoadingPos(false);
                           const locUrl = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                          const testoConPos = `${whatsappPreview.testo}\n\n📍 ${locUrl}`;
-                          window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(testoConPos)}`, '_blank');
-                          setWhatsappPreview(null);
-                          setWpInviaPosizione(false);
+                          sendMsg(`${whatsappPreview.testo}\n\n📍 ${locUrl}`);
                         },
-                        () => { setWpLoadingPos(false); sendMsg(); },
+                        () => { setWpLoadingPos(false); sendMsg(whatsappPreview.testo); },
                         { timeout: 8000 }
                       );
                     } else {
-                      sendMsg();
+                      sendMsg(whatsappPreview.testo);
                     }
                   }}
                   className="py-3 rounded-2xl bg-green-600 text-white font-semibold text-sm hover:bg-green-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
