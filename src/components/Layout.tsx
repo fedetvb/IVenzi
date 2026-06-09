@@ -35,7 +35,7 @@ import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { onOfflineStateChange, flushPendingSync, type SyncState } from '../lib/offlineFetch';
-import { getTheme, applyTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, type ThemeSettings } from '../lib/theme';
+import { getTheme, saveTheme, applyTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, type ThemeSettings } from '../lib/theme';
 
 interface PingLogRow {
   eseguito_at: string;
@@ -233,6 +233,34 @@ export default function Layout({ currentPage, onNavigate, children, user, messag
       })
       .catch(() => { /* use URL directly */ setLogoSrc(theme.logoUrl); });
   }, [theme.logoUrl]);
+
+  // Sync logo from Supabase on first load (cross-device support)
+  useEffect(() => {
+    if (!user) return;
+    if (getLogoCacheB64()) return; // already cached locally
+    (async () => {
+      const { data } = await supabase.from('impostazioni')
+        .select('valore')
+        .eq('chiave', 'logo_salone_url')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!data?.valore) return;
+      const url = data.valore;
+      const next = saveTheme({ logoUrl: url });
+      setTheme(next);
+      applyTheme(next);
+      fetch(url)
+        .then(r => r.blob())
+        .then(blob => new Promise<string>((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result as string);
+          reader.onerror = rej;
+          reader.readAsDataURL(blob);
+        }))
+        .then(b64 => { saveLogoCacheB64(b64); setLogoSrc(b64); })
+        .catch(() => setLogoSrc(url));
+    })();
+  }, [user]);
 
   useEffect(() => {
     return onOfflineStateChange((online, pending, state) => {

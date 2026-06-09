@@ -758,6 +758,32 @@ function PaginaTema({ onBack }: { onBack: () => void }) {
   const [saved, setSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Sync logo from Supabase on mount (cross-device support)
+  useEffect(() => {
+    if (!user) return;
+    if (getLogoCacheB64()) return;
+    (async () => {
+      const { data } = await supabase.from('impostazioni')
+        .select('valore')
+        .eq('chiave', 'logo_salone_url')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!data?.valore) return;
+      const url = data.valore;
+      saveTheme({ logoUrl: url });
+      fetch(url)
+        .then(r => r.blob())
+        .then(blob => new Promise<string>((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result as string);
+          reader.onerror = rej;
+          reader.readAsDataURL(blob);
+        }))
+        .then(b64 => { saveLogoCacheB64(b64); setLogoPreview(b64); })
+        .catch(() => setLogoPreview(url));
+    })();
+  }, [user]);
+
   function apply(patch: Parameters<typeof saveTheme>[0]) {
     const next = saveTheme(patch);
     setThemeState(next);
