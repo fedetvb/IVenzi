@@ -102,6 +102,7 @@ export default function App() {
   const lastPingedRichiestaRef = useRef<string | null>(null);
   const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
+  const [volumeNotifiche, setVolumeNotifiche] = useState(70);
 
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
@@ -123,12 +124,15 @@ export default function App() {
     setPage('clienti');
   }
 
-  // Carica impostazione suono notifica richiesta appuntamento
+  // Carica impostazioni suono notifica richiesta appuntamento
   useEffect(() => {
     if (!user) return;
-    getImpostazione('suono_richiesta_appuntamento').then(v => {
-      if (v === 'squillo') setSuonoRichiesta('squillo');
-      else setSuonoRichiesta('ping');
+    Promise.all([
+      getImpostazione('suono_richiesta_appuntamento'),
+      getImpostazione('volume_notifiche'),
+    ]).then(([suono, vol]) => {
+      setSuonoRichiesta(suono === 'squillo' ? 'squillo' : 'ping');
+      if (vol !== null) setVolumeNotifiche(Math.max(0, Math.min(100, parseInt(vol) || 70)));
     });
   }, [user]);
 
@@ -453,6 +457,7 @@ export default function App() {
   }
 
   function playPing() {
+    if (volumeNotifiche === 0) return;
     try {
       const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       const osc = ctx.createOscillator();
@@ -462,7 +467,8 @@ export default function App() {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      const v = 0.35 * (volumeNotifiche / 100);
+      gain.gain.setValueAtTime(v, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.5);
@@ -470,11 +476,13 @@ export default function App() {
   }
 
   function playSquillo() {
+    if (volumeNotifiche === 0) return;
     // Suono telefono delicato: due doppie note ascendenti (brrrr... brrrr...)
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new AudioCtx();
-      const note = (freq: number, start: number, dur: number, vol = 0.28) => {
+      const vol = 0.28 * (volumeNotifiche / 100);
+      const note = (freq: number, start: number, dur: number) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.connect(g); g.connect(ctx.destination);
@@ -487,12 +495,10 @@ export default function App() {
         o.start(ctx.currentTime + start);
         o.stop(ctx.currentTime + start + dur);
       };
-      // Primo squillo: do5-mi5 (breve)
       note(523, 0.0, 0.18);
       note(659, 0.0, 0.18);
       note(523, 0.22, 0.18);
       note(659, 0.22, 0.18);
-      // Pausa, secondo squillo
       note(523, 0.55, 0.18);
       note(659, 0.55, 0.18);
       note(523, 0.77, 0.18);
@@ -514,22 +520,23 @@ export default function App() {
   }
 
   function playPingMessaggio() {
+    if (volumeNotifiche === 0) return;
     try {
       const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      // Due note brevi discendenti — suono "messaggio" distinto dalla prenotazione
+      const vol = 0.4 * (volumeNotifiche / 100);
       const note = (freq: number, start: number, dur: number) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.connect(g); g.connect(ctx.destination);
         o.type = 'triangle';
         o.frequency.setValueAtTime(freq, ctx.currentTime + start);
-        g.gain.setValueAtTime(0.4, ctx.currentTime + start);
+        g.gain.setValueAtTime(vol, ctx.currentTime + start);
         g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
         o.start(ctx.currentTime + start);
         o.stop(ctx.currentTime + start + dur);
       };
-      note(1046, 0, 0.18);    // Do6
-      note(784, 0.2, 0.22);   // Sol5
+      note(1046, 0, 0.18);
+      note(784, 0.2, 0.22);
     } catch (_) {}
   }
 

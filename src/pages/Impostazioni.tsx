@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
@@ -334,6 +334,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [msgRifiuto, setMsgRifiuto] = useState('Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.');
   const [indirizzo, setIndirizzo] = useState('');
   const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
+  const [volumeNotifiche, setVolumeNotifiche] = useState(70);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -357,13 +358,15 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       getImpostazione('qr_prenotazioni_logo_url'),
       getImpostazione('indirizzo_salone'),
       getImpostazione('suono_richiesta_appuntamento'),
-    ]).then(([a, mc, mr, logo, ind, suono]) => {
+      getImpostazione('volume_notifiche'),
+    ]).then(([a, mc, mr, logo, ind, suono, vol]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (mc) setMsgConferma(mc);
       if (mr) setMsgRifiuto(mr);
       if (logo) setQrLogoUrl(logo);
       if (ind) setIndirizzo(ind);
       if (suono === 'squillo') setSuonoRichiesta('squillo');
+      if (vol !== null) setVolumeNotifiche(Math.max(0, Math.min(100, parseInt(vol) || 70)));
       setLoading(false);
     });
   }, [user]);
@@ -399,6 +402,46 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     await setImpostazione('qr_prenotazioni_logo_url', '', user.id);
   }
 
+  function previewSuono() {
+    if (volumeNotifiche === 0) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const v = volumeNotifiche / 100;
+      if (suonoRichiesta === 'ping') {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.15);
+        g.gain.setValueAtTime(0.35 * v, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.5);
+      } else {
+        const vol = 0.28 * v;
+        const note = (freq: number, start: number, dur: number) => {
+          const o = ctx.createOscillator();
+          const g2 = ctx.createGain();
+          o.connect(g2); g2.connect(ctx.destination);
+          o.type = 'sine';
+          o.frequency.setValueAtTime(freq, ctx.currentTime + start);
+          g2.gain.setValueAtTime(0, ctx.currentTime + start);
+          g2.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.03);
+          g2.gain.setValueAtTime(vol, ctx.currentTime + start + dur - 0.05);
+          g2.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
+          o.start(ctx.currentTime + start);
+          o.stop(ctx.currentTime + start + dur);
+        };
+        note(523, 0.0, 0.18); note(659, 0.0, 0.18);
+        note(523, 0.22, 0.18); note(659, 0.22, 0.18);
+        note(523, 0.55, 0.18); note(659, 0.55, 0.18);
+        note(523, 0.77, 0.18); note(659, 0.77, 0.18);
+      }
+    } catch (_) {}
+  }
+
   async function handleSave() {
     setSaving(true);
     await Promise.all([
@@ -407,6 +450,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, user?.id),
       setImpostazione('indirizzo_salone', indirizzo, user?.id),
       setImpostazione('suono_richiesta_appuntamento', suonoRichiesta, user?.id),
+      setImpostazione('volume_notifiche', String(volumeNotifiche), user?.id),
     ]);
     setSaving(false);
     setSaved(true);
@@ -605,12 +649,22 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
 
       {/* Suono notifica richiesta appuntamento */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
-        <div>
-          <p className="font-semibold text-stone-800 flex items-center gap-2">
-            <Bell size={16} className="text-amber-500" />
-            Suono notifica richiesta appuntamento
-          </p>
-          <p className="text-xs text-stone-400 mt-1">Come vuoi essere avvisato quando arriva una nuova richiesta?</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-stone-800 flex items-center gap-2">
+              <Bell size={16} className="text-amber-500" />
+              Suono notifica richiesta appuntamento
+            </p>
+            <p className="text-xs text-stone-400 mt-1">Come vuoi essere avvisato quando arriva una nuova richiesta?</p>
+          </div>
+          <button
+            onClick={previewSuono}
+            disabled={volumeNotifiche === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 disabled:opacity-40 text-stone-600 rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+          >
+            <Play size={11} />
+            Ascolta
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <button
@@ -639,6 +693,30 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
             </div>
             {suonoRichiesta === 'squillo' && <Check size={14} className="text-amber-600" />}
           </button>
+        </div>
+
+        {/* Volume */}
+        <div className="border-t border-stone-100 pt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-stone-700 flex items-center gap-2">
+              {volumeNotifiche === 0 ? <VolumeX size={15} className="text-stone-400" /> : volumeNotifiche < 50 ? <Volume1 size={15} className="text-stone-500" /> : <Volume2 size={15} className="text-stone-600" />}
+              Volume notifiche
+            </p>
+            <span className="text-xs font-semibold text-stone-500 w-8 text-right">{volumeNotifiche}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={volumeNotifiche}
+            onChange={e => setVolumeNotifiche(Number(e.target.value))}
+            className="w-full h-2 rounded-full appearance-none cursor-pointer accent-amber-500"
+          />
+          <div className="flex justify-between text-[10px] text-stone-300 font-medium">
+            <span>Silenzioso</span>
+            <span>Alto</span>
+          </div>
         </div>
       </div>
 
