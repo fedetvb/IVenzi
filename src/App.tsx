@@ -922,16 +922,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Bottone test popup (solo development) */}
-      {import.meta.env.DEV && (
-        <button
-          style={{ position: 'fixed', bottom: 80, right: 16, zIndex: 9999 }}
-          className="bg-red-600 text-white text-xs px-3 py-2 rounded-xl shadow-lg font-bold"
-          onClick={() => mostraMessaggioPopup('Test', 'Cliente', null, null)}
-        >
-          TEST POPUP MSG
-        </button>
-      )}
 
       {/* Popup notifica nuovo messaggio cliente */}
       {messaggioPopup && (
