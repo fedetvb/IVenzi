@@ -90,7 +90,6 @@ export default function App() {
   const [richiestaPrenotaData, setRichiestaPrenotaData] = useState<Date | null>(null);
   const [richiestaPrenotaId, setRichiestaPrenotaId] = useState<string | null>(null);
   const [richiestaPrenotaFoto, setRichiestaPrenotaFoto] = useState<string | null>(null);
-  richiestaPrenotaIdRef.current = richiestaPrenotaId;
 
   // Badge messaggi clienti non letti — coda ordinata per navigazione
   const [messaggiNonLetti, setMessaggiNonLetti] = useState<Array<{ id: string; cliente_id: string | null; nome: string; cognome: string }>>([]);
@@ -103,6 +102,7 @@ export default function App() {
   const lastPingedRichiestaRef = useRef<string | null>(null);
   const richiestaPrenotaIdRef = useRef<string | null>(null);
   const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  richiestaPrenotaIdRef.current = richiestaPrenotaId;
   const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
   const [volumeNotifiche, setVolumeNotifiche] = useState(70);
 
