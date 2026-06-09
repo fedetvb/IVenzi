@@ -29,6 +29,8 @@ interface MessaggioCliente {
   foto_url_3: string;
   letto: boolean;
   preferito: boolean;
+  risposta_testo: string | null;
+  risposta_at: string | null;
   created_at: string;
 }
 
@@ -1065,6 +1067,11 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
             await supabase.from('messaggi_clienti').update({ preferito: val }).eq('id', id);
             setMessaggi(prev => prev.map(m => m.id === id ? { ...m, preferito: val } : m));
           }}
+          onInviaRisposta={async (id, testo) => {
+            const now = new Date().toISOString();
+            await supabase.from('messaggi_clienti').update({ risposta_testo: testo, risposta_at: now }).eq('id', id);
+            setMessaggi(prev => prev.map(m => m.id === id ? { ...m, risposta_testo: testo, risposta_at: now } : m));
+          }}
           onDelete={(id) => {
             setDeleteTarget('single');
             setDeleteTargetId(id);
@@ -1169,10 +1176,11 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   );
 }
 
-function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onDelete, onDeleteAll, onFotoZoom }: {
+function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onInviaRisposta, onDelete, onDeleteAll, onFotoZoom }: {
   messaggi: MessaggioCliente[];
   onMarkRead: (id: string) => void;
   onTogglePreferito: (id: string, val: boolean) => void;
+  onInviaRisposta: (id: string, testo: string) => Promise<void>;
   onDelete: (id: string) => void;
   onDeleteAll: () => void;
   onFotoZoom: (url: string) => void;
@@ -1181,6 +1189,7 @@ function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onDelete, onDele
   const [rispostaAperta, setRispostaAperta] = useState<string | null>(null);
   const [testiRisposta, setTestiRisposta] = useState<Record<string, string>>({});
   const [loadingPos, setLoadingPos] = useState(false);
+  const [salvandoRisposta, setSalvandoRisposta] = useState<string | null>(null);
   const [soloPreferiti, setSoloPreferiti] = useState(false);
 
   function toggleMessaggio(m: MessaggioCliente) {
@@ -1334,100 +1343,125 @@ function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onDelete, onDele
               </div>
             )}
 
+            {/* Risposta già inviata */}
+            {m.risposta_testo && rispostaAperta !== m.id && (
+              <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                    <Send size={11} /> Risposta inviata
+                  </span>
+                  {m.risposta_at && (
+                    <span className="text-[10px] text-emerald-500">
+                      {new Date(m.risposta_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-emerald-800 leading-relaxed">{m.risposta_testo}</p>
+              </div>
+            )}
+
             {/* Pulsante Rispondi */}
-            <button
-              onClick={() => {
-                const isOpen = rispostaAperta === m.id;
-                setRispostaAperta(isOpen ? null : m.id);
-                if (!isOpen && !testiRisposta[m.id]) {
-                  setTestiRisposta(prev => ({ ...prev, [m.id]: '' }));
-                }
-              }}
-              className={`flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-xl border transition-all ${
-                rispostaAperta === m.id
-                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                  : 'border-stone-200 text-stone-600 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
-              }`}
-            >
-              {rispostaAperta === m.id ? <ChevronUp size={15} /> : <Send size={15} />}
-              {rispostaAperta === m.id ? 'Chiudi risposta' : 'Rispondi via WhatsApp'}
-            </button>
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={() => {
+                  const isOpen = rispostaAperta === m.id;
+                  setRispostaAperta(isOpen ? null : m.id);
+                  if (!isOpen) {
+                    setTestiRisposta(prev => ({ ...prev, [m.id]: m.risposta_testo ?? '' }));
+                  }
+                }}
+                className={`flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-xl border transition-all ${
+                  rispostaAperta === m.id
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                    : 'border-stone-200 text-stone-600 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'
+                }`}
+              >
+                {rispostaAperta === m.id ? <ChevronUp size={15} /> : <Send size={15} />}
+                {rispostaAperta === m.id ? 'Chiudi' : m.risposta_testo ? 'Modifica risposta' : 'Rispondi'}
+              </button>
+            </div>
 
           {/* Pannello risposta */}
           {rispostaAperta === m.id && (
-            <div className="border-t border-stone-100 overflow-hidden">
-              {/* WhatsApp-style header */}
-              <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#128C7E] flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-sm font-bold">{m.nome?.[0]?.toUpperCase() ?? '?'}</span>
+            <div className="mt-3 border border-stone-200 rounded-2xl overflow-hidden">
+              {/* Header */}
+              <div className="bg-stone-50 border-b border-stone-200 px-4 py-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-emerald-700 text-sm font-bold">{m.nome?.[0]?.toUpperCase() ?? '?'}</span>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-white text-sm font-semibold truncate">{m.nome} {m.cognome}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-stone-700 truncate">{m.nome} {m.cognome}</p>
                   {m.telefono
-                    ? <p className="text-[#25D366] text-xs truncate">{m.telefono}</p>
-                    : <p className="text-amber-300 text-xs">Nessun numero disponibile</p>
+                    ? <p className="text-xs text-stone-400 truncate">{m.telefono}</p>
+                    : <p className="text-xs text-amber-500">Nessun numero disponibile</p>
                   }
                 </div>
               </div>
 
-              {/* Chat background */}
-              <div className="bg-[#ECE5DD] px-4 pt-4 pb-3">
-                {/* Preview bubble */}
-                {(testiRisposta[m.id] ?? '').trim() && (
-                  <div className="flex justify-end mb-3">
-                    <div className="bg-[#DCF8C6] rounded-xl rounded-tr-sm px-4 py-2.5 max-w-[85%] shadow-sm">
-                      <p className="text-sm text-[#111B21] whitespace-pre-wrap break-words">{testiRisposta[m.id]}</p>
-                      <p className="text-[10px] text-[#667781] text-right mt-1">Anteprima</p>
-                    </div>
-                  </div>
-                )}
+              {/* Textarea */}
+              <div className="px-4 pt-3 pb-2">
+                <textarea
+                  value={testiRisposta[m.id] ?? ''}
+                  onChange={e => setTestiRisposta(prev => ({ ...prev, [m.id]: e.target.value }))}
+                  placeholder="Scrivi la tua risposta..."
+                  rows={3}
+                  style={{ maxHeight: '160px' }}
+                  className="w-full text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none bg-transparent resize-none leading-relaxed"
+                  autoFocus
+                />
+              </div>
 
-                {/* Input row */}
-                <div className="flex items-end gap-2">
-                  <div className="flex-1 bg-white rounded-2xl px-4 py-2 shadow-sm min-h-[44px] flex items-end">
-                    <textarea
-                      value={testiRisposta[m.id] ?? ''}
-                      onChange={e => setTestiRisposta(prev => ({ ...prev, [m.id]: e.target.value }))}
-                      placeholder="Scrivi un messaggio..."
-                      rows={1}
-                      style={{ minHeight: '24px', maxHeight: '120px' }}
-                      className="w-full text-sm text-[#111B21] placeholder:text-[#8696A0] focus:outline-none bg-transparent resize-none leading-relaxed"
-                      autoFocus
-                      onInput={e => {
-                        const el = e.currentTarget;
-                        el.style.height = 'auto';
-                        el.style.height = `${el.scrollHeight}px`;
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (!m.telefono) return;
-                      apriWhatsApp(m.telefono, testiRisposta[m.id] ?? '');
-                    }}
-                    disabled={!m.telefono || !(testiRisposta[m.id] ?? '').trim()}
-                    className="w-11 h-11 rounded-full bg-[#25D366] hover:bg-[#1ebe5d] disabled:bg-[#8696A0] transition-colors flex items-center justify-center flex-shrink-0 shadow-sm"
-                    title="Invia tramite WhatsApp"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                    </svg>
-                  </button>
-                </div>
+              {/* Azioni */}
+              <div className="px-4 pb-3 flex items-center gap-2 flex-wrap border-t border-stone-100 pt-3">
+                {/* Primario: salva nel gestionale */}
+                <button
+                  onClick={async () => {
+                    const testo = (testiRisposta[m.id] ?? '').trim();
+                    if (!testo) return;
+                    setSalvandoRisposta(m.id);
+                    await onInviaRisposta(m.id, testo);
+                    setSalvandoRisposta(null);
+                    setRispostaAperta(null);
+                  }}
+                  disabled={!(testiRisposta[m.id] ?? '').trim() || salvandoRisposta === m.id}
+                  className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {salvandoRisposta === m.id
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <Send size={14} />
+                  }
+                  Salva risposta
+                </button>
 
-                {/* Invia posizione */}
-                <div className="mt-2 flex justify-center">
+                {/* Secondario: apri WhatsApp */}
+                <button
+                  onClick={() => {
+                    if (!m.telefono) return;
+                    apriWhatsApp(m.telefono, testiRisposta[m.id] ?? '');
+                  }}
+                  disabled={!m.telefono || !(testiRisposta[m.id] ?? '').trim()}
+                  className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 border border-[#25D366] text-[#128C7E] rounded-xl hover:bg-[#f0fdf4] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title={m.telefono ? '' : 'Nessun numero disponibile'}
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-[#25D366]" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                  Apri WhatsApp
+                </button>
+
+                {/* Invia posizione (solo WA) */}
+                {m.telefono && (
                   <button
-                    onClick={() => { if (m.telefono) inviaPosizioneWhatsApp(m.telefono); }}
-                    disabled={!m.telefono || loadingPos}
-                    className="flex items-center gap-1.5 text-xs text-[#075E54] font-medium px-3 py-1.5 rounded-full bg-white/70 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    onClick={() => inviaPosizioneWhatsApp(m.telefono)}
+                    disabled={loadingPos}
+                    className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 disabled:opacity-50 transition-colors ml-auto"
                   >
                     <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current" xmlns="http://www.w3.org/2000/svg">
                       <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
                     </svg>
-                    {loadingPos ? 'Ricerca posizione...' : 'Invia posizione'}
+                    {loadingPos ? 'Ricerca...' : 'Invia posizione WA'}
                   </button>
-                </div>
+                )}
               </div>
             </div>
           )}
