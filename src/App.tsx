@@ -93,6 +93,10 @@ export default function App() {
   // Badge messaggi clienti non letti — coda ordinata per navigazione
   const [messaggiNonLetti, setMessaggiNonLetti] = useState<Array<{ id: string; cliente_id: string | null; nome: string; cognome: string }>>([]);
 
+  // Popup notifica nuovo messaggio cliente
+  const [messaggioPopup, setMessaggioPopup] = useState<{ nome: string; fotoUrl: string | null; clienteId: string | null } | null>(null);
+  const [messaggioPopupFading, setMessaggioPopupFading] = useState(false);
+
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
 
@@ -421,6 +425,34 @@ export default function App() {
     setRichiestaPrenotaData(new Date(dataOra));
     setRichiestaPrenotaFoto(fotoUrl ?? null);
     setShowRichiestaPrenotaBanner(true);
+    playPing();
+  }
+
+  function playPing() {
+    try {
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (_) {}
+  }
+
+  function mostraMessaggioPopup(nome: string, cognome: string, fotoUrl: string | null, clienteId: string | null) {
+    const n = [nome, cognome].filter(Boolean).join(' ') || 'Una cliente';
+    setMessaggioPopup({ nome: n, fotoUrl, clienteId });
+    setMessaggioPopupFading(false);
+    playPing();
+    const fadeTimer = setTimeout(() => setMessaggioPopupFading(true), 5000);
+    const removeTimer = setTimeout(() => setMessaggioPopup(null), 5800);
+    return () => { clearTimeout(fadeTimer); clearTimeout(removeTimer); };
   }
 
   async function checkAndShowPendingRichiesta() {
@@ -598,10 +630,16 @@ export default function App() {
       if (channelRef) { supabase.removeChannel(channelRef); channelRef = null; }
       channelRef = supabase
         .channel(`messaggi_clienti_${Date.now()}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messaggi_clienti' }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messaggi_clienti' }, async (payload) => {
           const row = payload.new as { id: string; cliente_id: string | null; nome: string; cognome: string; letto: boolean };
           if (!row.letto) {
             setMessaggiNonLetti(prev => [...prev, { id: row.id, cliente_id: row.cliente_id, nome: row.nome, cognome: row.cognome }]);
+            let fotoUrl: string | null = null;
+            if (row.cliente_id) {
+              const { data: cl } = await supabase.from('clienti').select('foto_url').eq('id', row.cliente_id).maybeSingle();
+              fotoUrl = cl?.foto_url ?? null;
+            }
+            mostraMessaggioPopup(row.nome, row.cognome, fotoUrl, row.cliente_id);
           }
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messaggi_clienti' }, (payload) => {
@@ -851,6 +889,48 @@ export default function App() {
               </p>
             </div>
           </button>
+        </div>
+      )}
+
+      {/* Popup notifica nuovo messaggio cliente */}
+      {messaggioPopup && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[105] w-full max-w-md px-4 transition-all duration-700"
+          style={{
+            top: showNuovaSchedaBanner || showRichiestaPrenotaBanner ? '12rem' : '1rem',
+            opacity: messaggioPopupFading ? 0 : 1,
+            pointerEvents: messaggioPopupFading ? 'none' : 'auto',
+          }}
+        >
+          <div className="bg-red-600 rounded-2xl shadow-2xl px-5 py-4 flex items-center gap-3">
+            {messaggioPopup.fotoUrl ? (
+              <img src={messaggioPopup.fotoUrl} alt="" className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border-2 border-red-400" />
+            ) : (
+              <div className="w-11 h-11 rounded-xl bg-red-500 flex items-center justify-center flex-shrink-0 border-2 border-red-400">
+                <MessageSquare size={18} className="text-white" />
+              </div>
+            )}
+            <button
+              className="flex-1 min-w-0 text-left"
+              onClick={() => {
+                if (messaggioPopup.clienteId) handleSelectCliente(messaggioPopup.clienteId);
+                else navigateTo('clienti');
+                setMessaggioPopup(null);
+              }}
+            >
+              <p className="text-sm font-bold text-white">Nuovo messaggio!</p>
+              <p className="text-xs text-red-100 mt-0.5">
+                <span className="font-semibold">{messaggioPopup.nome}</span> ha inviato un messaggio.{' '}
+                <span className="underline font-semibold">Tocca per aprire.</span>
+              </p>
+            </button>
+            <button
+              onClick={() => setMessaggioPopup(null)}
+              className="p-1.5 hover:bg-red-500 rounded-lg transition-colors text-red-200 hover:text-white flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
         </div>
       )}
 
