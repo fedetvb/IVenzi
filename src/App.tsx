@@ -477,32 +477,34 @@ export default function App() {
 
   function playSquillo() {
     if (volumeNotifiche === 0) return;
-    // Suono telefono delicato: due doppie note ascendenti (brrrr... brrrr...)
+    // Squillo telefono classico: coppia di toni 480+620Hz (standard PSTN), onda triangolare per più presenza
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new AudioCtx();
-      const vol = 0.28 * (volumeNotifiche / 100);
-      const note = (freq: number, start: number, dur: number) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.connect(g); g.connect(ctx.destination);
-        o.type = 'sine';
-        o.frequency.setValueAtTime(freq, ctx.currentTime + start);
-        g.gain.setValueAtTime(0, ctx.currentTime + start);
-        g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.03);
-        g.gain.setValueAtTime(vol, ctx.currentTime + start + dur - 0.05);
-        g.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
-        o.start(ctx.currentTime + start);
-        o.stop(ctx.currentTime + start + dur);
+      const vol = 0.52 * (volumeNotifiche / 100);
+      // Una "trillata" = due oscillatori sovrapposti per ricchezza armonica
+      const burst = (start: number, dur: number) => {
+        [480, 620].forEach(freq => {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(freq, ctx.currentTime + start);
+          g.gain.setValueAtTime(0, ctx.currentTime + start);
+          g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.025);
+          g.gain.setValueAtTime(vol, ctx.currentTime + start + dur - 0.04);
+          g.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
+          o.start(ctx.currentTime + start);
+          o.stop(ctx.currentTime + start + dur);
+        });
       };
-      note(523, 0.0, 0.18);
-      note(659, 0.0, 0.18);
-      note(523, 0.22, 0.18);
-      note(659, 0.22, 0.18);
-      note(523, 0.55, 0.18);
-      note(659, 0.55, 0.18);
-      note(523, 0.77, 0.18);
-      note(659, 0.77, 0.18);
+      // Squillo 1: brrrr (0.0–0.38s)
+      burst(0.00, 0.18);
+      burst(0.20, 0.18);
+      // Pausa (0.38–0.60s)
+      // Squillo 2: brrrr (0.60–0.98s)
+      burst(0.60, 0.18);
+      burst(0.80, 0.18);
     } catch (_) {}
   }
 

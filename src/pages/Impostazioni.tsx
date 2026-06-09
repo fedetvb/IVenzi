@@ -420,24 +420,24 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.5);
       } else {
-        const vol = 0.28 * v;
-        const note = (freq: number, start: number, dur: number) => {
-          const o = ctx.createOscillator();
-          const g2 = ctx.createGain();
-          o.connect(g2); g2.connect(ctx.destination);
-          o.type = 'sine';
-          o.frequency.setValueAtTime(freq, ctx.currentTime + start);
-          g2.gain.setValueAtTime(0, ctx.currentTime + start);
-          g2.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.03);
-          g2.gain.setValueAtTime(vol, ctx.currentTime + start + dur - 0.05);
-          g2.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
-          o.start(ctx.currentTime + start);
-          o.stop(ctx.currentTime + start + dur);
+        const vol = 0.52 * v;
+        const burst = (start: number, dur: number) => {
+          [480, 620].forEach(freq => {
+            const o = ctx.createOscillator();
+            const g2 = ctx.createGain();
+            o.connect(g2); g2.connect(ctx.destination);
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(freq, ctx.currentTime + start);
+            g2.gain.setValueAtTime(0, ctx.currentTime + start);
+            g2.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.025);
+            g2.gain.setValueAtTime(vol, ctx.currentTime + start + dur - 0.04);
+            g2.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
+            o.start(ctx.currentTime + start);
+            o.stop(ctx.currentTime + start + dur);
+          });
         };
-        note(523, 0.0, 0.18); note(659, 0.0, 0.18);
-        note(523, 0.22, 0.18); note(659, 0.22, 0.18);
-        note(523, 0.55, 0.18); note(659, 0.55, 0.18);
-        note(523, 0.77, 0.18); note(659, 0.77, 0.18);
+        burst(0.00, 0.18); burst(0.20, 0.18);
+        burst(0.60, 0.18); burst(0.80, 0.18);
       }
     } catch (_) {}
   }
