@@ -28,6 +28,7 @@ interface MessaggioCliente {
   foto_url_2: string;
   foto_url_3: string;
   letto: boolean;
+  preferito: boolean;
   created_at: string;
 }
 
@@ -1060,6 +1061,10 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
             await supabase.from('messaggi_clienti').update({ letto: true }).eq('id', id);
             setMessaggi(prev => prev.map(m => m.id === id ? { ...m, letto: true } : m));
           }}
+          onTogglePreferito={async (id, val) => {
+            await supabase.from('messaggi_clienti').update({ preferito: val }).eq('id', id);
+            setMessaggi(prev => prev.map(m => m.id === id ? { ...m, preferito: val } : m));
+          }}
           onDelete={(id) => {
             setDeleteTarget('single');
             setDeleteTargetId(id);
@@ -1164,9 +1169,10 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   );
 }
 
-function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }: {
+function MessaggiTab({ messaggi, onMarkRead, onTogglePreferito, onDelete, onDeleteAll, onFotoZoom }: {
   messaggi: MessaggioCliente[];
   onMarkRead: (id: string) => void;
+  onTogglePreferito: (id: string, val: boolean) => void;
   onDelete: (id: string) => void;
   onDeleteAll: () => void;
   onFotoZoom: (url: string) => void;
@@ -1175,6 +1181,7 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
   const [rispostaAperta, setRispostaAperta] = useState<string | null>(null);
   const [testiRisposta, setTestiRisposta] = useState<Record<string, string>>({});
   const [loadingPos, setLoadingPos] = useState(false);
+  const [soloPreferiti, setSoloPreferiti] = useState(false);
 
   function toggleMessaggio(m: MessaggioCliente) {
     setAperti(prev => {
@@ -1227,9 +1234,22 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
     );
   }
 
+  const msgFiltrati = soloPreferiti ? messaggi.filter(m => m.preferito) : messaggi;
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={() => setSoloPreferiti(v => !v)}
+          className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+            soloPreferiti
+              ? 'bg-amber-50 border-amber-300 text-amber-700'
+              : 'border-stone-200 text-stone-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50'
+          }`}
+        >
+          <Star size={12} className={soloPreferiti ? 'fill-amber-400 text-amber-400' : ''} />
+          {soloPreferiti ? 'Tutti i messaggi' : 'Solo preferiti'}
+        </button>
         <button
           onClick={onDeleteAll}
           className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors"
@@ -1238,7 +1258,14 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
         </button>
       </div>
 
-      {messaggi.map(m => (
+      {soloPreferiti && msgFiltrati.length === 0 && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-8 text-center">
+          <Star size={24} className="text-stone-300 mx-auto mb-3" />
+          <p className="text-sm text-stone-400">Nessun messaggio preferito</p>
+        </div>
+      )}
+
+      {msgFiltrati.map(m => (
         <div
           key={m.id}
           className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${m.letto ? 'border-stone-200' : 'border-sky-300 bg-sky-50/30'}`}
@@ -1266,6 +1293,13 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
                   ))}
                 </div>
               )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onTogglePreferito(m.id, !m.preferito); }}
+                className="p-1.5 rounded-lg transition-colors hover:bg-amber-50"
+                title={m.preferito ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
+              >
+                <Star size={14} className={m.preferito ? 'fill-amber-400 text-amber-400' : 'text-stone-300 hover:text-amber-400'} />
+              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(m.id); }}
                 className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"

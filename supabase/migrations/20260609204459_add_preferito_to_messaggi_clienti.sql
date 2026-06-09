@@ -1,0 +1,1 @@
+ALTER TABLE messaggi_clienti ADD COLUMN IF NOT EXISTS preferito BOOLEAN NOT NULL DEFAULT false;
