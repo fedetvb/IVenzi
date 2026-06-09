@@ -580,6 +580,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     parrId: string
   ) {
     if (drag) return;
+    if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) return;
     pointerStartPos.current = { x: e.clientX, y: e.clientY };
 
     longPressTimer.current = setTimeout(() => {
