@@ -26,7 +26,7 @@ import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing } from 'lucide-react';
 import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
 import AiChat from './components/AiChat';
-import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady } from './lib/localDb';
+import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
 import { flushPendingSync } from './lib/offlineFetch';
 
@@ -100,6 +100,8 @@ export default function App() {
   const msgPopupFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const msgPopupRemoveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPingedRichiestaRef = useRef<string | null>(null);
+  const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
 
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
@@ -120,6 +122,15 @@ export default function App() {
     setSelectedClienteTab(tab);
     setPage('clienti');
   }
+
+  // Carica impostazione suono notifica richiesta appuntamento
+  useEffect(() => {
+    if (!user) return;
+    getImpostazione('suono_richiesta_appuntamento').then(v => {
+      if (v === 'squillo') setSuonoRichiesta('squillo');
+      else setSuonoRichiesta('ping');
+    });
+  }, [user]);
 
   // Avviso invio appuntamenti e compleanni — eseguito una volta al caricamento
   useEffect(() => {
@@ -430,10 +441,14 @@ export default function App() {
     setRichiestaPrenotaData(new Date(dataOra));
     setRichiestaPrenotaFoto(fotoUrl ?? null);
     setShowRichiestaPrenotaBanner(true);
-    // Ping solo se è un appuntamento diverso dall'ultimo già segnalato
+    // Suona solo se è un appuntamento diverso dall'ultimo già segnalato
     if (lastPingedRichiestaRef.current !== id) {
       lastPingedRichiestaRef.current = id;
-      playPing();
+      if (suonoRichiesta === 'squillo') {
+        startRing();
+      } else {
+        playPing();
+      }
     }
   }
 
@@ -452,6 +467,50 @@ export default function App() {
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.5);
     } catch (_) {}
+  }
+
+  function playSquillo() {
+    // Suono telefono delicato: due doppie note ascendenti (brrrr... brrrr...)
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const note = (freq: number, start: number, dur: number, vol = 0.28) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        g.gain.setValueAtTime(0, ctx.currentTime + start);
+        g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.03);
+        g.gain.setValueAtTime(vol, ctx.currentTime + start + dur - 0.05);
+        g.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
+        o.start(ctx.currentTime + start);
+        o.stop(ctx.currentTime + start + dur);
+      };
+      // Primo squillo: do5-mi5 (breve)
+      note(523, 0.0, 0.18);
+      note(659, 0.0, 0.18);
+      note(523, 0.22, 0.18);
+      note(659, 0.22, 0.18);
+      // Pausa, secondo squillo
+      note(523, 0.55, 0.18);
+      note(659, 0.55, 0.18);
+      note(523, 0.77, 0.18);
+      note(659, 0.77, 0.18);
+    } catch (_) {}
+  }
+
+  function stopRing() {
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+  }
+
+  function startRing() {
+    stopRing();
+    playSquillo();
+    ringIntervalRef.current = setInterval(playSquillo, 3500);
   }
 
   function playPingMessaggio() {
@@ -500,6 +559,7 @@ export default function App() {
   }
 
   function dismissRichiestaBanner() {
+    stopRing();
     if (richiestaPrenotaId) markRichiestaDismissed(richiestaPrenotaId);
     setShowRichiestaPrenotaBanner(false);
     setRichiestaPrenotaId(null);
@@ -508,6 +568,7 @@ export default function App() {
 
   function apriRichiestaDalBanner() {
     if (!richiestaPrenotaId || !richiestaPrenotaData) return;
+    stopRing();
     markRichiestaDismissed(richiestaPrenotaId);
     setShowRichiestaPrenotaBanner(false);
     setRichiestaPrenotaId(null);

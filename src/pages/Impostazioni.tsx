@@ -333,6 +333,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [msgConferma, setMsgConferma] = useState('Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!');
   const [msgRifiuto, setMsgRifiuto] = useState('Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.');
   const [indirizzo, setIndirizzo] = useState('');
+  const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -355,12 +356,14 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       getImpostazione('msg_rifiuto_appuntamento_online'),
       getImpostazione('qr_prenotazioni_logo_url'),
       getImpostazione('indirizzo_salone'),
-    ]).then(([a, mc, mr, logo, ind]) => {
+      getImpostazione('suono_richiesta_appuntamento'),
+    ]).then(([a, mc, mr, logo, ind, suono]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (mc) setMsgConferma(mc);
       if (mr) setMsgRifiuto(mr);
       if (logo) setQrLogoUrl(logo);
       if (ind) setIndirizzo(ind);
+      if (suono === 'squillo') setSuonoRichiesta('squillo');
       setLoading(false);
     });
   }, [user]);
@@ -403,6 +406,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       setImpostazione('msg_conferma_appuntamento_online', msgConferma, user?.id),
       setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, user?.id),
       setImpostazione('indirizzo_salone', indirizzo, user?.id),
+      setImpostazione('suono_richiesta_appuntamento', suonoRichiesta, user?.id),
     ]);
     setSaving(false);
     setSaved(true);
@@ -596,6 +600,45 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
             rows={4}
             className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none text-stone-700"
           />
+        </div>
+      </div>
+
+      {/* Suono notifica richiesta appuntamento */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+        <div>
+          <p className="font-semibold text-stone-800 flex items-center gap-2">
+            <Bell size={16} className="text-amber-500" />
+            Suono notifica richiesta appuntamento
+          </p>
+          <p className="text-xs text-stone-400 mt-1">Come vuoi essere avvisato quando arriva una nuova richiesta?</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setSuonoRichiesta('ping')}
+            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all text-left ${suonoRichiesta === 'ping' ? 'border-emerald-500 bg-emerald-50' : 'border-stone-200 bg-stone-50 hover:border-stone-300'}`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${suonoRichiesta === 'ping' ? 'bg-emerald-100' : 'bg-stone-100'}`}>
+              <Bell size={18} className={suonoRichiesta === 'ping' ? 'text-emerald-600' : 'text-stone-500'} />
+            </div>
+            <div>
+              <p className={`text-sm font-semibold ${suonoRichiesta === 'ping' ? 'text-emerald-800' : 'text-stone-700'}`}>Ping singolo</p>
+              <p className="text-xs text-stone-400 mt-0.5">Un solo suono all'arrivo della richiesta</p>
+            </div>
+            {suonoRichiesta === 'ping' && <Check size={14} className="text-emerald-600" />}
+          </button>
+          <button
+            onClick={() => setSuonoRichiesta('squillo')}
+            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all text-left ${suonoRichiesta === 'squillo' ? 'border-amber-500 bg-amber-50' : 'border-stone-200 bg-stone-50 hover:border-stone-300'}`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${suonoRichiesta === 'squillo' ? 'bg-amber-100' : 'bg-stone-100'}`}>
+              <Activity size={18} className={suonoRichiesta === 'squillo' ? 'text-amber-600' : 'text-stone-500'} />
+            </div>
+            <div>
+              <p className={`text-sm font-semibold ${suonoRichiesta === 'squillo' ? 'text-amber-800' : 'text-stone-700'}`}>Suona fino a risposta</p>
+              <p className="text-xs text-stone-400 mt-0.5">Squilla finché non apri o chiudi il banner</p>
+            </div>
+            {suonoRichiesta === 'squillo' && <Check size={14} className="text-amber-600" />}
+          </button>
         </div>
       </div>
 
