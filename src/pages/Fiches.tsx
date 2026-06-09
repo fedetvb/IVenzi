@@ -3110,8 +3110,8 @@ function PrintFiche({ preview, forPrint = false }: { preview: FichePreview; forP
         </div>
         <div style={{ flex: 1 }}>
           {visibleVoci.map((v, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1mm 0', borderBottom: '0.5px solid #f0f0f0' }}>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '1mm 0', borderBottom: '0.5px solid #f0f0f0' }}>
+              <div style={{ flex: 1, wordBreak: 'break-word', minWidth: 0 }}>
                 <span style={{ fontSize: '7.5pt' }}>{v.nome_voce}</span>
                 {v.nome_parrucchiere && <span style={{ color: '#888', fontSize: '6.5pt', marginLeft: '2mm' }}>{v.nome_parrucchiere}</span>}
               </div>
