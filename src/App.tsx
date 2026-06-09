@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Agenda from './pages/Agenda';
@@ -96,6 +96,8 @@ export default function App() {
   // Popup notifica nuovo messaggio cliente
   const [messaggioPopup, setMessaggioPopup] = useState<{ nome: string; fotoUrl: string | null; clienteId: string | null } | null>(null);
   const [messaggioPopupFading, setMessaggioPopupFading] = useState(false);
+  const msgPopupFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const msgPopupRemoveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
@@ -447,12 +449,13 @@ export default function App() {
 
   function mostraMessaggioPopup(nome: string, cognome: string, fotoUrl: string | null, clienteId: string | null) {
     const n = [nome, cognome].filter(Boolean).join(' ') || 'Una cliente';
-    setMessaggioPopup({ nome: n, fotoUrl, clienteId });
+    if (msgPopupFadeRef.current) clearTimeout(msgPopupFadeRef.current);
+    if (msgPopupRemoveRef.current) clearTimeout(msgPopupRemoveRef.current);
     setMessaggioPopupFading(false);
+    setMessaggioPopup({ nome: n, fotoUrl, clienteId });
     playPing();
-    const fadeTimer = setTimeout(() => setMessaggioPopupFading(true), 5000);
-    const removeTimer = setTimeout(() => setMessaggioPopup(null), 5800);
-    return () => { clearTimeout(fadeTimer); clearTimeout(removeTimer); };
+    msgPopupFadeRef.current = setTimeout(() => setMessaggioPopupFading(true), 5000);
+    msgPopupRemoveRef.current = setTimeout(() => { setMessaggioPopup(null); setMessaggioPopupFading(false); }, 5800);
   }
 
   async function checkAndShowPendingRichiesta() {
@@ -892,6 +895,17 @@ export default function App() {
         </div>
       )}
 
+      {/* Bottone test popup (solo development) */}
+      {import.meta.env.DEV && (
+        <button
+          style={{ position: 'fixed', bottom: 80, right: 16, zIndex: 9999 }}
+          className="bg-red-600 text-white text-xs px-3 py-2 rounded-xl shadow-lg font-bold"
+          onClick={() => mostraMessaggioPopup('Test', 'Cliente', null, null)}
+        >
+          TEST POPUP MSG
+        </button>
+      )}
+
       {/* Popup notifica nuovo messaggio cliente */}
       {messaggioPopup && (
         <div
@@ -913,6 +927,8 @@ export default function App() {
             <button
               className="flex-1 min-w-0 text-left"
               onClick={() => {
+                if (msgPopupFadeRef.current) clearTimeout(msgPopupFadeRef.current);
+                if (msgPopupRemoveRef.current) clearTimeout(msgPopupRemoveRef.current);
                 if (messaggioPopup.clienteId) handleSelectCliente(messaggioPopup.clienteId);
                 else navigateTo('clienti');
                 setMessaggioPopup(null);
@@ -925,7 +941,11 @@ export default function App() {
               </p>
             </button>
             <button
-              onClick={() => setMessaggioPopup(null)}
+              onClick={() => {
+                if (msgPopupFadeRef.current) clearTimeout(msgPopupFadeRef.current);
+                if (msgPopupRemoveRef.current) clearTimeout(msgPopupRemoveRef.current);
+                setMessaggioPopup(null);
+              }}
               className="p-1.5 hover:bg-red-500 rounded-lg transition-colors text-red-200 hover:text-white flex-shrink-0"
             >
               <X size={15} />

@@ -1477,8 +1477,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                   <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${wpInviaPosizione ? 'translate-x-4' : ''}`} />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-stone-700">Invia anche la posizione</p>
-                  <p className="text-xs text-stone-400">La posizione attuale verrà aggiunta come secondo messaggio WhatsApp</p>
+                  <p className="text-sm font-medium text-stone-700">Includi la posizione nel messaggio</p>
+                  <p className="text-xs text-stone-400">Il link Google Maps verrà aggiunto in fondo al messaggio</p>
                 </div>
               </label>
 
@@ -1505,8 +1505,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                         (pos) => {
                           setWpLoadingPos(false);
                           const locUrl = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                          window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(whatsappPreview.testo)}`, '_blank');
-                          setTimeout(() => window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(locUrl)}`, '_blank'), 800);
+                          const testoConPos = `${whatsappPreview.testo}\n\n📍 ${locUrl}`;
+                          window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(testoConPos)}`, '_blank');
                           setWhatsappPreview(null);
                           setWpInviaPosizione(false);
                         },
