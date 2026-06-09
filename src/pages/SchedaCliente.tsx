@@ -579,15 +579,6 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (tab !== 'messaggi') return;
-    const nonLetti = messaggi.filter(m => !m.letto);
-    if (nonLetti.length === 0) return;
-    const ids = nonLetti.map(m => m.id);
-    supabase.from('messaggi_clienti').update({ letto: true }).in('id', ids).then(() => {
-      setMessaggi(prev => prev.map(m => ids.includes(m.id) ? { ...m, letto: true } : m));
-    });
-  }, [tab, messaggi.length]);
 
   async function deleteScheda(id: string) {
     if (!confirm('Eliminare questa scheda colore?')) return;
@@ -1179,9 +1170,22 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
   onDeleteAll: () => void;
   onFotoZoom: (url: string) => void;
 }) {
+  const [aperti, setAperti] = useState<Set<string>>(new Set());
   const [rispostaAperta, setRispostaAperta] = useState<string | null>(null);
   const [testiRisposta, setTestiRisposta] = useState<Record<string, string>>({});
   const [loadingPos, setLoadingPos] = useState(false);
+
+  function toggleMessaggio(m: MessaggioCliente) {
+    setAperti(prev => {
+      const next = new Set(prev);
+      if (next.has(m.id)) { next.delete(m.id); }
+      else {
+        next.add(m.id);
+        if (!m.letto) onMarkRead(m.id);
+      }
+      return next;
+    });
+  }
 
   function formatTel(telefono: string) {
     const tel = telefono.replace(/\D/g, '');
@@ -1239,42 +1243,37 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
           key={m.id}
           className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${m.letto ? 'border-stone-200' : 'border-sky-300 bg-sky-50/30'}`}
         >
-          {/* Header messaggio */}
-          <div className="p-5">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                {!m.letto && <span className="w-2 h-2 rounded-full bg-sky-500 flex-shrink-0" />}
-                <div>
-                  <span className="text-xs font-semibold text-stone-600">{m.nome} {m.cognome}</span>
-                  {m.telefono && (
-                    <span className="text-xs text-stone-400 ml-2">· {m.telefono}</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {!m.letto && (
-                  <button
-                    onClick={() => onMarkRead(m.id)}
-                    className="text-xs text-sky-600 hover:text-sky-800 border border-sky-200 rounded-lg px-2.5 py-1 hover:bg-sky-50 transition-colors font-medium"
-                  >
-                    Letto
-                  </button>
-                )}
-                <button
-                  onClick={() => onDelete(m.id)}
-                  className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
+          {/* Header messaggio – cliccabile per aprire */}
+          <button
+            onClick={() => toggleMessaggio(m)}
+            className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-stone-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {!m.letto && <span className="w-2 h-2 rounded-full bg-sky-500 flex-shrink-0" />}
+              <div className="min-w-0">
+                <span className="text-xs font-semibold text-stone-600">{m.nome} {m.cognome}</span>
+                {m.telefono && <span className="text-xs text-stone-400 ml-2">· {m.telefono}</span>}
+                <span className="text-[10px] text-stone-400 ml-2">
+                  {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
               </div>
             </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(m.id); }}
+                className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+              <ChevronDown size={15} className={`text-stone-400 transition-transform duration-200 ${aperti.has(m.id) ? 'rotate-180' : ''}`} />
+            </div>
+          </button>
 
-            <p className="text-[11px] text-stone-400 mb-3">
-              {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            </p>
-
+          {/* Corpo messaggio – visibile solo se aperto */}
+          {aperti.has(m.id) && (
+          <div className="px-5 pb-5 border-t border-stone-100">
             {m.testo && (
-              <p className="text-sm text-stone-700 leading-relaxed mb-4 bg-stone-50 rounded-xl px-4 py-3">{m.testo}</p>
+              <p className="text-sm text-stone-700 leading-relaxed mt-4 mb-4 bg-stone-50 rounded-xl px-4 py-3">{m.testo}</p>
             )}
 
             {(m.foto_url_1 || m.foto_url_2 || m.foto_url_3) && (
@@ -1312,7 +1311,6 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
               {rispostaAperta === m.id ? <ChevronUp size={15} /> : <Send size={15} />}
               {rispostaAperta === m.id ? 'Chiudi risposta' : 'Rispondi via WhatsApp'}
             </button>
-          </div>
 
           {/* Pannello risposta */}
           {rispostaAperta === m.id && (
@@ -1392,7 +1390,10 @@ function MessaggiTab({ messaggi, onMarkRead, onDelete, onDeleteAll, onFotoZoom }
               </div>
             </div>
           )}
+          </div>
+          )}
         </div>
+
       ))}
     </div>
   );
