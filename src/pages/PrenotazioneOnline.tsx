@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2 } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply } from 'lucide-react';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/prenota-online`;
+const MIEI_MSG_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/miei-messaggi`;
 
 interface Parrucchiere {
   id: string;
@@ -35,7 +36,19 @@ interface SalonInfo {
   serviziAbbinati: ServizioAbbinato[];
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi';
+
+interface MioMessaggio {
+  id: string;
+  testo: string;
+  foto_url_1: string;
+  foto_url_2: string;
+  foto_url_3: string;
+  preferito: boolean;
+  risposta_testo: string | null;
+  risposta_at: string | null;
+  created_at: string;
+}
 
 const LS_CLIENTE_KEY = 'prenota_online_cliente_v1';
 const MONTHS_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
@@ -108,6 +121,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [msgSubmitting, setMsgSubmitting] = useState(false);
   const [msgError, setMsgError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // I miei messaggi
+  const [mieiMsg, setMieiMsg] = useState<MioMessaggio[]>([]);
+  const [loadingMieiMsg, setLoadingMieiMsg] = useState(false);
+  const [mieiMsgError, setMieiMsgError] = useState('');
+  const [msgZoomUrl, setMsgZoomUrl] = useState<string | null>(null);
 
   // PWA install prompt
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
@@ -287,6 +306,34 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     } finally {
       clearTimeout(timeout);
       setMsgSubmitting(false);
+    }
+  }
+
+  async function loadMieiMessaggi() {
+    setLoadingMieiMsg(true);
+    setMieiMsgError('');
+    try {
+      const res = await fetch(`${MIEI_MSG_URL}?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      setMieiMsg(data.messaggi ?? []);
+    } catch {
+      setMieiMsgError('Impossibile caricare i messaggi. Riprova.');
+    } finally {
+      setLoadingMieiMsg(false);
+    }
+  }
+
+  async function toggleMioPreferito(id: string, val: boolean) {
+    setMieiMsg(prev => prev.map(m => m.id === id ? { ...m, preferito: val } : m));
+    try {
+      await fetch(MIEI_MSG_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, telefono: telefono.trim(), messaggio_id: id, preferito: val }),
+      });
+    } catch {
+      setMieiMsg(prev => prev.map(m => m.id === id ? { ...m, preferito: !val } : m));
     }
   }
 
@@ -474,7 +521,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-24">
         {/* Progress indicator */}
-        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && (
+        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && (
           <StepProgress step={step} />
         )}
 
@@ -555,6 +602,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-stone-400 mt-0.5">Invia foto e una richiesta speciale</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-sky-400 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
+              onClick={() => { loadMieiMessaggi(); setStep('miei_messaggi'); }}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-amber-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-amber-100 transition-colors">
+                <Inbox size={26} className="text-amber-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">I miei messaggi</p>
+                <p className="text-sm text-stone-400 mt-0.5">Archivio delle tue richieste inviate</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-amber-500 transition-colors flex-shrink-0" />
             </button>
 
             <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
@@ -694,6 +755,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               </button>
             </div>
           </div>
+        )}
+
+        {/* STEP: I miei messaggi */}
+        {step === 'miei_messaggi' && (
+          <MieiMessaggiStep
+            messaggi={mieiMsg}
+            loading={loadingMieiMsg}
+            error={mieiMsgError}
+            onTogglePreferito={toggleMioPreferito}
+            onFotoZoom={setMsgZoomUrl}
+            onBack={() => setStep('scelta')}
+            onRetry={loadMieiMessaggi}
+          />
         )}
 
         {/* STEP: Parrucchiere */}
@@ -1013,6 +1087,202 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           </div>
         )}
       </div>
+
+      {/* Lightbox foto */}
+      {msgZoomUrl && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setMsgZoomUrl(null)}
+        >
+          <button
+            onClick={() => setMsgZoomUrl(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+          >
+            <X size={22} className="text-white" />
+          </button>
+          <img
+            src={msgZoomUrl}
+            className="max-w-full max-h-full rounded-2xl object-contain"
+            style={{ maxHeight: '90vh', maxWidth: '90vw' }}
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MieiMessaggiStep({
+  messaggi, loading, error, onTogglePreferito, onFotoZoom, onBack, onRetry,
+}: {
+  messaggi: MioMessaggio[];
+  loading: boolean;
+  error: string;
+  onTogglePreferito: (id: string, val: boolean) => void;
+  onFotoZoom: (url: string) => void;
+  onBack: () => void;
+  onRetry: () => void;
+}) {
+  const [aperti, setAperti] = useState<Set<string>>(new Set());
+  const [soloPreferiti, setSoloPreferiti] = useState(false);
+
+  function toggle(id: string) {
+    setAperti(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  const lista = soloPreferiti ? messaggi.filter(m => m.preferito) : messaggi;
+
+  return (
+    <div className="space-y-4">
+      <div className="text-center mb-2">
+        <p className="text-xl font-bold text-stone-800">I miei messaggi</p>
+        <p className="text-sm text-stone-400 mt-1">Le tue richieste inviate al salone</p>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-center">
+          <p className="text-sm text-red-600 mb-3">{error}</p>
+          <button onClick={onRetry} className="text-sm font-medium text-red-600 underline">Riprova</button>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <>
+          {messaggi.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setSoloPreferiti(v => !v)}
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border transition-colors ${
+                  soloPreferiti
+                    ? 'bg-amber-50 border-amber-300 text-amber-700'
+                    : 'border-stone-200 text-stone-500 hover:border-amber-300 hover:text-amber-600'
+                }`}
+              >
+                <Star size={12} className={soloPreferiti ? 'fill-amber-400 text-amber-400' : ''} />
+                {soloPreferiti ? 'Tutti' : 'Solo preferiti'}
+              </button>
+            </div>
+          )}
+
+          {lista.length === 0 && (
+            <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-10 text-center">
+              <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                {soloPreferiti
+                  ? <Star size={24} className="text-stone-300" />
+                  : <Inbox size={24} className="text-stone-300" />
+                }
+              </div>
+              <p className="font-semibold text-stone-500">
+                {soloPreferiti ? 'Nessun messaggio preferito' : 'Nessun messaggio'}
+              </p>
+              <p className="text-sm text-stone-400 mt-1">
+                {soloPreferiti ? 'Tocca la stella su un messaggio per aggiungerlo ai preferiti.' : 'Non hai ancora inviato messaggi al salone.'}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {lista.map(m => (
+              <div
+                key={m.id}
+                className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden"
+              >
+                {/* Header */}
+                <div className="flex items-center gap-2 px-4 py-3.5">
+                  <button
+                    onClick={() => toggle(m.id)}
+                    className="flex-1 flex items-center gap-3 text-left min-w-0"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+                      <MessageCircle size={16} className="text-sky-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-stone-700 truncate">
+                        {m.testo ? m.testo.slice(0, 50) + (m.testo.length > 50 ? '…' : '') : 'Solo foto'}
+                      </p>
+                      <p className="text-[10px] text-stone-400 mt-0.5">
+                        {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {m.risposta_testo && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" title="Risposta ricevuta" />
+                    )}
+                    <button
+                      onClick={() => onTogglePreferito(m.id, !m.preferito)}
+                      className="p-1.5 rounded-lg hover:bg-amber-50 transition-colors"
+                    >
+                      <Star size={15} className={m.preferito ? 'fill-amber-400 text-amber-400' : 'text-stone-300'} />
+                    </button>
+                    <button onClick={() => toggle(m.id)} className="p-1.5 text-stone-300">
+                      {aperti.has(m.id)
+                        ? <ChevronUp size={15} />
+                        : <ChevronDown size={15} />
+                      }
+                    </button>
+                  </div>
+                </div>
+
+                {/* Body */}
+                {aperti.has(m.id) && (
+                  <div className="px-4 pb-4 border-t border-stone-100 pt-3 space-y-3">
+                    {m.testo && (
+                      <div className="bg-stone-50 rounded-xl px-4 py-3">
+                        <p className="text-sm text-stone-700 leading-relaxed">{m.testo}</p>
+                      </div>
+                    )}
+
+                    {[m.foto_url_1, m.foto_url_2, m.foto_url_3].some(Boolean) && (
+                      <div className="flex gap-3 flex-wrap">
+                        {[m.foto_url_1, m.foto_url_2, m.foto_url_3].filter(Boolean).map((url, i) => (
+                          <button
+                            key={i}
+                            onClick={() => onFotoZoom(url)}
+                            className="w-24 h-24 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 hover:border-sky-400 transition-colors group relative"
+                          >
+                            <img src={url} className="w-full h-full object-cover" alt={`foto ${i + 1}`} />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                              <ZoomIn size={18} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {m.risposta_testo && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Reply size={13} className="text-emerald-600" />
+                          <span className="text-xs font-semibold text-emerald-700">Risposta del salone</span>
+                          {m.risposta_at && (
+                            <span className="text-[10px] text-emerald-500 ml-auto">
+                              {new Date(m.risposta_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-emerald-800 leading-relaxed">{m.risposta_testo}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <BackBtn onClick={onBack} />
     </div>
   );
 }
