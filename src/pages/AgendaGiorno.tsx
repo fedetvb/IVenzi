@@ -352,12 +352,37 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       .replace(/\{ora\}/g, oraFmt)
       .replace(/\{posizione\}/g, posizione);
 
+    // Se la richiesta non aveva un cliente_id, cerca o crea il cliente
+    let clienteId: string | null = r.cliente_id ?? null;
+    if (!clienteId && r.nome && r.telefono) {
+      const telNorm = r.telefono.replace(/\s/g, '');
+      const { data: esistenti } = await dbSelect({
+        table: 'clienti',
+        filters: [{ col: 'telefono', op: 'eq', val: telNorm }],
+        limit: 1,
+      });
+      if (esistenti?.[0]) {
+        clienteId = (esistenti[0] as Record<string, unknown>).id as string;
+      } else {
+        const { data: newCliente } = await dbInsert({
+          table: 'clienti',
+          data: {
+            nome: r.nome.trim(),
+            cognome: r.cognome?.trim() ?? '',
+            telefono: telNorm,
+            user_id: user?.id,
+          },
+        });
+        clienteId = (newCliente as Record<string, unknown> | null)?.id as string | null ?? null;
+      }
+    }
+
     // Crea appuntamento con lo stesso flusso di AppuntamentoModal.handleSave
     // (dbInsert gestisce sia SQLite/Electron che IndexedDB+Supabase/browser)
     const { data: app1Data } = await dbInsert({
       table: 'appuntamenti',
       data: {
-        cliente_id: r.cliente_id ?? null,
+        cliente_id: clienteId,
         parrucchiere_id: r.parrucchiere_id,
         data_ora: r.data_ora,
         durata_minuti: r.durata_minuti ?? 60,
@@ -392,7 +417,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       const { data: app2Data } = await dbInsert({
         table: 'appuntamenti',
         data: {
-          cliente_id: r.cliente_id ?? null,
+          cliente_id: clienteId,
           parrucchiere_id: r.parrucchiere2_id,
           data_ora: r.data_ora2,
           durata_minuti: r.durata2_minuti ?? 30,

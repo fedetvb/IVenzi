@@ -255,6 +255,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
     setMsgSubmitting(true);
     setMsgError('');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
       const SCRIVICI_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/scrivici`;
       const body: Record<string, string> = {
@@ -271,13 +273,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante l\'invio');
       setStep('successo_messaggio');
     } catch (err) {
-      setMsgError(err instanceof Error ? err.message : 'Errore di rete. Riprova.');
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setMsgError('Connessione lenta o timeout. Controlla la rete e riprova.');
+      } else {
+        setMsgError(err instanceof Error ? err.message : 'Errore di rete. Riprova.');
+      }
     } finally {
+      clearTimeout(timeout);
       setMsgSubmitting(false);
     }
   }
