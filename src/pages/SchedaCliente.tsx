@@ -579,6 +579,16 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (tab !== 'messaggi') return;
+    const nonLetti = messaggi.filter(m => !m.letto);
+    if (nonLetti.length === 0) return;
+    const ids = nonLetti.map(m => m.id);
+    supabase.from('messaggi_clienti').update({ letto: true }).in('id', ids).then(() => {
+      setMessaggi(prev => prev.map(m => ids.includes(m.id) ? { ...m, letto: true } : m));
+    });
+  }, [tab, messaggi.length]);
+
   async function deleteScheda(id: string) {
     if (!confirm('Eliminare questa scheda colore?')) return;
     await dbUpdate({
