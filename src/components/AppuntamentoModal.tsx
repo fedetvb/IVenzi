@@ -55,6 +55,8 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
   const [catalogo, setCatalogo] = useState<TrattamentoCatalogo[]>([]);
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
   const [blacklistWarning, setBlacklistWarning] = useState<{ motivo: string } | null>(null);
 
@@ -262,6 +264,15 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
     }
 
     setSaving(false);
+    onSaved();
+  }
+
+  async function handleDelete() {
+    if (!appuntamentoId) return;
+    setDeleting(true);
+    await dbDelete({ table: 'appuntamento_trattamenti', filters: [{ col: 'appuntamento_id', op: 'eq', val: appuntamentoId }] });
+    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: appuntamentoId }] });
+    setDeleting(false);
     onSaved();
   }
 
@@ -519,20 +530,55 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-stone-100 flex gap-3 justify-end flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 text-sm font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
-          >
-            Annulla
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-5 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Salvataggio...' : 'Salva appuntamento'}
-          </button>
+        <div className="px-6 py-4 border-t border-stone-100 flex-shrink-0">
+          {confirmDelete ? (
+            <div className="flex items-center gap-3 justify-between">
+              <span className="text-sm text-red-700 font-medium">Eliminare definitivamente questo appuntamento?</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-4 py-2 text-sm font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                >
+                  No
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Trash2 size={14} />
+                  {deleting ? 'Eliminazione...' : 'Si, elimina'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-3 justify-between">
+              {appuntamentoId ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5"
+                >
+                  <Trash2 size={14} />
+                  Elimina
+                </button>
+              ) : <div />}
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="px-5 py-2 text-sm font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-5 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Salvataggio...' : 'Salva appuntamento'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

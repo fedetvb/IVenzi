@@ -141,6 +141,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const pointerStartPos = useRef<{ x: number; y: number } | null>(null);
   const savingDrag = useRef(false);
   const visibleParrRef = useRef<Parrucchiere[]>([]);
+  const lastTapRef = useRef<{ id: string; time: number } | null>(null);
 
   useEffect(() => { localStorage.setItem('agenda_slotHeight', String(slotHeight)); }, [slotHeight]);
   useEffect(() => { localStorage.setItem('agenda_fontSize', String(fontSize)); }, [fontSize]);
@@ -1182,6 +1183,16 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                               cancelDrag();
                               if (suppressModalOpen.current) {
                                 suppressModalOpen.current = false;
+                              } else if (e.pointerType === 'touch') {
+                                // Mobile: require double-tap to open modal
+                                const now = Date.now();
+                                const last = lastTapRef.current;
+                                if (last && last.id === app.id && now - last.time < 450) {
+                                  lastTapRef.current = null;
+                                  setAppModal({ open: true, id: app.id });
+                                } else {
+                                  lastTapRef.current = { id: app.id, time: now };
+                                }
                               } else {
                                 setAppModal({ open: true, id: app.id });
                               }
@@ -1354,7 +1365,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="white" stroke="#d6d3d1" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(100,100,100,0.12)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(100,100,100,0.18)"/></svg>
           <span className="text-[10px] text-stone-500">Sconto</span>
         </div>
-        <span className="ml-auto text-[9px] text-stone-400 italic hidden sm:block">Tieni premuto per spostare</span>
+        <span className="ml-auto text-[9px] text-stone-400 italic hidden sm:block">Tieni premuto per spostare · Doppio tap per modificare (mobile)</span>
       </div>
 
       {/* Edit parrucchiere modal */}
