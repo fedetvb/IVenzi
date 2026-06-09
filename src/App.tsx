@@ -716,12 +716,16 @@ export default function App() {
     const perm = getPushPermission();
 
     if (perm === 'granted') {
-      // Already granted — ensure subscription is active
+      // Already granted — ensure subscription is active and re-saved (catches expired subs)
       subscribePush().catch(() => {});
     } else if (perm === 'default') {
-      // Show our banner after a 3s delay to avoid overwhelming the user on login
-      const t = setTimeout(() => setShowPushBanner(true), 3000);
-      return () => clearTimeout(t);
+      // Show banner only if not already dismissed within the last 30 days
+      const lastDismissed = localStorage.getItem('push_banner_dismissed');
+      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+      if (!lastDismissed || Date.now() - parseInt(lastDismissed) > thirtyDays) {
+        const t = setTimeout(() => setShowPushBanner(true), 3000);
+        return () => clearTimeout(t);
+      }
     }
     // perm === 'denied' — respect the user's choice, do nothing
   }, [user]);
@@ -742,6 +746,7 @@ export default function App() {
 
   async function handleEnablePush() {
     setShowPushBanner(false);
+    localStorage.setItem('push_banner_dismissed', Date.now().toString());
     const perm = await requestPushPermission();
     if (perm === 'granted') {
       await subscribePush();
@@ -880,7 +885,10 @@ export default function App() {
                   Attiva
                 </button>
                 <button
-                  onClick={() => setShowPushBanner(false)}
+                  onClick={() => {
+                    setShowPushBanner(false);
+                    localStorage.setItem('push_banner_dismissed', Date.now().toString());
+                  }}
                   className="px-4 py-1.5 bg-stone-100 text-stone-600 text-xs font-medium rounded-lg hover:bg-stone-200 transition-colors"
                 >
                   Non ora

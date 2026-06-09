@@ -28,10 +28,25 @@ export async function subscribePush(): Promise<boolean> {
 
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
+
     if (existing) {
-      // Already subscribed — ensure it's saved in DB
-      await savePushSubscription(existing);
-      return true;
+      // Check if the VAPID key matches — if not, force a fresh subscription
+      const existingKey = existing.options?.applicationServerKey;
+      const expectedKey = urlBase64ToUint8Array(vapidPublicKey);
+      let keyMatches = false;
+      if (existingKey) {
+        const existingBytes = new Uint8Array(existingKey as ArrayBuffer);
+        keyMatches = existingBytes.length === expectedKey.length &&
+          existingBytes.every((b, i) => b === expectedKey[i]);
+      }
+
+      if (keyMatches) {
+        await savePushSubscription(existing);
+        return true;
+      }
+
+      // Keys don't match — unsubscribe and re-subscribe
+      await existing.unsubscribe();
     }
 
     const subscription = await reg.pushManager.subscribe({
