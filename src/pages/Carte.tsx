@@ -1337,6 +1337,7 @@ interface GiftPass {
   destinataria_nome: string;
   destinataria_telefono: string;
   destinataria_cliente_id: string | null;
+  cliente_id: string | null;
   attivata_at: string | null;
   scadenza_uso_at: string | null;
   fiche_id: string | null;
@@ -1370,7 +1371,7 @@ function statoGiftPass(gp: GiftPass): 'da_ritirare' | 'attivata' | 'utilizzata' 
 function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
   clienti: Cliente[];
   onClose: () => void;
-  onSaved: (gp: GiftPass) => void;
+  onSaved: (gp: GiftPass, compratore_nome?: string) => void;
 }) {
   const { user } = useAuth();
   const [form, setForm] = useState({
@@ -1501,8 +1502,16 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       }
     }
 
+    // Calcola nome compratore formattato "Elena C."
+    let compratore_nome_fmt: string | undefined;
+    if (compratoreFinalId) {
+      const cn = compratoreRegistra ? compratoreNome.trim() : (clienti.find(c => c.id === compratoreFinalId)?.nome ?? '');
+      const cc = compratoreRegistra ? compratoreCognome.trim() : (clienti.find(c => c.id === compratoreFinalId)?.cognome ?? '');
+      if (cn) compratore_nome_fmt = cc ? `${cn} ${cc.charAt(0)}.` : cn;
+    }
+
     setSaving(false);
-    if (data) onSaved(data as unknown as GiftPass);
+    if (data) onSaved(data as unknown as GiftPass, compratore_nome_fmt);
   }
 
   return (
@@ -1762,7 +1771,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
 
 // ─── Gift Pass WhatsApp Modal ─────────────────────────────────────────────────
 
-function GiftPassWaModal({ gp, nomeSalone, onClose }: { gp: GiftPass; nomeSalone: string; onClose: () => void }) {
+function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: GiftPass; nomeSalone: string; compratore_nome?: string; onClose: () => void }) {
   const [telefono, setTelefono] = useState('');
   const [maps, setMaps] = useState('');
   const [sito, setSito] = useState('');
@@ -1790,18 +1799,36 @@ function GiftPassWaModal({ gp, nomeSalone, onClose }: { gp: GiftPass; nomeSalone
     const link = sito;
     const mapLink = maps;
     const sn = nomeSalone || 'il salone';
+    const dest = gp.destinataria_nome ? gp.destinataria_nome.split(' ')[0] : '';
+    const saluto = dest ? `Ciao ${dest}! 😊` : 'Ciao! 😊';
+    const donante = compratore_nome ? `Una persona cara a te, ${compratore_nome},` : null;
     let msg = '';
-    if (gp.tipo === 'prodotto') {
-      msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-    } else if (gp.occasione === 'compleanno') {
-      msg = `Ciao 😊 Per il tuo compleanno ho voluto regalarti un'esperienza speciale da Stefano e Federico del salone "${sn}". Sono i ragazzi che si prendono cura dei miei capelli e volevo farti provare lo stesso entusiasmo, l'ascolto e la cura che dedicano a me ogni volta.\n\nTi lascio questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-    } else if (gp.occasione === 'regalo') {
-      msg = `Ciao 😊 Ho pensato di dedicare un pensiero speciale a te che sei una persona importante, per farti provare l'entusiasmo e la cura con cui Stefano e Federico del salone "${sn}" ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere questo benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax.`;
+
+    if (donante) {
+      // Messaggi con compratore noto: tono "il salone informa la destinataria del regalo"
+      if (gp.tipo === 'prodotto') {
+        msg = `${saluto} ${donante} ci ha pensato a farti un regalo speciale: ti ha donato un Gift Pass da "${sn}" per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento!\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
+      } else if (gp.occasione === 'compleanno') {
+        msg = `${saluto} Per il tuo compleanno ${donante} voluto regalarti un'esperienza speciale da "${sn}". Ti ha lasciato questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale!\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
+      } else if (gp.occasione === 'regalo') {
+        msg = `${saluto} ${donante} ha pensato di dedicarti un pensiero speciale: il tuo Gift Pass da "${sn}" con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo!\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax.`;
+      } else {
+        msg = `${saluto} ${donante} ha voluto farti scoprire il salone "${sn}": ti ha donato un invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi per il tuo primo appuntamento!\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
+      }
     } else {
-      msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass con un bonus di €${gp.valore_euro} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+      // Messaggi originali: tono "amica che scrive ad amica" (per invio dal sito prenotazioni)
+      if (gp.tipo === 'prodotto') {
+        msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+      } else if (gp.occasione === 'compleanno') {
+        msg = `Ciao 😊 Per il tuo compleanno ho voluto regalarti un'esperienza speciale da Stefano e Federico del salone "${sn}". Sono i ragazzi che si prendono cura dei miei capelli e volevo farti provare lo stesso entusiasmo, l'ascolto e la cura che dedicano a me ogni volta.\n\nTi lascio questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+      } else if (gp.occasione === 'regalo') {
+        msg = `Ciao 😊 Ho pensato di dedicare un pensiero speciale a te che sei una persona importante, per farti provare l'entusiasmo e la cura con cui Stefano e Federico del salone "${sn}" ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere questo benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax.`;
+      } else {
+        msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass con un bonus di €${gp.valore_euro} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+      }
     }
     setMessaggio(msg);
-  }, [loading, gp, telefono, maps, sito, nomeSalone]);
+  }, [loading, gp, telefono, maps, sito, nomeSalone, compratore_nome]);
 
   const hasPhone = !!gp.destinataria_telefono.trim();
 
@@ -1875,7 +1902,7 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filtroStato, setFiltroStato] = useState<'tutte' | 'da_ritirare' | 'attivata' | 'utilizzata' | 'scaduta'>('tutte');
-  const [waModal, setWaModal] = useState<GiftPass | null>(null);
+  const [waModal, setWaModal] = useState<{ gp: GiftPass; compratore_nome?: string } | null>(null);
   const [nomeSalone, setNomeSalone] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -2036,7 +2063,11 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {isAttiva && (
-                      <button onClick={() => setWaModal(gp)} className="p-2 rounded-lg hover:bg-violet-100 text-stone-400 hover:text-violet-600 transition-colors" title="Invia WhatsApp">
+                      <button onClick={() => {
+                        const comp = gp.cliente_id ? clienti.find(c => c.id === gp.cliente_id) : null;
+                        const cn = comp ? (comp.cognome ? `${comp.nome} ${comp.cognome.charAt(0)}.` : comp.nome) : undefined;
+                        setWaModal({ gp, compratore_nome: cn });
+                      }} className="p-2 rounded-lg hover:bg-violet-100 text-stone-400 hover:text-violet-600 transition-colors" title="Invia WhatsApp">
                         <Send size={15} />
                       </button>
                     )}
@@ -2066,11 +2097,11 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
         <NuovaGiftPassModal
           clienti={clienti}
           onClose={() => setShowModal(false)}
-          onSaved={gp => { setShowModal(false); load(); setWaModal(gp); }}
+          onSaved={(gp, compratore_nome) => { setShowModal(false); load(); setWaModal({ gp, compratore_nome }); }}
         />
       )}
       {waModal && (
-        <GiftPassWaModal gp={waModal} nomeSalone={nomeSalone} onClose={() => { setWaModal(null); load(); }} />
+        <GiftPassWaModal gp={waModal.gp} nomeSalone={nomeSalone} compratore_nome={waModal.compratore_nome} onClose={() => { setWaModal(null); load(); }} />
       )}
     </div>
   );
