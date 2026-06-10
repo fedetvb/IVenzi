@@ -1418,8 +1418,8 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
     (form.tipo === 'valore' && form.valore_euro > 0) ||
     (form.tipo === 'prodotto' && !!form.prodotto_id)
   ) && (
-    (registraNuova && nuovaNome.trim() !== '') ||
-    (!registraNuova && destinatariaId !== '')
+    (!compratoreRegistra && compratoreId !== '') ||
+    (compratoreRegistra && compratoreNome.trim() !== '')
   );
 
   async function save() {
@@ -1637,7 +1637,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
                 onChange={e => setCompratoreId(e.target.value)}
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
               >
-                <option value="">— Seleziona cliente (opzionale) —</option>
+                <option value="">— Seleziona cliente —</option>
                 {clienti.map(c => (
                   <option key={c.id} value={c.id}>{c.nome} {c.cognome}{c.telefono ? ` · ${c.telefono}` : ''}</option>
                 ))}
@@ -1673,7 +1673,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
           {/* Destinataria */}
           <div className="border border-stone-200 rounded-xl p-4 space-y-3">
             <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">
-              Destinataria <span className="text-red-500">*</span>
+              Destinataria <span className="text-stone-400 font-normal normal-case">(opzionale)</span>
             </label>
 
             {/* Toggle: cliente esistente vs nuova */}
@@ -1811,8 +1811,8 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
       : null;
     let msg = '';
 
-    if (donante) {
-      // Messaggi con compratore noto: tono "il salone informa la destinataria del regalo"
+    if (gp.destinataria_nome) {
+      // Messaggi con destinataria nota: tono "il salone informa la destinataria del regalo" (inviati dal gestionale)
       if (gp.tipo === 'prodotto') {
         msg = `${saluto} ${donante} ha pensato a te e ha voluto dedicarti un invito speciale da Stefano e Federico del salone "${sn}", per farti provare l'entusiasmo e la cura con cui la ascoltiamo e ci prendiamo cura dei suoi capelli, quindi ha pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al suo Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
       } else if (gp.occasione === 'compleanno') {
@@ -1823,7 +1823,7 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
         msg = `${saluto} Noi, Stefano e Federico del salone "${sn}", abbiamo dato la possibilità ${donanteConA} di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui la ascoltiamo e ci prendiamo cura dei suoi capelli, e ha scelto proprio te. Ti lascia così il nostro invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
       }
     } else {
-      // Messaggi originali: tono "amica che scrive ad amica" (per invio dal sito prenotazioni)
+      // Messaggi senza destinataria: tono "amica che scrive ad amica" (per invio dal sito prenotazioni tramite la donatrice)
       if (gp.tipo === 'prodotto') {
         msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
       } else if (gp.occasione === 'compleanno') {
@@ -1837,7 +1837,8 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
     setMessaggio(msg);
   }, [loading, gp, telefono, maps, sito, nomeSalone, compratore_nome]);
 
-  const hasPhone = !!gp.destinataria_telefono.trim();
+  const hasDestinaratia = !!gp.destinataria_nome;
+  const hasPhone = !!gp.destinataria_telefono?.trim();
 
   if (loading) return null;
 
@@ -1846,22 +1847,33 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-green-100 rounded-lg flex items-center justify-center">
-              <Send size={14} className="text-green-600" />
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${hasDestinaratia ? 'bg-green-100' : 'bg-blue-100'}`}>
+              <Send size={14} className={hasDestinaratia ? 'text-green-600' : 'text-blue-600'} />
             </div>
             <div>
-              <p className="font-bold text-stone-800 text-sm">Notifica destinataria</p>
-              <p className="text-xs text-stone-400">Gift Pass {gp.codice} · {gp.destinataria_nome}</p>
+              <p className="font-bold text-stone-800 text-sm">
+                {hasDestinaratia ? 'Notifica destinataria' : 'Messaggio per la donatrice'}
+              </p>
+              <p className="text-xs text-stone-400">
+                {hasDestinaratia
+                  ? `Gift Pass ${gp.codice} · ${gp.destinataria_nome}`
+                  : `Gift Pass ${gp.codice} · da inviare tramite ${compratore_nome ?? 'la donatrice'}`}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors"><X size={15} className="text-stone-500" /></button>
         </div>
+        {!hasDestinaratia && (
+          <p className="mx-5 mt-3 text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-2 flex-shrink-0">
+            Nessuna destinataria registrata. Copia questo messaggio e consegnalo alla donatrice affinché lo invii dal suo telefono.
+          </p>
+        )}
         <div className="px-5 pt-4 pb-2 overflow-y-auto flex-1">
           <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Messaggio</label>
           <textarea value={messaggio} onChange={e => setMessaggio(e.target.value)} rows={10}
             className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 leading-relaxed focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 resize-none font-mono transition-colors" />
         </div>
-        {!hasPhone && (
+        {hasDestinaratia && !hasPhone && (
           <p className="mx-5 mt-1 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Nessun numero di telefono registrato per questa destinataria.</p>
         )}
         <div className="flex gap-2 px-5 py-4 flex-shrink-0">
@@ -1870,7 +1882,7 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
             {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
             {copied ? 'Copiato!' : 'Copia'}
           </button>
-          {hasPhone && (
+          {hasDestinaratia && hasPhone && (
             <button onClick={() => { apriWhatsApp(gp.destinataria_telefono, messaggio); onClose(); }}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors">
               <Send size={14} />
@@ -1879,7 +1891,9 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
           )}
         </div>
         <div className="px-5 pb-4 flex-shrink-0">
-          <button onClick={onClose} className="w-full py-2 text-xs text-stone-400 hover:text-stone-600 transition-colors">Salta notifica</button>
+          <button onClick={onClose} className="w-full py-2 text-xs text-stone-400 hover:text-stone-600 transition-colors">
+            {hasDestinaratia ? 'Salta notifica' : 'Chiudi'}
+          </button>
         </div>
       </div>
     </div>
