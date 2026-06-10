@@ -883,6 +883,9 @@ interface GiftPassSimple {
   valore_euro: number | null; prodotto_id: string | null; prodotto_nome: string | null;
   occasione: string; attivata_at: string | null; scadenza_uso_at: string | null;
   fiche_id: string | null; destinataria_cliente_id: string | null;
+  cliente_id?: string | null;
+  _ruolo?: 'ricevente' | 'donatore';
+  _donatore_nome?: string;
 }
 
 function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, trattamentiCatalogo, parrucchieri, isOpen, onToggle, onSaved, onEliminato, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
@@ -1104,7 +1107,10 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
 
       // Carica Gift Pass associati a questo cliente (attivati o da ritirare, non utilizzati)
       if (realClienteId) {
-        const { data: gpData } = await dbSelect({
+        const now = new Date();
+
+        // Pass ricevuti: la cliente è la destinataria
+        const { data: gpRicevutiData } = await dbSelect({
           table: 'gift_pass',
           filters: [
             { col: 'destinataria_cliente_id', op: 'eq', val: realClienteId },
@@ -1112,12 +1118,28 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
             { col: 'attiva', op: 'eq', val: true },
           ],
         });
-        const now = new Date();
-        const gpList = ((gpData || []) as GiftPassSimple[]).filter(gp => {
-          if (gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now) return false;
-          return true;
+        const gpRicevuti = ((gpRicevutiData || []) as GiftPassSimple[])
+          .filter(gp => !(gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now))
+          .map(gp => ({ ...gp, _ruolo: 'ricevente' as const }));
+
+        // Pass donati: la cliente è l'acquirente, non ancora attivati/usati
+        const { data: gpDonatiData } = await dbSelect({
+          table: 'gift_pass',
+          filters: [
+            { col: 'cliente_id', op: 'eq', val: realClienteId },
+            { col: 'utilizzata', op: 'eq', val: false },
+            { col: 'attiva', op: 'eq', val: false },
+          ],
         });
-        setGiftPasses(gpList);
+        const gpDonati = ((gpDonatiData || []) as GiftPassSimple[])
+          .map(gp => ({ ...gp, _ruolo: 'donatore' as const }));
+
+        // Unisci evitando duplicati (un pass potrebbe avere stesso cliente_id e destinataria_cliente_id)
+        const gpTutti = [...gpRicevuti];
+        for (const gp of gpDonati) {
+          if (!gpTutti.find(g => g.id === gp.id)) gpTutti.push(gp);
+        }
+        setGiftPasses(gpTutti);
       }
     })();
     setInitialized(true);
@@ -2168,17 +2190,25 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                   <select value={giftPassId} onChange={e => setGiftPassId(e.target.value)}
                     className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-violet-400">
                     <option value="">— Nessun Gift Pass —</option>
-                    {giftPasses.map(gp => (
-                      <option key={gp.id} value={gp.id}>
-                        {gp.codice} · {gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore_euro}`} · {gp.occasione}
-                      </option>
-                    ))}
+                    {giftPasses.map(gp => {
+                      const valore = gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore_euro}`;
+                      const ruoloLabel = gp._ruolo === 'donatore' ? '[Da donare] ' : '';
+                      return (
+                        <option key={gp.id} value={gp.id}>
+                          {ruoloLabel}{gp.codice} · {valore} · {gp.occasione}
+                        </option>
+                      );
+                    })}
                   </select>
-                  {giftPasses.find(gp => gp.id === giftPassId) && (() => {
-                    const gp = giftPasses.find(gp => gp.id === giftPassId)!;
-                    return gp.tipo === 'prodotto'
-                      ? <p className="text-xs text-violet-600 mt-1 font-medium">Prodotto aggiunto alla fiche a €0 alla convalida</p>
-                      : <p className="text-xs text-violet-600 mt-1 font-medium">Gift Pass valore €{gp.valore_euro} — informativo</p>;
+                  {(() => {
+                    const gp = giftPasses.find(g => g.id === giftPassId);
+                    if (!gp) return null;
+                    if (gp._ruolo === 'donatore') return (
+                      <p className="text-xs text-violet-600 mt-1 font-medium flex items-center gap-1">
+                        <Gift size={11} /> Gift Pass acquistato da regalare — verrà attivato alla convalida
+                      </p>
+                    );
+                    return null;
                   })()}
                 </div>
               )}
