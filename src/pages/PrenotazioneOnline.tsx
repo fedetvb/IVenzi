@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 
-const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/prenota-online`;
-const MIEI_MSG_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/miei-messaggi`;
-const MIE_CARTE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/mie-carte`;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+const EDGE_URL = `${SUPABASE_URL}/functions/v1/prenota-online`;
+const MIEI_MSG_URL = `${SUPABASE_URL}/functions/v1/miei-messaggi`;
+const MIE_CARTE_URL = `${SUPABASE_URL}/functions/v1/mie-carte`;
 
 interface Parrucchiere {
   id: string;
@@ -384,6 +386,29 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
     localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
     setDatiError('');
+
+    // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
+    try {
+      const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
+      const checkRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}&stato=eq.in_attesa&select=id`,
+        { headers: anonHeaders }
+      );
+      const existing = await checkRes.json();
+      if (!Array.isArray(existing) || existing.length === 0) {
+        await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
+          method: 'POST',
+          headers: { ...anonHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            user_id: userId,
+            nome: nome.trim(),
+            cognome: cognome.trim(),
+            telefono: telefono.trim(),
+            stato: 'in_attesa',
+          }),
+        });
+      }
+    } catch { /* non bloccante */ }
 
     // Se ha inserito un codice carta sconto, associala tramite edge function
     if (cartaScontoCode.trim()) {
