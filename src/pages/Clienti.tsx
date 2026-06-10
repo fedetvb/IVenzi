@@ -27,6 +27,7 @@ interface SchedaDaConfermare {
   foto_url: string;
   stato: string;
   created_at: string;
+  presentata_da_nome?: string | null;
 }
 
 export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened }: Props) {
@@ -771,6 +772,11 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
                         </span>
                       )}
                     </div>
+                    {s.presentata_da_nome && (
+                      <p className="text-xs text-emerald-600 font-medium mt-1">
+                        Portata da noi tramite {s.presentata_da_nome}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="flex items-center gap-1 text-xs text-stone-400">
@@ -916,6 +922,14 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
                 <div>
                   <p className="text-xs text-stone-400 uppercase tracking-wide font-semibold mb-1">Note / Allergie</p>
                   <p className="text-sm text-stone-700 bg-stone-50 rounded-lg px-3 py-2 leading-relaxed">{schedaAperta.note}</p>
+                </div>
+              )}
+              {schedaAperta.presentata_da_nome && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                  <p className="text-xs text-emerald-600 uppercase tracking-wide font-bold mb-1">Referente</p>
+                  <p className="text-sm text-emerald-800 font-semibold">
+                    Portata in salone tramite {schedaAperta.presentata_da_nome}
+                  </p>
                 </div>
               )}
               <div>

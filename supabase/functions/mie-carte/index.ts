@@ -208,6 +208,7 @@ Deno.serve(async (req: Request) => {
           regalata: true,
           ex_proprietaria_nome: exNome,
           cliente_id: null,
+          regalata_da_cliente_id: cliente.id,
         })
         .eq("id", carta_id);
 
@@ -232,10 +233,10 @@ Deno.serve(async (req: Request) => {
 
       const telNorm = normalizePhone(telefono);
 
-      // Cerca la carta nel cassetto (regalata=true, cliente_id=null)
+      // Cerca la carta nel cassetto (regalata=true)
       const { data: carta } = await sb
         .from("carte_sconto")
-        .select("id, regalata, cliente_id, usa_e_getta, attiva")
+        .select("id, regalata, cliente_id, usa_e_getta, attiva, ex_proprietaria_nome, regalata_da_cliente_id")
         .eq("user_id", user_id)
         .eq("codice", codice_carta.toUpperCase())
         .maybeSingle();
@@ -243,6 +244,8 @@ Deno.serve(async (req: Request) => {
       if (!carta || !carta.regalata || !carta.attiva) {
         return json({ error: "Carta non trovata nel cassetto" }, 404);
       }
+
+      const presentataDaNome = carta.ex_proprietaria_nome ?? null;
 
       // Cerca se la cliente esiste già
       const { data: clienti } = await sb
@@ -256,10 +259,14 @@ Deno.serve(async (req: Request) => {
       );
 
       if (cliente) {
-        // Cliente esistente: assegna carta direttamente
-        await sb.from("carte_sconto").update({ cliente_id: cliente.id, regalata: false }).eq("id", carta.id);
+        // Cliente esistente: assegna carta direttamente, salva il referente
+        await sb.from("carte_sconto").update({
+          cliente_id: cliente.id,
+          regalata: false,
+          regalata_da_cliente_id: carta.regalata_da_cliente_id ?? null,
+        }).eq("id", carta.id);
       } else {
-        // Cliente nuova: crea scheda da confermare con il codice carta
+        // Cliente nuova: crea/aggiorna scheda da confermare con codice carta e nome referente
         const { data: existing } = await sb
           .from("schede_clienti_da_confermare")
           .select("id")
@@ -269,7 +276,10 @@ Deno.serve(async (req: Request) => {
 
         if (existing) {
           await sb.from("schede_clienti_da_confermare")
-            .update({ codice_carta_sconto: codice_carta.toUpperCase() })
+            .update({
+              codice_carta_sconto: codice_carta.toUpperCase(),
+              presentata_da_nome: presentataDaNome,
+            })
             .eq("id", existing.id);
         } else {
           await sb.from("schede_clienti_da_confermare").insert({
@@ -277,6 +287,7 @@ Deno.serve(async (req: Request) => {
             cognome: cognome ?? '',
             telefono: telefono.trim(),
             codice_carta_sconto: codice_carta.toUpperCase(),
+            presentata_da_nome: presentataDaNome,
             stato: "in_attesa",
           });
         }

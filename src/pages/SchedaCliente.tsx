@@ -456,6 +456,8 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [deletePasswordError, setDeletePasswordError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<'single' | 'all' | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [presentataDa, setPresentataDa] = useState<string | null>(null);
+  const [haPortato, setHaPortato] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     const [clRes, scRes, appRes, cscRes, cprRes] = await Promise.all([
@@ -586,6 +588,49 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    async function loadReferral() {
+      // Chi ha presentato questo cliente (ha una carta con regalata_da_cliente_id che punta ad un altro cliente)
+      const { data: cartaRicevuta } = await supabase
+        .from('carte_sconto')
+        .select('regalata_da_cliente_id')
+        .eq('cliente_id', clienteId)
+        .not('regalata_da_cliente_id', 'is', null)
+        .limit(1)
+        .maybeSingle();
+
+      if (cartaRicevuta?.regalata_da_cliente_id) {
+        const { data: gifter } = await supabase
+          .from('clienti')
+          .select('nome, cognome')
+          .eq('id', cartaRicevuta.regalata_da_cliente_id)
+          .maybeSingle();
+        if (gifter) setPresentataDa(`${gifter.nome} ${gifter.cognome}`);
+      } else {
+        setPresentataDa(null);
+      }
+
+      // Chi ha portato in salone (clienti che hanno ricevuto una carta regalata da questo cliente)
+      const { data: carteRegalate } = await supabase
+        .from('carte_sconto')
+        .select('cliente_id')
+        .eq('regalata_da_cliente_id', clienteId)
+        .not('cliente_id', 'is', null);
+
+      if (carteRegalate && carteRegalate.length > 0) {
+        const ids = carteRegalate.map((c: { cliente_id: string }) => c.cliente_id);
+        const { data: portate } = await supabase
+          .from('clienti')
+          .select('nome, cognome')
+          .in('id', ids)
+          .is('deleted_at', null);
+        setHaPortato((portate ?? []).map((c: { nome: string; cognome: string }) => `${c.nome} ${c.cognome}`));
+      } else {
+        setHaPortato([]);
+      }
+    }
+    loadReferral();
+  }, [clienteId]);
 
   async function deleteScheda(id: string) {
     if (!confirm('Eliminare questa scheda colore?')) return;
@@ -722,6 +767,22 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
             <div className="mt-4 pt-4 border-t border-stone-100">
               <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Note</p>
               <p className="text-sm text-stone-700">{cliente.note}</p>
+            </div>
+          )}
+          {(presentataDa || haPortato.length > 0) && (
+            <div className="mt-4 pt-4 border-t border-stone-100 space-y-3">
+              {presentataDa && (
+                <div className="bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100">
+                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-0.5">Presentata da</p>
+                  <p className="text-sm text-emerald-800 font-semibold">La cliente è stata presentata da: {presentataDa}</p>
+                </div>
+              )}
+              {haPortato.length > 0 && (
+                <div className="bg-sky-50 rounded-xl px-4 py-3 border border-sky-100">
+                  <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-0.5">Ha portato in salone</p>
+                  <p className="text-sm text-sky-800">{haPortato.join(', ')}</p>
+                </div>
+              )}
             </div>
           )}
           <p className="text-xs text-stone-400 mt-4 pt-4 border-t border-stone-100">
