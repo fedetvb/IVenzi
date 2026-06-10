@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Plus, Trash2, X, Euro, ChevronDown, ChevronUp, FileText,
   Pencil, Check, BookOpen, Printer, Download, ShieldCheck, AlertCircle, UserPlus, Scissors, Eye, EyeOff, ShoppingBag, Search,
-  Banknote, CreditCard,
+  Banknote, CreditCard, Gift,
 } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import jsPDF from 'jspdf';
@@ -881,7 +881,7 @@ interface GiftPassSimple {
   id: string; codice: string; tipo: 'valore' | 'prodotto';
   valore_euro: number | null; prodotto_id: string | null; prodotto_nome: string | null;
   occasione: string; attivata_at: string | null; scadenza_uso_at: string | null;
-  fiche_id: string | null;
+  fiche_id: string | null; destinataria_cliente_id: string | null;
 }
 
 function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, trattamentiCatalogo, parrucchieri, isOpen, onToggle, onSaved, onEliminato, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
@@ -924,9 +924,10 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [showServiziPicker, setShowServiziPicker] = useState(false);
   const [cercaServizio, setCercaServizio] = useState('');
 
-  // Cassetto carte sconto regalate
+  // Cassetto carte sconto regalate + gift pass orfani
   const [showCassetto, setShowCassetto] = useState(false);
   const [cassettoCarte, setCassettoCarte] = useState<CartaScontoSimple[]>([]);
+  const [cassettoGiftPasses, setCassettoGiftPasses] = useState<GiftPassSimple[]>([]);
   const [cassettoSearch, setCassettoSearch] = useState('');
   const [cassettoLoading, setCassettoLoading] = useState(false);
 
@@ -952,8 +953,19 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   async function openCassetto() {
     setShowCassetto(true);
     setCassettoLoading(true);
-    const { data } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'regalata', op: 'eq', val: true }, { col: 'attiva', op: 'eq', val: true }], orderBy: [{ col: 'codice', asc: true }] });
-    setCassettoCarte((data ?? []) as CartaScontoSimple[]);
+    const [carteRes, gpRes] = await Promise.all([
+      dbSelect({ table: 'carte_sconto', filters: [{ col: 'regalata', op: 'eq', val: true }, { col: 'attiva', op: 'eq', val: true }], orderBy: [{ col: 'codice', asc: true }] }),
+      dbSelect({ table: 'gift_pass', filters: [{ col: 'utilizzata', op: 'eq', val: false }, { col: 'attiva', op: 'eq', val: true }], orderBy: [{ col: 'codice', asc: true }] }),
+    ]);
+    setCassettoCarte((carteRes.data ?? []) as CartaScontoSimple[]);
+    // Gift pass orfani: non ancora associati a un cliente, non ancora attivati oppure già attivati ma senza fiche
+    const now = new Date();
+    const gpOrfani = ((gpRes.data ?? []) as GiftPassSimple[]).filter(gp => {
+      if (gp.destinataria_cliente_id) return false; // già ha un proprietario
+      if (gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now) return false;
+      return true;
+    });
+    setCassettoGiftPasses(gpOrfani);
     setCassettoLoading(false);
   }
 
@@ -964,6 +976,17 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
       return prev;
     });
     setCartaScontoId(carta.id);
+    setShowCassetto(false);
+    setCassettoSearch('');
+  }
+
+  function selectCassettoGiftPass(gp: GiftPassSimple) {
+    setGiftPasses(prev => {
+      const exists = prev.find(g => g.id === gp.id);
+      if (!exists) return [...prev, gp];
+      return prev;
+    });
+    setGiftPassId(gp.id);
     setShowCassetto(false);
     setCassettoSearch('');
   }
@@ -1025,17 +1048,13 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
       dbSelect({ table: 'clienti', filters: [{ col: 'id', op: 'eq', val: realClienteId }], orderBy: [], columns: 'telefono' }).then(({ data }) => { if (data?.[0]?.telefono) setClienteTelefono((data[0] as any).telefono); });
     }
 
-    // Carica carte disponibili per questo cliente e auto-seleziona
+    // Carica carte disponibili per questo cliente (solo quelle intestate a lui)
     (async () => {
-      const { data: sc } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'attiva', op: 'eq', val: true }] });
-      const scontoList = (sc || []) as CartaScontoSimple[];
-      setCarteSconto(scontoList);
-
-      // Auto-seleziona la carta sconto intestata al cliente (priorità)
-      if (realClienteId && scontoList.length > 0) {
-        const { data: scCliente } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'attiva', op: 'eq', val: true }] });
-        if (scCliente && scCliente.length > 0) setCartaScontoId((scCliente[0] as any).id);
-        else if (scontoList.length === 1) setCartaScontoId(scontoList[0].id);
+      if (realClienteId) {
+        const { data: sc } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'cliente_id', op: 'eq', val: realClienteId }, { col: 'attiva', op: 'eq', val: true }] });
+        const scontoList = (sc || []) as CartaScontoSimple[];
+        setCarteSconto(scontoList);
+        if (scontoList.length > 0) setCartaScontoId(scontoList[0].id);
       }
 
       if (realClienteId) {
@@ -1047,22 +1066,23 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         if (attiva) setCartaPremiumId(attiva.id);
       }
 
-      // Carica Gift Pass attivate per questo cliente (da_ritirare + attivata, non utilizzate)
-      const { data: gpData } = await dbSelect({
-        table: 'gift_pass',
-        filters: [
-          { col: 'destinataria_telefono', op: 'neq', val: '' },
-          { col: 'utilizzata', op: 'eq', val: false },
-        ],
-      });
-      // Filter activated (attivata_at non null) e non scadute
-      const now = new Date();
-      const gpList = ((gpData || []) as GiftPassSimple[]).filter(gp => {
-        if (!gp.attivata_at) return false; // non ancora attivata
-        if (gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now) return false;
-        return true;
-      });
-      setGiftPasses(gpList);
+      // Carica Gift Pass associati a questo cliente (attivati o da ritirare, non utilizzati)
+      if (realClienteId) {
+        const { data: gpData } = await dbSelect({
+          table: 'gift_pass',
+          filters: [
+            { col: 'destinataria_cliente_id', op: 'eq', val: realClienteId },
+            { col: 'utilizzata', op: 'eq', val: false },
+            { col: 'attiva', op: 'eq', val: true },
+          ],
+        });
+        const now = new Date();
+        const gpList = ((gpData || []) as GiftPassSimple[]).filter(gp => {
+          if (gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now) return false;
+          return true;
+        });
+        setGiftPasses(gpList);
+      }
     })();
     setInitialized(true);
   }, [isOpen, initialized, gruppo]);
@@ -1392,6 +1412,10 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         }
         await dbUpdate({ table: 'gift_pass', id: giftPass.id, data: {
           utilizzata: true, fiche_id: ficheId, updated_at: new Date().toISOString(),
+          // Se il pass era orfano, associalo alla cliente ora
+          ...(clienteGruppoIdValid && !giftPass.destinataria_cliente_id ? { destinataria_cliente_id: clienteGruppoIdValid } : {}),
+          // Attiva se non ancora attivato
+          ...(!giftPass.attivata_at ? { attivata_at: new Date().toISOString() } : {}),
         } });
       }
     }
@@ -2113,27 +2137,27 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
             </div>
           )}
 
-          {/* Cassetto carte sconto */}
+          {/* Cassetto carte / gift pass orfani */}
           {!isConvalidata && (
             <button
               onClick={openCassetto}
               className="w-full flex items-center justify-center gap-2 border border-dashed border-stone-300 text-stone-500 rounded-xl py-2.5 text-sm hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
             >
               <CreditCard size={14} />
-              Cassetto carte sconto
+              Assegna carta / Gift Pass per codice
             </button>
           )}
 
           {/* Modale cassetto */}
           {showCassetto && createPortal(
             <div className="fixed inset-0 z-[300] bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={() => setShowCassetto(false)}>
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-5 pt-5 pb-3">
                   <div>
-                    <p className="font-bold text-stone-800">Cassetto carte sconto</p>
-                    <p className="text-xs text-stone-400">Carte regalate disponibili da assegnare</p>
+                    <p className="font-bold text-stone-800">Assegna carta o Gift Pass</p>
+                    <p className="text-xs text-stone-400">Cerca per codice e assegna a questa cliente</p>
                   </div>
-                  <button onClick={() => setShowCassetto(false)} className="p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
+                  <button onClick={() => { setShowCassetto(false); setCassettoSearch(''); }} className="p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
                     <X size={18} className="text-stone-400" />
                   </button>
                 </div>
@@ -2143,7 +2167,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                     <input
                       value={cassettoSearch}
                       onChange={e => setCassettoSearch(e.target.value)}
-                      placeholder="Cerca per codice..."
+                      placeholder="Digita il codice ricevuto..."
                       className="w-full border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-amber-400"
                       autoFocus
                     />
@@ -2155,36 +2179,72 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                       <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
                     </div>
                   ) : (() => {
-                    const filtered = cassettoCarte.filter(c =>
-                      c.codice.toLowerCase().includes(cassettoSearch.toLowerCase())
-                    );
-                    if (filtered.length === 0) return (
+                    const q = cassettoSearch.toLowerCase();
+                    const filteredCarte = cassettoCarte.filter(c => c.codice.toLowerCase().includes(q));
+                    const filteredGp = cassettoGiftPasses.filter(g => g.codice.toLowerCase().includes(q));
+                    const hasResults = filteredCarte.length > 0 || filteredGp.length > 0;
+
+                    if (!hasResults) return (
                       <p className="text-sm text-stone-400 text-center py-8">
-                        {cassettoSearch ? 'Nessuna carta trovata' : 'Nessuna carta nel cassetto'}
+                        {cassettoSearch ? 'Nessun codice trovato' : 'Nessuna carta o Gift Pass disponibile'}
                       </p>
                     );
-                    return filtered.map(c => {
-                      const ex = (c as any).ex_proprietaria_nome;
-                      return (
-                        <button
-                          key={c.id}
-                          onClick={() => selectCassettoCarta(c as CartaScontoSimple & { ex_proprietaria_nome?: string })}
-                          className="w-full flex items-start gap-3 bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3.5 hover:border-amber-400 hover:bg-amber-50 transition-all text-left"
-                        >
-                          <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <CreditCard size={14} className="text-amber-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-mono font-semibold text-stone-800 text-sm">{c.codice}</p>
-                            <p className="text-xs text-stone-500 mt-0.5">
-                              {c.tipo_sconto === 'percentuale' ? `${c.valore_sconto}%` : `€${c.valore_sconto}`} di sconto
-                              {ex ? <span className="text-stone-400"> · (ex: {ex})</span> : ''}
-                            </p>
-                            {c.descrizione && <p className="text-xs text-stone-400 mt-0.5">{c.descrizione}</p>}
-                          </div>
-                        </button>
-                      );
-                    });
+
+                    return (
+                      <>
+                        {filteredCarte.length > 0 && (
+                          <>
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider pt-1">Carte sconto</p>
+                            {filteredCarte.map(c => {
+                              const ex = (c as any).ex_proprietaria_nome;
+                              return (
+                                <button
+                                  key={c.id}
+                                  onClick={() => selectCassettoCarta(c as CartaScontoSimple & { ex_proprietaria_nome?: string })}
+                                  className="w-full flex items-start gap-3 bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3.5 hover:border-amber-400 hover:bg-amber-50 transition-all text-left"
+                                >
+                                  <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <CreditCard size={14} className="text-amber-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-mono font-semibold text-stone-800 text-sm">{c.codice}</p>
+                                    <p className="text-xs text-stone-500 mt-0.5">
+                                      {c.tipo_sconto === 'percentuale' ? `${c.valore_sconto}%` : `€${c.valore_sconto}`} di sconto
+                                      {ex ? <span className="text-stone-400"> · regalata da {ex}</span> : ''}
+                                    </p>
+                                    {c.descrizione && <p className="text-xs text-stone-400 mt-0.5">{c.descrizione}</p>}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </>
+                        )}
+                        {filteredGp.length > 0 && (
+                          <>
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider pt-2">Gift Pass</p>
+                            {filteredGp.map(gp => (
+                              <button
+                                key={gp.id}
+                                onClick={() => selectCassettoGiftPass(gp)}
+                                className="w-full flex items-start gap-3 bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3.5 hover:border-violet-400 hover:bg-violet-50 transition-all text-left"
+                              >
+                                <div className="w-8 h-8 bg-violet-100 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
+                                  <Gift size={14} className="text-violet-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-mono font-semibold text-stone-800 text-sm tracking-widest">{gp.codice}</p>
+                                  <p className="text-xs text-stone-500 mt-0.5">
+                                    {gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore_euro}`}
+                                    <span className="text-stone-400"> · {gp.occasione}</span>
+                                    {gp.destinataria_nome ? <span className="text-stone-400"> · per {(gp as any).destinataria_nome}</span> : ''}
+                                  </p>
+                                </div>
+                              </button>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    );
                   })()}
                 </div>
               </div>
