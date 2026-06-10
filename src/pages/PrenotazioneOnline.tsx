@@ -1422,34 +1422,40 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
       <div
         className="relative w-full rounded-3xl overflow-hidden shadow-xl"
         style={{
-          background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 40%, #1a1a1a 60%, #0d0d0d 100%)',
-          minHeight: 200,
+          background: 'linear-gradient(135deg, #111008 0%, #2a2000 25%, #1a1500 50%, #2d2200 75%, #0d0a00 100%)',
+          minHeight: 210,
         }}
       >
-        {/* Pattern decorativo oro */}
-        <div className="absolute inset-0 opacity-10" style={{
-          backgroundImage: 'repeating-linear-gradient(45deg, #d4af37 0px, #d4af37 1px, transparent 0px, transparent 50%)',
-          backgroundSize: '20px 20px',
+        {/* Striscia oro orizzontale in alto */}
+        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, #b8860b, #f5e17a, #d4af37, #f5e17a, #b8860b)' }} />
+        {/* Pattern decorativo oro — più visibile */}
+        <div className="absolute inset-0 opacity-20" style={{
+          backgroundImage: 'repeating-linear-gradient(45deg, #d4af37 0px, #d4af37 1px, transparent 0px, transparent 28px)',
+          backgroundSize: '28px 28px',
         }} />
-        {/* Cerchio decorativo */}
-        <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full" style={{ background: 'rgba(212,175,55,0.15)' }} />
-        <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full" style={{ background: 'rgba(212,175,55,0.1)' }} />
+        {/* Alone oro grande in alto a destra */}
+        <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: 'radial-gradient(circle, rgba(212,175,55,0.35) 0%, transparent 70%)' }} />
+        {/* Alone oro piccolo in basso a sinistra */}
+        <div className="absolute -left-4 -bottom-4 w-32 h-32 rounded-full" style={{ background: 'radial-gradient(circle, rgba(212,175,55,0.2) 0%, transparent 70%)' }} />
 
-        <div className="relative p-6 flex flex-col h-full" style={{ minHeight: 200 }}>
+        <div className="relative p-6 flex flex-col h-full" style={{ minHeight: 210 }}>
           {/* Header */}
           <div className="flex items-start justify-between mb-auto">
             <div>
-              <p className="text-xs font-semibold tracking-[0.2em] uppercase" style={{ color: '#d4af37' }}>Carta Premium</p>
+              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: '#f5e17a', textShadow: '0 0 8px rgba(212,175,55,0.6)' }}>Carta Premium</p>
             </div>
-            <div className="w-10 h-7 rounded-md" style={{ background: 'linear-gradient(135deg, #d4af37, #f5e17a, #b8860b)' }} />
+            {/* Chip oro realistico */}
+            <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #b8860b 0%, #f5e17a 40%, #d4af37 60%, #8b6914 100%)', boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
+              <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(139,105,20,0.6)', background: 'linear-gradient(135deg, #d4af37 0%, #f5e17a 50%, #b8860b 100%)' }} />
+            </div>
           </div>
 
           {/* Dati cliente */}
           <div className="mt-8 mb-4">
-            <p className="text-white font-bold text-lg tracking-wide">
+            <p className="text-white font-bold text-lg tracking-wide" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
               {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
             </p>
-            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: 'rgba(212,175,55,0.7)' }}>
+            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: '#f5e17a' }}>
               {carta.codice}
             </p>
           </div>
@@ -1457,11 +1463,13 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
           {/* Saldo */}
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Saldo disponibile</p>
-              <p className="text-2xl font-bold" style={{ color: '#d4af37' }}>€ {carta.saldo.toFixed(2)}</p>
+              <p className="text-xs font-medium" style={{ color: 'rgba(245,225,122,0.7)' }}>Saldo disponibile</p>
+              <p className="text-3xl font-bold" style={{ color: '#f5e17a', textShadow: '0 0 12px rgba(212,175,55,0.5)' }}>€ {carta.saldo.toFixed(2)}</p>
             </div>
           </div>
         </div>
+        {/* Striscia oro in basso */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, #d4af37, #f5e17a, #d4af37, transparent)' }} />
       </div>
 
       {/* Frase risparmio */}
@@ -1493,27 +1501,45 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
             <p className="text-sm text-stone-400 text-center py-8">Nessun movimento</p>
           ) : (
             <div className="divide-y divide-stone-100">
-              {movimenti.map((m, i) => (
-                <div key={i} className="flex items-center gap-3 px-5 py-3.5">
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    m.tipo === 'ricarica' ? 'bg-emerald-50' : 'bg-stone-100'
-                  }`}>
-                    {m.tipo === 'ricarica'
-                      ? <ArrowUpCircle size={16} className="text-emerald-600" />
-                      : <ArrowDownCircle size={16} className="text-stone-400" />
-                    }
+              {movimenti.map((m, i) => {
+                const isFirst = i === 0 && m.tipo === 'ricarica';
+                const nota = isFirst
+                  ? null
+                  : m.note && m.note.toLowerCase() !== 'carica iniziale' ? m.note : null;
+                return (
+                  <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      m.tipo === 'ricarica' ? 'bg-green-100' : 'bg-stone-100'
+                    }`}>
+                      {m.tipo === 'ricarica'
+                        ? <ArrowUpCircle size={16} className="text-green-500" />
+                        : <ArrowDownCircle size={16} className="text-stone-400" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {isFirst ? (
+                        <p className="text-[11px] text-stone-400 font-medium">
+                          Data attivazione della carta:{' '}
+                          <span className="text-stone-600">
+                            {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}
+                          </span>
+                        </p>
+                      ) : (
+                        <>
+                          <p className={`text-sm font-bold ${m.tipo === 'ricarica' ? '' : 'text-stone-500'}`}
+                            style={m.tipo === 'ricarica' ? { color: '#16a34a', textShadow: '0 0 6px rgba(34,197,94,0.25)' } : {}}>
+                            {m.tipo === 'ricarica' ? '+' : '-'} € {m.importo.toFixed(2)}
+                          </p>
+                          <p className="text-[11px] text-stone-400">
+                            {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {nota ? ` · ${nota}` : ''}
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold ${m.tipo === 'ricarica' ? 'text-emerald-700' : 'text-stone-500'}`}>
-                      {m.tipo === 'ricarica' ? '+' : '-'} € {m.importo.toFixed(2)}
-                    </p>
-                    <p className="text-[11px] text-stone-400">
-                      {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      {m.note ? ` · ${m.note}` : ''}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
