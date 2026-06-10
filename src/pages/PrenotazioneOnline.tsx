@@ -1693,7 +1693,7 @@ function CartaUsaEGettaCard({
 
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
                 <p className="text-xs text-amber-800 leading-relaxed">
-                  <strong>Attenzione:</strong> dopo aver confermato, la carta sconto non sarà più tua. Se dovessi esserti sbagliata, contattaci e ti riassegneremo una nuova carta sconto.
+                  <strong>Attenzione:</strong> dopo aver confermato, la carta sconto non sarà più tua. Se dovessi esserti sbagliata/o, contattaci e ti riassegneremo una nuova carta sconto.
                 </p>
               </div>
 
