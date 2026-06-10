@@ -220,13 +220,16 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [showIosModal, setShowIosModal] = useState(false);
   const [showAndroidModal, setShowAndroidModal] = useState(false);
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
+  const [isSamsungBrowser, setIsSamsungBrowser] = useState(false);
 
   useEffect(() => {
     const ua = navigator.userAgent;
     const ios = /iphone|ipad|ipod/i.test(ua);
     const android = /android/i.test(ua);
+    const samsung = /SamsungBrowser/i.test(ua);
     const installed = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     setDeviceType(ios ? 'ios' : android ? 'android' : 'other');
+    setIsSamsungBrowser(samsung);
     // Show banner if not installed AND not permanently dismissed via "Ho installato"
     if (!installed && !localStorage.getItem('pwa_installata')) {
       setShowInstallBanner(true);
@@ -863,7 +866,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">1</div>
                 <div>
                   <p className="font-semibold text-stone-800 text-sm">Tocca il menu del browser</p>
-                  <p className="text-xs text-stone-500 mt-0.5">I tre puntini <span className="font-bold text-stone-700">⋮</span> in alto a destra nello schermo</p>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    I tre puntini <span className="font-bold text-stone-700">⋮</span>{' '}
+                    {isSamsungBrowser
+                      ? 'in basso a destra dello schermo'
+                      : 'in alto a destra dello schermo'
+                    }
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
