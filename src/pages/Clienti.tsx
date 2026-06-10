@@ -774,7 +774,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
                     </div>
                     {s.presentata_da_nome && (
                       <p className="text-xs text-emerald-600 font-medium mt-1">
-                        Portata da noi tramite {s.presentata_da_nome}
+                        Presentata da noi tramite {s.presentata_da_nome}
                       </p>
                     )}
                   </div>
@@ -928,7 +928,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
                   <p className="text-xs text-emerald-600 uppercase tracking-wide font-bold mb-1">Referente</p>
                   <p className="text-sm text-emerald-800 font-semibold">
-                    Portata in salone tramite {schedaAperta.presentata_da_nome}
+                    Presentata in salone tramite {schedaAperta.presentata_da_nome}
                   </p>
                 </div>
               )}
