@@ -512,31 +512,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       } catch { /* non bloccante */ }
     }
 
-    // Se ha inserito un codice Gift Pass, attivalo via REST diretto
+    // Se ha inserito un codice Gift Pass, attivalo tramite edge function (collega anche destinataria_cliente_id se esiste)
     if (giftPassCode.trim()) {
       try {
-        const anonHeadersJson = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' };
-        // Cerca il pass con questo codice non ancora attivato
-        const gpRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/gift_pass?codice=eq.${encodeURIComponent(giftPassCode.trim().toUpperCase())}&attivata_at=is.null&utilizzata=eq.false&select=id,tipo,scadenza_uso_giorni`,
-          { headers: anonHeaders }
-        );
-        const gpData = await gpRes.json();
-        if (Array.isArray(gpData) && gpData.length > 0) {
-          const gp = gpData[0];
-          const now = new Date().toISOString();
-          const scadenzaUsoAt = gp.tipo !== 'valore' && gp.scadenza_uso_giorni
-            ? (() => { const d = new Date(); d.setDate(d.getDate() + gp.scadenza_uso_giorni); return d.toISOString(); })()
-            : null;
-          await fetch(
-            `${SUPABASE_URL}/rest/v1/gift_pass?id=eq.${gp.id}`,
-            {
-              method: 'PATCH',
-              headers: { ...anonHeadersJson, 'Prefer': 'return=minimal' },
-              body: JSON.stringify({ attivata_at: now, ...(scadenzaUsoAt ? { scadenza_uso: scadenzaUsoAt } : {}), updated_at: now }),
-            }
-          );
-        }
+        await fetch(`${MIE_CARTE_URL}/attiva-gift-pass`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            telefono: telefono.trim(),
+            nome: nome.trim(),
+            cognome: cognome.trim(),
+            codice: giftPassCode.trim().toUpperCase(),
+          }),
+        });
       } catch { /* non bloccante */ }
     }
 

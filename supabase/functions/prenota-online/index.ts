@@ -440,6 +440,32 @@ Deno.serve(async (req: Request) => {
 
       if (insertErr) return json({ error: "Errore nel salvataggio della richiesta." }, 500);
 
+      // Se la cliente non è in rubrica, crea scheda da confermare (fire-and-forget)
+      if (!cliente) {
+        (async () => {
+          try {
+            const telTrim = telefono.trim();
+            const { data: existingScheda } = await sb
+              .from("schede_clienti_da_confermare")
+              .select("id")
+              .eq("user_id", user_id)
+              .eq("telefono", telTrim)
+              .eq("stato", "in_attesa")
+              .maybeSingle();
+
+            if (!existingScheda) {
+              await sb.from("schede_clienti_da_confermare").insert({
+                user_id,
+                nome: nome.trim(),
+                cognome: cognome.trim(),
+                telefono: telTrim,
+                stato: "in_attesa",
+              });
+            }
+          } catch { /* non bloccante */ }
+        })();
+      }
+
       // Send push notification — truly fire-and-forget, must not block the response
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

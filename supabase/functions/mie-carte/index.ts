@@ -155,15 +155,16 @@ Deno.serve(async (req: Request) => {
       tipo: "usa_e_getta" as const,
     }));
 
-    // Gift Pass — acquistati dalla cliente (da donare: attivi, non ancora attivati)
+    // Gift Pass — acquistati dalla cliente (da donare: attivi, non ancora attivati, non ancora contrassegnati come donati)
     // Primary: by cliente_id (compratore)
     const { data: gpByClienteId } = await sb
       .from("gift_pass")
-      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata, donata")
       .eq("cliente_id", cliente.id)
       .eq("user_id", userId)
       .eq("utilizzata", false)
       .eq("attiva", true)
+      .eq("donata", false)
       .is("attivata_at", null);
 
     // Fallback: find via fiche di acquisto (handles records where cliente_id is null)
@@ -180,11 +181,12 @@ Deno.serve(async (req: Request) => {
     if (ficheIds.length > 0) {
       const { data } = await sb
         .from("gift_pass")
-        .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata")
+        .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata, donata")
         .in("fiche_acquisto_id", ficheIds)
         .eq("user_id", userId)
         .eq("utilizzata", false)
         .eq("attiva", true)
+        .eq("donata", false)
         .is("attivata_at", null);
       gpByFiche = (data ?? []) as Array<Record<string, unknown>>;
     }
@@ -445,6 +447,94 @@ Deno.serve(async (req: Request) => {
       }
 
       return json({ gift_pass_error: giftPassError, carta_sconto_error: cartaScontoError });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // POST /attiva-gift-pass — attiva il gift pass e collega destinataria_cliente_id se la cliente esiste già
+  if (req.method === "POST" && path === "/attiva-gift-pass") {
+    try {
+      const body = await req.json().catch(() => null);
+      if (!body) return json({ error: "Body non valido" }, 400);
+
+      const { user_id, telefono, nome, cognome, codice } = body;
+      if (!user_id || !telefono || !codice) return json({ error: "Parametri mancanti" }, 400);
+
+      const telNorm = normalizePhone(telefono);
+
+      // Cerca il gift pass per codice (non ancora attivato e non utilizzato)
+      const { data: gp } = await sb
+        .from("gift_pass")
+        .select("id, tipo, scadenza_uso_giorni")
+        .eq("user_id", user_id)
+        .eq("codice", String(codice).toUpperCase())
+        .is("attivata_at", null)
+        .eq("utilizzata", false)
+        .maybeSingle();
+
+      if (!gp) return json({ error: "Gift pass non trovato o già attivato" }, 404);
+
+      // Cerca la cliente per telefono (potrebbe già esistere in rubrica)
+      const { data: clienti } = await sb
+        .from("clienti")
+        .select("id, nome, cognome, telefono")
+        .eq("user_id", user_id)
+        .is("deleted_at", null);
+
+      const cliente = (clienti ?? []).find((c: { telefono?: string }) =>
+        normalizePhone(c.telefono ?? "") === telNorm
+      );
+
+      const now = new Date().toISOString();
+      const scadenzaUsoAt = gp.tipo !== "valore" && gp.scadenza_uso_giorni
+        ? (() => { const d = new Date(); d.setDate(d.getDate() + (gp.scadenza_uso_giorni as number)); return d.toISOString(); })()
+        : null;
+
+      const patch: Record<string, unknown> = {
+        attivata_at: now,
+        updated_at: now,
+        ...(scadenzaUsoAt ? { scadenza_uso: scadenzaUsoAt } : {}),
+        ...(cliente ? { destinataria_cliente_id: cliente.id } : {}),
+      };
+
+      const { error: patchErr } = await sb
+        .from("gift_pass")
+        .update(patch)
+        .eq("id", gp.id);
+
+      if (patchErr) return json({ error: "Errore nell'attivazione" }, 500);
+
+      // Se la cliente non esiste in rubrica, crea/aggiorna scheda da confermare con il codice gift pass
+      if (!cliente) {
+        const { data: existingScheda } = await sb
+          .from("schede_clienti_da_confermare")
+          .select("id, codice_gift_pass")
+          .eq("user_id", user_id)
+          .eq("telefono", telefono.trim())
+          .eq("stato", "in_attesa")
+          .maybeSingle();
+
+        if (existingScheda) {
+          if (!existingScheda.codice_gift_pass) {
+            await sb.from("schede_clienti_da_confermare")
+              .update({ codice_gift_pass: String(codice).toUpperCase() })
+              .eq("id", existingScheda.id);
+          }
+        } else {
+          await sb.from("schede_clienti_da_confermare").insert({
+            user_id,
+            nome: nome ?? "",
+            cognome: cognome ?? "",
+            telefono: telefono.trim(),
+            stato: "in_attesa",
+            codice_gift_pass: String(codice).toUpperCase(),
+          });
+        }
+      }
+
+      return json({ success: true, cliente_collegata: !!cliente });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Errore interno";
       return json({ error: msg }, 500);

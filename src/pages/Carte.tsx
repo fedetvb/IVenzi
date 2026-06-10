@@ -1891,7 +1891,11 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
             {copied ? 'Copiato!' : 'Copia'}
           </button>
           {hasDestinaratia && hasPhone && (
-            <button onClick={() => { apriWhatsApp(gp.destinataria_telefono, messaggio); onClose(); }}
+            <button onClick={async () => {
+              await dbUpdate({ table: 'gift_pass', id: gp.id, data: { donata: true } }).catch(() => {});
+              apriWhatsApp(gp.destinataria_telefono, messaggio);
+              onClose();
+            }}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors">
               <Send size={14} />
               WhatsApp
