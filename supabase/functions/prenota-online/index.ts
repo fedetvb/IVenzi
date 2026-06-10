@@ -265,14 +265,136 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // GET /disponibilita-chiunque?user_id=...&data=YYYY-MM-DD&durata_minuti=...
+  // Returns union of free slots across all active hairdressers + map of slot → free parrucchiere IDs
+  if (req.method === "GET" && path === "/disponibilita-chiunque") {
+    try {
+      const userId = url.searchParams.get("user_id");
+      const data = url.searchParams.get("data");
+      const durata = parseInt(url.searchParams.get("durata_minuti") ?? "30");
+
+      if (!userId || !data) return json({ error: "Parametri mancanti" }, 400);
+
+      const { dayStart, dayEnd } = italianDayUtcBounds(data);
+
+      const [parrRes, appRes, assenzeRes, richiesteRes] = await Promise.all([
+        sb.from("parrucchieri").select("id,nome,colore").eq("user_id", userId).eq("attivo", true).order("nome"),
+        sb.from("appuntamenti")
+          .select("parrucchiere_id,data_ora,durata_minuti")
+          .eq("user_id", userId)
+          .gte("data_ora", dayStart)
+          .lte("data_ora", dayEnd)
+          .neq("stato", "cancellato"),
+        sb.from("assenze_parrucchieri")
+          .select("parrucchiere_id,ora_inizio,data_inizio,data_fine")
+          .eq("user_id", userId)
+          .lte("data_inizio", data)
+          .gte("data_fine", data),
+        sb.from("richieste_appuntamento")
+          .select("parrucchiere_id,data_ora,parrucchiere2_id,data_ora2,chiunque,parrucchieri_candidati")
+          .eq("user_id", userId)
+          .eq("stato", "in_attesa")
+          .gte("data_ora", dayStart)
+          .lte("data_ora", dayEnd),
+      ]);
+
+      const allParr: { id: string; nome: string; colore: string }[] = parrRes.data ?? [];
+
+      // Build busy intervals per parrucchiere
+      const busyByParr: Record<string, { start: number; end: number }[]> = {};
+
+      for (const a of appRes.data ?? []) {
+        if (!a.parrucchiere_id) continue;
+        const t = new Date(a.data_ora);
+        if (toItalianDateStr(t) !== data) continue;
+        const s = toItalianMinutes(t);
+        if (!busyByParr[a.parrucchiere_id]) busyByParr[a.parrucchiere_id] = [];
+        busyByParr[a.parrucchiere_id].push({ start: s, end: s + (a.durata_minuti ?? 30) });
+      }
+
+      for (const r of richiesteRes.data ?? []) {
+        if (r.chiunque && Array.isArray(r.parrucchieri_candidati)) {
+          // Block the slot for each candidate parrucchiere
+          const t = new Date(r.data_ora);
+          if (toItalianDateStr(t) === data) {
+            const s = toItalianMinutes(t);
+            for (const pid of r.parrucchieri_candidati as string[]) {
+              if (!busyByParr[pid]) busyByParr[pid] = [];
+              busyByParr[pid].push({ start: s, end: s + 90 });
+            }
+          }
+        } else {
+          if (r.parrucchiere_id) {
+            const t = new Date(r.data_ora);
+            if (toItalianDateStr(t) === data) {
+              const s = toItalianMinutes(t);
+              if (!busyByParr[r.parrucchiere_id]) busyByParr[r.parrucchiere_id] = [];
+              busyByParr[r.parrucchiere_id].push({ start: s, end: s + 90 });
+            }
+          }
+          if (r.parrucchiere2_id && r.data_ora2) {
+            const t = new Date(r.data_ora2);
+            if (toItalianDateStr(t) === data) {
+              const s = toItalianMinutes(t);
+              if (!busyByParr[r.parrucchiere2_id]) busyByParr[r.parrucchiere2_id] = [];
+              busyByParr[r.parrucchiere2_id].push({ start: s, end: s + 90 });
+            }
+          }
+        }
+      }
+
+      // Full-day absences: exclude parrucchieri completely absent
+      const fullDayAbsent = new Set<string>();
+      const partialAbsences: Record<string, number> = {}; // parrId → minutes from when they're absent
+      for (const a of assenzeRes.data ?? []) {
+        if (!a.ora_inizio) {
+          fullDayAbsent.add(a.parrucchiere_id);
+        } else {
+          const [ah, am] = a.ora_inizio.substring(0, 5).split(":").map(Number);
+          partialAbsences[a.parrucchiere_id] = ah * 60 + am;
+        }
+      }
+
+      const availableParr = allParr.filter(p => !fullDayAbsent.has(p.id));
+
+      // For each 15-min slot, find which parrucchieri are free
+      const parrucchieriPerSlot: Record<string, string[]> = {};
+      const slotDisponibili: string[] = [];
+
+      for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
+        const freeParr = availableParr.filter(p => {
+          // Check partial absence
+          if (partialAbsences[p.id] !== undefined && m >= partialAbsences[p.id]) return false;
+          const busy = busyByParr[p.id] ?? [];
+          return !busy.some((b) => m < b.end && m + durata > b.start);
+        });
+        if (freeParr.length > 0) {
+          const hh = String(Math.floor(m / 60)).padStart(2, "0");
+          const mm2 = String(m % 60).padStart(2, "0");
+          const slotKey = `${hh}:${mm2}`;
+          slotDisponibili.push(slotKey);
+          parrucchieriPerSlot[slotKey] = freeParr.map(p => p.id);
+        }
+      }
+
+      return json({ slot_disponibili: slotDisponibili, parrucchieri_per_slot: parrucchieriPerSlot });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg, slot_disponibili: [], parrucchieri_per_slot: {} }, 500);
+    }
+  }
+
   // POST /richiesta — submit booking request
   if (req.method === "POST" && path === "/richiesta") {
     try {
       const body = await req.json().catch(() => null);
       if (!body) return json({ error: "Body non valido" }, 400);
 
-      const { user_id, nome, cognome, telefono, parrucchiere_id, servizio_id, data_ora, parrucchiere2_id, servizio2_id, data_ora2 } = body;
-      if (!user_id || !nome || !cognome || !telefono || !parrucchiere_id || !servizio_id || !data_ora) {
+      const { user_id, nome, cognome, telefono, parrucchiere_id, servizio_id, data_ora, parrucchiere2_id, servizio2_id, data_ora2, chiunque, parrucchieri_candidati } = body;
+      if (!user_id || !nome || !cognome || !telefono || !servizio_id || !data_ora) {
+        return json({ error: "Dati obbligatori mancanti" }, 400);
+      }
+      if (!chiunque && !parrucchiere_id) {
         return json({ error: "Dati obbligatori mancanti" }, 400);
       }
 
@@ -306,12 +428,14 @@ Deno.serve(async (req: Request) => {
         cognome: cognome.trim(),
         telefono: telefono.trim(),
         cliente_id: cliente?.id ?? null,
-        parrucchiere_id,
+        parrucchiere_id: parrucchiere_id ?? null,
         servizio_id,
         data_ora,
         parrucchiere2_id: parrucchiere2_id ?? null,
         servizio2_id: servizio2_id ?? null,
         data_ora2: data_ora2 ?? null,
+        chiunque: chiunque ? true : false,
+        parrucchieri_candidati: chiunque && Array.isArray(parrucchieri_candidati) ? parrucchieri_candidati : null,
       });
 
       if (insertErr) return json({ error: "Errore nel salvataggio della richiesta." }, 500);

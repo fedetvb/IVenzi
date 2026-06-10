@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
@@ -151,6 +151,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   // Selections
   const [parrucchiere, setParrucchiere] = useState<Parrucchiere | null>(null);
+  const [chiunque, setChiunque] = useState(false);
   const [dataSelezionata, setDataSelezionata] = useState<string>('');
   const [oraSelezionata, setOraSelezionata] = useState<string>('');
   const [servizio, setServizio] = useState<Servizio | null>(null);
@@ -162,6 +163,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [parrLiberi, setParrLiberi] = useState<Parrucchiere[]>([]);
   const [loadingParr2, setLoadingParr2] = useState(false);
   const [parrPrimarioOccupato, setParrPrimarioOccupato] = useState(false);
+  const [parrucchieriPerSlot, setParrucchieriPerSlot] = useState<Record<string, string[]>>({});
+  const [parrucchieriCandidati, setParrucchieriCandidati] = useState<string[]>([]);
 
   // Calendar nav
   const [calMonth, setCalMonth] = useState(new Date());
@@ -306,6 +309,23 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       setLoadingSlot(false);
     }
   }, [userId]);
+
+  async function loadSlotsChiunque(data: string, durata: number) {
+    setLoadingSlot(true);
+    setSlotDisponibili([]);
+    setParrucchieriPerSlot({});
+    try {
+      const res = await fetch(`${EDGE_URL}/disponibilita-chiunque?user_id=${userId}&data=${data}&durata_minuti=${durata}`);
+      const d = await res.json();
+      setSlotDisponibili(d.slot_disponibili ?? []);
+      setParrucchieriPerSlot(d.parrucchieri_per_slot ?? {});
+    } catch {
+      setSlotDisponibili([]);
+      setParrucchieriPerSlot({});
+    } finally {
+      setLoadingSlot(false);
+    }
+  }
 
   async function loadParrLiberiPerAbbinato(
     data: string,
@@ -540,11 +560,28 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   function handleParrucchiereSelect(p: Parrucchiere) {
     setParrucchiere(p);
+    setChiunque(false);
     setDataSelezionata('');
     setOraSelezionata('');
     setServizio(null);
     setParrucchiere2(null);
     setParrPrimarioOccupato(false);
+    setParrucchieriPerSlot({});
+    setParrucchieriCandidati([]);
+    setCalMonth(new Date());
+    setStep('data');
+  }
+
+  function handleChiunqueSelect() {
+    setParrucchiere(null);
+    setChiunque(true);
+    setDataSelezionata('');
+    setOraSelezionata('');
+    setServizio(null);
+    setParrucchiere2(null);
+    setParrPrimarioOccupato(false);
+    setParrucchieriPerSlot({});
+    setParrucchieriCandidati([]);
     setCalMonth(new Date());
     setStep('data');
   }
@@ -566,7 +603,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setOraSelezionata('');
     setParrucchiere2(null);
     setParrPrimarioOccupato(false);
-    if (parrucchiere && dataSelezionata) {
+    if (chiunque && dataSelezionata) {
+      loadSlotsChiunque(dataSelezionata, s.durata_minuti);
+    } else if (parrucchiere && dataSelezionata) {
       loadSlots(parrucchiere.id, dataSelezionata, s.durata_minuti);
     }
     setStep('ora');
@@ -575,6 +614,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   async function handleOraSelect(ora: string) {
     setOraSelezionata(ora);
     if (!servizio) return;
+
+    if (chiunque) {
+      setParrucchieriCandidati(parrucchieriPerSlot[ora] ?? []);
+      setStep('riepilogo');
+      return;
+    }
 
     if (servizio.servizio_abbinato_online_id) {
       const servAbbinato =
@@ -596,7 +641,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }
 
   async function handleSubmit() {
-    if (!parrucchiere || !servizio || !dataSelezionata || !oraSelezionata) return;
+    if (!servizio || !dataSelezionata || !oraSelezionata) return;
+    if (!chiunque && !parrucchiere) return;
     setSubmitting(true);
     setSubmitError('');
 
@@ -604,24 +650,26 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const [h, m] = oraSelezionata.split(':').map(Number);
     const dataOraBase = new Date(`${dataSelezionata}T${pad(h)}:${pad(m)}:00`);
 
-    // data_ora2: after first service ends
+    // data_ora2: after first service ends (only for non-chiunque abbinato)
     let dataOra2: string | null = null;
-    if (parrucchiere2 && servizio.servizio_abbinato_online_id) {
+    if (!chiunque && parrucchiere2 && servizio.servizio_abbinato_online_id) {
       const endMs = dataOraBase.getTime() + servizio.durata_minuti * 60000;
       dataOra2 = new Date(endMs).toISOString();
     }
 
-    const body = {
+    const body: Record<string, unknown> = {
       user_id: userId,
       nome: nome.trim(),
       cognome: cognome.trim(),
       telefono: telefono.trim(),
-      parrucchiere_id: parrucchiere.id,
+      parrucchiere_id: chiunque ? null : parrucchiere!.id,
       servizio_id: servizio.id,
       data_ora: dataOraBase.toISOString(),
-      parrucchiere2_id: parrucchiere2?.id ?? null,
-      servizio2_id: servizio.servizio_abbinato_online_id ?? null,
+      parrucchiere2_id: (!chiunque && parrucchiere2?.id) ? parrucchiere2.id : null,
+      servizio2_id: (!chiunque && servizio.servizio_abbinato_online_id) ? servizio.servizio_abbinato_online_id : null,
       data_ora2: dataOra2,
+      chiunque: chiunque || false,
+      parrucchieri_candidati: chiunque ? parrucchieriCandidati : null,
     };
 
     try {
@@ -1027,14 +1075,27 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   <ChevronRight size={16} className="ml-auto text-stone-400" />
                 </button>
               ))}
-              <BackBtn onClick={() => setStep('dati')} />
+              <button
+                onClick={handleChiunqueSelect}
+                className="w-full flex items-center gap-4 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 hover:border-amber-400 hover:shadow-sm transition-all text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-amber-200 flex items-center justify-center flex-shrink-0">
+                  <Users size={20} className="text-amber-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-amber-800">Chiunque di noi</span>
+                  <p className="text-xs text-amber-600 mt-0.5">Vedremo noi chi è disponibile</p>
+                </div>
+                <ChevronRight size={16} className="ml-auto text-amber-500" />
+              </button>
+              <BackBtn onClick={() => setStep('scelta')} />
             </div>
           </Card>
         )}
 
         {/* STEP: Data */}
         {step === 'data' && (
-          <Card title="Scegli la data" subtitle={parrucchiere?.nome}>
+          <Card title="Scegli la data" subtitle={chiunque ? 'Chiunque di noi' : parrucchiere?.nome}>
             <div>
               {/* Calendar header */}
               <div className="flex items-center justify-between mb-4">
@@ -1091,7 +1152,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
         {/* STEP: Servizio */}
         {step === 'servizio' && (
-          <Card title="Scegli il servizio" subtitle={`${parrucchiere?.nome} · ${dataSelezionata ? dateLabel(dataSelezionata) : ''}`}>
+          <Card title="Scegli il servizio" subtitle={`${chiunque ? 'Chiunque di noi' : parrucchiere?.nome} · ${dataSelezionata ? dateLabel(dataSelezionata) : ''}`}>
             <div className="space-y-3">
               {isNuovaScheda && (
                 <div className="mb-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
@@ -1137,7 +1198,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
         {/* STEP: Ora */}
         {step === 'ora' && (
-          <Card title="Scegli l'orario" subtitle={`${parrucchiere?.nome} · ${dateLabel(dataSelezionata)}`}>
+          <Card title="Scegli l'orario" subtitle={`${chiunque ? 'Chiunque di noi' : parrucchiere?.nome} · ${dateLabel(dataSelezionata)}`}>
             {loadingSlot ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-7 h-7 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
@@ -1239,10 +1300,17 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   <Calendar size={14} />
                   <span className="text-xs font-semibold uppercase tracking-wide">Appuntamento</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: parrucchiere?.colore }} />
-                  <span className="font-medium text-stone-800">{parrucchiere?.nome}</span>
-                </div>
+                {chiunque ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span className="font-medium text-amber-800">Chiunque di noi</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: parrucchiere?.colore }} />
+                    <span className="font-medium text-stone-800">{parrucchiere?.nome}</span>
+                  </div>
+                )}
                 <p className="text-sm text-stone-600">{servizio?.nome}</p>
                 <p className="text-sm text-stone-500 flex items-center gap-1.5">
                   <Clock size={12} />
@@ -1292,7 +1360,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   <>Invia richiesta<ChevronRight size={18} /></>
                 )}
               </button>
-              <BackBtn onClick={() => setStep(servizioAbbinato ? 'abbinato' : 'ora')} />
+              <BackBtn onClick={() => setStep(chiunque ? 'ora' : (servizioAbbinato ? 'abbinato' : 'ora'))} />
             </div>
           </Card>
         )}

@@ -10,7 +10,7 @@ interface RichiestaAppuntamento {
   nome: string;
   cognome: string;
   telefono: string;
-  parrucchiere_id: string;
+  parrucchiere_id: string | null;
   servizio_id: string;
   data_ora: string;
   parrucchiere2_id: string | null;
@@ -18,6 +18,8 @@ interface RichiestaAppuntamento {
   data_ora2: string | null;
   stato: 'in_attesa' | 'confermata' | 'rifiutata';
   cliente_id: string | null;
+  chiunque: boolean;
+  parrucchieri_candidati: string[] | null;
   servizio_nome?: string;
   servizio2_nome?: string;
   durata_minuti?: number;
@@ -110,7 +112,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [catalogoPosa, setCatalogoPosa] = useState<Map<string, { inizio_posa: number; durata_posa: number }>>(new Map());
 
   const [richieste, setRichieste] = useState<RichiestaAppuntamento[]>([]);
-  const [richiestaModal, setRichiestaModal] = useState<{ open: boolean; r: RichiestaAppuntamento | null }>({ open: false, r: null });
+  const [richiestaModal, setRichiestaModal] = useState<{ open: boolean; r: RichiestaAppuntamento | null; parrucchiereAssegnatoId?: string }>({ open: false, r: null });
   const [processingRichiesta, setProcessingRichiesta] = useState(false);
   const [whatsappPreview, setWhatsappPreview] = useState<{ open: boolean; testo: string; telefono: string } | null>(null);
   const [wpInviaPosizione, setWpInviaPosizione] = useState(false);
@@ -244,7 +246,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       nome: r.nome as string,
       cognome: r.cognome as string,
       telefono: r.telefono as string,
-      parrucchiere_id: r.parrucchiere_id as string,
+      parrucchiere_id: r.parrucchiere_id as string | null,
       servizio_id: r.servizio_id as string,
       data_ora: r.data_ora as string,
       parrucchiere2_id: r.parrucchiere2_id as string | null,
@@ -252,6 +254,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       data_ora2: r.data_ora2 as string | null,
       stato: r.stato as 'in_attesa',
       cliente_id: r.cliente_id as string | null,
+      chiunque: (r.chiunque as boolean) ?? false,
+      parrucchieri_candidati: (r.parrucchieri_candidati as string[] | null) ?? null,
       servizio_nome: (r.trattamenti_catalogo_main as { nome?: string } | null)?.nome,
       servizio2_nome: (r.trattamenti_catalogo_2 as { nome?: string } | null)?.nome,
       durata_minuti: (r.trattamenti_catalogo_main as { durata_minuti?: number } | null)?.durata_minuti ?? 60,
@@ -326,7 +330,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     return filtered;
   }
 
-  async function confermaRichiesta(r: RichiestaAppuntamento) {
+  async function confermaRichiesta(r: RichiestaAppuntamento, parrucchiereAssegnatoId?: string) {
     setProcessingRichiesta(true);
 
     // Get message templates from impostazioni
@@ -417,13 +421,16 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       }
     }
 
+    // Per richieste "chiunque", usa il parrucchiere della colonna cliccata
+    const effectiveParrId = r.chiunque ? (parrucchiereAssegnatoId ?? r.parrucchiere_id) : r.parrucchiere_id;
+
     // Crea appuntamento con lo stesso flusso di AppuntamentoModal.handleSave
     // (dbInsert gestisce sia SQLite/Electron che IndexedDB+Supabase/browser)
     const { data: app1Data } = await dbInsert({
       table: 'appuntamenti',
       data: {
         cliente_id: clienteId,
-        parrucchiere_id: r.parrucchiere_id,
+        parrucchiere_id: effectiveParrId,
         data_ora: r.data_ora,
         durata_minuti: r.durata_minuti ?? 60,
         stato: 'confermato',
@@ -1087,6 +1094,42 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
                     {/* Pending booking request blocks (blinking) */}
                     {richieste.flatMap(r => {
+                      if (r.chiunque) {
+                        // "Chiunque di noi": render yellow block in each candidate parrucchiere column
+                        if (!r.parrucchieri_candidati?.includes(p.id)) return [];
+                        const t = new Date(r.data_ora);
+                        const startMin = t.getHours() * 60 + t.getMinutes();
+                        const dayStart = START_HOUR * 60;
+                        const topPx = Math.max(0, ((startMin - dayStart) / SLOT_DURATION) * slotHeight);
+                        const heightPx = Math.max(((r.durata_minuti ?? 60) / SLOT_DURATION) * slotHeight, slotHeight * 2);
+                        return [(
+                          <div
+                            key={`r-${r.id}-chiunque-${p.id}`}
+                            className="absolute left-1 right-1 rounded-lg overflow-hidden cursor-pointer z-20 border-2 border-dashed border-amber-400"
+                            style={{
+                              top: topPx + 1,
+                              height: heightPx - 2,
+                              background: 'rgba(251,191,36,0.15)',
+                              animation: 'richiestaBlinking 1.5s ease-in-out infinite',
+                            }}
+                            onClick={() => setRichiestaModal({ open: true, r, parrucchiereAssegnatoId: p.id })}
+                          >
+                            <div className="px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
+                              <div>
+                                <p className="font-bold text-amber-900 leading-tight truncate" style={{ fontSize: `${0.72 * (fontSize / 100)}rem` }}>
+                                  {r.nome} {r.cognome}
+                                </p>
+                                {r.servizio_nome && (
+                                  <p className="text-amber-700 truncate" style={{ fontSize: `${0.62 * (fontSize / 100)}rem` }}>{r.servizio_nome}</p>
+                                )}
+                              </div>
+                              <p className="text-amber-600 font-semibold" style={{ fontSize: `${0.6 * (fontSize / 100)}rem` }}>
+                                {t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · Chiunque
+                              </p>
+                            </div>
+                          </div>
+                        )];
+                      }
                       const slots: { isPrimary: boolean }[] = [];
                       if (r.parrucchiere_id === p.id) slots.push({ isPrimary: true });
                       if (r.parrucchiere2_id === p.id && r.data_ora2) slots.push({ isPrimary: false });
@@ -1430,7 +1473,10 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       {/* Richiesta prenotazione online modal */}
       {richiestaModal.open && richiestaModal.r && (() => {
         const r = richiestaModal.r;
-        const parrPrimario = parrucchieri.find(p => p.id === r.parrucchiere_id);
+        const parrAssegnatoId = richiestaModal.parrucchiereAssegnatoId;
+        const parrPrimario = r.chiunque
+          ? parrucchieri.find(p => p.id === parrAssegnatoId)
+          : parrucchieri.find(p => p.id === r.parrucchiere_id);
         const parrSecondario = r.parrucchiere2_id ? parrucchieri.find(p => p.id === r.parrucchiere2_id) : null;
         const dataFmt = new Date(r.data_ora).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
         const oraFmt = new Date(r.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -1439,15 +1485,17 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden">
               {/* Header */}
-              <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <CalendarClock size={18} className="text-emerald-600" />
+              <div className={`${r.chiunque ? 'bg-amber-50 border-b border-amber-200' : 'bg-emerald-50 border-b border-emerald-200'} px-6 py-4 flex items-center gap-3`}>
+                <div className={`w-10 h-10 rounded-2xl ${r.chiunque ? 'bg-amber-100' : 'bg-emerald-100'} flex items-center justify-center flex-shrink-0`}>
+                  <CalendarClock size={18} className={r.chiunque ? 'text-amber-600' : 'text-emerald-600'} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-emerald-900">Richiesta di prenotazione</p>
-                  <p className="text-xs text-emerald-600">{dataFmt} alle {oraFmt}</p>
+                  <p className={`font-bold ${r.chiunque ? 'text-amber-900' : 'text-emerald-900'}`}>
+                    {r.chiunque ? 'Richiesta — Chiunque di noi' : 'Richiesta di prenotazione'}
+                  </p>
+                  <p className={`text-xs ${r.chiunque ? 'text-amber-600' : 'text-emerald-600'}`}>{dataFmt} alle {oraFmt}</p>
                 </div>
-                <button onClick={() => setRichiestaModal({ open: false, r: null })} className="text-emerald-400 hover:text-emerald-700">
+                <button onClick={() => setRichiestaModal({ open: false, r: null })} className={r.chiunque ? 'text-amber-400 hover:text-amber-700' : 'text-emerald-400 hover:text-emerald-700'}>
                   <X size={18} />
                 </button>
               </div>
@@ -1468,10 +1516,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                 </div>
 
                 {/* Appointment 1 */}
-                <div className="bg-stone-50 rounded-2xl p-4 space-y-1.5">
+                <div className={`${r.chiunque ? 'bg-amber-50 border border-amber-200' : 'bg-stone-50'} rounded-2xl p-4 space-y-1.5`}>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: parrPrimario?.colore ?? '#ccc' }} />
-                    <span className="font-medium text-stone-700 text-sm">{parrPrimario?.nome}</span>
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: parrPrimario?.colore ?? (r.chiunque ? '#F59E0B' : '#ccc') }} />
+                    <span className="font-medium text-stone-700 text-sm">
+                      {r.chiunque ? `Assegna a ${parrPrimario?.nome ?? '...'}` : parrPrimario?.nome}
+                    </span>
+                    {r.chiunque && <span className="text-xs bg-amber-200 text-amber-800 font-medium px-2 py-0.5 rounded-full ml-auto">Chiunque</span>}
                   </div>
                   <p className="text-sm text-stone-600 font-medium">{r.servizio_nome}</p>
                   <p className="text-xs text-stone-400">{oraFmt} · {r.durata_minuti} min</p>
@@ -1501,9 +1552,9 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                   <X size={16} /> Rifiuta
                 </button>
                 <button
-                  onClick={() => confermaRichiesta(r)}
+                  onClick={() => confermaRichiesta(r, parrAssegnatoId)}
                   disabled={processingRichiesta}
-                  className="py-3.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className={`py-3.5 rounded-2xl ${r.chiunque ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'} text-white font-semibold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}
                 >
                   {processingRichiesta ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
