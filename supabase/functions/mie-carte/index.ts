@@ -155,8 +155,9 @@ Deno.serve(async (req: Request) => {
       tipo: "usa_e_getta" as const,
     }));
 
-    // Gift Pass — acquistati dalla cliente (da donare: attivi, non ancora attivati dalla destinataria)
-    const { data: gpDonatoreRaw } = await sb
+    // Gift Pass — acquistati dalla cliente (da donare: attivi, non ancora attivati)
+    // Primary: by cliente_id (compratore)
+    const { data: gpByClienteId } = await sb
       .from("gift_pass")
       .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
       .eq("cliente_id", cliente.id)
@@ -165,8 +166,38 @@ Deno.serve(async (req: Request) => {
       .eq("attiva", true)
       .is("attivata_at", null);
 
+    // Fallback: find via fiche di acquisto (handles records where cliente_id is null)
+    const { data: fichesGiftPass } = await sb
+      .from("fiches")
+      .select("id")
+      .eq("cliente_id", cliente.id)
+      .eq("user_id", userId)
+      .eq("tipo_fiche", "gift_pass")
+      .is("deleted_at", null);
+
+    const ficheIds = (fichesGiftPass ?? []).map((f: { id: string }) => f.id);
+    let gpByFiche: Array<Record<string, unknown>> = [];
+    if (ficheIds.length > 0) {
+      const { data } = await sb
+        .from("gift_pass")
+        .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+        .in("fiche_acquisto_id", ficheIds)
+        .eq("user_id", userId)
+        .eq("utilizzata", false)
+        .eq("attiva", true)
+        .is("attivata_at", null);
+      gpByFiche = (data ?? []) as Array<Record<string, unknown>>;
+    }
+
+    const seenDonatoreIds = new Set<string>((gpByClienteId ?? []).map((gp: { id: string }) => gp.id));
+    const gpDonatoreRaw = [
+      ...((gpByClienteId ?? []) as Array<Record<string, unknown>>),
+      ...gpByFiche.filter(gp => !seenDonatoreIds.has(gp.id as string)),
+    ];
+
     // Gift Pass — ricevuti dalla cliente (destinataria, attivi, non utilizzati)
-    const { data: gpRiceventeRaw } = await sb
+    // Primary: by destinataria_cliente_id
+    const { data: gpRiceventeById } = await sb
       .from("gift_pass")
       .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
       .eq("destinataria_cliente_id", cliente.id)
@@ -174,12 +205,33 @@ Deno.serve(async (req: Request) => {
       .eq("utilizzata", false)
       .eq("attiva", true);
 
+    // Fallback: by destinataria_telefono when destinataria_cliente_id is null
+    const { data: gpRiceventeByPhoneRaw } = await sb
+      .from("gift_pass")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+      .eq("user_id", userId)
+      .eq("utilizzata", false)
+      .eq("attiva", true)
+      .is("destinataria_cliente_id", null);
+
+    const gpRiceventeByPhone = ((gpRiceventeByPhoneRaw ?? []) as Array<Record<string, unknown>>)
+      .filter(gp => {
+        const gpTelNorm = normalizePhone(String(gp.destinataria_telefono ?? ""));
+        return gpTelNorm && telNorm && gpTelNorm === telNorm;
+      });
+
+    const seenRiceventeIds = new Set<string>((gpRiceventeById ?? []).map((gp: { id: string }) => gp.id));
+    const gpRiceventeRaw = [
+      ...((gpRiceventeById ?? []) as Array<Record<string, unknown>>),
+      ...gpRiceventeByPhone.filter(gp => !seenRiceventeIds.has(gp.id as string)),
+    ];
+
     const now = new Date();
-    const giftPassDonatore = (gpDonatoreRaw ?? []).map((gp: Record<string, unknown>) => ({
+    const giftPassDonatore = gpDonatoreRaw.map((gp: Record<string, unknown>) => ({
       ...gp,
       tipo_carta: "gift_pass_donatore" as const,
     }));
-    const giftPassRicevente = ((gpRiceventeRaw ?? []) as Array<Record<string, unknown> & { scadenza_uso_at?: string | null; tipo?: string }>)
+    const giftPassRicevente = (gpRiceventeRaw as Array<Record<string, unknown> & { scadenza_uso_at?: string | null; tipo?: string }>)
       .filter(gp => !(gp.tipo !== "valore" && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at as string) < now))
       .map(gp => ({
         ...gp,
