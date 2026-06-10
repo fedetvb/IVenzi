@@ -1978,7 +1978,11 @@ function CartaUsaEGettaCard({
   const maps = salone['azienda_google_maps'] ?? '';
   const sito = salone['azienda_sito_prenotazioni'] ?? '';
 
-  const msgBase = `Ciao 😊 Stefano e Federico del salone "${nomeSalone}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme alla mia carta sconto monouso per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${carta.codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${telefono} oppure richiedi una consulenza direttamente online su ${sito}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${maps}\n\nSpero che ti concederai questo momento di totale relax.`;
+  const scontoDesc = carta.tipo_sconto === 'percentuale'
+    ? `${carta.valore_sconto}%`
+    : `€ ${carta.valore_sconto?.toFixed(2)}`;
+
+  const msgBase = `Ciao 😊 Stefano e Federico del salone "${nomeSalone}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme alla mia carta sconto monouso per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${carta.codice}\nLa carta include uno sconto del ${scontoDesc} sul tuo primo appuntamento.\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${telefono} oppure richiedi una consulenza direttamente online su ${sito}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${maps}\n\nSpero che ti concederai questo momento di totale relax.`;
 
   useEffect(() => {
     if (showRegala) setMsgRegala(msgBase);
@@ -2027,6 +2031,13 @@ function CartaUsaEGettaCard({
           <div className="mt-6">
             <p className="text-xs text-white/60 mb-1">Codice carta</p>
             <p className="text-white font-bold text-xl font-mono tracking-widest">{carta.codice}</p>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full font-medium">Monouso</span>
+              {carta.tipo_sconto === 'percentuale'
+                ? <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full font-medium">Sconto {carta.valore_sconto}%</span>
+                : <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full font-medium">Sconto € {carta.valore_sconto?.toFixed(2)}</span>
+              }
+            </div>
           </div>
         </div>
       </div>
