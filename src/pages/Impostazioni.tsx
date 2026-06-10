@@ -9,7 +9,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -47,6 +47,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'notifiche_push') return <PaginaNotifichePush onBack={() => setSub(null)} />;
   if (sub === 'prenotazioni_online') return <PaginaPrenotazioniOnline onBack={() => setSub(null)} />;
   if (sub === 'messaggi_clienti') return <PaginaMessaggiClienti onBack={() => setSub(null)} userId={user?.id} />;
+  if (sub === 'dati_azienda') return <PaginaDatiAzienda onBack={() => setSub(null)} />;
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -112,6 +113,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Connessione Cloud</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica le chiavi API per connettere il gestionale al database</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Dati Azienda */}
+        <button
+          onClick={() => setSub('dati_azienda')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-teal-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <MapPin size={18} className="text-stone-500 group-hover:text-teal-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Dati Azienda</p>
+            <p className="text-xs text-stone-400 mt-0.5">Ragione sociale, indirizzo, P.IVA, telefono, Google Maps e sito web</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -319,6 +335,100 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
             <p className="text-xs text-stone-400 mt-0.5">Colori sidebar, icona e logo del salone (per questo dispositivo)</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Dati Azienda ─────────────────────────────────────────────────────────────
+
+function PaginaDatiAzienda({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const campi = [
+    { key: 'azienda_nome', label: 'Nome Salone / Ragione Sociale', placeholder: 'Es. I Venzi di Rossi S.r.l.' },
+    { key: 'azienda_intestazione', label: 'Intestazione Fatture', placeholder: 'Es. I Venzi di Mario Rossi' },
+    { key: 'azienda_indirizzo', label: 'Indirizzo', placeholder: 'Es. Via Roma 1, 00100 Roma RM' },
+    { key: 'azienda_piva', label: 'Partita IVA', placeholder: 'Es. IT01234567890' },
+    { key: 'azienda_cf', label: 'Codice Fiscale', placeholder: 'Es. RSSMRA80A01H501U' },
+    { key: 'azienda_telefono', label: 'Telefono', placeholder: 'Es. +39 06 1234567' },
+    { key: 'azienda_email', label: 'Email', placeholder: 'Es. info@ivenzi.it' },
+    { key: 'azienda_pec', label: 'PEC', placeholder: 'Es. ivenzi@pec.it' },
+    { key: 'azienda_iban', label: 'IBAN', placeholder: 'Es. IT60X0542811101000000123456' },
+    { key: 'azienda_google_maps', label: 'Link Google Maps', placeholder: 'https://maps.google.com/...' },
+    { key: 'azienda_sito_prenotazioni', label: 'Link Sito Prenotazioni Online', placeholder: 'https://...' },
+    { key: 'azienda_note', label: 'Note aggiuntive', placeholder: 'Eventuali altre informazioni...' },
+  ];
+
+  const [valori, setValori] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    Promise.all(campi.map(c => getImpostazione(c.key))).then(results => {
+      const map: Record<string, string> = {};
+      campi.forEach((c, i) => { map[c.key] = results[i] ?? ''; });
+      setValori(map);
+      setLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  async function handleSave() {
+    if (!user) return;
+    setSaving(true);
+    await Promise.all(campi.map(c => setImpostazione(c.key, valori[c.key] ?? '', user.id)));
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  if (loading) return (
+    <div className="p-6 max-w-2xl mx-auto flex items-center justify-center min-h-48">
+      <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={onBack} className="p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <ArrowLeft size={18} className="text-stone-500" />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Dati Azienda</h2>
+          <p className="text-sm text-stone-400">Ragione sociale, recapiti e riferimenti del salone</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+        {campi.map(c => (
+          <div key={c.key}>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">{c.label}</label>
+            <input
+              type="text"
+              value={valori[c.key] ?? ''}
+              onChange={e => setValori(v => ({ ...v, [c.key]: e.target.value }))}
+              placeholder={c.placeholder}
+              className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-teal-400 transition-colors"
+            />
+          </div>
+        ))}
+
+        {saved && (
+          <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 rounded-xl px-4 py-2.5">
+            <Check size={14} /> Dati salvati con successo
+          </div>
+        )}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-3 bg-teal-500 text-white font-semibold rounded-xl hover:bg-teal-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+        >
+          {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Check size={15} /> Salva dati azienda</>}
         </button>
       </div>
     </div>

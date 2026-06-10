@@ -915,6 +915,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [showServiziPicker, setShowServiziPicker] = useState(false);
   const [cercaServizio, setCercaServizio] = useState('');
 
+  // Cassetto carte sconto regalate
+  const [showCassetto, setShowCassetto] = useState(false);
+  const [cassettoCarte, setCassettoCarte] = useState<CartaScontoSimple[]>([]);
+  const [cassettoSearch, setCassettoSearch] = useState('');
+  const [cassettoLoading, setCassettoLoading] = useState(false);
+
   const totaleBase = voci.reduce((s, v) => s + v.prezzo, 0);
 
   const cartaSconto = carteSconto.find(c => c.id === cartaScontoId);
@@ -933,6 +939,25 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const saldoInsufficient = !!(cartaPremium && cartaPremium.saldo < totaleDopoSconto);
 
   const isConvalidata = gruppo.ficheConvalidata;
+
+  async function openCassetto() {
+    setShowCassetto(true);
+    setCassettoLoading(true);
+    const { data } = await dbSelect({ table: 'carte_sconto', filters: [{ col: 'regalata', op: 'eq', val: true }, { col: 'attiva', op: 'eq', val: true }], orderBy: [{ col: 'codice', asc: true }] });
+    setCassettoCarte((data ?? []) as CartaScontoSimple[]);
+    setCassettoLoading(false);
+  }
+
+  function selectCassettoCarta(carta: CartaScontoSimple & { ex_proprietaria_nome?: string }) {
+    setCarteSconto(prev => {
+      const exists = prev.find(c => c.id === carta.id);
+      if (!exists) return [...prev, carta];
+      return prev;
+    });
+    setCartaScontoId(carta.id);
+    setShowCassetto(false);
+    setCassettoSearch('');
+  }
 
   useEffect(() => {
     if (!isOpen || initialized) return;
@@ -1987,6 +2012,85 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                 </div>
               )}
             </div>
+          )}
+
+          {/* Cassetto carte sconto */}
+          {!isConvalidata && (
+            <button
+              onClick={openCassetto}
+              className="w-full flex items-center justify-center gap-2 border border-dashed border-stone-300 text-stone-500 rounded-xl py-2.5 text-sm hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+            >
+              <CreditCard size={14} />
+              Cassetto carte sconto
+            </button>
+          )}
+
+          {/* Modale cassetto */}
+          {showCassetto && createPortal(
+            <div className="fixed inset-0 z-[300] bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={() => setShowCassetto(false)}>
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                  <div>
+                    <p className="font-bold text-stone-800">Cassetto carte sconto</p>
+                    <p className="text-xs text-stone-400">Carte regalate disponibili da assegnare</p>
+                  </div>
+                  <button onClick={() => setShowCassetto(false)} className="p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
+                    <X size={18} className="text-stone-400" />
+                  </button>
+                </div>
+                <div className="px-5 pb-3">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                    <input
+                      value={cassettoSearch}
+                      onChange={e => setCassettoSearch(e.target.value)}
+                      placeholder="Cerca per codice..."
+                      className="w-full border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-amber-400"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-2">
+                  {cassettoLoading ? (
+                    <div className="flex items-center justify-center py-10">
+                      <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : (() => {
+                    const filtered = cassettoCarte.filter(c =>
+                      c.codice.toLowerCase().includes(cassettoSearch.toLowerCase())
+                    );
+                    if (filtered.length === 0) return (
+                      <p className="text-sm text-stone-400 text-center py-8">
+                        {cassettoSearch ? 'Nessuna carta trovata' : 'Nessuna carta nel cassetto'}
+                      </p>
+                    );
+                    return filtered.map(c => {
+                      const ex = (c as any).ex_proprietaria_nome;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => selectCassettoCarta(c as CartaScontoSimple & { ex_proprietaria_nome?: string })}
+                          className="w-full flex items-start gap-3 bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3.5 hover:border-amber-400 hover:bg-amber-50 transition-all text-left"
+                        >
+                          <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <CreditCard size={14} className="text-amber-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-mono font-semibold text-stone-800 text-sm">{c.codice}</p>
+                            <p className="text-xs text-stone-500 mt-0.5">
+                              {c.tipo_sconto === 'percentuale' ? `${c.valore_sconto}%` : `€${c.valore_sconto}`} di sconto
+                              {ex ? <span className="text-stone-400"> · (ex: {ex})</span> : ''}
+                            </p>
+                            {c.descrizione && <p className="text-xs text-stone-400 mt-0.5">{c.descrizione}</p>}
+                          </div>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>,
+            document.body
           )}
 
           {/* Tipo pagamento */}

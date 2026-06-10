@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/prenota-online`;
 const MIEI_MSG_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/miei-messaggi`;
+const MIE_CARTE_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/mie-carte`;
 
 interface Parrucchiere {
   id: string;
@@ -36,7 +37,7 @@ interface SalonInfo {
   serviziAbbinati: ServizioAbbinato[];
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte';
 
 interface MioMessaggio {
   id: string;
@@ -51,6 +52,48 @@ interface MioMessaggio {
   risposta_foto_url_2: string | null;
   risposta_foto_url_3: string | null;
   created_at: string;
+}
+
+interface CartaPremium {
+  id: string;
+  codice: string;
+  saldo: number;
+  attiva: boolean;
+  created_at: string;
+  tipo: 'premium';
+  ricariche: { id: string; importo: number; note: string; created_at: string }[];
+  utilizzi: { id: string; importo_detratto: number; note: string; created_at: string }[];
+  risparmioTotale: number;
+}
+
+interface CartaInfinity {
+  id: string;
+  codice: string;
+  descrizione: string;
+  tipo_sconto: string;
+  valore_sconto: number;
+  attiva: boolean;
+  created_at: string;
+  tipo: 'infinity';
+}
+
+interface CartaUsaEGetta {
+  id: string;
+  codice: string;
+  descrizione: string;
+  tipo_sconto: string;
+  valore_sconto: number;
+  attiva: boolean;
+  created_at: string;
+  tipo: 'usa_e_getta';
+}
+
+interface MieCarteData {
+  cliente: { id: string; nome: string; cognome: string } | null;
+  cartePremium: CartaPremium[];
+  carteInfinity: CartaInfinity[];
+  carteUsaEGetta: CartaUsaEGetta[];
+  salone: Record<string, string>;
 }
 
 const LS_CLIENTE_KEY = 'prenota_online_cliente_v1';
@@ -95,7 +138,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [nome, setNome] = useState('');
   const [cognome, setCognome] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [cartaScontoCode, setCartaScontoCode] = useState('');
   const [datiError, setDatiError] = useState('');
+
+  // Le mie carte
+  const [mieCarteData, setMieCarteData] = useState<MieCarteData | null>(null);
+  const [loadingMieCarte, setLoadingMieCarte] = useState(false);
+  const [mieCarteError, setMieCarteError] = useState('');
 
   // Selections
   const [parrucchiere, setParrucchiere] = useState<Parrucchiere | null>(null);
@@ -229,6 +278,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     } catch { /* ignore */ }
   }, []);
 
+
   useEffect(() => {
     async function loadInfo() {
       setLoadingInfo(true);
@@ -289,7 +339,39 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
   }
 
-  function handleDatiNext() {
+  async function loadMieCarte() {
+    setLoadingMieCarte(true);
+    setMieCarteError('');
+    try {
+      const res = await fetch(`${MIE_CARTE_URL}/info?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      setMieCarteData(data);
+    } catch {
+      setMieCarteError('Impossibile caricare le carte. Riprova.');
+    } finally {
+      setLoadingMieCarte(false);
+    }
+  }
+
+  async function handleRegalaCartaSconto(cartaId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${MIE_CARTE_URL}/regala`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, telefono: telefono.trim(), carta_id: cartaId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      // Ricarica carte dopo regalo
+      await loadMieCarte();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleDatiNext() {
     if (!nome.trim() || !cognome.trim() || !telefono.trim()) {
       setDatiError('Tutti i campi sono obbligatori');
       return;
@@ -298,8 +380,28 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       setDatiError('Inserisci un numero di telefono valido');
       return;
     }
-    localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify({ nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim() }));
+    const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim() };
+    if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
+    localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
     setDatiError('');
+
+    // Se ha inserito un codice carta sconto, associala tramite edge function
+    if (cartaScontoCode.trim()) {
+      try {
+        await fetch(`${MIE_CARTE_URL}/associa-carta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            nome: nome.trim(),
+            cognome: cognome.trim(),
+            telefono: telefono.trim(),
+            codice_carta: cartaScontoCode.trim(),
+          }),
+        });
+      } catch { /* non bloccante */ }
+    }
+
     setStep('scelta');
   }
 
@@ -593,7 +695,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-24">
         {/* Progress indicator */}
-        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && (
+        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && step !== 'mie_carte' && (
           <StepProgress step={step} />
         )}
 
@@ -631,6 +733,18 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                     className="input pl-9"
                   />
                 </div>
+              </Field>
+              <Field label="Codice carta sconto (opzionale)">
+                <div className="relative">
+                  <CreditCard size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    value={cartaScontoCode}
+                    onChange={e => setCartaScontoCode(e.target.value.toUpperCase())}
+                    placeholder="Es. SCONTO-XXXX"
+                    className="input pl-9 font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-stone-400 mt-1">Se hai ricevuto una carta sconto, inserisci il codice qui</p>
               </Field>
               <p className="text-xs text-stone-400 bg-stone-50 rounded-xl p-3">
                 La prenotazione è una <strong>richiesta</strong> e deve essere confermata dal salone via WhatsApp. Non è garantita finché non ricevi conferma.
@@ -688,6 +802,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-stone-400 mt-0.5">Archivio delle tue richieste inviate</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-amber-500 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
+              onClick={() => { loadMieCarte(); setStep('mie_carte'); }}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-rose-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-rose-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-rose-100 transition-colors">
+                <CreditCard size={26} className="text-rose-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">Le mie carte</p>
+                <p className="text-sm text-stone-400 mt-0.5">Carte premium, sconti e movimenti</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-rose-500 transition-colors flex-shrink-0" />
             </button>
 
             <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
@@ -841,6 +969,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             onRetry={loadMieiMessaggi}
             suonoAttivo={suonoAttivo}
             onToggleSuono={() => setSuonoAttivo(!suonoAttivo)}
+          />
+        )}
+
+        {/* STEP: Le mie carte */}
+        {step === 'mie_carte' && (
+          <MieCarteStep
+            data={mieCarteData}
+            loading={loadingMieCarte}
+            error={mieCarteError}
+            onBack={() => setStep('scelta')}
+            onRetry={loadMieCarte}
+            onRegala={handleRegalaCartaSconto}
+            nomeSalone={info?.nomeSalone ?? ''}
           />
         )}
 
@@ -1180,6 +1321,390 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             style={{ maxHeight: '90vh', maxWidth: '90vw' }}
             onClick={e => e.stopPropagation()}
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Le mie carte ─────────────────────────────────────────────────────────────
+
+function MieCarteStep({
+  data, loading, error, onBack, onRetry, onRegala, nomeSalone,
+}: {
+  data: MieCarteData | null;
+  loading: boolean;
+  error: string;
+  onBack: () => void;
+  onRetry: () => void;
+  onRegala: (cartaId: string) => Promise<boolean>;
+  nomeSalone: string;
+}) {
+  if (loading) return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 mb-4">
+        <p className="text-xl font-bold text-stone-800">Le mie carte</p>
+      </div>
+      <div className="flex items-center justify-center py-16">
+        <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+      <BackBtn onClick={onBack} />
+    </div>
+  );
+
+  if (error) return (
+    <div className="space-y-4">
+      <p className="text-xl font-bold text-stone-800">Le mie carte</p>
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-center">
+        <p className="text-sm text-red-600 mb-3">{error}</p>
+        <button onClick={onRetry} className="text-sm font-medium text-red-600 underline">Riprova</button>
+      </div>
+      <BackBtn onClick={onBack} />
+    </div>
+  );
+
+  const hasCarte = data && (
+    (data.cartePremium?.length ?? 0) > 0 ||
+    (data.carteInfinity?.length ?? 0) > 0 ||
+    (data.carteUsaEGetta?.length ?? 0) > 0
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <p className="text-xl font-bold text-stone-800">Le mie carte</p>
+      </div>
+
+      {!hasCarte && (
+        <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-10 text-center">
+          <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <CreditCard size={24} className="text-stone-300" />
+          </div>
+          <p className="font-semibold text-stone-500">Nessuna carta associata</p>
+          <p className="text-sm text-stone-400 mt-1">Non hai carte associate a questo numero di telefono.</p>
+        </div>
+      )}
+
+      {(data?.cartePremium ?? []).map(carta => (
+        <CartaPremiumCard key={carta.id} carta={carta} cliente={data?.cliente} />
+      ))}
+
+      {(data?.carteInfinity ?? []).map(carta => (
+        <CartaInfinityCard key={carta.id} carta={carta} cliente={data?.cliente} />
+      ))}
+
+      {(data?.carteUsaEGetta ?? []).map(carta => (
+        <CartaUsaEGettaCard
+          key={carta.id}
+          carta={carta}
+          salone={data?.salone ?? {}}
+          nomeSalone={nomeSalone}
+          onRegala={onRegala}
+        />
+      ))}
+
+      <BackBtn onClick={onBack} />
+    </div>
+  );
+}
+
+function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: MieCarteData['cliente'] }) {
+  const [showMovimenti, setShowMovimenti] = useState(false);
+
+  const movimenti = [
+    ...carta.ricariche.map(r => ({ ...r, tipo: 'ricarica' as const, importo: r.importo })),
+    ...carta.utilizzi.map(u => ({ ...u, tipo: 'utilizzo' as const, importo: u.importo_detratto })),
+  ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  return (
+    <div className="space-y-3">
+      {/* Card grafica nero/oro */}
+      <div
+        className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+        style={{
+          background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 40%, #1a1a1a 60%, #0d0d0d 100%)',
+          minHeight: 200,
+        }}
+      >
+        {/* Pattern decorativo oro */}
+        <div className="absolute inset-0 opacity-10" style={{
+          backgroundImage: 'repeating-linear-gradient(45deg, #d4af37 0px, #d4af37 1px, transparent 0px, transparent 50%)',
+          backgroundSize: '20px 20px',
+        }} />
+        {/* Cerchio decorativo */}
+        <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full" style={{ background: 'rgba(212,175,55,0.15)' }} />
+        <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full" style={{ background: 'rgba(212,175,55,0.1)' }} />
+
+        <div className="relative p-6 flex flex-col h-full" style={{ minHeight: 200 }}>
+          {/* Header */}
+          <div className="flex items-start justify-between mb-auto">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.2em] uppercase" style={{ color: '#d4af37' }}>Carta Premium</p>
+            </div>
+            <div className="w-10 h-7 rounded-md" style={{ background: 'linear-gradient(135deg, #d4af37, #f5e17a, #b8860b)' }} />
+          </div>
+
+          {/* Dati cliente */}
+          <div className="mt-8 mb-4">
+            <p className="text-white font-bold text-lg tracking-wide">
+              {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
+            </p>
+            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: 'rgba(212,175,55,0.7)' }}>
+              {carta.codice}
+            </p>
+          </div>
+
+          {/* Saldo */}
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Saldo disponibile</p>
+              <p className="text-2xl font-bold" style={{ color: '#d4af37' }}>€ {carta.saldo.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Frase risparmio */}
+      <div className="px-1">
+        <p className="text-xs text-stone-500 italic leading-relaxed">
+          La tua fiducia è il nostro privilegio. Grazie alla tua Carta Premium, finora hai già risparmiato:{' '}
+          <span className="text-emerald-600 font-bold text-sm not-italic">€ {carta.risparmioTotale.toFixed(2)}</span>
+        </p>
+      </div>
+
+      {/* Pulsante movimenti */}
+      <button
+        onClick={() => setShowMovimenti(v => !v)}
+        className="w-full flex items-center justify-between bg-white border border-stone-200 rounded-2xl px-5 py-3.5 hover:border-stone-300 transition-all"
+      >
+        <div className="flex items-center gap-2">
+          <TrendingUp size={16} className="text-stone-500" />
+          <span className="font-semibold text-stone-700 text-sm">Movimenti</span>
+          {movimenti.length > 0 && (
+            <span className="text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">{movimenti.length}</span>
+          )}
+        </div>
+        {showMovimenti ? <ChevronUp size={16} className="text-stone-400" /> : <ChevronDown size={16} className="text-stone-400" />}
+      </button>
+
+      {showMovimenti && (
+        <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
+          {movimenti.length === 0 ? (
+            <p className="text-sm text-stone-400 text-center py-8">Nessun movimento</p>
+          ) : (
+            <div className="divide-y divide-stone-100">
+              {movimenti.map((m, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    m.tipo === 'ricarica' ? 'bg-emerald-50' : 'bg-stone-100'
+                  }`}>
+                    {m.tipo === 'ricarica'
+                      ? <ArrowUpCircle size={16} className="text-emerald-600" />
+                      : <ArrowDownCircle size={16} className="text-stone-400" />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${m.tipo === 'ricarica' ? 'text-emerald-700' : 'text-stone-500'}`}>
+                      {m.tipo === 'ricarica' ? '+' : '-'} € {m.importo.toFixed(2)}
+                    </p>
+                    <p className="text-[11px] text-stone-400">
+                      {new Date(m.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      {m.note ? ` · ${m.note}` : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CartaInfinityCard({ carta, cliente }: { carta: CartaInfinity; cliente: MieCarteData['cliente'] }) {
+  const sconto = carta.tipo_sconto === 'percentuale'
+    ? `${carta.valore_sconto}%`
+    : `€ ${carta.valore_sconto.toFixed(2)}`;
+
+  return (
+    <div
+      className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+      style={{
+        background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 40%, #e8eaed 100%)',
+        minHeight: 200,
+        border: '1px solid #c0c0c0',
+      }}
+    >
+      {/* Pattern argento */}
+      <div className="absolute inset-0 opacity-5" style={{
+        backgroundImage: 'repeating-linear-gradient(-45deg, #888 0px, #888 1px, transparent 0px, transparent 50%)',
+        backgroundSize: '15px 15px',
+      }} />
+      <div className="absolute -right-6 -top-6 w-36 h-36 rounded-full" style={{ background: 'rgba(192,192,192,0.2)' }} />
+
+      <div className="relative p-6 flex flex-col" style={{ minHeight: 200 }}>
+        <div className="flex items-start justify-between mb-auto">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.2em] uppercase text-stone-500">Carta Sconto Infinity</p>
+          </div>
+          <div className="w-10 h-7 rounded-md" style={{ background: 'linear-gradient(135deg, #c0c0c0, #e8e8e8, #a8a8a8)' }} />
+        </div>
+
+        <div className="mt-8 mb-4">
+          <p className="text-stone-800 font-bold text-lg tracking-wide">
+            {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
+          </p>
+          <p className="text-xs mt-1 font-mono tracking-[0.15em] text-stone-400">{carta.codice}</p>
+        </div>
+
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-xs text-stone-400">Sconto applicato</p>
+            <p className="text-2xl font-bold text-stone-600">{sconto}</p>
+          </div>
+          <div className="text-xs text-stone-400 italic">Non scade</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CartaUsaEGettaCard({
+  carta, salone, nomeSalone, onRegala,
+}: {
+  carta: CartaUsaEGetta;
+  salone: Record<string, string>;
+  nomeSalone: string;
+  onRegala: (cartaId: string) => Promise<boolean>;
+}) {
+  const [showRegala, setShowRegala] = useState(false);
+  const [msgRegala, setMsgRegala] = useState('');
+  const [regalando, setRegalando] = useState(false);
+  const [regalato, setRegalato] = useState(false);
+  const [erroreRegala, setErroreRegala] = useState('');
+
+  const telefono = salone['azienda_telefono'] ?? '';
+  const maps = salone['azienda_google_maps'] ?? '';
+  const sito = salone['azienda_sito_prenotazioni'] ?? '';
+
+  const msgBase = `Ciao 😊 Stefano e Federico del salone "${nomeSalone}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme alla mia carta sconto monouso per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${carta.codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${telefono} oppure richiedi una consulenza direttamente online su ${sito}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${maps}\n\nSpero che ti concederai questo momento di totale relax.`;
+
+  useEffect(() => {
+    if (showRegala) setMsgRegala(msgBase);
+  }, [showRegala, msgBase]);
+
+  async function handleConfermaRegala() {
+    setRegalando(true);
+    setErroreRegala('');
+    const ok = await onRegala(carta.id);
+    if (ok) {
+      const waText = encodeURIComponent(msgRegala);
+      window.open(`https://wa.me/?text=${waText}`, '_blank');
+      setRegalato(true);
+      setShowRegala(false);
+    } else {
+      setErroreRegala('Errore nel trasferimento. Riprova.');
+    }
+    setRegalando(false);
+  }
+
+  if (regalato) return (
+    <div className="bg-stone-50 border border-stone-200 rounded-3xl p-6 text-center">
+      <Check size={24} className="text-emerald-500 mx-auto mb-2" />
+      <p className="text-sm font-semibold text-stone-700">Carta regalata con successo!</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      {/* Card grafica tiffany/verde bosco */}
+      <div
+        className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+        style={{
+          background: 'linear-gradient(135deg, #0abfbf 0%, #81d8d0 50%, #2e8b57 100%)',
+          minHeight: 180,
+        }}
+      >
+        <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }} />
+        <div className="absolute -left-4 -top-4 w-24 h-24 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />
+
+        <div className="relative p-6 flex flex-col" style={{ minHeight: 180 }}>
+          <div className="flex items-start justify-between mb-auto">
+            <p className="text-xs font-semibold tracking-[0.2em] uppercase text-white/80">Carta Sconto</p>
+            <Gift size={20} className="text-white/70" />
+          </div>
+          <div className="mt-6">
+            <p className="text-xs text-white/60 mb-1">Codice carta</p>
+            <p className="text-white font-bold text-xl font-mono tracking-widest">{carta.codice}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Pulsante regala */}
+      <button
+        onClick={() => setShowRegala(true)}
+        className="w-full flex items-center justify-center gap-2 bg-white border-2 border-teal-300 text-teal-700 font-semibold rounded-2xl px-5 py-3.5 hover:bg-teal-50 hover:border-teal-400 transition-all"
+      >
+        <Gift size={17} />
+        Regala a un'amica/o
+      </button>
+
+      {/* Modale regala */}
+      {showRegala && (
+        <div className="fixed inset-0 z-[200] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={() => setShowRegala(false)}>
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-stone-800 text-lg">Regala la carta sconto</p>
+                <button onClick={() => setShowRegala(false)} className="p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
+                  <X size={18} className="text-stone-400" />
+                </button>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  <strong>Attenzione:</strong> dopo aver confermato, la carta sconto non sarà più tua. Se dovessi esserti sbagliata, contattaci e ti riassegneremo una nuova carta sconto.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Anteprima messaggio (modificabile)</label>
+                <textarea
+                  value={msgRegala}
+                  onChange={e => setMsgRegala(e.target.value)}
+                  rows={10}
+                  className="w-full border border-stone-200 rounded-2xl px-4 py-3 text-sm text-stone-700 focus:outline-none focus:border-teal-400 resize-none leading-relaxed"
+                />
+              </div>
+
+              {erroreRegala && (
+                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2">{erroreRegala}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRegala(false)}
+                  className="flex-1 py-3 border border-stone-200 text-stone-600 font-semibold rounded-2xl hover:bg-stone-50 transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleConfermaRegala}
+                  disabled={regalando}
+                  className="flex-1 py-3 bg-teal-500 text-white font-semibold rounded-2xl hover:bg-teal-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {regalando
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <><Gift size={15} /> Sì, regala</>
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
