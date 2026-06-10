@@ -1392,6 +1392,10 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
 
   // Compratore/donatore: chi ha pagato il gift pass
   const [compratoreId, setCompratoreId] = useState('');
+  const [compratoreRegistra, setCompratoreRegistra] = useState(false);
+  const [compratoreNome, setCompratoreNome] = useState('');
+  const [compratoreCognome, setCompratoreCognome] = useState('');
+  const [compratoreTelefono, setCompratoreTelefono] = useState('');
 
   const [prodotti, setProdotti] = useState<ProdottoRivenditaCatalogo[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1421,9 +1425,8 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
     if (!canSave) return;
     setSaving(true);
 
+    // Destinataria
     let clienteId: string | null = registraNuova ? null : (destinatariaId || null);
-
-    // Se nuova cliente: crea scheda da confermare e cliente
     if (registraNuova && nuovaNome.trim()) {
       const { data: newCliente } = await dbInsert({ table: 'clienti', data: {
         nome: nuovaNome.trim(),
@@ -1432,6 +1435,18 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
         user_id: user?.id,
       }});
       clienteId = (newCliente as { id: string } | null)?.id ?? null;
+    }
+
+    // Compratore
+    let compratoreFinalId: string | null = compratoreRegistra ? null : (compratoreId || null);
+    if (compratoreRegistra && compratoreNome.trim()) {
+      const { data: newComp } = await dbInsert({ table: 'clienti', data: {
+        nome: compratoreNome.trim(),
+        cognome: compratoreCognome.trim(),
+        telefono: compratoreTelefono.trim(),
+        user_id: user?.id,
+      }});
+      compratoreFinalId = (newComp as { id: string } | null)?.id ?? null;
     }
 
     const { data } = await dbInsert({ table: 'gift_pass', data: {
@@ -1446,12 +1461,46 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       destinataria_nome: nomeFinale,
       destinataria_telefono: telefonoFinale,
       destinataria_cliente_id: clienteId,
-      cliente_id: compratoreId || null,
+      cliente_id: compratoreFinalId,
       note: form.note.trim(),
       utilizzata: false,
       attiva: true,
       user_id: user?.id,
     }});
+
+    // Crea fiche automatica per il compratore
+    if (compratoreFinalId && data) {
+      const giftPassId = (data as { id: string }).id;
+      const importoFiche = form.tipo === 'valore'
+        ? (form.valore_euro ?? 0)
+        : (prodottoSel?.prezzo_vendita ?? 0);
+      const today = localDateStr();
+      const { data: ficheData } = await dbInsert({ table: 'fiches', data: {
+        manuale: true,
+        cliente_id: compratoreFinalId,
+        tipo_fiche: 'gift_pass',
+        note: `Gift Pass #${form.codice}`,
+        data_riferimento: today,
+        user_id: user?.id,
+      }});
+      const ficheId = (ficheData as { id: string } | null)?.id;
+      if (ficheId) {
+        const destLabel = nomeFinale ? ` — per ${nomeFinale}` : '';
+        await dbInsert({ table: 'fiche_voci', data: {
+          fiche_id: ficheId,
+          tipo: 'extra',
+          nome_voce: `Gift Pass #${form.codice}${destLabel}`,
+          parrucchiere_id: null,
+          nome_parrucchiere: '',
+          prezzo: importoFiche,
+          note: '',
+          ordine: 0,
+          user_id: user?.id,
+        }});
+        await dbUpdate({ table: 'gift_pass', id: giftPassId, data: { fiche_acquisto_id: ficheId } });
+      }
+    }
+
     setSaving(false);
     if (data) onSaved(data as unknown as GiftPass);
   }
@@ -1555,21 +1604,61 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
           )}
 
           {/* Compratore (chi ha pagato) */}
-          <div>
-            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">
+          <div className="border border-stone-200 rounded-xl p-4 space-y-3">
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">
               Acquistata da (compratore)
             </label>
-            <select
-              value={compratoreId}
-              onChange={e => setCompratoreId(e.target.value)}
-              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
-            >
-              <option value="">— Seleziona cliente (opzionale) —</option>
-              {clienti.map(c => (
-                <option key={c.id} value={c.id}>{c.nome} {c.cognome}{c.telefono ? ` · ${c.telefono}` : ''}</option>
-              ))}
-            </select>
-            <p className="text-xs text-stone-400 mt-1">Chi ha pagato il Gift Pass. Apparirà nella sua scheda cliente come "Da regalare".</p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setCompratoreRegistra(false); setCompratoreNome(''); setCompratoreCognome(''); setCompratoreTelefono(''); }}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${!compratoreRegistra ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
+                Cliente esistente
+              </button>
+              <button
+                onClick={() => { setCompratoreRegistra(true); setCompratoreId(''); }}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${compratoreRegistra ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
+                Nuova cliente
+              </button>
+            </div>
+
+            {!compratoreRegistra ? (
+              <select
+                value={compratoreId}
+                onChange={e => setCompratoreId(e.target.value)}
+                className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+              >
+                <option value="">— Seleziona cliente (opzionale) —</option>
+                {clienti.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome} {c.cognome}{c.telefono ? ` · ${c.telefono}` : ''}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={compratoreNome}
+                    onChange={e => setCompratoreNome(e.target.value)}
+                    placeholder="Nome *"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+                  />
+                  <input
+                    value={compratoreCognome}
+                    onChange={e => setCompratoreCognome(e.target.value)}
+                    placeholder="Cognome"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <input
+                  type="tel"
+                  value={compratoreTelefono}
+                  onChange={e => setCompratoreTelefono(e.target.value)}
+                  placeholder="Telefono"
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+                />
+              </div>
+            )}
+            <p className="text-xs text-stone-400">Chi ha pagato il Gift Pass. Verrà creata una fiche da convalidare intestata a lei.</p>
           </div>
 
           {/* Destinataria */}
