@@ -1274,6 +1274,7 @@ interface GiftPass {
   scadenza_uso_giorni: number;
   destinataria_nome: string;
   destinataria_telefono: string;
+  destinataria_cliente_id: string | null;
   attivata_at: string | null;
   scadenza_uso_at: string | null;
   fiche_id: string | null;
@@ -1304,7 +1305,8 @@ function statoGiftPass(gp: GiftPass): 'da_ritirare' | 'attivata' | 'utilizzata' 
 
 // ─── Nuova Gift Pass Modal ────────────────────────────────────────────────────
 
-function NuovaGiftPassModal({ onClose, onSaved }: {
+function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
+  clienti: Cliente[];
   onClose: () => void;
   onSaved: (gp: GiftPass) => void;
 }) {
@@ -1317,10 +1319,15 @@ function NuovaGiftPassModal({ onClose, onSaved }: {
     occasione: 'invito' as 'invito' | 'compleanno' | 'regalo',
     scadenza_ritiro_giorni: 30,
     scadenza_uso_giorni: 60,
-    destinataria_nome: '',
-    destinataria_telefono: '',
     note: '',
   });
+  // Destinataria: cliente esistente o nuova
+  const [destinatariaId, setDestinatariaId] = useState('');
+  const [nuovaNome, setNuovaNome] = useState('');
+  const [nuovaCognome, setNuovaCognome] = useState('');
+  const [nuovaTelefono, setNuovaTelefono] = useState('');
+  const [registraNuova, setRegistraNuova] = useState(false);
+
   const [prodotti, setProdotti] = useState<ProdottoRivenditaCatalogo[]>([]);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1330,13 +1337,38 @@ function NuovaGiftPassModal({ onClose, onSaved }: {
       .then(({ data }) => setProdotti((data || []) as ProdottoRivenditaCatalogo[]));
   }, []);
 
+  const clienteSel = clienti.find(c => c.id === destinatariaId) ?? null;
   const prodottoSel = prodotti.find(p => p.id === form.prodotto_id) ?? null;
 
+  // Risolvi nome e telefono finali
+  const nomeFinale = registraNuova ? `${nuovaNome.trim()} ${nuovaCognome.trim()}`.trim() : (clienteSel ? `${clienteSel.nome} ${clienteSel.cognome}`.trim() : '');
+  const telefonoFinale = registraNuova ? nuovaTelefono.trim() : (clienteSel?.telefono ?? '');
+
+  const canSave = (
+    (form.tipo === 'valore' && form.valore_euro > 0) ||
+    (form.tipo === 'prodotto' && !!form.prodotto_id)
+  ) && (
+    (registraNuova && nuovaNome.trim() !== '') ||
+    (!registraNuova && destinatariaId !== '')
+  );
+
   async function save() {
-    if (form.tipo === 'prodotto' && !form.prodotto_id) return;
-    if (form.tipo === 'valore' && (!form.valore_euro || form.valore_euro <= 0)) return;
-    if (!form.destinataria_nome.trim()) return;
+    if (!canSave) return;
     setSaving(true);
+
+    let clienteId: string | null = registraNuova ? null : (destinatariaId || null);
+
+    // Se nuova cliente: crea scheda da confermare e cliente
+    if (registraNuova && nuovaNome.trim()) {
+      const { data: newCliente } = await dbInsert({ table: 'clienti', data: {
+        nome: nuovaNome.trim(),
+        cognome: nuovaCognome.trim(),
+        telefono: nuovaTelefono.trim(),
+        user_id: user?.id,
+      }});
+      clienteId = (newCliente as { id: string } | null)?.id ?? null;
+    }
+
     const { data } = await dbInsert({ table: 'gift_pass', data: {
       codice: form.codice,
       tipo: form.tipo,
@@ -1346,8 +1378,9 @@ function NuovaGiftPassModal({ onClose, onSaved }: {
       occasione: form.occasione,
       scadenza_ritiro_giorni: form.scadenza_ritiro_giorni,
       scadenza_uso_giorni: form.scadenza_uso_giorni,
-      destinataria_nome: form.destinataria_nome.trim(),
-      destinataria_telefono: form.destinataria_telefono.trim(),
+      destinataria_nome: nomeFinale,
+      destinataria_telefono: telefonoFinale,
+      destinataria_cliente_id: clienteId,
       note: form.note.trim(),
       utilizzata: false,
       attiva: true,
@@ -1456,17 +1489,68 @@ function NuovaGiftPassModal({ onClose, onSaved }: {
           )}
 
           {/* Destinataria */}
-          <div>
-            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Nome destinataria <span className="text-red-500">*</span></label>
-            <input value={form.destinataria_nome} onChange={e => setForm(f => ({ ...f, destinataria_nome: e.target.value }))}
-              placeholder="es. Sara Bianchi"
-              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Telefono destinataria</label>
-            <input type="tel" value={form.destinataria_telefono} onChange={e => setForm(f => ({ ...f, destinataria_telefono: e.target.value }))}
-              placeholder="es. 3331234567"
-              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
+          <div className="border border-stone-200 rounded-xl p-4 space-y-3">
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">
+              Destinataria <span className="text-red-500">*</span>
+            </label>
+
+            {/* Toggle: cliente esistente vs nuova */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setRegistraNuova(false); setNuovaNome(''); setNuovaCognome(''); setNuovaTelefono(''); }}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${!registraNuova ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
+                Cliente esistente
+              </button>
+              <button
+                onClick={() => { setRegistraNuova(true); setDestinatariaId(''); }}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${registraNuova ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
+                Nuova cliente
+              </button>
+            </div>
+
+            {!registraNuova ? (
+              <select
+                value={destinatariaId}
+                onChange={e => setDestinatariaId(e.target.value)}
+                className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+              >
+                <option value="">— Seleziona cliente —</option>
+                {clienti.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome} {c.cognome}{c.telefono ? ` · ${c.telefono}` : ' — senza tel.'}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input
+                      value={nuovaNome}
+                      onChange={e => setNuovaNome(e.target.value)}
+                      placeholder="Nome *"
+                      className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      value={nuovaCognome}
+                      onChange={e => setNuovaCognome(e.target.value)}
+                      placeholder="Cognome"
+                      className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+                    />
+                  </div>
+                </div>
+                <input
+                  type="tel"
+                  value={nuovaTelefono}
+                  onChange={e => setNuovaTelefono(e.target.value)}
+                  placeholder="Telefono"
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+                />
+                <p className="text-[10px] text-violet-600 bg-violet-50 rounded-lg px-3 py-2">
+                  Verrà creata una scheda cliente nel gestionale e il Gift Pass verrà associato a lei.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Codice */}
@@ -1493,7 +1577,7 @@ function NuovaGiftPassModal({ onClose, onSaved }: {
 
         <div className="flex gap-3 px-6 pb-6">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Annulla</button>
-          <button onClick={save} disabled={saving || !form.destinataria_nome.trim() || (form.tipo === 'prodotto' && !form.prodotto_id) || (form.tipo === 'valore' && form.valore_euro <= 0)}
+          <button onClick={save} disabled={saving || !canSave}
             className="flex-1 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
             {saving ? 'Creazione...' : 'Crea Gift Pass'}
           </button>
@@ -1610,7 +1694,7 @@ const STATO_COLOR: Record<string, string> = {
   scaduta: 'bg-red-100 text-red-600',
 };
 
-function GiftPassTab() {
+function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
   const [cards, setCards] = useState<GiftPass[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -1807,6 +1891,7 @@ function GiftPassTab() {
       )}
       {showModal && (
         <NuovaGiftPassModal
+          clienti={clienti}
           onClose={() => setShowModal(false)}
           onSaved={gp => { setShowModal(false); load(); setWaModal(gp); }}
         />
@@ -1872,7 +1957,7 @@ export default function Carte() {
 
       {tab === 'sconto' && <CarteSconto clienti={clienti} />}
       {tab === 'premium' && <CartePremium clienti={clienti} />}
-      {tab === 'gift' && <GiftPassTab />}
+      {tab === 'gift' && <GiftPassTab clienti={clienti} />}
     </div>
   );
 }

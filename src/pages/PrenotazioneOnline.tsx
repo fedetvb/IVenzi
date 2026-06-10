@@ -426,6 +426,28 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       setDatiError('Inserisci un numero di telefono valido');
       return;
     }
+
+    const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
+
+    // Validazione server-side: blocca se la persona è il mittente originale del codice
+    if (giftPassCode.trim() || cartaScontoCode.trim()) {
+      try {
+        const verRes = await fetch(`${MIE_CARTE_URL}/verifica-codici`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            telefono: telefono.trim(),
+            gift_pass_codice: giftPassCode.trim() || null,
+            carta_sconto_codice: cartaScontoCode.trim() || null,
+          }),
+        });
+        const verData = await verRes.json();
+        if (verData.gift_pass_error) { setDatiError(verData.gift_pass_error); return; }
+        if (verData.carta_sconto_error) { setDatiError(verData.carta_sconto_error); return; }
+      } catch { /* non bloccante se l'edge function fallisce */ }
+    }
+
     const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim() };
     if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
     if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
@@ -434,7 +456,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
     // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
     try {
-      const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
       const checkRes = await fetch(
         `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}&stato=eq.in_attesa&select=id`,
         { headers: anonHeaders }
@@ -476,11 +497,11 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     // Se ha inserito un codice Gift Pass, attivalo via REST diretto
     if (giftPassCode.trim()) {
       try {
-        const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' };
+        const anonHeadersJson = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' };
         // Cerca il pass con questo codice non ancora attivato
         const gpRes = await fetch(
           `${SUPABASE_URL}/rest/v1/gift_pass?codice=eq.${encodeURIComponent(giftPassCode.trim().toUpperCase())}&attivata_at=is.null&utilizzata=eq.false&select=id,tipo,scadenza_uso_giorni`,
-          { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
+          { headers: anonHeaders }
         );
         const gpData = await gpRes.json();
         if (Array.isArray(gpData) && gpData.length > 0) {
@@ -493,7 +514,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             `${SUPABASE_URL}/rest/v1/gift_pass?id=eq.${gp.id}`,
             {
               method: 'PATCH',
-              headers: { ...anonHeaders, 'Prefer': 'return=minimal' },
+              headers: { ...anonHeadersJson, 'Prefer': 'return=minimal' },
               body: JSON.stringify({ attivata_at: now, ...(scadenzaUsoAt ? { scadenza_uso_at: scadenzaUsoAt } : {}), updated_at: now }),
             }
           );

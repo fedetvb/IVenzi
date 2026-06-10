@@ -300,5 +300,71 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // POST /verifica-codici — verifica se il telefono è il mittente originale del codice (blocco auto-uso)
+  // Restituisce { gift_pass_error, carta_sconto_error } se ci sono blocchi
+  if (req.method === "POST" && path === "/verifica-codici") {
+    try {
+      const body = await req.json().catch(() => null);
+      if (!body) return json({ error: "Body non valido" }, 400);
+
+      const { user_id, telefono, gift_pass_codice, carta_sconto_codice } = body;
+      if (!user_id || !telefono) return json({ error: "Parametri mancanti" }, 400);
+
+      const telNorm = normalizePhone(telefono);
+      let giftPassError: string | null = null;
+      let cartaScontoError: string | null = null;
+
+      // Controllo Gift Pass
+      if (gift_pass_codice) {
+        const { data: gp } = await sb
+          .from("gift_pass")
+          .select("id, destinataria_telefono")
+          .eq("codice", String(gift_pass_codice).toUpperCase())
+          .is("attivata_at", null)
+          .eq("utilizzata", false)
+          .maybeSingle();
+
+        if (gp && gp.destinataria_telefono) {
+          const telNormDest = normalizePhone(gp.destinataria_telefono);
+          if (telNormDest && telNorm && telNorm === telNormDest) {
+            giftPassError = "Questo Gift Pass è destinato a essere regalato a qualcun altro. Non puoi usarlo tu stessa.";
+          }
+        }
+      }
+
+      // Controllo Carta Sconto regalata
+      if (carta_sconto_codice) {
+        const { data: carta } = await sb
+          .from("carte_sconto")
+          .select("id, regalata, regalata_da_cliente_id")
+          .eq("user_id", user_id)
+          .eq("codice", String(carta_sconto_codice).toUpperCase())
+          .eq("regalata", true)
+          .eq("attiva", true)
+          .maybeSingle();
+
+        if (carta && carta.regalata_da_cliente_id) {
+          const { data: mittente } = await sb
+            .from("clienti")
+            .select("telefono")
+            .eq("id", carta.regalata_da_cliente_id)
+            .maybeSingle();
+
+          if (mittente && mittente.telefono) {
+            const telNormMitt = normalizePhone(mittente.telefono);
+            if (telNormMitt && telNorm && telNorm === telNormMitt) {
+              cartaScontoError = "Questa carta sconto è stata regalata a un'amica. Non puoi usarla tu stessa.";
+            }
+          }
+        }
+      }
+
+      return json({ gift_pass_error: giftPassError, carta_sconto_error: cartaScontoError });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg }, 500);
+    }
+  }
+
   return json({ error: "Not found" }, 404);
 });
