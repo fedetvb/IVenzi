@@ -2091,12 +2091,12 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {isAttiva && (
+                    {isAttiva && gp.destinataria_nome && gp.destinataria_telefono && (
                       <button onClick={() => {
                         const comp = gp.cliente_id ? clienti.find(c => c.id === gp.cliente_id) : null;
                         const cn = comp ? (comp.cognome ? `${comp.nome} ${comp.cognome.charAt(0)}.` : comp.nome) : undefined;
                         setWaModal({ gp, compratore_nome: cn });
-                      }} className="p-2 rounded-lg hover:bg-violet-100 text-stone-400 hover:text-violet-600 transition-colors" title="Invia WhatsApp">
+                      }} className="p-2 rounded-lg hover:bg-violet-100 text-stone-400 hover:text-violet-600 transition-colors" title="Notifica destinataria via WhatsApp">
                         <Send size={15} />
                       </button>
                     )}
@@ -2126,7 +2126,7 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
         <NuovaGiftPassModal
           clienti={clienti}
           onClose={() => setShowModal(false)}
-          onSaved={(gp, compratore_nome) => { setShowModal(false); load(); setWaModal({ gp, compratore_nome }); }}
+          onSaved={(gp, compratore_nome) => { setShowModal(false); load(); if (gp.destinataria_nome && gp.destinataria_telefono) setWaModal({ gp, compratore_nome }); }}
         />
       )}
       {waModal && (

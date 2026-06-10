@@ -2126,7 +2126,22 @@ function GiftPassCard({
   const sito = salone['azienda_sito_prenotazioni'] ?? '';
   const maps = salone['azienda_google_maps'] ?? '';
 
-  const msgBase = `Ciao! 🎁 Ho pensato a te — ho acquistato una Gift Pass da ${valore} presso il salone "${nomeSalone}" e voglio regalarla a te!\n\nIl codice è: ${gp.codice}\n\nPuoi usarlo al momento del pagamento in salone. Per fissare un appuntamento chiama il ${telefono} o prenota online su ${sito}.\n\nEcco dove si trova il salone: ${maps}\n\nSpero che ti faccia piacere questo pensiero! ✨`;
+  const msgBase = (() => {
+    const sn = nomeSalone || 'il salone';
+    const codice = gp.codice;
+    const tel = telefono;
+    const link = sito;
+    const mapLink = maps;
+    if (gp.tipo === 'prodotto') {
+      return `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+    } else if (gp.occasione === 'compleanno') {
+      return `Ciao 😊 Per il tuo compleanno ho voluto regalarti un'esperienza speciale da Stefano e Federico del salone "${sn}". Sono i ragazzi che si prendono cura dei miei capelli e volevo farti provare lo stesso entusiasmo, l'ascolto e la cura che dedicano a me ogni volta.\n\nTi lascio questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro ?? 0} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+    } else if (gp.occasione === 'regalo') {
+      return `Ciao 😊 Ho pensato di dedicare un pensiero speciale a te che sei una persona importante, per farti provare l'entusiasmo e la cura con cui Stefano e Federico del salone "${sn}" ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere questo benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro ?? 0} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax.`;
+    } else {
+      return `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass con un bonus di €${gp.valore_euro ?? 0} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+    }
+  })();
 
   function openDona() {
     setMsgDona(msgBase);
