@@ -2363,21 +2363,22 @@ function ListinoTab() {
                       <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">
                         {tipo === 'servizio' ? 'Servizi' : 'Trattamenti'}
                       </p>
+                      <div className="overflow-x-auto">
                       {/* Header colonne */}
-                      <div className="grid grid-cols-[1fr_120px_120px_80px] gap-2 px-4 py-1.5 text-[10px] font-bold text-stone-400 uppercase tracking-wide border-b border-stone-100 mb-1">
+                      <div className="grid grid-cols-[minmax(100px,1fr)_100px_110px_70px] gap-2 px-4 py-1.5 text-[10px] font-bold text-stone-400 uppercase tracking-wide border-b border-stone-100 mb-1 min-w-[380px]">
                         <span>Voce</span>
-                        <span className="text-right">Prezzo standard</span>
+                        <span className="text-right">Prezzo std</span>
                         <span className="text-right">Prezzo listino</span>
                         <span />
                       </div>
-                      <div className="divide-y divide-stone-50">
+                      <div className="divide-y divide-stone-50 min-w-[380px]">
                         {gruppo.map(serv => {
                           const listinoPx = getPrezzoForServizio(serv.nome);
                           const isEditing = editingPrezzoId === serv.nome;
                           const hasPx = listinoPx !== null;
                           const risparmio = hasPx ? Math.max(0, serv.prezzo - (listinoPx as number)) : 0;
                           return (
-                            <div key={serv.id} className={`grid grid-cols-[1fr_120px_120px_80px] gap-2 items-center px-4 py-3 transition-all ${hasPx ? 'bg-orange-50/60' : 'bg-white hover:bg-stone-50/50'}`}>
+                            <div key={serv.id} className={`grid grid-cols-[minmax(100px,1fr)_100px_110px_70px] gap-2 items-center px-4 py-3 transition-all ${hasPx ? 'bg-orange-50/60' : 'bg-white hover:bg-stone-50/50'}`}>
                               <div className="min-w-0">
                                 <p className="text-sm font-medium text-stone-800 truncate">{serv.nome}</p>
                                 {hasPx && risparmio > 0 && (
@@ -2443,6 +2444,7 @@ function ListinoTab() {
                           );
                         })}
                       </div>
+                      </div>{/* end overflow-x-auto */}
                     </div>
                   );
                 })}
