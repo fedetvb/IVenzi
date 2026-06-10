@@ -196,6 +196,14 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
         }
       }
 
+      // Aggancia i messaggi inviati da questa cliente (per telefono, senza cliente_id) al nuovo cliente
+      await supabase
+        .from('messaggi_clienti')
+        .update({ cliente_id: clienteRes.data.id })
+        .eq('user_id', user?.id)
+        .eq('telefono', scheda.telefono || '')
+        .is('cliente_id', null);
+
       setSchedaAperta(null);
       loadSchede();
       loadClienti();
