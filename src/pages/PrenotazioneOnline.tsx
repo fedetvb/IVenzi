@@ -135,6 +135,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [info, setInfo] = useState<SalonInfo | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(true);
   const [step, setStep] = useState<Step>('dati');
+  const [isNuovaScheda, setIsNuovaScheda] = useState(false);
 
   // Cliente dati
   const [nome, setNome] = useState('');
@@ -396,6 +397,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       );
       const existing = await checkRes.json();
       if (!Array.isArray(existing) || existing.length === 0) {
+        setIsNuovaScheda(true);
         await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
           method: 'POST',
           headers: { ...anonHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
@@ -1091,9 +1093,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         {step === 'servizio' && (
           <Card title="Scegli il servizio" subtitle={`${parrucchiere?.nome} · ${dataSelezionata ? dateLabel(dataSelezionata) : ''}`}>
             <div className="space-y-3">
+              {isNuovaScheda && (
+                <div className="mb-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+                  Per il tuo primo appuntamento puoi prenotare solo <strong>Piega</strong> o <strong>Consulenza</strong>.
+                </div>
+              )}
               {(() => {
                 const abbinatiIds = new Set((info.serviziAbbinati ?? []).map(a => a.id));
-                const serviziSelezionabili = info.servizi.filter(s => !abbinatiIds.has(s.id));
+                let serviziSelezionabili = info.servizi.filter(s => !abbinatiIds.has(s.id));
+                if (isNuovaScheda) {
+                  serviziSelezionabili = serviziSelezionabili.filter(s =>
+                    /piega|consulenza/i.test(s.nome)
+                  );
+                }
                 return serviziSelezionabili.length === 0 ? (
                   <p className="text-sm text-stone-500 text-center py-6">Nessun servizio disponibile online al momento.</p>
                 ) : serviziSelezionabili.map(s => (
