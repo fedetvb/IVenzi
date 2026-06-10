@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image, Send, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image, Send, ChevronUp, Gift } from 'lucide-react';
 import { localDateStr, type Cliente, type SchedaColore, type Appuntamento, supabase } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated, getImpostazione } from '../lib/localDb';
 import { apriWhatsApp as apriWA } from '../lib/waUtils';
@@ -52,6 +52,12 @@ interface CartaScontoCliente {
 }
 interface CartaPremiumCliente {
   id: string; codice: string; saldo: number; note: string; attiva: boolean;
+}
+interface GiftPassCliente {
+  id: string; codice: string; tipo: 'valore' | 'prodotto';
+  valore_euro: number | null; prodotto_nome: string | null;
+  occasione: string; attivata_at: string | null; utilizzata: boolean;
+  destinataria_nome: string; destinataria_cliente_id: string | null;
 }
 interface RicaricaRecord {
   id: string; carta_premium_id: string; importo: number; note: string; created_at: string;
@@ -442,6 +448,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [appModal, setAppModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [carteSconto, setCarteSconto] = useState<CartaScontoCliente[]>([]);
   const [cartePremium, setCartePremium] = useState<CartaPremiumCliente[]>([]);
+  const [giftPassList, setGiftPassList] = useState<GiftPassCliente[]>([]);
   const [ricaricheStorico, setRicaricheStorico] = useState<RicaricaRecord[]>([]);
   const [ricaricaModal, setRicaricaModal] = useState<CartaPremiumCliente | null>(null);
   const [passwordGatePending, setPasswordGatePending] = useState<CartaPremiumCliente | null>(null);
@@ -511,6 +518,18 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
     setCarteSconto(cscRes.data || []);
     const premiumList = cprRes.data || [];
     setCartePremium(premiumList);
+
+    // Carica gift pass acquistate da questa cliente (lei è la donatrice)
+    const { data: gpData } = await dbSelect<GiftPassCliente>({
+      table: 'gift_pass',
+      columns: 'id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, utilizzata, destinataria_nome, destinataria_cliente_id',
+      filters: [
+        { col: 'cliente_id', op: 'eq', val: clienteId },
+        { col: 'utilizzata', op: 'eq', val: false },
+      ],
+      orderBy: [{ col: 'created_at', asc: false }],
+    });
+    setGiftPassList(gpData || []);
 
     // Carica voci fiche del cliente:
     // Caso 1 – fiches legate ad appuntamento del cliente (cliente_id su appuntamenti)
@@ -1036,6 +1055,45 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Gift Pass acquistate (da donare) */}
+      {giftPassList.length > 0 && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#fdf0eb' }}>
+              <Gift size={14} style={{ color: '#c9897a' }} />
+            </div>
+            <h3 className="font-semibold text-stone-700">Gift Pass</h3>
+            <span className="text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">{giftPassList.length}</span>
+          </div>
+          <div className="space-y-2">
+            {giftPassList.map(gp => {
+              const valore = gp.tipo === 'prodotto' ? (gp.prodotto_nome ?? 'Prodotto') : `€${gp.valore_euro ?? 0}`;
+              const stato = gp.attivata_at ? 'Attivata' : 'Da donare';
+              const statoColor = gp.attivata_at ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
+              return (
+                <div key={gp.id} className="flex items-center justify-between p-3 rounded-xl border" style={{ borderColor: '#f2d5c8', background: '#fdf8f5' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#f2d5c8' }}>
+                      <Gift size={14} style={{ color: '#c9897a' }} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-mono font-bold text-stone-800">{gp.codice}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statoColor}`}>{stato}</span>
+                      </div>
+                      {gp.destinataria_nome && (
+                        <p className="text-xs text-stone-400">Per: {gp.destinataria_nome}</p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold" style={{ color: '#8b4a3a' }}>{valore}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

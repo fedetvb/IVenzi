@@ -155,14 +155,15 @@ Deno.serve(async (req: Request) => {
       tipo: "usa_e_getta" as const,
     }));
 
-    // Gift Pass — acquistati dalla cliente (da donare, non ancora attivati)
+    // Gift Pass — acquistati dalla cliente (da donare: attivi, non ancora attivati dalla destinataria)
     const { data: gpDonatoreRaw } = await sb
       .from("gift_pass")
       .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
       .eq("cliente_id", cliente.id)
       .eq("user_id", userId)
       .eq("utilizzata", false)
-      .eq("attiva", false);
+      .eq("attiva", true)
+      .is("attivata_at", null);
 
     // Gift Pass — ricevuti dalla cliente (destinataria, attivi, non utilizzati)
     const { data: gpRiceventeRaw } = await sb

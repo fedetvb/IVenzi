@@ -1390,6 +1390,9 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
   const [nuovaTelefono, setNuovaTelefono] = useState('');
   const [registraNuova, setRegistraNuova] = useState(false);
 
+  // Compratore/donatore: chi ha pagato il gift pass
+  const [compratoreId, setCompratoreId] = useState('');
+
   const [prodotti, setProdotti] = useState<ProdottoRivenditaCatalogo[]>([]);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1443,6 +1446,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       destinataria_nome: nomeFinale,
       destinataria_telefono: telefonoFinale,
       destinataria_cliente_id: clienteId,
+      cliente_id: compratoreId || null,
       note: form.note.trim(),
       utilizzata: false,
       attiva: true,
@@ -1549,6 +1553,24 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
               </div>
             </div>
           )}
+
+          {/* Compratore (chi ha pagato) */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">
+              Acquistata da (compratore)
+            </label>
+            <select
+              value={compratoreId}
+              onChange={e => setCompratoreId(e.target.value)}
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+            >
+              <option value="">— Seleziona cliente (opzionale) —</option>
+              {clienti.map(c => (
+                <option key={c.id} value={c.id}>{c.nome} {c.cognome}{c.telefono ? ` · ${c.telefono}` : ''}</option>
+              ))}
+            </select>
+            <p className="text-xs text-stone-400 mt-1">Chi ha pagato il Gift Pass. Apparirà nella sua scheda cliente come "Da regalare".</p>
+          </div>
 
           {/* Destinataria */}
           <div className="border border-stone-200 rounded-xl p-4 space-y-3">

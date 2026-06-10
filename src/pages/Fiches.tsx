@@ -1122,13 +1122,14 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           .filter(gp => !(gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now))
           .map(gp => ({ ...gp, _ruolo: 'ricevente' as const }));
 
-        // Pass donati: la cliente è l'acquirente, non ancora attivati/usati
+        // Pass donati: la cliente è l'acquirente, attiva ma non ancora attivata dalla destinataria
         const { data: gpDonatiData } = await dbSelect({
           table: 'gift_pass',
           filters: [
             { col: 'cliente_id', op: 'eq', val: realClienteId },
             { col: 'utilizzata', op: 'eq', val: false },
-            { col: 'attiva', op: 'eq', val: false },
+            { col: 'attiva', op: 'eq', val: true },
+            { col: 'attivata_at', op: 'is_null', val: null },
           ],
         });
         const gpDonati = ((gpDonatiData || []) as GiftPassSimple[])
