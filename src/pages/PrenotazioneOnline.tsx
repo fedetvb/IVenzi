@@ -217,6 +217,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // PWA install prompt
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [showIosModal, setShowIosModal] = useState(false);
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
 
   useEffect(() => {
@@ -225,7 +226,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const android = /android/i.test(ua);
     const installed = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     setDeviceType(ios ? 'ios' : android ? 'android' : 'other');
-    if (!installed && !localStorage.getItem('pwa_banner_dismissed_v2')) {
+    // Show banner if not installed AND not permanently dismissed via "Ho installato"
+    if (!installed && !localStorage.getItem('pwa_installata')) {
       setShowInstallBanner(true);
     }
     const handler = (e: Event) => {
@@ -237,8 +239,14 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }, []);
 
   function dismissInstallBanner() {
-    localStorage.setItem('pwa_banner_dismissed_v2', '1');
+    // Temporary dismiss — no localStorage, banner returns on next reload
     setShowInstallBanner(false);
+  }
+
+  function markAsInstalled() {
+    localStorage.setItem('pwa_installata', '1');
+    setShowInstallBanner(false);
+    setShowIosModal(false);
   }
 
   async function handleInstall() {
@@ -246,8 +254,11 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const prompt = installPrompt as Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> };
     prompt.prompt();
     const { outcome } = await prompt.userChoice;
-    if (outcome === 'accepted') dismissInstallBanner();
-    else setInstallPrompt(null);
+    if (outcome === 'accepted') {
+      markAsInstalled();
+    } else {
+      setInstallPrompt(null);
+    }
   }
 
   // Tieni stepRef sincronizzato
@@ -746,24 +757,92 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <p className="font-bold text-sm leading-snug">Aggiungila alla schermata home!</p>
               <p className="text-xs text-emerald-100 mt-0.5 leading-snug">
                 {deviceType === 'ios'
-                  ? <>Tocca <span className="font-bold">{'↑'} Condividi</span> in basso, poi <span className="font-bold">"Aggiungi a schermata Home"</span>. Prenota con un tap, senza aprire il browser!</>
-                  : deviceType === 'android'
-                  ? <>Tocca il menu del browser e scegli <span className="font-bold">"Aggiungi a schermata Home"</span>. Prenota con un tap, sempre a portata di mano!</>
-                  : <>Aggiungi questa pagina ai segnalibri o salvala sulla schermata home. Prenota con un click, senza cercarla ogni volta!</>
+                  ? 'Accedi con un tap, senza aprire il browser ogni volta.'
+                  : 'Prenota con un tap, sempre a portata di mano.'
                 }
               </p>
-              {installPrompt && (
-                <button
-                  onClick={handleInstall}
-                  className="mt-2 px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
-                >
-                  Installa ora
-                </button>
-              )}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {deviceType === 'ios' && (
+                  <button
+                    onClick={() => setShowIosModal(true)}
+                    className="px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
+                  >
+                    Come si fa?
+                  </button>
+                )}
+                {installPrompt && (
+                  <button
+                    onClick={handleInstall}
+                    className="px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
+                  >
+                    Installa ora
+                  </button>
+                )}
+                {!installPrompt && deviceType === 'android' && (
+                  <p className="text-xs text-emerald-100 leading-snug">
+                    Tocca <span className="font-bold">⋮</span> in alto a destra nel browser, poi <span className="font-bold">"Aggiungi a schermata Home"</span>.
+                  </p>
+                )}
+              </div>
             </div>
             <button onClick={dismissInstallBanner} className="text-emerald-200 hover:text-white transition-colors flex-shrink-0 pt-0.5">
               <X size={18} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* iOS install instructions modal */}
+      {showIosModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-emerald-600 px-6 pt-6 pb-4 text-white text-center">
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <Share size={26} />
+              </div>
+              <p className="font-bold text-lg">Aggiungi alla schermata Home</p>
+              <p className="text-emerald-100 text-sm mt-1">Segui questi 3 semplici passi su Safari</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {/* Step 1 */}
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">1</div>
+                <div>
+                  <p className="font-semibold text-stone-800 text-sm">Tocca il pulsante di condivisione</p>
+                  <p className="text-xs text-stone-500 mt-0.5">Il quadratino con la freccia verso l'alto <span className="font-bold text-stone-700">⬆</span> in basso al centro dello schermo</p>
+                </div>
+              </div>
+              {/* Step 2 */}
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">2</div>
+                <div>
+                  <p className="font-semibold text-stone-800 text-sm">Scorri e tocca "Aggiungi alla schermata Home"</p>
+                  <p className="text-xs text-stone-500 mt-0.5">Cerca l'icona con il <span className="font-bold text-stone-700">+</span> nel menu che si apre</p>
+                </div>
+              </div>
+              {/* Step 3 */}
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">3</div>
+                <div>
+                  <p className="font-semibold text-stone-800 text-sm">Tocca "Aggiungi" in alto a destra</p>
+                  <p className="text-xs text-stone-500 mt-0.5">L'icona del salone apparirà sulla tua schermata home</p>
+                </div>
+              </div>
+              <div className="pt-2 space-y-2">
+                <button
+                  onClick={markAsInstalled}
+                  className="w-full py-3.5 bg-emerald-600 text-white font-semibold rounded-2xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check size={16} /> Ho installato, non mostrare piu'
+                </button>
+                <button
+                  onClick={() => setShowIosModal(false)}
+                  className="w-full py-3 text-stone-500 text-sm font-medium hover:text-stone-700 transition-colors"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
