@@ -155,11 +155,43 @@ Deno.serve(async (req: Request) => {
       tipo: "usa_e_getta" as const,
     }));
 
+    // Gift Pass — acquistati dalla cliente (da donare, non ancora attivati)
+    const { data: gpDonatoreRaw } = await sb
+      .from("gift_pass")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+      .eq("cliente_id", cliente.id)
+      .eq("user_id", userId)
+      .eq("utilizzata", false)
+      .eq("attiva", false);
+
+    // Gift Pass — ricevuti dalla cliente (destinataria, attivi, non utilizzati)
+    const { data: gpRiceventeRaw } = await sb
+      .from("gift_pass")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+      .eq("destinataria_cliente_id", cliente.id)
+      .eq("user_id", userId)
+      .eq("utilizzata", false)
+      .eq("attiva", true);
+
+    const now = new Date();
+    const giftPassDonatore = (gpDonatoreRaw ?? []).map((gp: Record<string, unknown>) => ({
+      ...gp,
+      tipo_carta: "gift_pass_donatore" as const,
+    }));
+    const giftPassRicevente = ((gpRiceventeRaw ?? []) as Array<Record<string, unknown> & { scadenza_uso_at?: string | null; tipo?: string }>)
+      .filter(gp => !(gp.tipo !== "valore" && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at as string) < now))
+      .map(gp => ({
+        ...gp,
+        tipo_carta: "gift_pass_ricevente" as const,
+      }));
+
     return json({
       cliente: { id: cliente.id, nome: cliente.nome, cognome: cliente.cognome },
       cartePremium,
       carteInfinity,
       carteUsaEGetta,
+      giftPassDonatore,
+      giftPassRicevente,
       salone: imp,
     });
   }

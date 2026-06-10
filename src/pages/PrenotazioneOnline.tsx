@@ -90,11 +90,28 @@ interface CartaUsaEGetta {
   tipo: 'usa_e_getta';
 }
 
+interface GiftPass {
+  id: string;
+  codice: string;
+  tipo: 'valore' | 'prodotto';
+  valore_euro: number | null;
+  prodotto_nome: string | null;
+  occasione: string;
+  attivata_at: string | null;
+  scadenza_uso_at: string | null;
+  destinataria_nome: string;
+  destinataria_telefono: string;
+  utilizzata: boolean;
+  tipo_carta: 'gift_pass_donatore' | 'gift_pass_ricevente';
+}
+
 interface MieCarteData {
   cliente: { id: string; nome: string; cognome: string } | null;
   cartePremium: CartaPremium[];
   carteInfinity: CartaInfinity[];
   carteUsaEGetta: CartaUsaEGetta[];
+  giftPassDonatore: GiftPass[];
+  giftPassRicevente: GiftPass[];
   salone: Record<string, string>;
 }
 
@@ -1675,7 +1692,9 @@ function MieCarteStep({
   const hasCarte = data && (
     (data.cartePremium?.length ?? 0) > 0 ||
     (data.carteInfinity?.length ?? 0) > 0 ||
-    (data.carteUsaEGetta?.length ?? 0) > 0
+    (data.carteUsaEGetta?.length ?? 0) > 0 ||
+    (data.giftPassDonatore?.length ?? 0) > 0 ||
+    (data.giftPassRicevente?.length ?? 0) > 0
   );
 
   return (
@@ -1710,6 +1729,14 @@ function MieCarteStep({
           nomeSalone={nomeSalone}
           onRegala={onRegala}
         />
+      ))}
+
+      {(data?.giftPassDonatore ?? []).map(gp => (
+        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} />
+      ))}
+
+      {(data?.giftPassRicevente ?? []).map(gp => (
+        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} />
       ))}
 
       <BackBtn onClick={onBack} />
@@ -2063,6 +2090,214 @@ function CartaUsaEGettaCard({
                     ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     : <><Gift size={15} /> Sì, regala</>
                   }
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GiftPassCard({
+  gp, salone, nomeSalone,
+}: {
+  gp: GiftPass;
+  salone: Record<string, string>;
+  nomeSalone: string;
+}) {
+  const [showDona, setShowDona] = useState(false);
+  const [msgDona, setMsgDona] = useState('');
+
+  const isDonatore = gp.tipo_carta === 'gift_pass_donatore';
+  const valore = gp.tipo === 'prodotto'
+    ? (gp.prodotto_nome ?? 'Prodotto omaggio')
+    : `€${gp.valore_euro ?? 0}`;
+
+  const scadenzaLabel = (() => {
+    if (!gp.scadenza_uso_at) return 'Nessuna scadenza';
+    const d = new Date(gp.scadenza_uso_at);
+    return `Valida fino al ${d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+  })();
+
+  const telefono = salone['azienda_telefono'] ?? '';
+  const sito = salone['azienda_sito_prenotazioni'] ?? '';
+  const maps = salone['azienda_google_maps'] ?? '';
+
+  const msgBase = `Ciao! 🎁 Ho pensato a te — ho acquistato una Gift Pass da ${valore} presso il salone "${nomeSalone}" e voglio regalarla a te!\n\nIl codice è: ${gp.codice}\n\nPuoi usarlo al momento del pagamento in salone. Per fissare un appuntamento chiama il ${telefono} o prenota online su ${sito}.\n\nEcco dove si trova il salone: ${maps}\n\nSpero che ti faccia piacere questo pensiero! ✨`;
+
+  function openDona() {
+    setMsgDona(msgBase);
+    setShowDona(true);
+  }
+
+  function handleInviaDona() {
+    const waText = encodeURIComponent(msgDona);
+    window.location.href = `whatsapp://send?text=${waText}`;
+    setShowDona(false);
+  }
+
+  // Oro rosa palette
+  const roseGold = {
+    base: 'linear-gradient(135deg, #f9e8e0 0%, #f2d5c8 25%, #f7e0d4 50%, #eddac9 75%, #f5e4d8 100%)',
+    stripe: 'linear-gradient(90deg, #c9897a, #e8b4a0, #d4a090, #e8b4a0, #c9897a)',
+    chip: 'linear-gradient(135deg, #c9897a 0%, #e8b4a0 40%, #d4966a 60%, #b8705a 100%)',
+    chipInner: 'linear-gradient(135deg, #e8b4a0 0%, #f5d0be 50%, #c9897a 100%)',
+    glow1: 'radial-gradient(circle, rgba(201,137,122,0.25) 0%, transparent 70%)',
+    glow2: 'radial-gradient(circle, rgba(232,180,160,0.18) 0%, transparent 70%)',
+    pattern: 'repeating-linear-gradient(45deg, rgba(180,100,80,0.06) 0px, rgba(180,100,80,0.06) 1px, transparent 0px, transparent 28px)',
+    title: '#8b4a3a',
+    code: '#7a3a2a',
+    body: '#5a3028',
+    accent: '#c9897a',
+    badge: 'rgba(139,74,58,0.12)',
+    badgeBorder: 'rgba(139,74,58,0.25)',
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Card grafica cipria/oro rosa */}
+      <div
+        className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+        style={{
+          background: roseGold.base,
+          minHeight: 210,
+          boxShadow: '0 8px 32px rgba(180,100,80,0.18), 0 2px 8px rgba(180,100,80,0.1)',
+          border: '1px solid rgba(201,137,122,0.35)',
+        }}
+      >
+        {/* Striscia oro rosa in alto */}
+        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: roseGold.stripe }} />
+        {/* Pattern diagonale sottile */}
+        <div className="absolute inset-0" style={{ backgroundImage: roseGold.pattern, backgroundSize: '28px 28px' }} />
+        {/* Alone grande in alto a destra */}
+        <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: roseGold.glow1 }} />
+        {/* Alone piccolo in basso a sinistra */}
+        <div className="absolute -left-4 -bottom-4 w-36 h-36 rounded-full" style={{ background: roseGold.glow2 }} />
+
+        <div className="relative p-6 flex flex-col" style={{ minHeight: 210 }}>
+          {/* Header */}
+          <div className="flex items-start justify-between mb-auto">
+            <div>
+              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: roseGold.title }}>
+                Gift Pass
+              </p>
+              <p className="text-xs mt-0.5 font-medium" style={{ color: roseGold.accent }}>
+                {isDonatore ? 'Da regalare' : 'Ricevuta'}
+              </p>
+            </div>
+            {/* Chip oro rosa */}
+            <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: roseGold.chip, boxShadow: '0 2px 6px rgba(139,74,58,0.3), inset 0 1px 1px rgba(255,255,255,0.4)' }}>
+              <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(139,74,58,0.4)', background: roseGold.chipInner }} />
+            </div>
+          </div>
+
+          {/* Dati */}
+          <div className="mt-6 mb-3">
+            {isDonatore && gp.destinataria_nome && (
+              <p className="text-xs font-medium mb-1" style={{ color: roseGold.accent }}>
+                Per: {gp.destinataria_nome}
+              </p>
+            )}
+            <p className="text-xs mb-1 font-mono tracking-[0.15em]" style={{ color: roseGold.code }}>
+              {gp.codice}
+            </p>
+          </div>
+
+          {/* Footer: valore + scadenza */}
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-xs font-medium mb-0.5" style={{ color: roseGold.accent }}>Valore</p>
+              <p className="text-2xl font-bold" style={{ color: roseGold.body }}>{valore}</p>
+            </div>
+            <div className="text-xs italic px-3 py-1 rounded-full" style={{ color: roseGold.title, background: roseGold.badge, border: `1px solid ${roseGold.badgeBorder}` }}>
+              {scadenzaLabel}
+            </div>
+          </div>
+        </div>
+
+        {/* Striscia oro rosa in basso */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, #d4a090, #e8b4a0, #d4a090, transparent)' }} />
+      </div>
+
+      {/* Messaggio descrittivo */}
+      <div className="px-1">
+        {isDonatore ? (
+          <p className="text-xs text-stone-500 italic leading-relaxed">
+            Hai acquistato questa Gift Pass da <span className="text-stone-700 font-semibold not-italic">{valore}</span> da regalare.
+            Condividi il codice con chi vuoi per permetterle di usarla in salone.
+          </p>
+        ) : (
+          <p className="text-xs text-stone-500 italic leading-relaxed">
+            Hai ricevuto questa Gift Pass da <span className="text-stone-700 font-semibold not-italic">{valore}</span>.
+            Mostra il codice <span className="font-mono font-semibold not-italic text-stone-700">{gp.codice}</span> al momento del pagamento in salone.
+          </p>
+        )}
+      </div>
+
+      {/* Bottone dona (solo se donatore) */}
+      {isDonatore && (
+        <button
+          onClick={openDona}
+          className="w-full flex items-center justify-center gap-2 font-semibold rounded-2xl px-5 py-3.5 transition-all"
+          style={{ background: 'white', border: '2px solid #e8b4a0', color: '#8b4a3a' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fdf0eb'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'white'; }}
+        >
+          <Gift size={17} />
+          Invia il codice via WhatsApp
+        </button>
+      )}
+
+      {/* Modale dona */}
+      {showDona && (
+        <div className="fixed inset-0 z-[200] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={() => setShowDona(false)}>
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-stone-800 text-lg">Invia il Gift Pass</p>
+                <button onClick={() => setShowDona(false)} className="p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
+                  <X size={18} className="text-stone-400" />
+                </button>
+              </div>
+
+              <div className="rounded-2xl px-4 py-3" style={{ background: '#fdf0eb', border: '1px solid #e8b4a0' }}>
+                <p className="text-xs leading-relaxed" style={{ color: '#7a3a2a' }}>
+                  Il codice <strong>{gp.codice}</strong> sarà incluso nel messaggio. La persona a cui lo invii potrà usarlo in salone al momento del pagamento.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Anteprima messaggio (modificabile)</label>
+                <textarea
+                  value={msgDona}
+                  onChange={e => setMsgDona(e.target.value)}
+                  rows={10}
+                  className="w-full border border-stone-200 rounded-2xl px-4 py-3 text-sm text-stone-700 focus:outline-none resize-none leading-relaxed"
+                  style={{ outlineColor: '#e8b4a0' }}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDona(false)}
+                  className="flex-1 py-3 border border-stone-200 text-stone-600 font-semibold rounded-2xl hover:bg-stone-50 transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleInviaDona}
+                  className="flex-1 py-3 text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2"
+                  style={{ background: '#c9897a' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#b8705a'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#c9897a'; }}
+                >
+                  <Gift size={15} />
+                  Apri WhatsApp
                 </button>
               </div>
             </div>
