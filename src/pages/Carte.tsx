@@ -19,13 +19,14 @@ interface CartaSconto {
   id: string;
   codice: string;
   descrizione: string;
-  tipo_sconto: 'percentuale' | 'fisso';
+  tipo_sconto: 'percentuale' | 'fisso' | 'listino';
   valore_sconto: number;
   attiva: boolean;
   usa_e_getta: boolean;
   nominativa: boolean;
   cliente_id: string | null;
   telefono_override: string;
+  listino_categoria_id: string | null;
   created_at: string;
   clienti?: { nome: string; cognome: string; telefono: string } | null;
 }
@@ -128,6 +129,13 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
   const mostraTelefonoManuale = !clienteSelezionato || !clienteHaTelefono;
   const isNominativa = !form.usa_e_getta && !!form.cliente_id;
 
+  // Reset listino type if card is no longer nominative
+  useEffect(() => {
+    if (!isNominativa && form.tipo_sconto === 'listino') {
+      setForm(f => ({ ...f, tipo_sconto: 'percentuale', listino_categoria_id: '' }));
+    }
+  }, [isNominativa, form.tipo_sconto]);
+
   async function save() {
     if (form.tipo_sconto === 'listino' && !form.listino_categoria_id) return;
     setSaving(true);
@@ -212,7 +220,7 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
               >
                 <option value="percentuale">Percentuale (%)</option>
                 <option value="fisso">Importo fisso (€)</option>
-                <option value="listino">Listino prezzi</option>
+                {isNominativa && <option value="listino">Listino prezzi</option>}
               </select>
             </div>
             {form.tipo_sconto !== 'listino' && (
@@ -2138,7 +2146,7 @@ function ListinoTab() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ListinoCategoria | null>(null);
   const [prezzi, setPrezzi] = useState<ListinoPrezzoRow[]>([]);
-  const [servizi, setServizi] = useState<{ id: string; nome: string; prezzo: number }[]>([]);
+  const [servizi, setServizi] = useState<{ id: string; nome: string; prezzo: number; tipo: 'servizio' | 'trattamento' }[]>([]);
   const [loadingPrezzi, setLoadingPrezzi] = useState(false);
   const [showNuova, setShowNuova] = useState(false);
   const [nuovaNome, setNuovaNome] = useState('');
@@ -2157,8 +2165,15 @@ function ListinoTab() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    dbSelect({ table: 'servizi', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }).then(({ data }) => {
-      setServizi((data || []) as { id: string; nome: string; prezzo: number }[]);
+    Promise.all([
+      dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }, { col: 'tipo', op: 'eq', val: 'servizio' }], orderBy: [{ col: 'nome', asc: true }] }),
+      dbSelect({ table: 'trattamenti_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }, { col: 'tipo', op: 'eq', val: 'trattamento' }], orderBy: [{ col: 'nome', asc: true }] }),
+    ]).then(([sRes, tRes]) => {
+      const all = [
+        ...(sRes.data || []).map((s: any) => ({ id: s.id, nome: s.nome, prezzo: s.prezzo ?? 0, tipo: 'servizio' as const })),
+        ...(tRes.data || []).map((t: any) => ({ id: t.id, nome: t.nome, prezzo: t.prezzo ?? 0, tipo: 'trattamento' as const })),
+      ];
+      setServizi(all);
     });
   }, []);
 
@@ -2231,9 +2246,9 @@ function ListinoTab() {
   }
 
   return (
-    <div className="flex gap-6 h-full">
+    <div className="flex gap-6 h-full min-h-[60vh]">
       {/* Colonna sinistra: lista categorie */}
-      <div className="w-72 flex-shrink-0">
+      <div className="w-64 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-bold text-stone-700">Listini salvati</p>
           <button
@@ -2337,60 +2352,96 @@ function ListinoTab() {
                 <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : servizi.length === 0 ? (
-              <p className="text-sm text-stone-400 text-center py-8">Nessun servizio nel catalogo</p>
+              <p className="text-sm text-stone-400 text-center py-8">Nessun servizio o trattamento nel catalogo</p>
             ) : (
-              <div className="space-y-2">
-                {servizi.map(serv => {
-                  const listinoPx = getPrezzoForServizio(serv.nome);
-                  const isEditing = editingPrezzoId === serv.nome;
-                  const hasPx = listinoPx !== null;
+              <div className="space-y-5">
+                {(['servizio', 'trattamento'] as const).map(tipo => {
+                  const gruppo = servizi.filter(s => s.tipo === tipo);
+                  if (gruppo.length === 0) return null;
                   return (
-                    <div key={serv.id} className={`flex items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-all ${hasPx ? 'bg-orange-50 border-orange-200' : 'bg-white border-stone-100 hover:border-stone-200'}`}>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-stone-700 truncate">{serv.nome}</p>
-                        <p className="text-xs text-stone-400">Prezzo standard: €{serv.prezzo.toFixed(2)}</p>
+                    <div key={tipo}>
+                      <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">
+                        {tipo === 'servizio' ? 'Servizi' : 'Trattamenti'}
+                      </p>
+                      {/* Header colonne */}
+                      <div className="grid grid-cols-[1fr_120px_120px_80px] gap-2 px-4 py-1.5 text-[10px] font-bold text-stone-400 uppercase tracking-wide border-b border-stone-100 mb-1">
+                        <span>Voce</span>
+                        <span className="text-right">Prezzo standard</span>
+                        <span className="text-right">Prezzo listino</span>
+                        <span />
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {isEditing ? (
-                          <>
-                            <div className="relative">
-                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs">€</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step={0.5}
-                                value={editingVal}
-                                onChange={e => setEditingVal(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') commitEdit(serv.nome); if (e.key === 'Escape') { setEditingPrezzoId(null); } }}
-                                onBlur={() => commitEdit(serv.nome)}
-                                className="w-24 border border-orange-400 rounded-lg pl-6 pr-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-300"
-                                autoFocus
-                                onFocus={e => e.target.select()}
-                              />
+                      <div className="divide-y divide-stone-50">
+                        {gruppo.map(serv => {
+                          const listinoPx = getPrezzoForServizio(serv.nome);
+                          const isEditing = editingPrezzoId === serv.nome;
+                          const hasPx = listinoPx !== null;
+                          const risparmio = hasPx ? Math.max(0, serv.prezzo - (listinoPx as number)) : 0;
+                          return (
+                            <div key={serv.id} className={`grid grid-cols-[1fr_120px_120px_80px] gap-2 items-center px-4 py-3 transition-all ${hasPx ? 'bg-orange-50/60' : 'bg-white hover:bg-stone-50/50'}`}>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-stone-800 truncate">{serv.nome}</p>
+                                {hasPx && risparmio > 0 && (
+                                  <p className="text-[10px] text-orange-500 font-medium mt-0.5">risparmio €{risparmio.toFixed(2)}</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <span className={`text-sm font-medium ${hasPx && risparmio > 0 ? 'text-stone-400 line-through' : 'text-stone-700'}`}>
+                                  €{serv.prezzo.toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                {isEditing ? (
+                                  <div className="relative flex justify-end">
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs">€</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={0.5}
+                                      value={editingVal}
+                                      onChange={e => setEditingVal(e.target.value)}
+                                      onKeyDown={e => { if (e.key === 'Enter') commitEdit(serv.nome); if (e.key === 'Escape') setEditingPrezzoId(null); }}
+                                      onBlur={() => commitEdit(serv.nome)}
+                                      className="w-full border border-orange-400 rounded-lg pl-6 pr-2 py-1.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-orange-300"
+                                      autoFocus
+                                      onFocus={e => e.target.select()}
+                                    />
+                                  </div>
+                                ) : hasPx ? (
+                                  <button
+                                    onClick={() => startEdit(serv.nome)}
+                                    className="text-sm font-bold text-orange-600 hover:text-orange-700 transition-colors cursor-pointer"
+                                    title="Clicca per modificare"
+                                  >
+                                    €{(listinoPx as number).toFixed(2)}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => startEdit(serv.nome)}
+                                    className="text-xs font-medium text-stone-300 hover:text-amber-500 transition-colors border border-dashed border-stone-200 hover:border-amber-400 px-2 py-1 rounded-lg"
+                                  >
+                                    — imposta
+                                  </button>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-end gap-1">
+                                {isEditing ? (
+                                  <button onClick={() => commitEdit(serv.nome)} className="p-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors">
+                                    <Check size={12} />
+                                  </button>
+                                ) : hasPx ? (
+                                  <>
+                                    <button onClick={() => startEdit(serv.nome)} className="p-1.5 rounded-lg hover:bg-orange-100 text-stone-300 hover:text-orange-600 transition-colors">
+                                      <Pencil size={12} />
+                                    </button>
+                                    <button onClick={() => removePrezzo(serv.nome)} className="p-1.5 rounded-lg hover:bg-red-50 text-stone-200 hover:text-red-500 transition-colors">
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </>
+                                ) : null}
+                              </div>
                             </div>
-                            <button onClick={() => commitEdit(serv.nome)} className="p-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors">
-                              <Check size={12} />
-                            </button>
-                          </>
-                        ) : hasPx ? (
-                          <>
-                            <span className="text-sm font-bold text-orange-600">€{(listinoPx as number).toFixed(2)}</span>
-                            <button onClick={() => startEdit(serv.nome)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-400 hover:text-orange-600 transition-colors">
-                              <Pencil size={13} />
-                            </button>
-                            <button onClick={() => removePrezzo(serv.nome)} className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors">
-                              <Trash2 size={13} />
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => startEdit(serv.nome)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-stone-400 hover:text-amber-600 border border-dashed border-stone-200 hover:border-amber-400 px-3 py-1.5 rounded-lg transition-colors"
-                          >
-                            <Plus size={11} />
-                            Imposta prezzo
-                          </button>
-                        )}
+                          );
+                        })}
                       </div>
                     </div>
                   );

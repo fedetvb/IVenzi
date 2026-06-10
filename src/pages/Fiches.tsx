@@ -1840,21 +1840,24 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
               {voci.map(v => {
                 const lpx = v.tipo === 'servizio' && cartaSconto?.tipo_sconto === 'listino' ? listinoPrezziMap.get(v.nome_voce) : undefined;
                 return (
-                  <div key={v.id} className={lpx !== undefined ? 'ring-1 ring-inset ring-orange-200 rounded-xl' : ''}>
-                    <VoceRow voce={v} parrucchieri={parrucchieri} onChange={patch => updateVoce(v.id, patch)} onRemove={() => removeVoce(v.id)} />
-                    {lpx !== undefined && (
-                      <div className="px-4 pb-2 -mt-1 flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
-                          Listino: €{lpx.toFixed(2)} · risparmio €{Math.max(0, v.prezzo - lpx).toFixed(2)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  <VoceRow
+                    key={v.id}
+                    voce={v}
+                    parrucchieri={parrucchieri}
+                    onChange={patch => updateVoce(v.id, patch)}
+                    onRemove={() => removeVoce(v.id)}
+                    listinoPrezzoOverride={lpx}
+                  />
                 );
               })}
               {voci.length > 0 && (
-                <div className="flex justify-end items-center px-4 py-2.5 bg-stone-50 border-t border-stone-100">
-                  <span className="text-sm font-bold text-stone-800">Totale: €{totale.toFixed(2)}</span>
+                <div className="flex justify-end items-center gap-3 px-4 py-2.5 bg-stone-50 border-t border-stone-100">
+                  {cartaSconto?.tipo_sconto === 'listino' && scontoAmt > 0 && (
+                    <span className="text-xs text-stone-400 line-through">€{totaleBase.toFixed(2)}</span>
+                  )}
+                  <span className={`text-sm font-bold ${cartaSconto?.tipo_sconto === 'listino' && scontoAmt > 0 ? 'text-orange-600' : 'text-stone-800'}`}>
+                    Totale: €{totale.toFixed(2)}
+                  </span>
                 </div>
               )}
             </div>
@@ -1870,15 +1873,26 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                 <div>
                   <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Servizi</p>
                   <div className="flex flex-wrap gap-2">
-                    {serviziCatalogo.map(s => (
-                      <button key={s.id} type="button" onClick={() => addVoceServizio(s)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:shadow-sm active:scale-95"
-                        style={{ borderColor: s.colore, backgroundColor: `${s.colore}15`, color: s.colore }}
-                      >
-                        <Plus size={10} />
-                        {s.nome}{s.prezzo > 0 && <span className="opacity-70"> €{s.prezzo.toFixed(0)}</span>}
-                      </button>
-                    ))}
+                    {serviziCatalogo.map(s => {
+                      const listinoPxBtn = cartaSconto?.tipo_sconto === 'listino' ? listinoPrezziMap.get(s.nome) : undefined;
+                      return (
+                        <button key={s.id} type="button" onClick={() => addVoceServizio(s)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:shadow-sm active:scale-95"
+                          style={{ borderColor: s.colore, backgroundColor: `${s.colore}15`, color: s.colore }}
+                        >
+                          <Plus size={10} />
+                          {s.nome}
+                          {listinoPxBtn !== undefined ? (
+                            <span className="flex items-center gap-1">
+                              <span className="font-bold opacity-90"> €{listinoPxBtn.toFixed(0)}</span>
+                              {s.prezzo !== listinoPxBtn && <span className="opacity-40 line-through text-[10px]">€{s.prezzo.toFixed(0)}</span>}
+                            </span>
+                          ) : (
+                            s.prezzo > 0 && <span className="opacity-70"> €{s.prezzo.toFixed(0)}</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2767,9 +2781,10 @@ interface VoceRowProps {
   parrucchieri: ParrucchiereSimple[];
   onChange: (patch: Partial<FicheVoce>) => void;
   onRemove: () => void;
+  listinoPrezzoOverride?: number;
 }
 
-function VoceRow({ voce, parrucchieri, onChange, onRemove }: VoceRowProps) {
+function VoceRow({ voce, parrucchieri, onChange, onRemove, listinoPrezzoOverride }: VoceRowProps) {
   const [editing, setEditing] = useState(false);
   const [nomeStr, setNomeStr] = useState(voce.nome_voce);
   const [prezzoStr, setPrezzoStr] = useState(voce.prezzo.toFixed(2));
@@ -2905,6 +2920,13 @@ function VoceRow({ voce, parrucchieri, onChange, onRemove }: VoceRowProps) {
             }}
             className="w-20 border border-amber-300 rounded-lg px-2 py-0.5 text-sm text-right font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
           />
+        ) : listinoPrezzoOverride !== undefined ? (
+          <span className="flex items-center gap-1.5">
+            <span className="text-sm font-bold text-orange-600">€{listinoPrezzoOverride.toFixed(2)}</span>
+            {voce.prezzo !== listinoPrezzoOverride && (
+              <span className="text-xs text-stone-400 line-through">€{voce.prezzo.toFixed(2)}</span>
+            )}
+          </span>
         ) : (
           <span
             onClick={() => {
