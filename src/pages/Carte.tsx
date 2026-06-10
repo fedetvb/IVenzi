@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   CreditCard, Plus, Trash2, X, ChevronDown, Search, Tag, Star,
   RefreshCw, Check, Copy, AlertCircle, Wallet, History, Percent, Euro,
+  Gift, Package, Send, Clock, ShieldCheck,
 } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
-import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
+import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete, getImpostazione } from '../lib/localDb';
+import { apriWhatsApp } from '../lib/waUtils';
 
 type TipoPagamento = 'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null;
 
@@ -60,7 +62,7 @@ interface UtilizzoCarta {
 
 interface Cliente { id: string; nome: string; cognome: string; telefono: string; }
 
-type Tab = 'sconto' | 'premium';
+type Tab = 'sconto' | 'premium' | 'gift';
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -1246,7 +1248,577 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+function genCodiceGift(): string {
+  return String(Math.floor(10000 + Math.random() * 90000));
+}
+
+// ─── Types Gift Pass ──────────────────────────────────────────────────────────
+
+interface ProdottoRivenditaCatalogo {
+  id: string;
+  nome: string;
+  marca: string;
+  categoria: string;
+  prezzo_vendita: number;
+}
+
+interface GiftPass {
+  id: string;
+  codice: string;
+  tipo: 'valore' | 'prodotto';
+  valore_euro: number | null;
+  prodotto_id: string | null;
+  prodotto_nome: string | null;
+  occasione: 'invito' | 'compleanno' | 'regalo';
+  scadenza_ritiro_giorni: number;
+  scadenza_uso_giorni: number;
+  destinataria_nome: string;
+  destinataria_telefono: string;
+  attivata_at: string | null;
+  scadenza_uso_at: string | null;
+  fiche_id: string | null;
+  utilizzata: boolean;
+  attiva: boolean;
+  note: string;
+  created_at: string;
+}
+
+function statoGiftPass(gp: GiftPass): 'da_ritirare' | 'attivata' | 'utilizzata' | 'scaduta' {
+  if (gp.utilizzata) return 'utilizzata';
+  const ora = new Date();
+  if (!gp.attivata_at) {
+    if (gp.tipo === 'valore') return 'da_ritirare';
+    // prodotto: controlla scadenza ritiro (created_at + scadenza_ritiro_giorni)
+    const cAt = new Date(gp.created_at);
+    cAt.setDate(cAt.getDate() + gp.scadenza_ritiro_giorni);
+    if (ora > cAt) return 'scaduta';
+    return 'da_ritirare';
+  }
+  // attivata: controlla scadenza uso
+  if (gp.tipo !== 'valore' && gp.scadenza_uso_at) {
+    const scadUso = new Date(gp.scadenza_uso_at);
+    if (ora > scadUso) return 'scaduta';
+  }
+  return 'attivata';
+}
+
+// ─── Nuova Gift Pass Modal ────────────────────────────────────────────────────
+
+function NuovaGiftPassModal({ onClose, onSaved }: {
+  onClose: () => void;
+  onSaved: (gp: GiftPass) => void;
+}) {
+  const { user } = useAuth();
+  const [form, setForm] = useState({
+    codice: genCodiceGift(),
+    tipo: 'valore' as 'valore' | 'prodotto',
+    valore_euro: 50,
+    prodotto_id: '',
+    occasione: 'invito' as 'invito' | 'compleanno' | 'regalo',
+    scadenza_ritiro_giorni: 30,
+    scadenza_uso_giorni: 60,
+    destinataria_nome: '',
+    destinataria_telefono: '',
+    note: '',
+  });
+  const [prodotti, setProdotti] = useState<ProdottoRivenditaCatalogo[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    dbSelect({ table: 'prodotti_rivendita_catalogo', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'categoria', asc: true }, { col: 'nome', asc: true }] })
+      .then(({ data }) => setProdotti((data || []) as ProdottoRivenditaCatalogo[]));
+  }, []);
+
+  const prodottoSel = prodotti.find(p => p.id === form.prodotto_id) ?? null;
+
+  async function save() {
+    if (form.tipo === 'prodotto' && !form.prodotto_id) return;
+    if (form.tipo === 'valore' && (!form.valore_euro || form.valore_euro <= 0)) return;
+    if (!form.destinataria_nome.trim()) return;
+    setSaving(true);
+    const { data } = await dbInsert({ table: 'gift_pass', data: {
+      codice: form.codice,
+      tipo: form.tipo,
+      valore_euro: form.tipo === 'valore' ? form.valore_euro : null,
+      prodotto_id: form.tipo === 'prodotto' ? form.prodotto_id : null,
+      prodotto_nome: form.tipo === 'prodotto' ? (prodottoSel ? `${prodottoSel.nome}${prodottoSel.marca ? ` (${prodottoSel.marca})` : ''}` : null) : null,
+      occasione: form.occasione,
+      scadenza_ritiro_giorni: form.scadenza_ritiro_giorni,
+      scadenza_uso_giorni: form.scadenza_uso_giorni,
+      destinataria_nome: form.destinataria_nome.trim(),
+      destinataria_telefono: form.destinataria_telefono.trim(),
+      note: form.note.trim(),
+      utilizzata: false,
+      attiva: true,
+      user_id: user?.id,
+    }});
+    setSaving(false);
+    if (data) onSaved(data as unknown as GiftPass);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center">
+              <Gift size={16} className="text-violet-600" />
+            </div>
+            <h2 className="font-bold text-stone-800">Nuovo Gift Pass</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors"><X size={16} /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Tipo */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Tipo regalo</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setForm(f => ({ ...f, tipo: 'valore' }))}
+                className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-sm font-semibold transition-colors ${form.tipo === 'valore' ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                <Euro size={16} />
+                Valore in €
+              </button>
+              <button onClick={() => setForm(f => ({ ...f, tipo: 'prodotto' }))}
+                className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-sm font-semibold transition-colors ${form.tipo === 'prodotto' ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                <Package size={16} />
+                Prodotto
+              </button>
+            </div>
+          </div>
+
+          {/* Valore / Prodotto */}
+          {form.tipo === 'valore' && (
+            <div>
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Valore (€)</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {[20, 30, 50, 80, 100].map(v => (
+                  <button key={v} onClick={() => setForm(f => ({ ...f, valore_euro: v }))}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${form.valore_euro === v ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                    €{v}
+                  </button>
+                ))}
+              </div>
+              <input type="number" min={1} step={5} value={form.valore_euro}
+                onChange={e => setForm(f => ({ ...f, valore_euro: Number(e.target.value) }))}
+                onFocus={e => e.target.select()}
+                className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
+              <p className="text-xs text-stone-400 mt-1">La carta con valore in € non scade mai.</p>
+            </div>
+          )}
+          {form.tipo === 'prodotto' && (
+            <div>
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Prodotto da regalare <span className="text-red-500">*</span></label>
+              <select value={form.prodotto_id} onChange={e => setForm(f => ({ ...f, prodotto_id: e.target.value }))}
+                className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400">
+                <option value="">— Seleziona prodotto —</option>
+                {prodotti.map(p => (
+                  <option key={p.id} value={p.id}>{p.categoria ? `${p.categoria} · ` : ''}{p.nome}{p.marca ? ` (${p.marca})` : ''} — €{p.prezzo_vendita.toFixed(2)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Occasione */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Occasione</label>
+            <div className="grid grid-cols-3 gap-2">
+              {([['invito', 'Invito'], ['compleanno', 'Compleanno'], ['regalo', 'Regalo']] as const).map(([val, lbl]) => (
+                <button key={val} onClick={() => setForm(f => ({ ...f, occasione: val }))}
+                  className={`px-2 py-2 rounded-xl border text-xs font-semibold transition-colors ${form.occasione === val ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Scadenze (solo per prodotto) */}
+          {form.tipo === 'prodotto' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Giorni per ritirarlo</label>
+                <input type="number" min={1} step={1} value={form.scadenza_ritiro_giorni}
+                  onChange={e => setForm(f => ({ ...f, scadenza_ritiro_giorni: Number(e.target.value) }))}
+                  onFocus={e => e.target.select()}
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
+                <p className="text-[10px] text-stone-400 mt-0.5">Giorni dalla creazione</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Giorni per usarlo</label>
+                <input type="number" min={1} step={1} value={form.scadenza_uso_giorni}
+                  onChange={e => setForm(f => ({ ...f, scadenza_uso_giorni: Number(e.target.value) }))}
+                  onFocus={e => e.target.select()}
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
+                <p className="text-[10px] text-stone-400 mt-0.5">Giorni dall'attivazione</p>
+              </div>
+            </div>
+          )}
+
+          {/* Destinataria */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Nome destinataria <span className="text-red-500">*</span></label>
+            <input value={form.destinataria_nome} onChange={e => setForm(f => ({ ...f, destinataria_nome: e.target.value }))}
+              placeholder="es. Sara Bianchi"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Telefono destinataria</label>
+            <input type="tel" value={form.destinataria_telefono} onChange={e => setForm(f => ({ ...f, destinataria_telefono: e.target.value }))}
+              placeholder="es. 3331234567"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
+          </div>
+
+          {/* Codice */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Codice Gift Pass</label>
+            <div className="flex gap-2">
+              <input value={form.codice} onChange={e => setForm(f => ({ ...f, codice: e.target.value }))}
+                maxLength={5}
+                className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono text-center text-lg font-bold tracking-widest focus:outline-none focus:border-violet-400" />
+              <button onClick={() => setForm(f => ({ ...f, codice: genCodiceGift() }))} className="p-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"><RefreshCw size={14} className="text-stone-500" /></button>
+              <button onClick={() => { navigator.clipboard.writeText(form.codice).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="p-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">
+                {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} className="text-stone-500" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Note (opzionale)</label>
+            <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Note opzionali..."
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Annulla</button>
+          <button onClick={save} disabled={saving || !form.destinataria_nome.trim() || (form.tipo === 'prodotto' && !form.prodotto_id) || (form.tipo === 'valore' && form.valore_euro <= 0)}
+            className="flex-1 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+            {saving ? 'Creazione...' : 'Crea Gift Pass'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Gift Pass WhatsApp Modal ─────────────────────────────────────────────────
+
+function GiftPassWaModal({ gp, nomeSalone, onClose }: { gp: GiftPass; nomeSalone: string; onClose: () => void }) {
+  const [telefono, setTelefono] = useState('');
+  const [maps, setMaps] = useState('');
+  const [sito, setSito] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [messaggio, setMessaggio] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      getImpostazione('azienda_telefono'),
+      getImpostazione('azienda_google_maps'),
+      getImpostazione('azienda_sito_prenotazioni'),
+    ]).then(([tel, mp, sit]) => {
+      setTelefono(tel ?? '');
+      setMaps(mp ?? '');
+      setSito(sit ?? '');
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const codice = gp.codice;
+    const tel = telefono;
+    const link = sito;
+    const mapLink = maps;
+    const sn = nomeSalone || 'il salone';
+    let msg = '';
+    if (gp.tipo === 'prodotto') {
+      msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+    } else if (gp.occasione === 'compleanno') {
+      msg = `Ciao 😊 Per il tuo compleanno ho voluto regalarti un'esperienza speciale da Stefano e Federico del salone "${sn}". Sono i ragazzi che si prendono cura dei miei capelli e volevo farti provare lo stesso entusiasmo, l'ascolto e la cura che dedicano a me ogni volta.\n\nTi lascio questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+    } else if (gp.occasione === 'regalo') {
+      msg = `Ciao 😊 Ho pensato di dedicare un pensiero speciale a te che sei una persona importante, per farti provare l'entusiasmo e la cura con cui Stefano e Federico del salone "${sn}" ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere questo benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax.`;
+    } else {
+      msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass con un bonus di €${gp.valore_euro} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
+    }
+    setMessaggio(msg);
+  }, [loading, gp, telefono, maps, sito, nomeSalone]);
+
+  const hasPhone = !!gp.destinataria_telefono.trim();
+
+  if (loading) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-green-100 rounded-lg flex items-center justify-center">
+              <Send size={14} className="text-green-600" />
+            </div>
+            <div>
+              <p className="font-bold text-stone-800 text-sm">Notifica destinataria</p>
+              <p className="text-xs text-stone-400">Gift Pass {gp.codice} · {gp.destinataria_nome}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors"><X size={15} className="text-stone-500" /></button>
+        </div>
+        <div className="px-5 pt-4 pb-2 overflow-y-auto flex-1">
+          <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Messaggio</label>
+          <textarea value={messaggio} onChange={e => setMessaggio(e.target.value)} rows={10}
+            className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 leading-relaxed focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 resize-none font-mono transition-colors" />
+        </div>
+        {!hasPhone && (
+          <p className="mx-5 mt-1 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Nessun numero di telefono registrato per questa destinataria.</p>
+        )}
+        <div className="flex gap-2 px-5 py-4 flex-shrink-0">
+          <button onClick={() => { navigator.clipboard.writeText(messaggio).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+            {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+            {copied ? 'Copiato!' : 'Copia'}
+          </button>
+          {hasPhone && (
+            <button onClick={() => { apriWhatsApp(gp.destinataria_telefono, messaggio); onClose(); }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors">
+              <Send size={14} />
+              WhatsApp
+            </button>
+          )}
+        </div>
+        <div className="px-5 pb-4 flex-shrink-0">
+          <button onClick={onClose} className="w-full py-2 text-xs text-stone-400 hover:text-stone-600 transition-colors">Salta notifica</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Gift Pass Tab ────────────────────────────────────────────────────────────
+
+const STATO_LABEL: Record<string, string> = {
+  da_ritirare: 'Da ritirare',
+  attivata: 'Attivata',
+  utilizzata: 'Utilizzata',
+  scaduta: 'Scaduta',
+};
+const STATO_COLOR: Record<string, string> = {
+  da_ritirare: 'bg-amber-100 text-amber-700',
+  attivata: 'bg-emerald-100 text-emerald-700',
+  utilizzata: 'bg-stone-100 text-stone-500',
+  scaduta: 'bg-red-100 text-red-600',
+};
+
+function GiftPassTab() {
+  const [cards, setCards] = useState<GiftPass[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [showPasswordGate, setShowPasswordGate] = useState<'nuova' | 'elimina' | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [filtroStato, setFiltroStato] = useState<'tutte' | 'da_ritirare' | 'attivata' | 'utilizzata' | 'scaduta'>('tutte');
+  const [waModal, setWaModal] = useState<GiftPass | null>(null);
+  const [nomeSalone, setNomeSalone] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [res, sn] = await Promise.all([
+      dbSelect({ table: 'gift_pass', filters: [{ col: 'deleted_at', op: 'is_null' }], orderBy: [{ col: 'created_at', asc: false }] }),
+      getImpostazione('azienda_nome'),
+    ]);
+    setCards((res.data || []) as GiftPass[]);
+    setNomeSalone(sn ?? 'I Venzi');
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function confirmDelete(id: string) {
+    await dbUpdate({ table: 'gift_pass', id, data: { deleted_at: new Date().toISOString() } });
+    setPendingDeleteId(null);
+    load();
+  }
+
+  function copyCodice(codice: string) {
+    navigator.clipboard.writeText(codice).catch(() => {});
+    setCopied(codice);
+    setTimeout(() => setCopied(null), 1500);
+  }
+
+  const filtered = cards.filter(gp => {
+    const stato = statoGiftPass(gp);
+    const matchSearch = !search ||
+      gp.codice.includes(search) ||
+      gp.destinataria_nome.toLowerCase().includes(search.toLowerCase());
+    const matchStato = filtroStato === 'tutte' || stato === filtroStato;
+    return matchSearch && matchStato;
+  });
+
+  const stats = {
+    totale: cards.length,
+    da_ritirare: cards.filter(g => statoGiftPass(g) === 'da_ritirare').length,
+    attivata: cards.filter(g => statoGiftPass(g) === 'attivata').length,
+    utilizzata: cards.filter(g => statoGiftPass(g) === 'utilizzata').length,
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Barra azioni */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per codice o nome..."
+            className="w-full pl-9 pr-4 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 bg-white" />
+        </div>
+        <div className="flex gap-1 flex-wrap">
+          {(['tutte', 'da_ritirare', 'attivata', 'utilizzata', 'scaduta'] as const).map(s => (
+            <button key={s} onClick={() => setFiltroStato(s)}
+              className={`px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors border ${filtroStato === s ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+              {s === 'tutte' ? 'Tutte' : STATO_LABEL[s]}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowPasswordGate('nuova')}
+          className="flex items-center gap-2 bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex-shrink-0">
+          <Plus size={15} />
+          Nuovo Gift Pass
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Totale', value: stats.totale, color: 'text-stone-700' },
+          { label: 'Da ritirare', value: stats.da_ritirare, color: 'text-amber-600' },
+          { label: 'Attivati', value: stats.attivata, color: 'text-emerald-600' },
+          { label: 'Utilizzati', value: stats.utilizzata, color: 'text-stone-400' },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-2xl border border-stone-200 p-4 text-center">
+            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-stone-400 mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Lista */}
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center">
+          <Gift size={32} className="text-stone-300 mx-auto mb-3" />
+          <p className="text-stone-500 font-medium">Nessun Gift Pass trovato</p>
+          <p className="text-xs text-stone-400 mt-1">Crea il primo Gift Pass per iniziare</p>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {filtered.map(gp => {
+            const stato = statoGiftPass(gp);
+            const isAttiva = stato === 'da_ritirare' || stato === 'attivata';
+            return (
+              <div key={gp.id} className={`rounded-2xl border p-4 transition-all ${isAttiva ? 'bg-violet-50 border-violet-200' : 'border-stone-100 opacity-70'}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isAttiva ? 'bg-violet-100' : 'bg-stone-100'}`}>
+                      {gp.tipo === 'prodotto'
+                        ? <Package size={18} className={isAttiva ? 'text-violet-600' : 'text-stone-400'} />
+                        : <Euro size={18} className={isAttiva ? 'text-violet-600' : 'text-stone-400'} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button onClick={() => copyCodice(gp.codice)}
+                          className="font-mono text-lg font-bold text-stone-800 hover:text-violet-600 transition-colors flex items-center gap-1 tracking-widest">
+                          {gp.codice}
+                          {copied === gp.codice ? <Check size={12} className="text-emerald-500" /> : <Copy size={11} className="text-stone-300" />}
+                        </button>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATO_COLOR[stato]}`}>{STATO_LABEL[stato]}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${gp.tipo === 'prodotto' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {gp.tipo === 'prodotto' ? 'Prodotto' : `€${gp.valore_euro}`}
+                        </span>
+                        <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-medium capitalize">{gp.occasione}</span>
+                      </div>
+                      {gp.tipo === 'prodotto' && gp.prodotto_nome && (
+                        <p className="text-xs text-stone-600 mt-0.5 font-medium">{gp.prodotto_nome}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                        <span className="text-xs text-stone-600 font-medium">{gp.destinataria_nome}</span>
+                        {gp.destinataria_telefono && <span className="text-xs text-stone-400">{gp.destinataria_telefono}</span>}
+                      </div>
+                      {stato === 'attivata' && gp.scadenza_uso_at && gp.tipo !== 'valore' && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Clock size={11} className="text-amber-500" />
+                          <span className="text-[10px] text-amber-600 font-medium">
+                            Scade uso: {new Date(gp.scadenza_uso_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                      )}
+                      {stato === 'da_ritirare' && gp.tipo !== 'valore' && (() => {
+                        const sc = new Date(gp.created_at);
+                        sc.setDate(sc.getDate() + gp.scadenza_ritiro_giorni);
+                        return (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Clock size={11} className="text-stone-400" />
+                            <span className="text-[10px] text-stone-400">
+                              Scade ritiro: {sc.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {stato === 'utilizzata' && gp.fiche_id && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <ShieldCheck size={11} className="text-emerald-500" />
+                          <span className="text-[10px] text-emerald-600 font-medium">Usato in fiche</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {isAttiva && (
+                      <button onClick={() => setWaModal(gp)} className="p-2 rounded-lg hover:bg-violet-100 text-stone-400 hover:text-violet-600 transition-colors" title="Invia WhatsApp">
+                        <Send size={15} />
+                      </button>
+                    )}
+                    <button onClick={() => { setPendingDeleteId(gp.id); setShowPasswordGate('elimina'); }} className="p-2 rounded-lg hover:bg-red-50 text-stone-400 hover:text-red-500 transition-colors">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showPasswordGate && (
+        <PasswordGateModal
+          titolo={showPasswordGate === 'nuova' ? 'Nuovo Gift Pass' : 'Elimina Gift Pass'}
+          descrizione={showPasswordGate === 'nuova' ? 'Inserisci la password per creare un nuovo Gift Pass.' : 'Inserisci la password per eliminare questo Gift Pass.'}
+          onSuccess={() => {
+            if (showPasswordGate === 'nuova') { setShowPasswordGate(null); setShowModal(true); }
+            else if (pendingDeleteId) { setShowPasswordGate(null); confirmDelete(pendingDeleteId); }
+          }}
+          onClose={() => { setShowPasswordGate(null); setPendingDeleteId(null); }}
+        />
+      )}
+      {showModal && (
+        <NuovaGiftPassModal
+          onClose={() => setShowModal(false)}
+          onSaved={gp => { setShowModal(false); load(); setWaModal(gp); }}
+        />
+      )}
+      {waModal && (
+        <GiftPassWaModal gp={waModal} nomeSalone={nomeSalone} onClose={() => { setWaModal(null); load(); }} />
+      )}
+    </div>
+  );
+}
+
+
 
 export default function Carte() {
   const [tab, setTab] = useState<Tab>('sconto');
@@ -1268,7 +1840,7 @@ export default function Carte() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-stone-800">Carte</h1>
-            <p className="text-sm text-stone-400">Gestisci carte sconto e carte premium ricaricabili</p>
+            <p className="text-sm text-stone-400">Gestisci carte sconto, carte premium e Gift Pass</p>
           </div>
         </div>
       </div>
@@ -1289,10 +1861,18 @@ export default function Carte() {
           <Star size={15} />
           Carte premium
         </button>
+        <button
+          onClick={() => setTab('gift')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${tab === 'gift' ? 'bg-white text-violet-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+        >
+          <Gift size={15} />
+          Gift Pass
+        </button>
       </div>
 
       {tab === 'sconto' && <CarteSconto clienti={clienti} />}
       {tab === 'premium' && <CartePremium clienti={clienti} />}
+      {tab === 'gift' && <GiftPassTab />}
     </div>
   );
 }

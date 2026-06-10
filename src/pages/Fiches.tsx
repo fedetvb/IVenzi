@@ -877,6 +877,12 @@ interface CartaScontoSimple {
 interface CartaPremiumSimple {
   id: string; codice: string; saldo: number; attiva?: boolean;
 }
+interface GiftPassSimple {
+  id: string; codice: string; tipo: 'valore' | 'prodotto';
+  valore_euro: number | null; prodotto_id: string | null; prodotto_nome: string | null;
+  occasione: string; attivata_at: string | null; scadenza_uso_at: string | null;
+  fiche_id: string | null;
+}
 
 function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, trattamentiCatalogo, parrucchieri, isOpen, onToggle, onSaved, onEliminato, onConvalidata, showImporti, carteTipi }: FicheCardProps) {
   const { user } = useAuth();
@@ -903,6 +909,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [ricaricaImporto, setRicaricaImporto] = useState(0);
   const [clienteTelefono, setClienteTelefono] = useState('');
   const [smsModal, setSmsModal] = useState<{ azione: AzioneCarta; codiceOverride?: string } | null>(null);
+  // Gift Pass
+  const [giftPasses, setGiftPasses] = useState<GiftPassSimple[]>([]);
+  const [giftPassId, setGiftPassId] = useState('');
   const [pendingExtra, setPendingExtra] = useState<{ voce: VoceExtra; parrId: string } | null>(null);
   const [pendingServizio, setPendingServizio] = useState<{ servizio: ServizioSemplice; parrId: string } | null>(null);
   const [showRivenditaPicker, setShowRivenditaPicker] = useState(false);
@@ -1037,6 +1046,23 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         const attiva = premiumList.find(c => c.attiva && c.saldo > 0);
         if (attiva) setCartaPremiumId(attiva.id);
       }
+
+      // Carica Gift Pass attivate per questo cliente (da_ritirare + attivata, non utilizzate)
+      const { data: gpData } = await dbSelect({
+        table: 'gift_pass',
+        filters: [
+          { col: 'destinataria_telefono', op: 'neq', val: '' },
+          { col: 'utilizzata', op: 'eq', val: false },
+        ],
+      });
+      // Filter activated (attivata_at non null) e non scadute
+      const now = new Date();
+      const gpList = ((gpData || []) as GiftPassSimple[]).filter(gp => {
+        if (!gp.attivata_at) return false; // non ancora attivata
+        if (gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now) return false;
+        return true;
+      });
+      setGiftPasses(gpList);
     })();
     setInitialized(true);
   }, [isOpen, initialized, gruppo]);
@@ -1344,6 +1370,30 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           ...(nuovoSaldoPremium <= 0 ? { attiva: false } : {}),
         } });
       }
+
+      // Registra utilizzo Gift Pass
+      const giftPass = giftPasses.find(gp => gp.id === giftPassId);
+      if (ficheId && giftPass) {
+        // Se tipo=prodotto, aggiungi voce a €0 se non già presente
+        if (giftPass.tipo === 'prodotto' && giftPass.prodotto_id) {
+          const nomevoce = `${giftPass.prodotto_nome ?? 'Prodotto'} - Gift Pass (${giftPass.codice})`;
+          const noteConId = `__catalogo_id__:${giftPass.prodotto_id}`;
+          const alreadyAdded = voci.some(v => v.note === noteConId || v.nome_voce.includes(giftPass.codice));
+          if (!alreadyAdded) {
+            await dbInsert({ table: 'fiche_voci', data: {
+              fiche_id: ficheId, tipo: 'extra', nome_voce: nomevoce,
+              parrucchiere_id: null, nome_parrucchiere: '', prezzo: 0,
+              note: noteConId, ordine: voci.length, user_id: user?.id,
+            } });
+            // Scala stock
+            const { error: rpcErr } = await dbRpc('aggiorna_stock_catalogo', { p_id: giftPass.prodotto_id, p_stock_delta: -1, p_venduta_delta: 1 });
+            if (rpcErr) console.error('[handleConvalida] scala stock gift pass fallito:', giftPass.prodotto_id, rpcErr);
+          }
+        }
+        await dbUpdate({ table: 'gift_pass', id: giftPass.id, data: {
+          utilizzata: true, fiche_id: ficheId, updated_at: new Date().toISOString(),
+        } });
+      }
     }
 
     setConvalidando(false);
@@ -1431,6 +1481,23 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'id', op: 'eq', val: (inc as any).id }] });
       }
 
+      // Ripristina Gift Pass collegato a questa fiche
+      const { data: gpRows } = await dbSelect({ table: 'gift_pass', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+      for (const gp of gpRows || []) {
+        const gpData = gp as GiftPassSimple & { prodotto_id: string | null; scadenza_uso_at: string | null };
+        // Calcola nuovo scadenza_uso_at: ripristina il tempo residuo basandosi su attivata_at
+        await dbUpdate({ table: 'gift_pass', id: gpData.id, data: {
+          utilizzata: false, fiche_id: null, updated_at: new Date().toISOString(),
+        } });
+        // Ripristina stock se tipo=prodotto
+        if (gpData.prodotto_id) {
+          const voceGp = vociFiche?.find((vf: any) => (vf.note ?? '').includes(gpData.prodotto_id!));
+          if (voceGp) {
+            await dbRpc('aggiorna_stock_catalogo', { p_id: gpData.prodotto_id, p_stock_delta: 1, p_venduta_delta: -1 });
+          }
+        }
+      }
+
       // Riporta fiche a non-convalidata
       await dbUpdate({ table: 'fiches', id: ficheId, data: { convalidata: false, convalidata_at: null, importo_convalidato: 0 } });
     }
@@ -1503,6 +1570,18 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           const { data: incassiE } = await dbSelect({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
           for (const inc of incassiE || []) {
             await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'id', op: 'eq', val: (inc as any).id }] });
+          }
+
+          // Ripristina Gift Pass collegato a questa fiche
+          const { data: gpRowsE } = await dbSelect({ table: 'gift_pass', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
+          for (const gp of gpRowsE || []) {
+            const gpData = gp as any;
+            await dbUpdate({ table: 'gift_pass', id: gpData.id, data: {
+              utilizzata: false, fiche_id: null, updated_at: new Date().toISOString(),
+            } });
+            if (gpData.prodotto_id) {
+              await dbRpc('aggiorna_stock_catalogo', { p_id: gpData.prodotto_id, p_stock_delta: 1, p_venduta_delta: -1 });
+            }
           }
         }
 
@@ -1945,7 +2024,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           </div>
 
           {/* Carte sconto e premium */}
-          {(carteSconto.length > 0 || cartePremium.length > 0) && (
+          {(carteSconto.length > 0 || cartePremium.length > 0 || giftPasses.length > 0) && (
             <div className="rounded-xl border border-stone-100 bg-stone-50/50 px-4 py-4 space-y-3">
               <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Carte cliente</p>
               {carteSconto.length > 0 && (
@@ -2003,6 +2082,26 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                       <AlertCircle size={11} /> Saldo insufficiente — verrà richiesta conferma alla convalida
                     </p>
                   )}
+                </div>
+              )}
+              {giftPasses.length > 0 && (
+                <div>
+                  <label className="block text-xs text-stone-500 mb-1">Gift Pass</label>
+                  <select value={giftPassId} onChange={e => setGiftPassId(e.target.value)}
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-violet-400">
+                    <option value="">— Nessun Gift Pass —</option>
+                    {giftPasses.map(gp => (
+                      <option key={gp.id} value={gp.id}>
+                        {gp.codice} · {gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore_euro}`} · {gp.occasione}
+                      </option>
+                    ))}
+                  </select>
+                  {giftPasses.find(gp => gp.id === giftPassId) && (() => {
+                    const gp = giftPasses.find(gp => gp.id === giftPassId)!;
+                    return gp.tipo === 'prodotto'
+                      ? <p className="text-xs text-violet-600 mt-1 font-medium">Prodotto aggiunto alla fiche a €0 alla convalida</p>
+                      : <p className="text-xs text-violet-600 mt-1 font-medium">Gift Pass valore €{gp.valore_euro} — informativo</p>;
+                  })()}
                 </div>
               )}
               {(scontoAmt > 0 || creditoPremium > 0) && (

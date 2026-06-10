@@ -142,6 +142,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [cognome, setCognome] = useState('');
   const [telefono, setTelefono] = useState('');
   const [cartaScontoCode, setCartaScontoCode] = useState('');
+  const [giftPassCode, setGiftPassCode] = useState('');
   const [datiError, setDatiError] = useState('');
 
   // Le mie carte
@@ -427,6 +428,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
     const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim() };
     if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
+    if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
     localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
     setDatiError('');
 
@@ -468,6 +470,34 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             codice_carta: cartaScontoCode.trim(),
           }),
         });
+      } catch { /* non bloccante */ }
+    }
+
+    // Se ha inserito un codice Gift Pass, attivalo via REST diretto
+    if (giftPassCode.trim()) {
+      try {
+        const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' };
+        // Cerca il pass con questo codice non ancora attivato
+        const gpRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/gift_pass?codice=eq.${encodeURIComponent(giftPassCode.trim().toUpperCase())}&attivata_at=is.null&utilizzata=eq.false&select=id,tipo,scadenza_uso_giorni`,
+          { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
+        );
+        const gpData = await gpRes.json();
+        if (Array.isArray(gpData) && gpData.length > 0) {
+          const gp = gpData[0];
+          const now = new Date().toISOString();
+          const scadenzaUsoAt = gp.tipo !== 'valore' && gp.scadenza_uso_giorni
+            ? (() => { const d = new Date(); d.setDate(d.getDate() + gp.scadenza_uso_giorni); return d.toISOString(); })()
+            : null;
+          await fetch(
+            `${SUPABASE_URL}/rest/v1/gift_pass?id=eq.${gp.id}`,
+            {
+              method: 'PATCH',
+              headers: { ...anonHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ attivata_at: now, ...(scadenzaUsoAt ? { scadenza_uso_at: scadenzaUsoAt } : {}), updated_at: now }),
+            }
+          );
+        }
       } catch { /* non bloccante */ }
     }
 
@@ -692,6 +722,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       data_ora2: dataOra2,
       chiunque: chiunque || false,
       parrucchieri_candidati: chiunque ? parrucchieriCandidati : null,
+      ...(giftPassCode.trim() ? { gift_pass_codice: giftPassCode.trim().toUpperCase() } : {}),
     };
 
     try {
@@ -960,6 +991,18 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   />
                 </div>
                 <p className="text-[11px] text-stone-400 mt-1">Se hai ricevuto una carta sconto, inserisci il codice qui</p>
+              </Field>
+              <Field label="Codice Gift Pass (opzionale)">
+                <div className="relative">
+                  <Gift size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    value={giftPassCode}
+                    onChange={e => setGiftPassCode(e.target.value.toUpperCase())}
+                    placeholder="Es. 12345"
+                    className="input pl-9 font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-stone-400 mt-1">Se hai ricevuto un Gift Pass, inserisci il codice numerico qui</p>
               </Field>
               <p className="text-xs text-stone-400 bg-stone-50 rounded-xl p-3">
                 La prenotazione è una <strong>richiesta</strong> e deve essere confermata dal salone via WhatsApp. Non è garantita finché non ricevi conferma.
