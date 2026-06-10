@@ -178,9 +178,9 @@ Deno.serve(async (req: Request) => {
       // Verifica che la carta appartenga effettivamente a questa cliente
       const { data: clienti } = await sb
         .from("clienti")
-        .select("id, nome, cognome")
+        .select("id, nome, cognome, telefono")
         .eq("user_id", user_id)
-        .eq("deleted", false);
+        .is("deleted_at", null);
 
       const cliente = (clienti ?? []).find((c: { telefono: string }) =>
         normalizePhone(c.telefono ?? "") === telNorm
@@ -247,9 +247,9 @@ Deno.serve(async (req: Request) => {
       // Cerca se la cliente esiste già
       const { data: clienti } = await sb
         .from("clienti")
-        .select("id, nome, cognome")
+        .select("id, nome, cognome, telefono")
         .eq("user_id", user_id)
-        .eq("deleted", false);
+        .is("deleted_at", null);
 
       const cliente = (clienti ?? []).find((c: { telefono?: string }) =>
         normalizePhone(c.telefono ?? "") === telNorm
