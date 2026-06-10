@@ -76,6 +76,27 @@ Deno.serve(async (req: Request) => {
 
     const cliente_id = clienteRows?.[0]?.id ?? null;
 
+    // Crea scheda da confermare se la cliente non è già registrata
+    if (!cliente_id) {
+      const { data: esistente } = await admin
+        .from("schede_clienti_da_confermare")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("telefono", String(telefono).trim())
+        .eq("stato", "in_attesa")
+        .maybeSingle();
+
+      if (!esistente) {
+        await admin.from("schede_clienti_da_confermare").insert({
+          user_id,
+          nome: String(nome).trim(),
+          cognome: String(cognome).trim(),
+          telefono: String(telefono).trim(),
+          stato: "in_attesa",
+        });
+      }
+    }
+
     // Upload foto
     const folder = `messaggi/${user_id}`;
     let foto_url_1 = "";
