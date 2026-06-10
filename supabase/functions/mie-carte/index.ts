@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
       .from("clienti")
       .select("id, nome, cognome, telefono")
       .eq("user_id", userId)
-      .eq("deleted", false);
+      .is("deleted_at", null);
 
     const cliente = (clienti ?? []).find((c: { telefono: string }) =>
       normalizePhone(c.telefono ?? "") === telNorm
@@ -103,7 +103,7 @@ Deno.serve(async (req: Request) => {
             .eq("cliente_id", cliente.id)
             .eq("user_id", userId)
             .eq("convalidata", true)
-            .eq("deleted", false),
+            .is("deleted_at", null),
         ]);
 
         const risparmioTotale = (risparmioRes.data ?? []).reduce(
