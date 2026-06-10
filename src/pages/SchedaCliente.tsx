@@ -779,7 +779,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
               )}
               {haPortato.length > 0 && (
                 <div className="bg-sky-50 rounded-xl px-4 py-3 border border-sky-100">
-                  <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-0.5">Ha portato in salone</p>
+                  <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-0.5">Ha presentato al salone</p>
                   <p className="text-sm text-sky-800">{haPortato.join(', ')}</p>
                 </div>
               )}
