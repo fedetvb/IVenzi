@@ -1554,43 +1554,68 @@ function CartaInfinityCard({ carta, cliente }: { carta: CartaInfinity; cliente: 
     : `€ ${carta.valore_sconto.toFixed(2)}`;
 
   return (
-    <div
-      className="relative w-full rounded-3xl overflow-hidden shadow-xl"
-      style={{
-        background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 40%, #e8eaed 100%)',
-        minHeight: 200,
-        border: '1px solid #c0c0c0',
-      }}
-    >
-      {/* Pattern argento */}
-      <div className="absolute inset-0 opacity-5" style={{
-        backgroundImage: 'repeating-linear-gradient(-45deg, #888 0px, #888 1px, transparent 0px, transparent 50%)',
-        backgroundSize: '15px 15px',
-      }} />
-      <div className="absolute -right-6 -top-6 w-36 h-36 rounded-full" style={{ background: 'rgba(192,192,192,0.2)' }} />
+    <div className="space-y-3">
+      {/* Card grafica argento */}
+      <div
+        className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+        style={{
+          background: 'linear-gradient(135deg, #1a1a1a 0%, #2e2e2e 25%, #1f1f1f 50%, #303030 75%, #141414 100%)',
+          minHeight: 210,
+        }}
+      >
+        {/* Striscia argento in alto */}
+        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, #6b6b6b, #d4d4d4, #a8a8a8, #d4d4d4, #6b6b6b)' }} />
+        {/* Pattern decorativo argento */}
+        <div className="absolute inset-0 opacity-15" style={{
+          backgroundImage: 'repeating-linear-gradient(45deg, #a0a0a0 0px, #a0a0a0 1px, transparent 0px, transparent 28px)',
+          backgroundSize: '28px 28px',
+        }} />
+        {/* Alone argento grande in alto a destra */}
+        <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: 'radial-gradient(circle, rgba(180,180,180,0.25) 0%, transparent 70%)' }} />
+        {/* Alone argento piccolo in basso a sinistra */}
+        <div className="absolute -left-4 -bottom-4 w-32 h-32 rounded-full" style={{ background: 'radial-gradient(circle, rgba(180,180,180,0.15) 0%, transparent 70%)' }} />
 
-      <div className="relative p-6 flex flex-col" style={{ minHeight: 200 }}>
-        <div className="flex items-start justify-between mb-auto">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.2em] uppercase text-stone-500">Carta Sconto Infinity</p>
+        <div className="relative p-6 flex flex-col" style={{ minHeight: 210 }}>
+          {/* Header */}
+          <div className="flex items-start justify-between mb-auto">
+            <div>
+              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: '#d4d4d4', textShadow: '0 0 8px rgba(192,192,192,0.5)' }}>Carta Sconto Infinity</p>
+            </div>
+            {/* Chip argento realistico */}
+            <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6b6b6b 0%, #d4d4d4 40%, #a8a8a8 60%, #5a5a5a 100%)', boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
+              <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(90,90,90,0.6)', background: 'linear-gradient(135deg, #a8a8a8 0%, #d4d4d4 50%, #6b6b6b 100%)' }} />
+            </div>
           </div>
-          <div className="w-10 h-7 rounded-md" style={{ background: 'linear-gradient(135deg, #c0c0c0, #e8e8e8, #a8a8a8)' }} />
-        </div>
 
-        <div className="mt-8 mb-4">
-          <p className="text-stone-800 font-bold text-lg tracking-wide">
-            {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
-          </p>
-          <p className="text-xs mt-1 font-mono tracking-[0.15em] text-stone-400">{carta.codice}</p>
-        </div>
-
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="text-xs text-stone-400">Sconto applicato</p>
-            <p className="text-2xl font-bold text-stone-600">{sconto}</p>
+          {/* Dati cliente */}
+          <div className="mt-8 mb-4">
+            <p className="text-white font-bold text-lg tracking-wide" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+              {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
+            </p>
+            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: '#d4d4d4' }}>
+              {carta.codice}
+            </p>
           </div>
-          <div className="text-xs text-stone-400 italic">Non scade</div>
+
+          {/* Sconto */}
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-xs font-medium" style={{ color: 'rgba(212,212,212,0.7)' }}>Sconto applicato</p>
+              <p className="text-3xl font-bold" style={{ color: '#d4d4d4', textShadow: '0 0 12px rgba(180,180,180,0.4)' }}>{sconto}</p>
+            </div>
+            <div className="text-xs italic px-3 py-1 rounded-full" style={{ color: '#d4d4d4', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}>Non scade</div>
+          </div>
         </div>
+        {/* Striscia argento in basso */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, #a8a8a8, #d4d4d4, #a8a8a8, transparent)' }} />
+      </div>
+
+      {/* Frase motivazionale */}
+      <div className="px-1">
+        <p className="text-xs text-stone-500 italic leading-relaxed">
+          Il salone ti ha riservato uno sconto esclusivo su ogni visita.{' '}
+          <span className="text-stone-700 font-semibold not-italic">{sconto} di sconto</span> ad ogni appuntamento, senza limiti di utilizzo.
+        </p>
       </div>
     </div>
   );
