@@ -1626,7 +1626,7 @@ function CartaUsaEGettaCard({
     const ok = await onRegala(carta.id);
     if (ok) {
       const waText = encodeURIComponent(msgRegala);
-      window.open(`https://wa.me/?text=${waText}`, '_blank');
+      window.location.href = `whatsapp://send?text=${waText}`;
       setRegalato(true);
       setShowRegala(false);
     } else {
