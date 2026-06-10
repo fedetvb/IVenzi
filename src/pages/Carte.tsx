@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   CreditCard, Plus, Trash2, X, ChevronDown, Search, Tag, Star,
   RefreshCw, Check, Copy, AlertCircle, Wallet, History, Percent, Euro,
-  Gift, Package, Send, Clock, ShieldCheck,
+  Gift, Package, Send, Clock, ShieldCheck, List, Pencil, ChevronRight, BookOpen,
 } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import PasswordGateModal from '../components/PasswordGateModal';
@@ -62,7 +62,21 @@ interface UtilizzoCarta {
 
 interface Cliente { id: string; nome: string; cognome: string; telefono: string; }
 
-type Tab = 'sconto' | 'premium' | 'gift';
+interface ListinoCategoria {
+  id: string;
+  nome: string;
+  descrizione: string;
+  created_at: string;
+}
+
+interface ListinoPrezzoRow {
+  id: string;
+  categoria_id: string;
+  nome_servizio: string;
+  prezzo: number;
+}
+
+type Tab = 'sconto' | 'premium' | 'gift' | 'listino';
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -86,20 +100,28 @@ function calcolaPrezzoRicarica(credito: number): number {
 function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
   clienti: Cliente[];
   onClose: () => void;
-  onSaved: (info: { codice: string; tipoSconto: 'percentuale' | 'fisso'; valoreSconto: number; cliente: Cliente | null; telefonoOverride: string }) => void;
+  onSaved: (info: { codice: string; tipoSconto: 'percentuale' | 'fisso' | 'listino'; valoreSconto: number; cliente: Cliente | null; telefonoOverride: string }) => void;
 }) {
   const { user } = useAuth();
   const [form, setForm] = useState({
     codice: genCodice('SCONTO'),
     descrizione: '',
-    tipo_sconto: 'percentuale' as 'percentuale' | 'fisso',
+    tipo_sconto: 'percentuale' as 'percentuale' | 'fisso' | 'listino',
     valore_sconto: 10,
     usa_e_getta: true,
     cliente_id: '',
     telefono_override: '',
+    listino_categoria_id: '',
   });
+  const [categorie, setCategorie] = useState<ListinoCategoria[]>([]);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    dbSelect({ table: 'carte_sconto_listino_categorie', orderBy: [{ col: 'nome', asc: true }] }).then(({ data }) => {
+      setCategorie((data || []) as ListinoCategoria[]);
+    });
+  }, []);
 
   const clienteSelezionato = clienti.find(c => c.id === form.cliente_id) ?? null;
   const clienteHaTelefono = !!clienteSelezionato?.telefono?.trim();
@@ -107,16 +129,18 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
   const isNominativa = !form.usa_e_getta && !!form.cliente_id;
 
   async function save() {
+    if (form.tipo_sconto === 'listino' && !form.listino_categoria_id) return;
     setSaving(true);
     await dbInsert({ table: 'carte_sconto', data: {
       codice: form.codice,
       descrizione: form.descrizione,
       tipo_sconto: form.tipo_sconto,
-      valore_sconto: form.valore_sconto,
+      valore_sconto: form.tipo_sconto === 'listino' ? 0 : form.valore_sconto,
       usa_e_getta: form.usa_e_getta,
       cliente_id: form.cliente_id || null,
       telefono_override: form.telefono_override.trim(),
       nominativa: isNominativa,
+      listino_categoria_id: form.tipo_sconto === 'listino' ? form.listino_categoria_id : null,
       user_id: user?.id,
     }});
     setSaving(false);
@@ -183,30 +207,61 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
               <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Tipo sconto</label>
               <select
                 value={form.tipo_sconto}
-                onChange={e => setForm(f => ({ ...f, tipo_sconto: e.target.value as 'percentuale' | 'fisso' }))}
+                onChange={e => setForm(f => ({ ...f, tipo_sconto: e.target.value as 'percentuale' | 'fisso' | 'listino' }))}
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
               >
                 <option value="percentuale">Percentuale (%)</option>
                 <option value="fisso">Importo fisso (€)</option>
+                <option value="listino">Listino prezzi</option>
               </select>
             </div>
+            {form.tipo_sconto !== 'listino' && (
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">
+                  Valore {form.tipo_sconto === 'percentuale' ? '(%)' : '(€)'}
+                </label>
+                <input
+                  type="number"
+                  onInput={e => { const t = e.currentTarget; if (t.value.length > 1 && t.value.startsWith('0') && !t.value.startsWith('0.')) t.value = String(Number(t.value)); }}
+                  min={0}
+                  max={form.tipo_sconto === 'percentuale' ? 100 : undefined}
+                  step={form.tipo_sconto === 'percentuale' ? 1 : 0.5}
+                  value={form.valore_sconto}
+                  onChange={e => setForm(f => ({ ...f, valore_sconto: Number(e.target.value) }))}
+                  onFocus={e => e.target.select()}
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Selezione categoria listino */}
+          {form.tipo_sconto === 'listino' && (
             <div>
               <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">
-                Valore {form.tipo_sconto === 'percentuale' ? '(%)' : '(€)'}
+                Categoria listino <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                onInput={e => { const t = e.currentTarget; if (t.value.length > 1 && t.value.startsWith('0') && !t.value.startsWith('0.')) t.value = String(Number(t.value)); }}
-                min={0}
-                max={form.tipo_sconto === 'percentuale' ? 100 : undefined}
-                step={form.tipo_sconto === 'percentuale' ? 1 : 0.5}
-                value={form.valore_sconto}
-                onChange={e => setForm(f => ({ ...f, valore_sconto: Number(e.target.value) }))}
-                onFocus={e => e.target.select()}
-                className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
-              />
+              {categorie.length === 0 ? (
+                <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                  <AlertCircle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-700">
+                    Nessun listino disponibile. Vai alla scheda <strong>Listini</strong> per crearne uno prima.
+                  </p>
+                </div>
+              ) : (
+                <select
+                  value={form.listino_categoria_id}
+                  onChange={e => setForm(f => ({ ...f, listino_categoria_id: e.target.value }))}
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
+                >
+                  <option value="">— Seleziona listino —</option>
+                  {categorie.map(c => (
+                    <option key={c.id} value={c.id}>{c.nome}{c.descrizione ? ` · ${c.descrizione}` : ''}</option>
+                  ))}
+                </select>
+              )}
             </div>
-          </div>
+          )}
 
           {/* Assegna a cliente */}
           <div>
@@ -272,7 +327,7 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
         </div>
         <div className="flex gap-3 px-6 pb-6">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Annulla</button>
-          <button onClick={save} disabled={saving || !form.codice} className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+          <button onClick={save} disabled={saving || !form.codice || (form.tipo_sconto === 'listino' && !form.listino_categoria_id)} className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
             {saving ? 'Salvataggio...' : 'Crea carta'}
           </button>
         </div>
@@ -924,6 +979,8 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
                       {carta.tipo_sconto === 'percentuale'
                         ? <Percent size={18} className={iconColor} />
+                        : carta.tipo_sconto === 'listino'
+                        ? <List size={18} className={iconColor} />
                         : <Euro size={18} className={iconColor} />}
                     </div>
                     <div className="min-w-0">
@@ -938,11 +995,16 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
                           : <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-semibold">Riutilizzabile</span>
                         }
                         {carta.nominativa && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">Nominativa</span>}
+                        {carta.tipo_sconto === 'listino' && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">Listino</span>}
                       </div>
                       {carta.descrizione && <p className="text-xs text-stone-500 mt-0.5">{carta.descrizione}</p>}
                       <div className="flex items-center gap-3 mt-1.5">
                         <span className={`text-sm font-bold ${scontoColor}`}>
-                          {carta.tipo_sconto === 'percentuale' ? `${carta.valore_sconto}%` : `€${fmt(carta.valore_sconto)}`} di sconto
+                          {carta.tipo_sconto === 'percentuale'
+                            ? `${carta.valore_sconto}% di sconto`
+                            : carta.tipo_sconto === 'listino'
+                            ? 'Prezzi personalizzati'
+                            : `€${fmt(carta.valore_sconto)} di sconto`}
                         </span>
                         {carta.clienti
                           ? <span className="text-xs text-stone-500">{carta.clienti.nome} {carta.clienti.cognome}</span>
@@ -1905,6 +1967,280 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
 
 
 
+// ─── Listino Categorie Tab ────────────────────────────────────────────────────
+
+function ListinoTab() {
+  const { user } = useAuth();
+  const [categorie, setCategorie] = useState<ListinoCategoria[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<ListinoCategoria | null>(null);
+  const [prezzi, setPrezzi] = useState<ListinoPrezzoRow[]>([]);
+  const [servizi, setServizi] = useState<{ id: string; nome: string; prezzo: number }[]>([]);
+  const [loadingPrezzi, setLoadingPrezzi] = useState(false);
+  const [showNuova, setShowNuova] = useState(false);
+  const [nuovaNome, setNuovaNome] = useState('');
+  const [nuovaDesc, setNuovaDesc] = useState('');
+  const [savingNuova, setSavingNuova] = useState(false);
+  const [editingPrezzoId, setEditingPrezzoId] = useState<string | null>(null);
+  const [editingVal, setEditingVal] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await dbSelect({ table: 'carte_sconto_listino_categorie', orderBy: [{ col: 'nome', asc: true }] });
+    setCategorie((data || []) as ListinoCategoria[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    dbSelect({ table: 'servizi', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome', asc: true }] }).then(({ data }) => {
+      setServizi((data || []) as { id: string; nome: string; prezzo: number }[]);
+    });
+  }, []);
+
+  async function openCategoria(cat: ListinoCategoria) {
+    setSelected(cat);
+    setLoadingPrezzi(true);
+    const { data } = await dbSelect({ table: 'carte_sconto_listino_prezzi', filters: [{ col: 'categoria_id', op: 'eq', val: cat.id }] });
+    setPrezzi((data || []) as ListinoPrezzoRow[]);
+    setLoadingPrezzi(false);
+  }
+
+  async function saveNuovaCategoria() {
+    if (!nuovaNome.trim()) return;
+    setSavingNuova(true);
+    await dbInsert({ table: 'carte_sconto_listino_categorie', data: { nome: nuovaNome.trim(), descrizione: nuovaDesc.trim(), user_id: user?.id } });
+    setSavingNuova(false);
+    setNuovaNome('');
+    setNuovaDesc('');
+    setShowNuova(false);
+    load();
+  }
+
+  async function deleteCategoria(id: string) {
+    await dbDelete({ table: 'carte_sconto_listino_categorie', filters: [{ col: 'id', op: 'eq', val: id }] });
+    if (selected?.id === id) setSelected(null);
+    load();
+  }
+
+  function getPrezzoForServizio(nomeServizio: string): number | null {
+    const row = prezzi.find(p => p.nome_servizio === nomeServizio);
+    return row ? row.prezzo : null;
+  }
+
+  async function setPrezzo(nomeServizio: string, prezzo: number) {
+    if (!selected) return;
+    const existing = prezzi.find(p => p.nome_servizio === nomeServizio);
+    if (existing) {
+      await dbUpdate({ table: 'carte_sconto_listino_prezzi', id: existing.id, data: { prezzo } });
+    } else {
+      await dbInsert({ table: 'carte_sconto_listino_prezzi', data: {
+        categoria_id: selected.id, nome_servizio: nomeServizio, prezzo, user_id: user?.id,
+      }});
+    }
+    const { data } = await dbSelect({ table: 'carte_sconto_listino_prezzi', filters: [{ col: 'categoria_id', op: 'eq', val: selected.id }] });
+    setPrezzi((data || []) as ListinoPrezzoRow[]);
+  }
+
+  async function removePrezzo(nomeServizio: string) {
+    if (!selected) return;
+    const existing = prezzi.find(p => p.nome_servizio === nomeServizio);
+    if (existing) {
+      await dbDelete({ table: 'carte_sconto_listino_prezzi', filters: [{ col: 'id', op: 'eq', val: existing.id }] });
+      setPrezzi(prev => prev.filter(p => p.nome_servizio !== nomeServizio));
+    }
+  }
+
+  function startEdit(nomeServizio: string) {
+    const val = getPrezzoForServizio(nomeServizio);
+    setEditingPrezzoId(nomeServizio);
+    setEditingVal(val !== null ? String(val) : '');
+  }
+
+  async function commitEdit(nomeServizio: string) {
+    const n = parseFloat(editingVal.replace(',', '.'));
+    if (!isNaN(n) && n >= 0) {
+      await setPrezzo(nomeServizio, n);
+    }
+    setEditingPrezzoId(null);
+    setEditingVal('');
+  }
+
+  return (
+    <div className="flex gap-6 h-full">
+      {/* Colonna sinistra: lista categorie */}
+      <div className="w-72 flex-shrink-0">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-bold text-stone-700">Listini salvati</p>
+          <button
+            onClick={() => setShowNuova(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Plus size={12} />
+            Nuovo
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-24">
+            <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : categorie.length === 0 ? (
+          <div className="bg-stone-50 rounded-2xl border border-stone-200 p-6 text-center">
+            <BookOpen size={28} className="text-stone-300 mx-auto mb-2" />
+            <p className="text-sm text-stone-500 font-medium">Nessun listino</p>
+            <p className="text-xs text-stone-400 mt-0.5">Crea il primo listino per iniziare</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {categorie.map(cat => (
+              <div
+                key={cat.id}
+                onClick={() => openCategoria(cat)}
+                className={`flex items-center justify-between gap-2 rounded-xl border px-4 py-3 cursor-pointer transition-all ${selected?.id === cat.id ? 'bg-orange-50 border-orange-300' : 'bg-white border-stone-200 hover:border-amber-300 hover:bg-amber-50'}`}
+              >
+                <div className="min-w-0">
+                  <p className={`text-sm font-semibold truncate ${selected?.id === cat.id ? 'text-orange-700' : 'text-stone-700'}`}>{cat.nome}</p>
+                  {cat.descrizione && <p className="text-xs text-stone-400 truncate">{cat.descrizione}</p>}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={e => { e.stopPropagation(); deleteCategoria(cat.id); }}
+                    className="p-1 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                  <ChevronRight size={14} className={selected?.id === cat.id ? 'text-orange-500' : 'text-stone-300'} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Form nuovo listino */}
+        {showNuova && (
+          <div className="mt-4 bg-white rounded-xl border border-amber-300 p-4 space-y-3">
+            <p className="text-xs font-bold text-stone-600 uppercase tracking-wide">Nuovo listino</p>
+            <input
+              value={nuovaNome}
+              onChange={e => setNuovaNome(e.target.value)}
+              placeholder="Nome (es. Ministero)"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
+              autoFocus
+            />
+            <input
+              value={nuovaDesc}
+              onChange={e => setNuovaDesc(e.target.value)}
+              placeholder="Descrizione (opzionale)"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => { setShowNuova(false); setNuovaNome(''); setNuovaDesc(''); }} className="flex-1 py-2 text-xs font-semibold text-stone-500 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">Annulla</button>
+              <button onClick={saveNuovaCategoria} disabled={savingNuova || !nuovaNome.trim()} className="flex-1 py-2 text-xs font-semibold bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50">Salva</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Colonna destra: prezzi per servizio */}
+      <div className="flex-1 min-w-0">
+        {!selected ? (
+          <div className="bg-stone-50 rounded-2xl border border-dashed border-stone-300 p-12 text-center h-full flex flex-col items-center justify-center">
+            <List size={32} className="text-stone-300 mb-3" />
+            <p className="text-stone-500 font-medium">Seleziona un listino</p>
+            <p className="text-xs text-stone-400 mt-1">Scegli un listino a sinistra per impostare i prezzi</p>
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <List size={15} className="text-orange-600" />
+              </div>
+              <div>
+                <p className="font-bold text-stone-800">{selected.nome}</p>
+                {selected.descrizione && <p className="text-xs text-stone-400">{selected.descrizione}</p>}
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 mb-4">
+              <p className="text-xs text-amber-700">
+                Imposta il prezzo personalizzato per ogni servizio. I servizi senza prezzo impostato manterranno il prezzo standard in fiche.
+              </p>
+            </div>
+
+            {loadingPrezzi ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : servizi.length === 0 ? (
+              <p className="text-sm text-stone-400 text-center py-8">Nessun servizio nel catalogo</p>
+            ) : (
+              <div className="space-y-2">
+                {servizi.map(serv => {
+                  const listinoPx = getPrezzoForServizio(serv.nome);
+                  const isEditing = editingPrezzoId === serv.nome;
+                  const hasPx = listinoPx !== null;
+                  return (
+                    <div key={serv.id} className={`flex items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-all ${hasPx ? 'bg-orange-50 border-orange-200' : 'bg-white border-stone-100 hover:border-stone-200'}`}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-stone-700 truncate">{serv.nome}</p>
+                        <p className="text-xs text-stone-400">Prezzo standard: €{serv.prezzo.toFixed(2)}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isEditing ? (
+                          <>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs">€</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.5}
+                                value={editingVal}
+                                onChange={e => setEditingVal(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') commitEdit(serv.nome); if (e.key === 'Escape') { setEditingPrezzoId(null); } }}
+                                onBlur={() => commitEdit(serv.nome)}
+                                className="w-24 border border-orange-400 rounded-lg pl-6 pr-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-300"
+                                autoFocus
+                                onFocus={e => e.target.select()}
+                              />
+                            </div>
+                            <button onClick={() => commitEdit(serv.nome)} className="p-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors">
+                              <Check size={12} />
+                            </button>
+                          </>
+                        ) : hasPx ? (
+                          <>
+                            <span className="text-sm font-bold text-orange-600">€{(listinoPx as number).toFixed(2)}</span>
+                            <button onClick={() => startEdit(serv.nome)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-400 hover:text-orange-600 transition-colors">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => removePrezzo(serv.nome)} className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => startEdit(serv.nome)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-stone-400 hover:text-amber-600 border border-dashed border-stone-200 hover:border-amber-400 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Plus size={11} />
+                            Imposta prezzo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Carte() {
   const [tab, setTab] = useState<Tab>('sconto');
   const [clienti, setClienti] = useState<Cliente[]>([]);
@@ -1931,7 +2267,7 @@ export default function Carte() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-stone-100 p-1 rounded-xl mb-6 w-fit">
+      <div className="flex gap-1 bg-stone-100 p-1 rounded-xl mb-6 w-fit flex-wrap">
         <button
           onClick={() => setTab('sconto')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${tab === 'sconto' ? 'bg-white text-amber-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
@@ -1953,11 +2289,19 @@ export default function Carte() {
           <Gift size={15} />
           Gift Pass
         </button>
+        <button
+          onClick={() => setTab('listino')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${tab === 'listino' ? 'bg-white text-orange-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+        >
+          <List size={15} />
+          Listini
+        </button>
       </div>
 
       {tab === 'sconto' && <CarteSconto clienti={clienti} />}
       {tab === 'premium' && <CartePremium clienti={clienti} />}
       {tab === 'gift' && <GiftPassTab clienti={clienti} />}
+      {tab === 'listino' && <ListinoTab />}
     </div>
   );
 }

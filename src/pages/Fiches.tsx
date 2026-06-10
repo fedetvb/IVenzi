@@ -871,8 +871,9 @@ interface FicheCardProps {
 
 interface CartaScontoSimple {
   id: string; codice: string; descrizione: string;
-  tipo_sconto: 'percentuale' | 'fisso'; valore_sconto: number;
+  tipo_sconto: 'percentuale' | 'fisso' | 'listino'; valore_sconto: number;
   nominativa?: boolean; cliente_id?: string | null;
+  listino_categoria_id?: string | null;
 }
 interface CartaPremiumSimple {
   id: string; codice: string; saldo: number; attiva?: boolean;
@@ -931,13 +932,32 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [cassettoSearch, setCassettoSearch] = useState('');
   const [cassettoLoading, setCassettoLoading] = useState(false);
 
+  // Listino prezzi (per carte di tipo 'listino')
+  const [listinoPrezziMap, setListinoPrezziMap] = useState<Map<string, number>>(new Map());
+
   const totaleBase = voci.reduce((s, v) => s + v.prezzo, 0);
 
   const cartaSconto = carteSconto.find(c => c.id === cartaScontoId);
+
+  // Calcolo con listino: somma dei prezzi listino per i servizi trovati + prezzi originali per gli altri
+  const totaleConListino = cartaSconto?.tipo_sconto === 'listino' && listinoPrezziMap.size > 0
+    ? voci.reduce((s, v) => {
+        if (v.tipo === 'servizio') {
+          const lpx = listinoPrezziMap.get(v.nome_voce);
+          return s + (lpx !== undefined ? lpx : v.prezzo);
+        }
+        return s + v.prezzo;
+      }, 0)
+    : null;
+
   const scontoAmt = cartaSconto
     ? cartaSconto.tipo_sconto === 'percentuale'
       ? totaleBase * (cartaSconto.valore_sconto / 100)
-      : Math.min(cartaSconto.valore_sconto, totaleBase)
+      : cartaSconto.tipo_sconto === 'fisso'
+      ? Math.min(cartaSconto.valore_sconto, totaleBase)
+      : cartaSconto.tipo_sconto === 'listino' && totaleConListino !== null
+      ? Math.max(0, totaleBase - totaleConListino)
+      : 0
     : 0;
   const totaleDopoSconto = Math.max(0, totaleBase - scontoAmt);
 
@@ -990,6 +1010,22 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     setShowCassetto(false);
     setCassettoSearch('');
   }
+
+  // Carica prezzi listino quando cambia la carta sconto selezionata
+  useEffect(() => {
+    const carta = carteSconto.find(c => c.id === cartaScontoId);
+    if (carta?.tipo_sconto === 'listino' && carta.listino_categoria_id) {
+      dbSelect({ table: 'carte_sconto_listino_prezzi', filters: [{ col: 'categoria_id', op: 'eq', val: carta.listino_categoria_id }] }).then(({ data }) => {
+        const map = new Map<string, number>();
+        for (const row of (data || []) as { nome_servizio: string; prezzo: number }[]) {
+          map.set(row.nome_servizio, row.prezzo);
+        }
+        setListinoPrezziMap(map);
+      });
+    } else {
+      setListinoPrezziMap(new Map());
+    }
+  }, [cartaScontoId, carteSconto]);
 
   useEffect(() => {
     if (!isOpen || initialized) return;
@@ -1778,9 +1814,21 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
               {voci.length === 0 && (
                 <div className="px-4 py-6 text-center text-sm text-stone-400">Nessun servizio — aggiungi voci dal catalogo sotto</div>
               )}
-              {voci.map(v => (
-                <VoceRow key={v.id} voce={v} parrucchieri={parrucchieri} onChange={patch => updateVoce(v.id, patch)} onRemove={() => removeVoce(v.id)} />
-              ))}
+              {voci.map(v => {
+                const lpx = v.tipo === 'servizio' && cartaSconto?.tipo_sconto === 'listino' ? listinoPrezziMap.get(v.nome_voce) : undefined;
+                return (
+                  <div key={v.id} className={lpx !== undefined ? 'ring-1 ring-inset ring-orange-200 rounded-xl' : ''}>
+                    <VoceRow voce={v} parrucchieri={parrucchieri} onChange={patch => updateVoce(v.id, patch)} onRemove={() => removeVoce(v.id)} />
+                    {lpx !== undefined && (
+                      <div className="px-4 pb-2 -mt-1 flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
+                          Listino: €{lpx.toFixed(2)} · risparmio €{Math.max(0, v.prezzo - lpx).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {voci.length > 0 && (
                 <div className="flex justify-end items-center px-4 py-2.5 bg-stone-50 border-t border-stone-100">
                   <span className="text-sm font-bold text-stone-800">Totale: €{totale.toFixed(2)}</span>
@@ -2059,11 +2107,17 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                     <option value="">— Nessuna carta sconto —</option>
                     {carteSconto.map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.codice} · {c.tipo_sconto === 'percentuale' ? `${c.valore_sconto}%` : `€${c.valore_sconto}`} off{c.descrizione ? ` · ${c.descrizione}` : ''}{c.nominativa ? ' · nominativa' : ''}
+                        {c.codice} · {c.tipo_sconto === 'percentuale' ? `${c.valore_sconto}%` : c.tipo_sconto === 'fisso' ? `€${c.valore_sconto}` : 'Listino'} off{c.descrizione ? ` · ${c.descrizione}` : ''}{c.nominativa ? ' · nominativa' : ''}
                       </option>
                     ))}
                   </select>
-                  {cartaSconto && scontoAmt > 0 && (
+                  {cartaSconto?.tipo_sconto === 'listino' && listinoPrezziMap.size > 0 && (
+                    <p className="text-xs text-orange-600 mt-1 font-medium flex items-center gap-1.5">
+                      <Check size={11} /> Listino attivo · {listinoPrezziMap.size} prezzi personalizzati
+                      {scontoAmt > 0 && <span> · risparmio €{scontoAmt.toFixed(2)}</span>}
+                    </p>
+                  )}
+                  {cartaSconto?.tipo_sconto !== 'listino' && cartaSconto && scontoAmt > 0 && (
                     <p className="text-xs text-amber-600 mt-1 font-medium">Sconto applicato: -€{scontoAmt.toFixed(2)}</p>
                   )}
                 </div>
