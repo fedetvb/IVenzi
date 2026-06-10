@@ -28,6 +28,7 @@ interface SchedaDaConfermare {
   stato: string;
   created_at: string;
   presentata_da_nome?: string | null;
+  codice_carta_sconto?: string | null;
 }
 
 export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened }: Props) {
@@ -176,6 +177,25 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
 
     if (!clienteRes.error && clienteRes.data?.id) {
       await dbUpdate({ table: 'schede_clienti_da_confermare', id: scheda.id, data: { stato: 'confermato' } });
+
+      // Se la scheda aveva un codice carta sconto, assegna la carta al nuovo cliente
+      if (scheda.codice_carta_sconto) {
+        const { data: carta } = await supabase
+          .from('carte_sconto')
+          .select('id')
+          .eq('user_id', user?.id)
+          .eq('codice', scheda.codice_carta_sconto.toUpperCase())
+          .eq('regalata', true)
+          .eq('attiva', true)
+          .maybeSingle();
+        if (carta) {
+          await supabase.from('carte_sconto').update({
+            cliente_id: clienteRes.data.id,
+            regalata: false,
+          }).eq('id', carta.id);
+        }
+      }
+
       setSchedaAperta(null);
       loadSchede();
       loadClienti();
