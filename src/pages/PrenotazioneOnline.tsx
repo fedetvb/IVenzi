@@ -218,6 +218,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showIosModal, setShowIosModal] = useState(false);
+  const [showAndroidModal, setShowAndroidModal] = useState(false);
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
 
   useEffect(() => {
@@ -247,17 +248,24 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     localStorage.setItem('pwa_installata', '1');
     setShowInstallBanner(false);
     setShowIosModal(false);
+    setShowAndroidModal(false);
   }
 
   async function handleInstall() {
-    if (!installPrompt) return;
-    const prompt = installPrompt as Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> };
-    prompt.prompt();
-    const { outcome } = await prompt.userChoice;
-    if (outcome === 'accepted') {
-      markAsInstalled();
+    if (installPrompt) {
+      const prompt = installPrompt as Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> };
+      prompt.prompt();
+      const { outcome } = await prompt.userChoice;
+      if (outcome === 'accepted') {
+        markAsInstalled();
+      } else {
+        setInstallPrompt(null);
+        // Show manual instructions as fallback
+        setShowAndroidModal(true);
+      }
     } else {
-      setInstallPrompt(null);
+      // Browser doesn't support beforeinstallprompt (Samsung Internet, Firefox, etc.)
+      setShowAndroidModal(true);
     }
   }
 
@@ -765,23 +773,18 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 {deviceType === 'ios' && (
                   <button
                     onClick={() => setShowIosModal(true)}
-                    className="px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
+                    className="animate-pulse-glow px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
                   >
                     Come si fa?
                   </button>
                 )}
-                {installPrompt && (
+                {(deviceType === 'android' || deviceType === 'other') && (
                   <button
                     onClick={handleInstall}
-                    className="px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
+                    className="animate-pulse-glow px-3 py-1.5 bg-white text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-50 transition-colors"
                   >
                     Installa ora
                   </button>
-                )}
-                {!installPrompt && deviceType === 'android' && (
-                  <p className="text-xs text-emerald-100 leading-snug">
-                    Tocca <span className="font-bold">⋮</span> in alto a destra nel browser, poi <span className="font-bold">"Aggiungi a schermata Home"</span>.
-                  </p>
                 )}
               </div>
             </div>
@@ -804,7 +807,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <p className="text-emerald-100 text-sm mt-1">Segui questi 3 semplici passi su Safari</p>
             </div>
             <div className="px-6 py-5 space-y-4">
-              {/* Step 1 */}
               <div className="flex items-start gap-4">
                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">1</div>
                 <div>
@@ -812,7 +814,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   <p className="text-xs text-stone-500 mt-0.5">Il quadratino con la freccia verso l'alto <span className="font-bold text-stone-700">⬆</span> in basso al centro dello schermo</p>
                 </div>
               </div>
-              {/* Step 2 */}
               <div className="flex items-start gap-4">
                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">2</div>
                 <div>
@@ -820,7 +821,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   <p className="text-xs text-stone-500 mt-0.5">Cerca l'icona con il <span className="font-bold text-stone-700">+</span> nel menu che si apre</p>
                 </div>
               </div>
-              {/* Step 3 */}
               <div className="flex items-start gap-4">
                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">3</div>
                 <div>
@@ -837,6 +837,58 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 </button>
                 <button
                   onClick={() => setShowIosModal(false)}
+                  className="w-full py-3 text-stone-500 text-sm font-medium hover:text-stone-700 transition-colors"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Android manual install instructions modal */}
+      {showAndroidModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-emerald-600 px-6 pt-6 pb-4 text-white text-center">
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <Download size={26} />
+              </div>
+              <p className="font-bold text-lg">Aggiungi alla schermata Home</p>
+              <p className="text-emerald-100 text-sm mt-1">Segui questi passi nel tuo browser Android</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">1</div>
+                <div>
+                  <p className="font-semibold text-stone-800 text-sm">Tocca il menu del browser</p>
+                  <p className="text-xs text-stone-500 mt-0.5">I tre puntini <span className="font-bold text-stone-700">⋮</span> in alto a destra nello schermo</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">2</div>
+                <div>
+                  <p className="font-semibold text-stone-800 text-sm">Seleziona "Aggiungi a schermata Home"</p>
+                  <p className="text-xs text-stone-500 mt-0.5">Su Samsung Internet potrebbe chiamarsi <span className="font-bold text-stone-700">"Aggiungi pagina a"</span> oppure <span className="font-bold text-stone-700">"Schermata Home"</span></p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">3</div>
+                <div>
+                  <p className="font-semibold text-stone-800 text-sm">Tocca "Aggiungi" per confermare</p>
+                  <p className="text-xs text-stone-500 mt-0.5">L'icona del salone apparirà sulla tua schermata home</p>
+                </div>
+              </div>
+              <div className="pt-2 space-y-2">
+                <button
+                  onClick={markAsInstalled}
+                  className="w-full py-3.5 bg-emerald-600 text-white font-semibold rounded-2xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check size={16} /> Ho installato, non mostrare piu'
+                </button>
+                <button
+                  onClick={() => setShowAndroidModal(false)}
                   className="w-full py-3 text-stone-500 text-sm font-medium hover:text-stone-700 transition-colors"
                 >
                   Chiudi
