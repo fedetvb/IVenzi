@@ -489,6 +489,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             cognome: cognome.trim(),
             telefono: telefono.trim(),
             stato: 'in_attesa',
+            ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
           }),
         });
       }

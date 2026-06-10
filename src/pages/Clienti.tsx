@@ -29,6 +29,7 @@ interface SchedaDaConfermare {
   created_at: string;
   presentata_da_nome?: string | null;
   codice_carta_sconto?: string | null;
+  codice_gift_pass?: string | null;
 }
 
 export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened }: Props) {
@@ -193,6 +194,23 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
             cliente_id: clienteRes.data.id,
             regalata: false,
           }).eq('id', carta.id);
+        }
+      }
+
+      // Se la scheda aveva un codice gift pass, collega la gift pass al nuovo cliente
+      if (scheda.codice_gift_pass) {
+        const { data: gp } = await supabase
+          .from('gift_pass')
+          .select('id')
+          .eq('user_id', user?.id)
+          .eq('codice', scheda.codice_gift_pass.toUpperCase())
+          .eq('attiva', true)
+          .eq('utilizzata', false)
+          .maybeSingle();
+        if (gp) {
+          await supabase.from('gift_pass').update({
+            destinataria_cliente_id: clienteRes.data.id,
+          }).eq('id', gp.id);
         }
       }
 
