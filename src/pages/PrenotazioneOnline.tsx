@@ -1555,44 +1555,46 @@ function CartaInfinityCard({ carta, cliente }: { carta: CartaInfinity; cliente: 
 
   return (
     <div className="space-y-3">
-      {/* Card grafica argento */}
+      {/* Card grafica bianca/argento */}
       <div
-        className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+        className="relative w-full rounded-3xl overflow-hidden"
         style={{
-          background: 'linear-gradient(135deg, #1a1a1a 0%, #2e2e2e 25%, #1f1f1f 50%, #303030 75%, #141414 100%)',
+          background: 'linear-gradient(135deg, #ffffff 0%, #f0f0f0 30%, #fafafa 60%, #e8e8e8 100%)',
           minHeight: 210,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(180,180,180,0.4)',
         }}
       >
         {/* Striscia argento in alto */}
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, #6b6b6b, #d4d4d4, #a8a8a8, #d4d4d4, #6b6b6b)' }} />
-        {/* Pattern decorativo argento */}
-        <div className="absolute inset-0 opacity-15" style={{
-          backgroundImage: 'repeating-linear-gradient(45deg, #a0a0a0 0px, #a0a0a0 1px, transparent 0px, transparent 28px)',
+        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, #c0c0c0, #e8e8e8, #f5f5f5, #e8e8e8, #c0c0c0)' }} />
+        {/* Pattern decorativo diagonale sottile */}
+        <div className="absolute inset-0" style={{
+          backgroundImage: 'repeating-linear-gradient(45deg, rgba(160,160,160,0.07) 0px, rgba(160,160,160,0.07) 1px, transparent 0px, transparent 28px)',
           backgroundSize: '28px 28px',
         }} />
-        {/* Alone argento grande in alto a destra */}
-        <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: 'radial-gradient(circle, rgba(180,180,180,0.25) 0%, transparent 70%)' }} />
-        {/* Alone argento piccolo in basso a sinistra */}
-        <div className="absolute -left-4 -bottom-4 w-32 h-32 rounded-full" style={{ background: 'radial-gradient(circle, rgba(180,180,180,0.15) 0%, transparent 70%)' }} />
+        {/* Alone argentato grande in alto a destra */}
+        <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: 'radial-gradient(circle, rgba(192,192,192,0.3) 0%, transparent 70%)' }} />
+        {/* Riflesso bianco in basso a sinistra */}
+        <div className="absolute -left-4 -bottom-4 w-36 h-36 rounded-full" style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.8) 0%, transparent 70%)' }} />
 
         <div className="relative p-6 flex flex-col" style={{ minHeight: 210 }}>
           {/* Header */}
           <div className="flex items-start justify-between mb-auto">
             <div>
-              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: '#d4d4d4', textShadow: '0 0 8px rgba(192,192,192,0.5)' }}>Carta Sconto Infinity</p>
+              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: '#888888' }}>Carta Sconto Infinity</p>
             </div>
             {/* Chip argento realistico */}
-            <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6b6b6b 0%, #d4d4d4 40%, #a8a8a8 60%, #5a5a5a 100%)', boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
-              <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(90,90,90,0.6)', background: 'linear-gradient(135deg, #a8a8a8 0%, #d4d4d4 50%, #6b6b6b 100%)' }} />
+            <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #b0b0b0 0%, #e8e8e8 40%, #c8c8c8 60%, #989898 100%)', boxShadow: '0 2px 6px rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.6)' }}>
+              <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(140,140,140,0.5)', background: 'linear-gradient(135deg, #d0d0d0 0%, #f0f0f0 50%, #b8b8b8 100%)' }} />
             </div>
           </div>
 
           {/* Dati cliente */}
           <div className="mt-8 mb-4">
-            <p className="text-white font-bold text-lg tracking-wide" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+            <p className="font-bold text-lg tracking-wide" style={{ color: '#2a2a2a' }}>
               {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
             </p>
-            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: '#d4d4d4' }}>
+            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: '#888888' }}>
               {carta.codice}
             </p>
           </div>
@@ -1600,14 +1602,14 @@ function CartaInfinityCard({ carta, cliente }: { carta: CartaInfinity; cliente: 
           {/* Sconto */}
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-xs font-medium" style={{ color: 'rgba(212,212,212,0.7)' }}>Sconto applicato</p>
-              <p className="text-3xl font-bold" style={{ color: '#d4d4d4', textShadow: '0 0 12px rgba(180,180,180,0.4)' }}>{sconto}</p>
+              <p className="text-xs font-medium" style={{ color: '#999999' }}>Sconto applicato</p>
+              <p className="text-3xl font-bold" style={{ color: '#3a3a3a' }}>{sconto}</p>
             </div>
-            <div className="text-xs italic px-3 py-1 rounded-full" style={{ color: '#d4d4d4', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}>Non scade</div>
+            <div className="text-xs italic px-3 py-1 rounded-full" style={{ color: '#888888', background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.1)' }}>Non scade</div>
           </div>
         </div>
         {/* Striscia argento in basso */}
-        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, #a8a8a8, #d4d4d4, #a8a8a8, transparent)' }} />
+        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, #c8c8c8, #e0e0e0, #c8c8c8, transparent)' }} />
       </div>
 
       {/* Frase motivazionale */}
