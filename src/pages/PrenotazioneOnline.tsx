@@ -98,7 +98,7 @@ interface GiftPass {
   prodotto_nome: string | null;
   occasione: string;
   attivata_at: string | null;
-  scadenza_uso_at: string | null;
+  scadenza_uso: string | null;
   destinataria_nome: string;
   destinataria_telefono: string;
   utilizzata: boolean;
@@ -533,7 +533,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             {
               method: 'PATCH',
               headers: { ...anonHeadersJson, 'Prefer': 'return=minimal' },
-              body: JSON.stringify({ attivata_at: now, ...(scadenzaUsoAt ? { scadenza_uso_at: scadenzaUsoAt } : {}), updated_at: now }),
+              body: JSON.stringify({ attivata_at: now, ...(scadenzaUsoAt ? { scadenza_uso: scadenzaUsoAt } : {}), updated_at: now }),
             }
           );
         }
@@ -2128,8 +2128,8 @@ function GiftPassCard({
     : `€${gp.valore_euro ?? 0}`;
 
   const scadenzaLabel = (() => {
-    if (!gp.scadenza_uso_at) return 'Nessuna scadenza';
-    const d = new Date(gp.scadenza_uso_at);
+    if (!gp.scadenza_uso) return 'Nessuna scadenza';
+    const d = new Date(gp.scadenza_uso);
     return `Valida fino al ${d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}`;
   })();
 

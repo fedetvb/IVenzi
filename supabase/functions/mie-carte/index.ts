@@ -159,7 +159,7 @@ Deno.serve(async (req: Request) => {
     // Primary: by cliente_id (compratore)
     const { data: gpByClienteId } = await sb
       .from("gift_pass")
-      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata")
       .eq("cliente_id", cliente.id)
       .eq("user_id", userId)
       .eq("utilizzata", false)
@@ -180,7 +180,7 @@ Deno.serve(async (req: Request) => {
     if (ficheIds.length > 0) {
       const { data } = await sb
         .from("gift_pass")
-        .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+        .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata")
         .in("fiche_acquisto_id", ficheIds)
         .eq("user_id", userId)
         .eq("utilizzata", false)
@@ -199,7 +199,7 @@ Deno.serve(async (req: Request) => {
     // Primary: by destinataria_cliente_id
     const { data: gpRiceventeById } = await sb
       .from("gift_pass")
-      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata")
       .eq("destinataria_cliente_id", cliente.id)
       .eq("user_id", userId)
       .eq("utilizzata", false)
@@ -208,7 +208,7 @@ Deno.serve(async (req: Request) => {
     // Fallback: by destinataria_telefono when destinataria_cliente_id is null
     const { data: gpRiceventeByPhoneRaw } = await sb
       .from("gift_pass")
-      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso_at, destinataria_nome, destinataria_telefono, utilizzata")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata")
       .eq("user_id", userId)
       .eq("utilizzata", false)
       .eq("attiva", true)
@@ -231,8 +231,8 @@ Deno.serve(async (req: Request) => {
       ...gp,
       tipo_carta: "gift_pass_donatore" as const,
     }));
-    const giftPassRicevente = (gpRiceventeRaw as Array<Record<string, unknown> & { scadenza_uso_at?: string | null; tipo?: string }>)
-      .filter(gp => !(gp.tipo !== "valore" && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at as string) < now))
+    const giftPassRicevente = (gpRiceventeRaw as Array<Record<string, unknown> & { scadenza_uso?: string | null; tipo?: string }>)
+      .filter(gp => !(gp.tipo !== "valore" && gp.scadenza_uso && new Date(gp.scadenza_uso as string) < now))
       .map(gp => ({
         ...gp,
         tipo_carta: "gift_pass_ricevente" as const,

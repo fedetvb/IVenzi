@@ -881,7 +881,7 @@ interface CartaPremiumSimple {
 interface GiftPassSimple {
   id: string; codice: string; tipo: 'valore' | 'prodotto';
   valore_euro: number | null; prodotto_id: string | null; prodotto_nome: string | null;
-  occasione: string; attivata_at: string | null; scadenza_uso_at: string | null;
+  occasione: string; attivata_at: string | null; scadenza_uso: string | null;
   fiche_id: string | null; destinataria_cliente_id: string | null;
   cliente_id?: string | null;
   _ruolo?: 'ricevente' | 'donatore';
@@ -985,7 +985,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     const now = new Date();
     const gpOrfani = ((gpRes.data ?? []) as GiftPassSimple[]).filter(gp => {
       if (gp.destinataria_cliente_id) return false; // già ha un proprietario
-      if (gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now) return false;
+      if (gp.tipo !== 'valore' && gp.scadenza_uso && new Date(gp.scadenza_uso) < now) return false;
       return true;
     });
     setCassettoGiftPasses(gpOrfani);
@@ -1119,7 +1119,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           ],
         });
         const gpRicevuti = ((gpRicevutiData || []) as GiftPassSimple[])
-          .filter(gp => !(gp.tipo !== 'valore' && gp.scadenza_uso_at && new Date(gp.scadenza_uso_at) < now))
+          .filter(gp => !(gp.tipo !== 'valore' && gp.scadenza_uso && new Date(gp.scadenza_uso) < now))
           .map(gp => ({ ...gp, _ruolo: 'ricevente' as const }));
 
         // Pass donati: la cliente è l'acquirente, attiva ma non ancora attivata dalla destinataria
@@ -1567,8 +1567,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
       // Ripristina Gift Pass collegato a questa fiche
       const { data: gpRows } = await dbSelect({ table: 'gift_pass', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
       for (const gp of gpRows || []) {
-        const gpData = gp as GiftPassSimple & { prodotto_id: string | null; scadenza_uso_at: string | null };
-        // Calcola nuovo scadenza_uso_at: ripristina il tempo residuo basandosi su attivata_at
+        const gpData = gp as GiftPassSimple & { prodotto_id: string | null; scadenza_uso: string | null };
+        // Calcola nuovo scadenza_uso: ripristina il tempo residuo basandosi su attivata_at
         await dbUpdate({ table: 'gift_pass', id: gpData.id, data: {
           utilizzata: false, fiche_id: null, updated_at: new Date().toISOString(),
         } });

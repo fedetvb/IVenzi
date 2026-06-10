@@ -1347,7 +1347,7 @@ interface GiftPass {
   destinataria_cliente_id: string | null;
   cliente_id: string | null;
   attivata_at: string | null;
-  scadenza_uso_at: string | null;
+  scadenza_uso: string | null;
   fiche_id: string | null;
   utilizzata: boolean;
   attiva: boolean;
@@ -1367,8 +1367,8 @@ function statoGiftPass(gp: GiftPass): 'da_ritirare' | 'attivata' | 'utilizzata' 
     return 'da_ritirare';
   }
   // attivata: controlla scadenza uso
-  if (gp.tipo !== 'valore' && gp.scadenza_uso_at) {
-    const scadUso = new Date(gp.scadenza_uso_at);
+  if (gp.tipo !== 'valore' && gp.scadenza_uso) {
+    const scadUso = new Date(gp.scadenza_uso);
     if (ora > scadUso) return 'scaduta';
   }
   return 'attivata';
@@ -2062,11 +2062,11 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                         <span className="text-xs text-stone-600 font-medium">{gp.destinataria_nome}</span>
                         {gp.destinataria_telefono && <span className="text-xs text-stone-400">{gp.destinataria_telefono}</span>}
                       </div>
-                      {stato === 'attivata' && gp.scadenza_uso_at && gp.tipo !== 'valore' && (
+                      {stato === 'attivata' && gp.scadenza_uso && gp.tipo !== 'valore' && (
                         <div className="flex items-center gap-1 mt-1">
                           <Clock size={11} className="text-amber-500" />
                           <span className="text-[10px] text-amber-600 font-medium">
-                            Scade uso: {new Date(gp.scadenza_uso_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            Scade uso: {new Date(gp.scadenza_uso).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </span>
                         </div>
                       )}
