@@ -585,7 +585,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }
 
   // Core "proceed" logic — called after conflict resolution or directly when no conflict
-  async function proceedAfterDati(telOverride?: string) {
+  // knownExisting=true means we already verified this is a confirmed client (skip isNuovaScheda)
+  async function proceedAfterDati(telOverride?: string, knownExisting = false) {
     const tel = (telOverride ?? telefono).trim();
     const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
 
@@ -597,12 +598,17 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
     // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
     try {
-      const clientiRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/clienti?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&deleted_at=is.null&select=id&limit=1`,
-        { headers: anonHeaders }
-      );
-      const clientiRows = await clientiRes.json();
-      const isClienteConfermata = Array.isArray(clientiRows) && clientiRows.length > 0;
+      // Use aggiorna-profilo (service role) to check if the client exists — anon REST call blocked by RLS
+      let isClienteConfermata = knownExisting;
+      if (!knownExisting) {
+        try {
+          const profRes = await fetch(
+            `${AGGIORNA_PROFILO_URL}?user_id=${userId}&telefono=${encodeURIComponent(tel)}`
+          );
+          const profData = await profRes.json();
+          isClienteConfermata = !!(profData.cliente);
+        } catch { /* non bloccante */ }
+      }
 
       const checkRes = await fetch(
         `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&stato=eq.in_attesa&select=id`,
@@ -737,7 +743,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
     setConflittoLoading(false);
     setTelefono(nuovo);
-    await proceedAfterDati(nuovo);
+    await proceedAfterDati(nuovo, true);
   }
 
   function handleFotoAdd(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1742,11 +1748,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               )}
               {(() => {
                 const abbinatiIds = new Set((info.serviziAbbinati ?? []).map(a => a.id));
-                let serviziSelezionabili = info.servizi.filter(s => !abbinatiIds.has(s.id));
+                let serviziSelezionabili: typeof info.servizi;
                 if (isNuovaScheda) {
-                  serviziSelezionabili = serviziSelezionabili.filter(s =>
-                    /piega|consulenza/i.test(s.nome)
-                  );
+                  // For first-time clients show Piega/Consulenza from ALL services (including abbinati)
+                  serviziSelezionabili = info.servizi.filter(s => /piega|consulenza/i.test(s.nome));
+                } else {
+                  serviziSelezionabili = info.servizi.filter(s => !abbinatiIds.has(s.id));
                 }
                 return serviziSelezionabili.length === 0 ? (
                   <p className="text-sm text-stone-500 text-center py-6">Nessun servizio disponibile online al momento.</p>
