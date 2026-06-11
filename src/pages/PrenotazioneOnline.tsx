@@ -548,22 +548,36 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
         );
         const existing = await checkRes.json();
+        const schedaPayload = {
+          nome: profiloNome.trim(),
+          cognome: profiloCognome.trim(),
+          email: profiloEmail.trim() || null,
+          data_nascita: profiloDataNascita || null,
+          note: profiloNote.trim() || null,
+        };
         if (!Array.isArray(existing) || existing.length === 0) {
           const schedaRes = await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
             method: 'POST',
             headers: anonHeaders,
             body: JSON.stringify({
               user_id: userId,
-              nome: profiloNome.trim(),
-              cognome: profiloCognome.trim(),
               telefono: tel,
-              email: profiloEmail.trim() || null,
-              data_nascita: profiloDataNascita || null,
-              note: profiloNote.trim() || null,
               stato: 'in_attesa',
+              ...schedaPayload,
             }),
           });
           if (!schedaRes.ok) throw new Error('Errore durante l\'invio della scheda.');
+        } else {
+          const existingId = existing[0].id;
+          const updateRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?id=eq.${existingId}`,
+            {
+              method: 'PATCH',
+              headers: anonHeaders,
+              body: JSON.stringify(schedaPayload),
+            }
+          );
+          if (!updateRes.ok) throw new Error('Errore durante l\'aggiornamento della scheda.');
         }
         setProfiloSchedaInviata(true);
         setProfiloFotoBase64('');
