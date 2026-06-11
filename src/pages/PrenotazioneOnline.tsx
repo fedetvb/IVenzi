@@ -33,6 +33,7 @@ interface ServizioAbbinato {
 
 interface SalonInfo {
   prenotazioniAttive: boolean;
+  portaleNascosto: boolean;
   nomeSalone: string;
   logoUrl: string | null;
   parrucchieri: Parrucchiere[];
@@ -1161,16 +1162,22 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     );
   }
 
-  if (!info.prenotazioniAttive) {
+  if (info.portaleNascosto) {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6">
         <SalonHeader info={info} />
         <div className="mt-10 bg-white rounded-2xl border border-stone-200 p-8 text-center max-w-sm w-full shadow-sm">
-          <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <X size={24} className="text-stone-400" />
+          <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <X size={24} className="text-amber-400" />
           </div>
-          <p className="font-semibold text-stone-800 text-lg mb-2">Prenotazioni sospese</p>
-          <p className="text-stone-500 text-sm">Il servizio di prenotazione online non è attivo al momento. Contattaci direttamente.</p>
+          <p className="font-semibold text-stone-800 text-lg mb-3">Portale temporaneamente non disponibile</p>
+          <p className="text-stone-500 text-sm leading-relaxed">
+            Ci scusiamo per il disagio. Il portale online è momentaneamente sospeso.
+          </p>
+          <p className="text-stone-500 text-sm leading-relaxed mt-3">
+            <span className="font-medium text-stone-700">Non preoccuparti</span> — tutte le tue carte e promozioni sono al sicuro e registrate nel nostro sistema. Non perderai nulla.
+          </p>
+          <p className="text-stone-400 text-xs mt-4">Contattaci direttamente per qualsiasi necessità.</p>
         </div>
       </div>
     );
@@ -1595,19 +1602,32 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <ChevronRight size={20} className="text-stone-300 group-hover:text-violet-500 transition-colors flex-shrink-0" />
             </button>
 
-            <button
-              onClick={() => setStep('parrucchiere')}
-              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-md transition-all text-left group"
-            >
-              <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-200 transition-colors">
-                <CalendarPlus size={26} className="text-emerald-600" />
+            {info.prenotazioniAttive ? (
+              <button
+                onClick={() => setStep('parrucchiere')}
+                className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-md transition-all text-left group"
+              >
+                <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-200 transition-colors">
+                  <CalendarPlus size={26} className="text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-stone-800 text-lg">Richiedi un appuntamento</p>
+                  <p className="text-sm text-stone-400 mt-0.5">Scegli data, orario e servizio</p>
+                </div>
+                <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+              </button>
+            ) : (
+              <div className="w-full flex items-center gap-5 bg-stone-50 border-2 border-stone-200 rounded-3xl p-6 text-left opacity-70">
+                <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <CalendarPlus size={26} className="text-stone-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-stone-500 text-lg">Richiedi un appuntamento</p>
+                  <p className="text-sm text-stone-400 mt-0.5">Le prenotazioni online sono momentaneamente sospese. Contattaci direttamente.</p>
+                </div>
+                <X size={20} className="text-stone-300 flex-shrink-0" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-stone-800 text-lg">Richiedi un appuntamento</p>
-                <p className="text-sm text-stone-400 mt-0.5">Scegli data, orario e servizio</p>
-              </div>
-              <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
-            </button>
+            )}
 
             <button
               onClick={() => setStep('scrivici')}

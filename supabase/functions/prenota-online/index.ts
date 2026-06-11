@@ -72,6 +72,7 @@ Deno.serve(async (req: Request) => {
     for (const r of iRes.data ?? []) impostazioni[r.chiave] = r.valore;
 
     const prenotazioniAttive = impostazioni["prenotazioni_online_attive"] !== "false";
+    const portaleNascosto = impostazioni["portale_nascosto"] === "true";
 
     // Also fetch abbinati services (may not have prenotazione_online_abilitata=true)
     const serviziAbilitati = sRes.data ?? [];
@@ -100,6 +101,7 @@ Deno.serve(async (req: Request) => {
 
     return json({
       prenotazioniAttive,
+      portaleNascosto,
       nomeSalone: impostazioni["nome_salone"] ?? "",
       logoUrl: impostazioni["logo_salone_url"] ?? null,
       parrucchieri: pRes.data ?? [],

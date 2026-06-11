@@ -456,6 +456,7 @@ function PaginaDatiAzienda({ onBack }: { onBack: () => void }) {
 function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const [attiva, setAttiva] = useState(true);
+  const [portaleNascosto, setPortaleNascosto] = useState(false);
   const [msgConferma, setMsgConferma] = useState('Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!');
   const [msgRifiuto, setMsgRifiuto] = useState('Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.');
   const [indirizzo, setIndirizzo] = useState('');
@@ -479,14 +480,16 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     if (!user) return;
     Promise.all([
       getImpostazione('prenotazioni_online_attive'),
+      getImpostazione('portale_nascosto'),
       getImpostazione('msg_conferma_appuntamento_online'),
       getImpostazione('msg_rifiuto_appuntamento_online'),
       getImpostazione('qr_prenotazioni_logo_url'),
       getImpostazione('indirizzo_salone'),
       getImpostazione('suono_richiesta_appuntamento'),
       getImpostazione('volume_notifiche'),
-    ]).then(([a, mc, mr, logo, ind, suono, vol]) => {
+    ]).then(([a, pn, mc, mr, logo, ind, suono, vol]) => {
       if (a !== null) setAttiva(a !== 'false');
+      if (pn !== null) setPortaleNascosto(pn === 'true');
       if (mc) setMsgConferma(mc);
       if (mr) setMsgRifiuto(mr);
       if (logo) setQrLogoUrl(logo);
@@ -572,6 +575,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     setSaving(true);
     await Promise.all([
       setImpostazione('prenotazioni_online_attive', attiva ? 'true' : 'false', user?.id),
+      setImpostazione('portale_nascosto', portaleNascosto ? 'true' : 'false', user?.id),
       setImpostazione('msg_conferma_appuntamento_online', msgConferma, user?.id),
       setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, user?.id),
       setImpostazione('indirizzo_salone', indirizzo, user?.id),
@@ -629,7 +633,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           <div>
             <p className="font-semibold text-stone-800">Prenotazioni online</p>
             <p className="text-xs text-stone-400 mt-0.5">
-              {attiva ? 'Le clienti possono richiedere appuntamenti online' : 'La pagina mostra un avviso di servizio sospeso'}
+              {attiva ? 'Le clienti possono richiedere appuntamenti online' : 'Il pulsante "Richiedi un appuntamento" risulta sospeso'}
             </p>
           </div>
           <button
@@ -719,6 +723,31 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Nascondi portale pubblico */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex-1 pr-4">
+            <p className="font-semibold text-stone-800">Nascondi portale pubblico</p>
+            <p className="text-xs text-stone-400 mt-0.5">
+              {portaleNascosto
+                ? 'Il portale mostra un messaggio di scuse e rassicura le clienti sui loro dati'
+                : 'Il portale è accessibile normalmente'}
+            </p>
+          </div>
+          <button
+            onClick={() => setPortaleNascosto(v => !v)}
+            className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${portaleNascosto ? 'bg-red-400' : 'bg-stone-200'}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${portaleNascosto ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+        {portaleNascosto && (
+          <div className="mt-4 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-700 leading-relaxed">
+            Le clienti vedranno: <em>"Portale temporaneamente non disponibile — non preoccuparti, le tue carte e promozioni sono al sicuro e registrate nel nostro sistema."</em>
+          </div>
+        )}
       </div>
 
       {/* Indirizzo salone */}
