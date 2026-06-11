@@ -1,0 +1,1 @@
+ALTER TABLE gift_pass ADD COLUMN IF NOT EXISTS nominativa boolean NOT NULL DEFAULT false;

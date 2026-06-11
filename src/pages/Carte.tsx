@@ -1346,6 +1346,7 @@ interface GiftPass {
   destinataria_telefono: string;
   destinataria_cliente_id: string | null;
   cliente_id: string | null;
+  nominativa: boolean;
   attivata_at: string | null;
   scadenza_uso: string | null;
   fiche_id: string | null;
@@ -1392,6 +1393,9 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
     scadenza_uso_giorni: 60,
     note: '',
   });
+  // Nominativa (solo prodotto): la cliente acquista per se stessa
+  const [nominativa, setNominativa] = useState(false);
+
   // Destinataria: cliente esistente o nuova
   const [destinatariaId, setDestinatariaId] = useState('');
   const [nuovaNome, setNuovaNome] = useState('');
@@ -1467,10 +1471,11 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       occasione: form.occasione,
       scadenza_ritiro_giorni: form.scadenza_ritiro_giorni,
       scadenza_uso_giorni: form.scadenza_uso_giorni,
-      destinataria_nome: nomeFinale,
-      destinataria_telefono: telefonoFinale,
-      destinataria_cliente_id: clienteId,
+      destinataria_nome: nominativa ? '' : nomeFinale,
+      destinataria_telefono: nominativa ? '' : telefonoFinale,
+      destinataria_cliente_id: nominativa ? null : clienteId,
       cliente_id: compratoreFinalId,
+      nominativa: nominativa && form.tipo === 'prodotto',
       note: form.note.trim(),
       utilizzata: false,
       attiva: true,
@@ -1585,6 +1590,32 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
             </div>
           )}
 
+          {/* Modalità: Per me / Da regalare (solo prodotto) */}
+          {form.tipo === 'prodotto' && (
+            <div>
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Per chi è il Gift Pass?</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setNominativa(false)}
+                  className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-sm font-semibold transition-colors ${!nominativa ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                  <Gift size={16} />
+                  Da regalare
+                </button>
+                <button
+                  onClick={() => setNominativa(true)}
+                  className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-sm font-semibold transition-colors ${nominativa ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                  <Star size={16} />
+                  Per la cliente
+                </button>
+              </div>
+              {nominativa && (
+                <p className="text-[10px] text-violet-700 bg-violet-50 rounded-lg px-3 py-2 mt-2">
+                  La cliente usa il Gift Pass per se stessa. Potra' regalarlo in seguito dal salone inserendo i dati della destinataria.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Occasione */}
           <div>
             <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Occasione</label>
@@ -1678,8 +1709,8 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
             <p className="text-xs text-stone-400">Chi ha pagato il Gift Pass. Verrà creata una fiche da convalidare intestata a lei.</p>
           </div>
 
-          {/* Destinataria */}
-          <div className="border border-stone-200 rounded-xl p-4 space-y-3">
+          {/* Destinataria (nascosta se nominativa) */}
+          {!nominativa && <div className="border border-stone-200 rounded-xl p-4 space-y-3">
             <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">
               Destinataria <span className="text-stone-400 font-normal normal-case">(opzionale)</span>
             </label>
@@ -1741,7 +1772,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
                 </p>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Codice */}
           <div>
@@ -1921,6 +1952,89 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
   );
 }
 
+// ─── Converti Gift Pass Nominativa in Regalo ──────────────────────────────────
+
+function ConvertToGiftModal({ gp, onClose, onConverted }: {
+  gp: GiftPass;
+  onClose: () => void;
+  onConverted: (updated: GiftPass) => void;
+}) {
+  const [nome, setNome] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const canSave = nome.trim() !== '' && telefono.trim() !== '';
+
+  async function save() {
+    if (!canSave) return;
+    setSaving(true);
+    await dbUpdate({ table: 'gift_pass', id: gp.id, data: {
+      nominativa: false,
+      destinataria_nome: nome.trim(),
+      destinataria_telefono: telefono.trim(),
+    }});
+    onConverted({
+      ...gp,
+      nominativa: false,
+      destinataria_nome: nome.trim(),
+      destinataria_telefono: telefono.trim(),
+    });
+    setSaving(false);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+              <Gift size={16} className="text-green-600" />
+            </div>
+            <div>
+              <p className="font-bold text-stone-800 text-sm">Regala Gift Pass</p>
+              <p className="text-xs text-stone-400">Codice: {gp.codice}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors"><X size={15} /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-stone-500">Inserisci i dati della destinataria. Il Gift Pass le verrà intestato e potrai inviarle il codice via WhatsApp.</p>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Nome destinataria <span className="text-red-500">*</span></label>
+            <input
+              value={nome}
+              onChange={e => setNome(e.target.value)}
+              placeholder="Nome e cognome"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Telefono destinataria <span className="text-red-500">*</span></label>
+            <input
+              type="tel"
+              value={telefono}
+              onChange={e => setTelefono(e.target.value)}
+              placeholder="3xx xxxxxxx"
+              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Annulla</button>
+          <button onClick={save} disabled={saving || !canSave}
+            className="flex-1 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+            {saving ? 'Salvataggio...' : 'Conferma e invia WA'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Gift Pass Tab ────────────────────────────────────────────────────────────
 
 const STATO_LABEL: Record<string, string> = {
@@ -1945,6 +2059,7 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
   const [search, setSearch] = useState('');
   const [filtroStato, setFiltroStato] = useState<'tutte' | 'da_ritirare' | 'attivata' | 'utilizzata' | 'scaduta'>('tutte');
   const [waModal, setWaModal] = useState<{ gp: GiftPass; compratore_nome?: string } | null>(null);
+  const [convertModal, setConvertModal] = useState<GiftPass | null>(null);
   const [nomeSalone, setNomeSalone] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -2067,6 +2182,9 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                           {gp.tipo === 'prodotto' ? 'Prodotto' : `€${gp.valore_euro}`}
                         </span>
                         <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-medium capitalize">{gp.occasione}</span>
+                        {gp.nominativa && (
+                          <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-semibold">Nominativa</span>
+                        )}
                       </div>
                       {gp.tipo === 'prodotto' && gp.prodotto_nome && (
                         <p className="text-xs text-stone-600 mt-0.5 font-medium">{gp.prodotto_nome}</p>
@@ -2104,7 +2222,13 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {isAttiva && gp.destinataria_nome && gp.destinataria_telefono && (
+                    {isAttiva && gp.nominativa && !gp.utilizzata && (
+                      <button onClick={() => setConvertModal(gp)}
+                        className="p-2 rounded-lg hover:bg-green-50 text-stone-400 hover:text-green-600 transition-colors" title="Regala a qualcun altro">
+                        <Gift size={15} />
+                      </button>
+                    )}
+                    {isAttiva && !gp.nominativa && gp.destinataria_nome && gp.destinataria_telefono && (
                       <button onClick={() => {
                         const comp = gp.cliente_id ? clienti.find(c => c.id === gp.cliente_id) : null;
                         const cn = comp ? (comp.cognome ? `${comp.nome} ${comp.cognome.charAt(0)}.` : comp.nome) : undefined;
@@ -2144,6 +2268,20 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
       )}
       {waModal && (
         <GiftPassWaModal gp={waModal.gp} nomeSalone={nomeSalone} compratore_nome={waModal.compratore_nome} onClose={() => { setWaModal(null); load(); }} />
+      )}
+      {convertModal && (
+        <ConvertToGiftModal
+          gp={convertModal}
+          onClose={() => setConvertModal(null)}
+          onConverted={(updated) => {
+            setConvertModal(null);
+            load();
+            // Apri subito la WaModal per inviare il messaggio
+            const comp = updated.cliente_id ? clienti.find(c => c.id === updated.cliente_id) : null;
+            const cn = comp ? (comp.cognome ? `${comp.nome} ${comp.cognome.charAt(0)}.` : comp.nome) : undefined;
+            setWaModal({ gp: updated, compratore_nome: cn });
+          }}
+        />
       )}
     </div>
   );
