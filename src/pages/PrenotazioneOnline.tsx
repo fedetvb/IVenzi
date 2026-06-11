@@ -154,6 +154,14 @@ function buildCalendar(baseDate: Date) {
   return cells;
 }
 
+function buildLookupParams(nome: string, cognome: string, telefono: string, codiceCliente: string): string {
+  const nomeEnc = `&nome=${encodeURIComponent(nome.trim())}&cognome=${encodeURIComponent(cognome.trim())}`;
+  const codice = codiceCliente.trim().toUpperCase();
+  if (codice) return `codice_cliente=${encodeURIComponent(codice)}${nomeEnc}`;
+  if (telefono.trim()) return `telefono=${encodeURIComponent(telefono.trim())}${nomeEnc}`;
+  return `nome=${encodeURIComponent(nome.trim())}&cognome=${encodeURIComponent(cognome.trim())}`;
+}
+
 export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [info, setInfo] = useState<SalonInfo | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(true);
@@ -164,6 +172,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [nome, setNome] = useState('');
   const [cognome, setCognome] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [codiceCliente, setCodiceCliente] = useState('');
   const [cartaScontoCode, setCartaScontoCode] = useState('');
   const [giftPassCode, setGiftPassCode] = useState('');
   const [datiError, setDatiError] = useState('');
@@ -345,6 +354,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       if (saved.nome) setNome(saved.nome.charAt(0).toUpperCase() + saved.nome.slice(1));
       if (saved.cognome) setCognome(saved.cognome.charAt(0).toUpperCase() + saved.cognome.slice(1));
       if (saved.telefono) setTelefono(saved.telefono);
+      if (saved.codiceCliente) setCodiceCliente(saved.codiceCliente.toUpperCase());
     } catch { /* ignore */ }
   }, []);
 
@@ -430,7 +440,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setLoadingMieCarte(true);
     setMieCarteError('');
     try {
-      const res = await fetch(`${MIE_CARTE_URL}/info?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
+      const params = buildLookupParams(nome, cognome, telefono, codiceCliente);
+      const res = await fetch(`${MIE_CARTE_URL}/info?user_id=${userId}&${params}`);
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
       setMieCarteData(data);
@@ -445,7 +456,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setLoadingProfilo(true);
     setProfiloError('');
     try {
-      const res = await fetch(`${AGGIORNA_PROFILO_URL}?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
+      const res = await fetch(`${AGGIORNA_PROFILO_URL}?user_id=${userId}&${buildLookupParams(nome, cognome, telefono, codiceCliente)}`);
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
       const c = data.cliente;
@@ -477,13 +488,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     try {
       const body: Record<string, string> = {
         user_id: userId,
-        telefono: telefono.trim(),
         nome: profiloNome.trim(),
         cognome: profiloCognome.trim(),
         email: profiloEmail.trim(),
         data_nascita: profiloDataNascita,
         note: profiloNote.trim(),
       };
+      // Lookup identity: codice_cliente preferred, then telefono, then nome+cognome (already in body)
+      const codice = codiceCliente.trim().toUpperCase();
+      if (codice) {
+        body.codice_cliente = codice;
+        if (telefono.trim()) body.telefono = telefono.trim();
+      } else if (telefono.trim()) {
+        body.telefono = telefono.trim();
+      }
       if (profiloFotoBase64) {
         body.foto_base64 = profiloFotoBase64;
         body.foto_mime = profiloFotoMime;
@@ -589,6 +607,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
 
     const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim() };
+    if (codiceCliente.trim()) saved.codiceCliente = codiceCliente.trim().toUpperCase();
     if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
     if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
     localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
@@ -725,7 +744,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }
 
   async function fetchMieiMessaggi(playSound: boolean): Promise<MioMessaggio[]> {
-    const res = await fetch(`${MIEI_MSG_URL}?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
+    const res = await fetch(`${MIEI_MSG_URL}?user_id=${userId}&${buildLookupParams(nome, cognome, telefono, codiceCliente)}`);
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
     const messaggi: MioMessaggio[] = data.messaggi ?? [];
@@ -1138,6 +1157,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                     className="input pl-9"
                   />
                 </div>
+              </Field>
+              <Field label="Il tuo codice cliente (opzionale)">
+                <div className="relative">
+                  <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    value={codiceCliente}
+                    onChange={e => setCodiceCliente(e.target.value.toUpperCase())}
+                    placeholder="Es. AB3X7K"
+                    className="input pl-9 font-mono tracking-widest"
+                    maxLength={8}
+                  />
+                </div>
+                <p className="text-[11px] text-stone-400 mt-1">Il codice personale assegnato dal salone — ti permette di accedere al tuo profilo anche se cambi numero</p>
               </Field>
               <Field label="Codice carta sconto (opzionale)">
                 <div className="relative">

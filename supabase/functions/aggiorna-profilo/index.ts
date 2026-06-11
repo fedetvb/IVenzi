@@ -7,6 +7,50 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+function normalizePhone(tel: string): string {
+  let t = String(tel ?? "").replace(/\D/g, "");
+  if (t.startsWith("0039")) t = t.slice(4);
+  else if (t.startsWith("39") && t.length > 10) t = t.slice(2);
+  return t.slice(-9);
+}
+
+type ClienteRow = { id: string; nome: string; cognome: string; telefono: string; email: string | null; data_nascita: string | null; note: string | null; foto_url: string | null; codice_cliente: string | null };
+
+async function findCliente(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  params: { codiceCliente?: string | null; telefono?: string | null; nome?: string | null; cognome?: string | null },
+  selectFields = "id, nome, cognome, telefono, email, data_nascita, note, foto_url, codice_cliente",
+): Promise<ClienteRow | null> {
+  const baseQuery = () =>
+    admin.from("clienti").select(selectFields).eq("user_id", userId).is("deleted_at", null);
+
+  // Priority 1: codice_cliente (esatto, univoco per salone)
+  if (params.codiceCliente) {
+    const { data } = await baseQuery().eq("codice_cliente", params.codiceCliente.toUpperCase()).maybeSingle();
+    if (data) return data as ClienteRow;
+  }
+
+  // Priority 2: telefono normalizzato
+  if (params.telefono) {
+    const telNorm = normalizePhone(params.telefono);
+    const { data: all } = await baseQuery();
+    const found = (all ?? []).find((c: { telefono: string }) => normalizePhone(c.telefono ?? "") === telNorm);
+    if (found) return found as ClienteRow;
+  }
+
+  // Priority 3: nome + cognome (case-insensitive, fallback)
+  if (params.nome && params.cognome) {
+    const { data } = await baseQuery()
+      .ilike("nome", params.nome.trim())
+      .ilike("cognome", params.cognome.trim())
+      .maybeSingle();
+    if (data) return data as ClienteRow;
+  }
+
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -15,13 +59,16 @@ Deno.serve(async (req: Request) => {
   const su = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-  // GET: fetch dati cliente by telefono + user_id
+  // GET: fetch dati cliente
   if (req.method === "GET") {
     const url = new URL(req.url);
     const userId = url.searchParams.get("user_id");
     const telefono = url.searchParams.get("telefono");
+    const codiceCliente = url.searchParams.get("codice_cliente");
+    const nome = url.searchParams.get("nome");
+    const cognome = url.searchParams.get("cognome");
 
-    if (!userId || !telefono) {
+    if (!userId || (!telefono && !codiceCliente && (!nome || !cognome))) {
       return new Response(JSON.stringify({ error: "Parametri mancanti" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -30,17 +77,9 @@ Deno.serve(async (req: Request) => {
 
     try {
       const admin = createClient(su, serviceKey);
-      const { data, error } = await admin
-        .from("clienti")
-        .select("id, nome, cognome, telefono, email, data_nascita, note, foto_url")
-        .eq("user_id", userId)
-        .eq("telefono", telefono)
-        .is("deleted_at", null)
-        .maybeSingle();
+      const cliente = await findCliente(admin, userId, { codiceCliente, telefono, nome, cognome });
 
-      if (error) throw error;
-
-      return new Response(JSON.stringify({ cliente: data ?? null }), {
+      return new Response(JSON.stringify({ cliente: cliente ?? null }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -57,9 +96,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "POST") {
     try {
       const body = await req.json();
-      const { user_id, telefono, nome, cognome, email, data_nascita, note, foto_base64, foto_mime } = body;
+      const { user_id, telefono, codice_cliente, nome, cognome, email, data_nascita, note, foto_base64, foto_mime } = body;
 
-      if (!user_id || !telefono) {
+      if (!user_id || (!telefono && !codice_cliente && (!nome || !cognome))) {
         return new Response(JSON.stringify({ error: "Parametri mancanti" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -68,18 +107,10 @@ Deno.serve(async (req: Request) => {
 
       const admin = createClient(su, serviceKey);
 
-      // Trova il cliente
-      const { data: cliente, error: findErr } = await admin
-        .from("clienti")
-        .select("id, foto_url")
-        .eq("user_id", user_id)
-        .eq("telefono", telefono)
-        .is("deleted_at", null)
-        .maybeSingle();
+      const cliente = await findCliente(admin, user_id, { codiceCliente: codice_cliente, telefono, nome, cognome }, "id, foto_url");
 
-      if (findErr) throw findErr;
       if (!cliente) {
-        return new Response(JSON.stringify({ error: "Cliente non trovato" }), {
+        return new Response(JSON.stringify({ error: "Cliente non trovata" }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -99,8 +130,11 @@ Deno.serve(async (req: Request) => {
       if (email !== undefined) updateData.email = String(email ?? "").trim() || null;
       if (data_nascita !== undefined) updateData.data_nascita = data_nascita || null;
       if (note !== undefined) updateData.note = String(note ?? "").trim() || null;
+      // When lookup was by codice, allow updating telefono
+      if (codice_cliente && telefono !== undefined) {
+        updateData.telefono = String(telefono).trim();
+      }
 
-      // Gestione foto
       if (foto_base64 && foto_mime) {
         const mimeType = String(foto_mime).startsWith("image/") ? String(foto_mime) : "image/jpeg";
         const ext = mimeType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";

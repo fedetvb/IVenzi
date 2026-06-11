@@ -19,6 +19,44 @@ function normalizePhone(tel: string): string {
   return t.slice(-9);
 }
 
+async function findClienteByParams(
+  userId: string,
+  params: { codiceCliente?: string | null; telefono?: string | null; nome?: string | null; cognome?: string | null },
+): Promise<{ id: string; nome: string; cognome: string; telefono: string } | undefined> {
+  // Priority 1: codice_cliente
+  if (params.codiceCliente) {
+    const { data } = await sb.from("clienti")
+      .select("id, nome, cognome, telefono")
+      .eq("user_id", userId)
+      .eq("codice_cliente", params.codiceCliente.toUpperCase())
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (data) return data as { id: string; nome: string; cognome: string; telefono: string };
+  }
+  // Priority 2: telefono normalizzato
+  if (params.telefono) {
+    const telNorm = normalizePhone(params.telefono);
+    const { data: all } = await sb.from("clienti")
+      .select("id, nome, cognome, telefono")
+      .eq("user_id", userId)
+      .is("deleted_at", null);
+    const found = (all ?? []).find((c: { telefono: string }) => normalizePhone(c.telefono ?? "") === telNorm);
+    if (found) return found as { id: string; nome: string; cognome: string; telefono: string };
+  }
+  // Priority 3: nome + cognome fallback
+  if (params.nome && params.cognome) {
+    const { data } = await sb.from("clienti")
+      .select("id, nome, cognome, telefono")
+      .eq("user_id", userId)
+      .ilike("nome", params.nome.trim())
+      .ilike("cognome", params.cognome.trim())
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (data) return data as { id: string; nome: string; cognome: string; telefono: string };
+  }
+  return undefined;
+}
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -32,25 +70,20 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/mie-carte/, "");
 
-  // GET /info?user_id=...&telefono=...
+  // GET /info?user_id=...&(telefono|codice_cliente|nome+cognome)
   // Restituisce tutte le carte associate alla cliente + dati salone
   if (req.method === "GET" && (path === "/info" || path === "")) {
     const userId = url.searchParams.get("user_id");
     const telefono = url.searchParams.get("telefono");
-    if (!userId || !telefono) return json({ error: "user_id e telefono richiesti" }, 400);
+    const codiceCliente = url.searchParams.get("codice_cliente");
+    const nome = url.searchParams.get("nome");
+    const cognome = url.searchParams.get("cognome");
+    if (!userId || (!telefono && !codiceCliente && (!nome || !cognome))) {
+      return json({ error: "user_id e almeno un identificatore richiesti" }, 400);
+    }
 
-    const telNorm = normalizePhone(telefono);
-
-    // Trova cliente per numero di telefono
-    const { data: clienti } = await sb
-      .from("clienti")
-      .select("id, nome, cognome, telefono")
-      .eq("user_id", userId)
-      .is("deleted_at", null);
-
-    const cliente = (clienti ?? []).find((c: { telefono: string }) =>
-      normalizePhone(c.telefono ?? "") === telNorm
-    );
+    // Lookup con priorità: codice_cliente → telefono → nome+cognome
+    const cliente = await findClienteByParams(userId, { codiceCliente, telefono, nome, cognome });
 
     // Dati salone dalle impostazioni
     const { data: impostazioni } = await sb

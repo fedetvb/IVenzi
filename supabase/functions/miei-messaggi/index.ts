@@ -13,7 +13,6 @@ function normTel(t: string): string {
 
 function telMatch(a: string, b: string): boolean {
   const na = normTel(a), nb = normTel(b);
-  // Match on last 9 digits
   return na.slice(-9) === nb.slice(-9);
 }
 
@@ -29,15 +28,46 @@ Deno.serve(async (req: Request) => {
 
   const url = new URL(req.url);
 
-  // GET: list messages for this phone
+  // GET: list messages — lookup by telefono, codice_cliente, or nome+cognome (in priority order)
   if (req.method === "GET") {
     const user_id = url.searchParams.get("user_id");
     const telefono = url.searchParams.get("telefono");
+    const codice_cliente = url.searchParams.get("codice_cliente");
+    const nome = url.searchParams.get("nome");
+    const cognome = url.searchParams.get("cognome");
 
-    if (!user_id || !telefono) {
-      return new Response(JSON.stringify({ error: "user_id e telefono obbligatori" }), {
+    if (!user_id || (!telefono && !codice_cliente && (!nome || !cognome))) {
+      return new Response(JSON.stringify({ error: "user_id e almeno un identificatore obbligatori" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Resolve to telefono via DB when not provided directly
+    let resolvedTelefono = telefono ?? "";
+    if (!telefono || codice_cliente) {
+      // Priority 1: codice_cliente
+      if (codice_cliente) {
+        const { data } = await supabase
+          .from("clienti")
+          .select("telefono")
+          .eq("user_id", user_id)
+          .eq("codice_cliente", codice_cliente.toUpperCase())
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (data?.telefono) resolvedTelefono = data.telefono;
+      }
+      // Priority 3: nome+cognome (only if still not resolved)
+      if (!resolvedTelefono && nome && cognome) {
+        const { data } = await supabase
+          .from("clienti")
+          .select("telefono")
+          .eq("user_id", user_id)
+          .ilike("nome", nome.trim())
+          .ilike("cognome", cognome.trim())
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (data?.telefono) resolvedTelefono = data.telefono;
+      }
     }
 
     const { data, error } = await supabase
@@ -52,9 +82,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Filter by phone server-side (last 9 digits match)
-    const filtered = (data ?? []).filter(m => telMatch(m.telefono ?? '', telefono));
-    // Remove telefono from response
+    const filtered = (data ?? []).filter(m => resolvedTelefono && telMatch(m.telefono ?? '', resolvedTelefono));
     const sanitized = filtered.map(({ telefono: _tel, ...rest }) => rest);
 
     return new Response(JSON.stringify({ messaggi: sanitized }), {
@@ -83,7 +111,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Verify message belongs to this phone + user
     const { data: msg } = await supabase
       .from("messaggi_clienti")
       .select("id, telefono")
