@@ -1541,6 +1541,46 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <p className="text-sm text-stone-400 mt-1">Cosa vuoi fare oggi?</p>
             </div>
 
+            {/* Banner promemoria appuntamenti oggi/domani */}
+            {(() => {
+              const now = new Date();
+              const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+              const tomorrowStr = addDays(todayStr, 1);
+              const candidates = mieiAppuntamenti.filter(a => {
+                if (a.tipo !== 'appuntamento') return false;
+                const dataStr = new Date(a.data_ora).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+                return (dataStr === todayStr || dataStr === tomorrowStr) && new Date(a.data_ora) >= now;
+              });
+              if (candidates.length === 0) return null;
+              return (
+                <>
+                  {candidates.map(a => {
+                    const dataStr = new Date(a.data_ora).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+                    const isOggi = dataStr === todayStr;
+                    const bannerKey = `${a.id}_${isOggi ? 'oggi' : 'domani'}`;
+                    if (bannerDismissed[bannerKey]) return null;
+                    const ora = new Date(a.data_ora).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+                    return (
+                      <div key={bannerKey} className="bg-pink-100 border border-pink-300 rounded-2xl px-5 py-4 flex items-start gap-3">
+                        <Bell size={20} className="text-pink-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-pink-800 text-sm">
+                            {isOggi ? 'Oggi' : 'Domani'} hai un appuntamento alle {ora}
+                          </p>
+                          {a.servizi.length > 0 && (
+                            <p className="text-xs text-pink-600 mt-0.5">{a.servizi.join(' + ')}</p>
+                          )}
+                        </div>
+                        <button onClick={() => dismissBanner(bannerKey)} className="text-pink-400 hover:text-pink-700 transition-colors flex-shrink-0">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
+
             <button
               onClick={() => { loadProfilo(); setStep('profilo'); }}
               className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-violet-400 hover:shadow-md transition-all text-left group"
