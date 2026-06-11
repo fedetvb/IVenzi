@@ -5393,7 +5393,7 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
           </div>
           <div>
             <p className="font-semibold text-stone-800">Password eliminazione messaggi</p>
-            <p className="text-xs text-stone-400">Password attuale: <span className="font-mono text-stone-600">{pwd || '1234 (default)'}</span></p>
+            <p className="text-xs text-stone-400">Gestione password e cancellazione globale</p>
           </div>
         </div>
 
