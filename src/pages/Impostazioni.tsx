@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
@@ -9,7 +9,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -49,6 +49,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'prenotazioni_online') return <PaginaPrenotazioniOnline onBack={() => setSub(null)} />;
   if (sub === 'messaggi_clienti') return <PaginaMessaggiClienti onBack={() => setSub(null)} userId={user?.id} />;
   if (sub === 'dati_azienda') return <PaginaDatiAzienda onBack={() => setSub(null)} />;
+  if (sub === 'canali_social') return <PaginaCanaleSocial onBack={() => setSub(null)} />;
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -99,6 +100,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Backup e Ripristino</p>
             <p className="text-xs text-stone-400 mt-0.5">Esporta tutti i dati in un file o ripristina da un backup precedente</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Canali Social */}
+        <button
+          onClick={() => setSub('canali_social')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-pink-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Share2 size={18} className="text-stone-500 group-hover:text-pink-500 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Canali Social</p>
+            <p className="text-xs text-stone-400 mt-0.5">Instagram, Facebook, TikTok, YouTube e altri canali del salone</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -447,6 +463,183 @@ function PaginaDatiAzienda({ onBack }: { onBack: () => void }) {
           {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Check size={15} /> Salva dati azienda</>}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Prenotazioni Online ──────────────────────────────────────────────────────
+
+// ─── Canali Social ────────────────────────────────────────────────────────────
+
+const SOCIAL_CANALI = [
+  {
+    key: 'social_instagram',
+    label: 'Instagram',
+    placeholder: 'https://instagram.com/iltuosalone',
+    color: 'from-pink-500 to-orange-400',
+    icon: '📸',
+  },
+  {
+    key: 'social_facebook',
+    label: 'Facebook',
+    placeholder: 'https://facebook.com/iltuosalone',
+    color: 'from-blue-600 to-blue-400',
+    icon: '👤',
+  },
+  {
+    key: 'social_tiktok',
+    label: 'TikTok',
+    placeholder: 'https://tiktok.com/@iltuosalone',
+    color: 'from-stone-900 to-stone-600',
+    icon: '🎵',
+  },
+  {
+    key: 'social_youtube',
+    label: 'YouTube',
+    placeholder: 'https://youtube.com/@iltuosalone',
+    color: 'from-red-600 to-red-400',
+    icon: '▶️',
+  },
+  {
+    key: 'social_whatsapp',
+    label: 'WhatsApp Business',
+    placeholder: 'https://wa.me/393331234567',
+    color: 'from-green-500 to-emerald-400',
+    icon: '💬',
+  },
+  {
+    key: 'social_x',
+    label: 'X (Twitter)',
+    placeholder: 'https://x.com/iltuosalone',
+    color: 'from-stone-800 to-stone-600',
+    icon: '✕',
+  },
+  {
+    key: 'social_threads',
+    label: 'Threads',
+    placeholder: 'https://threads.net/@iltuosalone',
+    color: 'from-stone-900 to-stone-700',
+    icon: '🧵',
+  },
+  {
+    key: 'social_google_business',
+    label: 'Google Business',
+    placeholder: 'https://g.page/iltuosalone',
+    color: 'from-blue-500 to-sky-400',
+    icon: '🔍',
+  },
+  {
+    key: 'social_tripadvisor',
+    label: 'TripAdvisor',
+    placeholder: 'https://tripadvisor.it/...',
+    color: 'from-emerald-600 to-green-500',
+    icon: '⭐',
+  },
+  {
+    key: 'social_altro',
+    label: 'Altro link',
+    placeholder: 'https://...',
+    color: 'from-stone-500 to-stone-400',
+    icon: '🔗',
+  },
+] as const;
+
+function PaginaCanaleSocial({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [valori, setValori] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    Promise.all(SOCIAL_CANALI.map(c => getImpostazione(c.key))).then(results => {
+      const map: Record<string, string> = {};
+      SOCIAL_CANALI.forEach((c, i) => { map[c.key] = results[i] ?? ''; });
+      setValori(map);
+      setLoading(false);
+    });
+  }, [user]);
+
+  async function handleSave() {
+    setSaving(true);
+    await Promise.all(
+      SOCIAL_CANALI.map(c => setImpostazione(c.key, valori[c.key] ?? '', user?.id))
+    );
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  const compilati = SOCIAL_CANALI.filter(c => (valori[c.key] ?? '').trim()).length;
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Canali Social</h2>
+          <p className="text-sm text-stone-400 mt-0.5">
+            Link ai profili e alle pagine del salone
+            {compilati > 0 && <span className="ml-1.5 text-pink-500 font-semibold">· {compilati} configurati</span>}
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-start gap-3">
+        <Link size={15} className="text-amber-600 mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-amber-700 leading-relaxed">
+          Inserisci i link completi (con <span className="font-mono bg-amber-100 px-1 rounded">https://</span>). I campi lasciati vuoti non verranno salvati. Questi link possono essere usati in futuro per comunicazioni o per il portale prenotazioni.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden divide-y divide-stone-100">
+        {SOCIAL_CANALI.map(canale => (
+          <div key={canale.key} className="px-5 py-4 flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${canale.color} flex items-center justify-center flex-shrink-0 text-base`}>
+              <span role="img" aria-label={canale.label}>{canale.icon}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-stone-600 mb-1">{canale.label}</p>
+              <input
+                type="url"
+                value={valori[canale.key] ?? ''}
+                onChange={e => setValori(prev => ({ ...prev, [canale.key]: e.target.value }))}
+                placeholder={canale.placeholder}
+                className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-200 focus:border-pink-400 text-stone-700 placeholder-stone-300 transition-colors"
+              />
+            </div>
+            {(valori[canale.key] ?? '').trim() && (
+              <a
+                href={valori[canale.key]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 text-stone-400 hover:text-pink-500 transition-colors flex-shrink-0"
+                title="Apri link"
+              >
+                <ExternalLink size={15} />
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 to-orange-400 hover:from-pink-600 hover:to-orange-500 disabled:opacity-50 text-white font-semibold text-sm shadow-sm transition-all"
+      >
+        {saved ? <Check size={16} /> : <Share2 size={16} />}
+        {saving ? 'Salvataggio...' : saved ? 'Salvato!' : 'Salva canali social'}
+      </button>
     </div>
   );
 }
