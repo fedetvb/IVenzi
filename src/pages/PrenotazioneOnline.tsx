@@ -206,6 +206,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [profiloSaving, setProfiloSaving] = useState(false);
   const [profiloError, setProfiloError] = useState('');
   const [profiloSaved, setProfiloSaved] = useState(false);
+  const [profiloSchedaInviata, setProfiloSchedaInviata] = useState(false);
   const profiloFotoRef = useRef<HTMLInputElement>(null);
   const profiloFotoCameraRef = useRef<HTMLInputElement>(null);
 
@@ -503,6 +504,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setProfiloSaving(true);
     setProfiloError('');
     setProfiloSaved(false);
+    setProfiloSchedaInviata(false);
     try {
       const body: Record<string, string> = {
         user_id: userId,
@@ -530,6 +532,45 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         body: JSON.stringify(body),
       });
       const data = await res.json();
+
+      // Cliente non ancora registrata: crea scheda da confermare
+      if (res.status === 404 || data.error === 'Cliente non trovata') {
+        const anonHeaders = {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        };
+        const tel = (telefono || profiloTelefono).trim();
+        // Controlla se esiste già una scheda in attesa
+        const checkRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&stato=eq.in_attesa&select=id`,
+          { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
+        );
+        const existing = await checkRes.json();
+        if (!Array.isArray(existing) || existing.length === 0) {
+          const schedaRes = await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
+            method: 'POST',
+            headers: anonHeaders,
+            body: JSON.stringify({
+              user_id: userId,
+              nome: profiloNome.trim(),
+              cognome: profiloCognome.trim(),
+              telefono: tel,
+              email: profiloEmail.trim() || null,
+              data_nascita: profiloDataNascita || null,
+              note: profiloNote.trim() || null,
+              stato: 'in_attesa',
+            }),
+          });
+          if (!schedaRes.ok) throw new Error('Errore durante l\'invio della scheda.');
+        }
+        setProfiloSchedaInviata(true);
+        setProfiloFotoBase64('');
+        setTimeout(() => setProfiloSchedaInviata(false), 5000);
+        return;
+      }
+
       if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
       setProfiloSaved(true);
       setProfiloFotoBase64('');
@@ -1651,6 +1692,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             saving={profiloSaving}
             error={profiloError}
             saved={profiloSaved}
+            schedaInviata={profiloSchedaInviata}
             onSave={handleProfiloSave}
             onBack={() => setStep('scelta')}
           />
@@ -2942,7 +2984,7 @@ function ProfiloStep({
   nome, setNome, cognome, setCognome, telefono, setTelefono,
   email, setEmail, dataNascita, setDataNascita, note, setNote,
   fotoUrl, fotoPreview, fotoRef, fotoCameraRef, onFotoChange, onFotoRemove,
-  loading, saving, error, saved, onSave, onBack,
+  loading, saving, error, saved, schedaInviata, onSave, onBack,
 }: {
   nome: string; setNome: (v: string) => void;
   cognome: string; setCognome: (v: string) => void;
@@ -2955,7 +2997,7 @@ function ProfiloStep({
   fotoCameraRef: React.RefObject<HTMLInputElement>;
   onFotoChange: (f: File) => void;
   onFotoRemove: () => void;
-  loading: boolean; saving: boolean; error: string; saved: boolean;
+  loading: boolean; saving: boolean; error: string; saved: boolean; schedaInviata: boolean;
   onSave: () => void; onBack: () => void;
 }) {
   const hasFoto = !!fotoPreview;
@@ -3134,6 +3176,14 @@ function ProfiloStep({
         <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
           <Check size={15} className="text-emerald-600 flex-shrink-0" />
           <p className="text-sm text-emerald-700 font-medium">Profilo aggiornato!</p>
+        </div>
+      )}
+
+      {/* Scheda inviata (cliente non ancora registrata) */}
+      {schedaInviata && (
+        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+          <Check size={15} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-emerald-700 font-medium">Scheda inviata! Lo staff la confermerà al piu presto.</p>
         </div>
       )}
 
