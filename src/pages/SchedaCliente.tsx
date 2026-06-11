@@ -620,7 +620,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
 
   useEffect(() => {
     async function loadReferral() {
-      // Chi ha presentato questo cliente (ha una carta con regalata_da_cliente_id che punta ad un altro cliente)
+      // Chi ha presentato questo cliente — via carta sconto
       const { data: cartaRicevuta } = await supabase
         .from('carte_sconto')
         .select('regalata_da_cliente_id')
@@ -629,30 +629,79 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
         .limit(1)
         .maybeSingle();
 
-      if (cartaRicevuta?.regalata_da_cliente_id) {
+      let presentataDaId: string | null = cartaRicevuta?.regalata_da_cliente_id ?? null;
+
+      // Chi ha presentato questo cliente — via gift pass (se non trovato via carta sconto)
+      if (!presentataDaId) {
+        const { data: gpRicevuto } = await supabase
+          .from('gift_pass')
+          .select('cliente_id, fiche_acquisto_id')
+          .eq('destinataria_cliente_id', clienteId)
+          .not('cliente_id', 'is', null)
+          .limit(1)
+          .maybeSingle();
+
+        if (gpRicevuto?.cliente_id) {
+          presentataDaId = gpRicevuto.cliente_id;
+        } else if (!gpRicevuto) {
+          // fallback: cerca tramite fiche_acquisto_id
+          const { data: gpRicevutoFiche } = await supabase
+            .from('gift_pass')
+            .select('fiche_acquisto_id')
+            .eq('destinataria_cliente_id', clienteId)
+            .not('fiche_acquisto_id', 'is', null)
+            .limit(1)
+            .maybeSingle();
+          if (gpRicevutoFiche?.fiche_acquisto_id) {
+            const { data: fiche } = await supabase
+              .from('fiches')
+              .select('cliente_id')
+              .eq('id', gpRicevutoFiche.fiche_acquisto_id)
+              .maybeSingle();
+            presentataDaId = fiche?.cliente_id ?? null;
+          }
+        }
+      }
+
+      if (presentataDaId) {
         const { data: gifter } = await supabase
           .from('clienti')
           .select('nome, cognome')
-          .eq('id', cartaRicevuta.regalata_da_cliente_id)
+          .eq('id', presentataDaId)
           .maybeSingle();
         if (gifter) setPresentataDa(`${gifter.nome} ${gifter.cognome}`);
+        else setPresentataDa(null);
       } else {
         setPresentataDa(null);
       }
 
-      // Chi ha portato in salone (clienti che hanno ricevuto una carta regalata da questo cliente)
+      // Chi ha portato in salone — via carte sconto
       const { data: carteRegalate } = await supabase
         .from('carte_sconto')
         .select('cliente_id')
         .eq('regalata_da_cliente_id', clienteId)
         .not('cliente_id', 'is', null);
 
-      if (carteRegalate && carteRegalate.length > 0) {
-        const ids = carteRegalate.map((c: { cliente_id: string }) => c.cliente_id);
+      const portateIds = new Set<string>(
+        (carteRegalate ?? []).map((c: { cliente_id: string }) => c.cliente_id)
+      );
+
+      // Chi ha portato in salone — via gift pass donate
+      const { data: gpDonate } = await supabase
+        .from('gift_pass')
+        .select('destinataria_cliente_id')
+        .eq('cliente_id', clienteId)
+        .not('destinataria_cliente_id', 'is', null);
+
+      (gpDonate ?? []).forEach((gp: { destinataria_cliente_id: string }) => {
+        portateIds.add(gp.destinataria_cliente_id);
+      });
+
+      if (portateIds.size > 0) {
         const { data: portate } = await supabase
           .from('clienti')
           .select('nome, cognome')
-          .in('id', ids)
+          .in('id', Array.from(portateIds))
           .is('deleted_at', null);
         setHaPortato((portate ?? []).map((c: { nome: string; cognome: string }) => `${c.nome} ${c.cognome}`));
       } else {

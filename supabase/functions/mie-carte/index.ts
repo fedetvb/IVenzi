@@ -498,7 +498,7 @@ Deno.serve(async (req: Request) => {
       // Cerca il gift pass per codice (non ancora attivato e non utilizzato)
       const { data: gp } = await sb
         .from("gift_pass")
-        .select("id, tipo, scadenza_uso_giorni, scadenza_uso")
+        .select("id, tipo, scadenza_uso_giorni, scadenza_uso, cliente_id, fiche_acquisto_id")
         .eq("user_id", user_id)
         .eq("codice", String(codice).toUpperCase())
         .is("attivata_at", null)
@@ -517,6 +517,22 @@ Deno.serve(async (req: Request) => {
       const cliente = (clienti ?? []).find((c: { telefono?: string }) =>
         normalizePhone(c.telefono ?? "") === telNorm
       );
+
+      // Trova nome del donatore per il sistema referral
+      let donatoreId: string | null = gp.cliente_id ?? null;
+      if (!donatoreId && gp.fiche_acquisto_id) {
+        const { data: fiche } = await sb
+          .from("fiches")
+          .select("cliente_id")
+          .eq("id", gp.fiche_acquisto_id)
+          .maybeSingle();
+        donatoreId = fiche?.cliente_id ?? null;
+      }
+      let presentataDaNome: string | null = null;
+      if (donatoreId) {
+        const donatore = (clienti ?? []).find((c: { id: string }) => c.id === donatoreId) as { nome: string; cognome: string } | undefined;
+        if (donatore) presentataDaNome = `${donatore.nome} ${donatore.cognome}`.trim();
+      }
 
       const now = new Date().toISOString();
       // Calcola scadenza_uso solo se non già impostata al momento della donazione
@@ -538,7 +554,7 @@ Deno.serve(async (req: Request) => {
 
       if (patchErr) return json({ error: "Errore nell'attivazione" }, 500);
 
-      // Se la cliente non esiste in rubrica, crea/aggiorna scheda da confermare con il codice gift pass
+      // Se la cliente non esiste in rubrica, crea/aggiorna scheda da confermare con il codice gift pass e referral
       if (!cliente) {
         const { data: existingScheda } = await sb
           .from("schede_clienti_da_confermare")
@@ -549,9 +565,12 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (existingScheda) {
-          if (!existingScheda.codice_gift_pass) {
+          const schedaUpdate: Record<string, unknown> = {};
+          if (!existingScheda.codice_gift_pass) schedaUpdate.codice_gift_pass = String(codice).toUpperCase();
+          if (presentataDaNome) schedaUpdate.presentata_da_nome = presentataDaNome;
+          if (Object.keys(schedaUpdate).length > 0) {
             await sb.from("schede_clienti_da_confermare")
-              .update({ codice_gift_pass: String(codice).toUpperCase() })
+              .update(schedaUpdate)
               .eq("id", existingScheda.id);
           }
         } else {
@@ -562,6 +581,7 @@ Deno.serve(async (req: Request) => {
             telefono: telefono.trim(),
             stato: "in_attesa",
             codice_gift_pass: String(codice).toUpperCase(),
+            ...(presentataDaNome ? { presentata_da_nome: presentataDaNome } : {}),
           });
         }
       }
