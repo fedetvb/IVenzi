@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, ExternalLink, AlertCircle, Gift } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, ExternalLink, AlertCircle, Gift, HelpCircle } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
 import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
@@ -59,6 +59,13 @@ interface AgendaProps {
   setSelectedDay: (d: Date | null) => void;
 }
 
+interface ClienteInForseEntry {
+  nome: string;
+  telefono: string;
+  appImmediato: { data: string; ora: string };
+  altriApp: { data: string; ora: string }[];
+}
+
 export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const oraItaliana = useItalianTime();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -79,9 +86,75 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [birthdayClienti, setBirthdayClienti] = useState<{ id: string; nome: string; cognome: string; telefono: string | null }[]>([]);
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
   const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+  const [inForseClienti, setInForseClienti] = useState<ClienteInForseEntry[]>([]);
+  const [showInForseBanner, setShowInForseBanner] = useState(false);
+  const [showInForseModal, setShowInForseModal] = useState(false);
 
   useEffect(() => {
     getImpostazione('whatsapp_avviso_disabilitato').then(v => setWhatsappDisabilitato(v === 'true'));
+  }, []);
+
+  async function loadAvvisoInForse(): Promise<ClienteInForseEntry[]> {
+    const now = new Date();
+    const dopodomani = addDays(now, 2);
+    const ddKey = dopodomani.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+
+    const res = await dbSelectWithRelated({
+      table: 'appuntamenti',
+      columns: 'id, data_ora, cliente_id, stato, deleted_at',
+      filters: [
+        { col: 'stato', op: 'eq', val: 'in_forse' },
+        { col: 'data_ora', op: 'gte', val: now.toISOString() },
+        { col: 'deleted_at', op: 'is_null' }
+      ],
+      orderBy: [{ col: 'data_ora' }],
+      relations: [{ key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, telefono' }],
+      supabaseSelect: 'id, data_ora, cliente_id, clienti(id, nome, telefono)'
+    });
+
+    type RawApp = { data_ora: string; cliente_id: string; clienti: { id: string; nome: string; telefono?: string } | null };
+    const byCliente = new Map<string, { nome: string; telefono: string; apps: { data: string; ora: string; dateKey: string }[] }>();
+
+    for (const app of (res.data || []) as RawApp[]) {
+      const c = app.clienti;
+      if (!c || !c.telefono?.trim()) continue;
+      if (!byCliente.has(c.id)) byCliente.set(c.id, { nome: c.nome, telefono: c.telefono.trim(), apps: [] });
+      const d = new Date(app.data_ora);
+      const dateKey = d.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+      const ora = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
+      const data = d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Rome' });
+      byCliente.get(c.id)!.apps.push({ data, ora, dateKey });
+    }
+
+    const entries: ClienteInForseEntry[] = [];
+    for (const [, cliente] of byCliente) {
+      const immediati = cliente.apps.filter(a => a.dateKey === ddKey);
+      if (immediati.length === 0) continue;
+      const altriApp = cliente.apps.filter(a => a.dateKey !== ddKey);
+      entries.push({ nome: cliente.nome, telefono: cliente.telefono, appImmediato: immediati[0], altriApp });
+    }
+    return entries;
+  }
+
+  useEffect(() => {
+    const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    const check = async () => {
+      const orario = await getImpostazione('orario_avviso_in_forse') ?? '18:00';
+      const nowIt = fmt.format(new Date());
+      if (nowIt !== orario) return;
+      const dopodomani = addDays(new Date(), 2);
+      const ddKey = dopodomani.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+      const lsKey = `avviso_in_forse_shown_${ddKey}`;
+      if (localStorage.getItem(lsKey)) return;
+      const entries = await loadAvvisoInForse();
+      if (entries.length === 0) return;
+      localStorage.setItem(lsKey, '1');
+      setInForseClienti(entries);
+      setShowInForseBanner(true);
+    };
+    check();
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   async function loadAvvisoClienti() {
@@ -107,7 +180,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
         relations: [
           { key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, telefono' }
         ],
-        supabaseSelect: 'data_ora, clienti(id, nome, telefono)'
+        supabaseSelect: 'data_ora, stato, clienti(id, nome, telefono)'
       }),
       dbSelect({ table: 'impostazioni', columns: 'valore', filters: [{ col: 'chiave', op: 'eq', val: 'messaggio_avviso_appuntamento' }] }),
       dbSelect({ table: 'impostazioni', columns: 'valore', filters: [{ col: 'chiave', op: 'eq', val: 'avviso_appuntamento_indirizzo' }] })
@@ -117,7 +190,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     const indirizzo = indirizzoRes.data?.[0]?.valore ?? 'via Palermo 15, Roma';
 
     const clientiMap: Record<string, { nome: string; telefono: string; ora: string; data: string }> = {};
-    for (const app of appRes.data || []) {
+    for (const app of (appRes.data || []).filter((a: { stato?: string }) => a.stato !== 'in_forse')) {
       const c = app.clienti as { id: string; nome: string; telefono?: string } | null;
       if (!c || !c.telefono?.trim()) continue;
       if (clientiMap[c.id]) continue;
@@ -277,6 +350,38 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
           </button>
         </div>
       </div>
+
+      {/* Banner appuntamenti in forse */}
+      {showInForseBanner && inForseClienti.length > 0 && (
+        <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <HelpCircle size={14} className="text-amber-500 flex-shrink-0" />
+            <p className="text-sm text-amber-700 font-semibold truncate">
+              {inForseClienti.length === 1
+                ? `1 appuntamento in forse tra 2 giorni — chiedi conferma a ${inForseClienti[0].nome}`
+                : `${inForseClienti.length} clienti con appuntamento in forse tra 2 giorni`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={async () => {
+                if (inForseClienti.length === 0) {
+                  const entries = await loadAvvisoInForse();
+                  setInForseClienti(entries);
+                }
+                setShowInForseModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors"
+            >
+              <MessageCircle size={12} />
+              Invia conferma
+            </button>
+            <button onClick={() => setShowInForseBanner(false)} className="p-1 hover:bg-amber-100 rounded-lg transition-colors">
+              <X size={14} className="text-amber-500" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Banner compleanni */}
       {birthdayClienti.length > 0 && (
@@ -461,6 +566,12 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
           onClose={() => setShowBirthdayModal(false)}
         />
       )}
+      {showInForseModal && (
+        <AvvisoInForseModal
+          clienti={inForseClienti}
+          onClose={() => setShowInForseModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -572,6 +683,113 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
                     {/* Anteprima messaggio */}
                     <div className="px-4 pb-3">
                       <p className="text-[11px] text-stone-400 whitespace-pre-wrap leading-relaxed bg-white border border-stone-100 rounded-lg px-3 py-2">{testo}{mapUrl ? `\n\n${mapUrl}` : ''}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-stone-100 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors"
+          >
+            Chiudi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── AvvisoInForseModal ───────────────────────────────────────────────────────
+
+const DEFAULT_IN_FORSE_TEMPLATE = `Ciao {nome}, ti scriviamo per chiederti di confermarci l'appuntamento di {giorno} alle ore {ora}. Puoi farcelo sapere? Grazie! I Venzi.`;
+
+function buildInForseMessaggio(nome: string, appImmediato: { data: string; ora: string }, altriApp: { data: string; ora: string }[]): string {
+  let msg = DEFAULT_IN_FORSE_TEMPLATE
+    .replace(/\{nome\}/g, nome)
+    .replace(/\{giorno\}/g, appImmediato.data)
+    .replace(/\{ora\}/g, appImmediato.ora);
+  if (altriApp.length > 0) {
+    const lista = altriApp.map(a => `- ${a.data} alle ${a.ora}`).join('\n');
+    msg += `\n\nHai anche altri appuntamenti da confermare:\n${lista}\n\nFacci sapere quali vuoi tenere!`;
+  }
+  return msg;
+}
+
+interface AvvisoInForseModalProps {
+  clienti: ClienteInForseEntry[];
+  onClose: () => void;
+}
+
+function AvvisoInForseModal({ clienti, onClose }: AvvisoInForseModalProps) {
+  const dopodomani = addDays(new Date(), 2);
+  const dopodomaniLabel = dopodomani.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
+              <HelpCircle size={16} className="text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-stone-800">Conferma appuntamenti in forse</h2>
+              <p className="text-xs text-stone-400 capitalize">{dopodomaniLabel}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors">
+            <X size={16} className="text-stone-500" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+          {clienti.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center mb-3">
+                <AlertCircle size={20} className="text-stone-400" />
+              </div>
+              <p className="text-sm font-medium text-stone-600">Nessun appuntamento in forse tra 2 giorni</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-stone-500 pb-1">
+                {clienti.length} client{clienti.length === 1 ? 'e' : 'i'} con appuntamento in forse tra 2 giorni. Clicca WhatsApp per chiedere conferma.
+              </p>
+              {clienti.map((c, i) => {
+                const testo = buildInForseMessaggio(c.nome, c.appImmediato, c.altriApp);
+                return (
+                  <div key={i} className="bg-stone-50 border border-stone-200 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 text-sm font-bold text-amber-700">
+                        {c.nome[0]?.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-stone-800">{c.nome}</p>
+                        <p className="text-xs text-stone-400">
+                          {c.telefono} · {c.appImmediato.data} alle {c.appImmediato.ora}
+                          {c.altriApp.length > 0 && <span className="ml-1 text-amber-500">+{c.altriApp.length} altri</span>}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => apriWhatsApp(c.telefono, testo)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
+                      >
+                        <MessageCircle size={13} />
+                        WhatsApp
+                        <ExternalLink size={10} className="opacity-70" />
+                      </button>
+                    </div>
+                    {/* Anteprima */}
+                    <div className="px-4 pb-3">
+                      <p className="text-[11px] text-stone-400 whitespace-pre-wrap leading-relaxed bg-white border border-stone-100 rounded-lg px-3 py-2">{testo}</p>
                     </div>
                   </div>
                 );

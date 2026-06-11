@@ -3572,6 +3572,7 @@ function applyTemplate(template: string, vars: { nome: string; data: string; ora
 function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
   const [messaggio, setMessaggio] = useState('');
   const [indirizzo, setIndirizzo] = useState('');
+  const [orarioInForse, setOrarioInForse] = useState('18:00');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
@@ -3580,8 +3581,10 @@ function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
     (async () => {
       const m = await getImpostazione('messaggio_avviso_appuntamento');
       const i = await getImpostazione('avviso_appuntamento_indirizzo');
+      const o = await getImpostazione('orario_avviso_in_forse');
       setMessaggio(m ?? DEFAULT_MESSAGGIO);
       setIndirizzo(i ?? DEFAULT_INDIRIZZO);
+      setOrarioInForse(o ?? '18:00');
       setLoading(false);
     })();
   }, []);
@@ -3600,6 +3603,7 @@ function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
       await Promise.all([
         setImpostazione('messaggio_avviso_appuntamento', messaggio, uid),
         setImpostazione('avviso_appuntamento_indirizzo', indirizzo, uid),
+        setImpostazione('orario_avviso_in_forse', orarioInForse, uid),
       ]);
       setSaving(false);
       setFeedback({ tipo: 'ok', msg: 'Messaggio salvato. Sarà usato al prossimo invio avviso.' });
@@ -3687,6 +3691,28 @@ function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
                 Vedi su Google Maps
               </a>
             )}
+          </div>
+        </div>
+
+        {/* Orario avviso in forse */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+              <Bell size={16} className="text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-stone-800">Orario avviso appuntamenti in forse</h3>
+              <p className="text-xs text-stone-500">A quest'ora comparirà il banner per gli appuntamenti "in forse" di dopodomani</p>
+            </div>
+          </div>
+          <div className="px-6 py-5">
+            <input
+              type="time"
+              value={orarioInForse}
+              onChange={e => { setOrarioInForse(e.target.value); setFeedback(null); }}
+              className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition-colors"
+            />
+            <p className="text-xs text-stone-400 mt-2">Il banner apparirà nell'agenda solo se ci sono appuntamenti in forse entro 2 giorni</p>
           </div>
         </div>
 
