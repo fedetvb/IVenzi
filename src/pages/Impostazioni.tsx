@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
@@ -9,7 +9,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -35,6 +35,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
     </StatisticheGate>
   );
   if (sub === 'password') return <PaginaPassword onBack={() => setSub(null)} />;
+  if (sub === 'avvisi_banner') return <PaginaAvvisiBanner onBack={() => setSub(null)} onTestReminder={onTestReminder} />;
   if (sub === 'promemoria') return <PaginaPromemoria onBack={() => setSub(null)} onTestReminder={onTestReminder} />;
   if (sub === 'messaggio_avviso') return <PaginaMessaggioAvviso onBack={() => setSub(null)} />;
   if (sub === 'template_carta') return <PaginaTemplateCarta onBack={() => setSub(null)} />;
@@ -68,6 +69,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Account e Credenziali</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica email e password di accesso al gestionale</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Avvisi e Banner */}
+        <button
+          onClick={() => setSub('avvisi_banner')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-teal-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Megaphone size={18} className="text-stone-500 group-hover:text-teal-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Avvisi e Banner</p>
+            <p className="text-xs text-stone-400 mt-0.5">Orari e attivazione di tutti gli avvisi, banner e notifiche del gestionale</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -3160,6 +3176,258 @@ function PaginaPassword({ onBack }: { onBack: () => void }) {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── PaginaAvvisiBanner ───────────────────────────────────────────────────────
+
+function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; onTestReminder?: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
+
+  // Promemoria convalida fiches
+  const [ficheGiorni, setFicheGiorni] = useState<number[]>([1, 2, 3, 4, 5, 6]);
+  const [ficheOrario, setFicheOrario] = useState('20:00');
+
+  // Avviso in forse
+  const [inForseAttivo, setInForseAttivo] = useState(true);
+  const [inForseOrario, setInForseOrario] = useState('18:00');
+
+  // Banner compleanni
+  const [compleannoAttivo, setCompleannoAttivo] = useState(true);
+
+  // WhatsApp automatici
+  const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const [g, fo, infa, inoo, ca, wa] = await Promise.all([
+        getImpostazione('promemoria_convalida_giorni'),
+        getImpostazione('promemoria_convalida_orario'),
+        getImpostazione('banner_in_forse_attivo'),
+        getImpostazione('orario_avviso_in_forse'),
+        getImpostazione('banner_compleanno_attivo'),
+        getImpostazione('whatsapp_avviso_disabilitato'),
+      ]);
+      if (g) { try { setFicheGiorni(JSON.parse(g)); } catch { /* keep default */ } }
+      if (fo) setFicheOrario(fo);
+      setInForseAttivo(infa !== 'false');
+      if (inoo) setInForseOrario(inoo);
+      setCompleannoAttivo(ca !== 'false');
+      setWhatsappDisabilitato(wa === 'true');
+      setLoading(false);
+    })();
+  }, []);
+
+  function toggleFicheGiorno(v: number) {
+    setFicheGiorni(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
+    setFeedback(null);
+  }
+
+  async function handleSalva(e: React.FormEvent) {
+    e.preventDefault();
+    setFeedback(null);
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const uid = user?.id;
+    try {
+      await Promise.all([
+        setImpostazione('promemoria_convalida_giorni', JSON.stringify(ficheGiorni), uid),
+        setImpostazione('promemoria_convalida_orario', ficheOrario, uid),
+        setImpostazione('banner_in_forse_attivo', String(inForseAttivo), uid),
+        setImpostazione('orario_avviso_in_forse', inForseOrario, uid),
+        setImpostazione('banner_compleanno_attivo', String(compleannoAttivo), uid),
+        setImpostazione('whatsapp_avviso_disabilitato', String(whatsappDisabilitato), uid),
+      ]);
+      setSaving(false);
+      setFeedback({ tipo: 'ok', msg: 'Impostazioni avvisi salvate.' });
+    } catch {
+      setSaving(false);
+      setFeedback({ tipo: 'err', msg: 'Errore durante il salvataggio.' });
+    }
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors text-stone-500 hover:text-stone-800">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-2xl font-bold text-stone-800">Avvisi e Banner</h2>
+          <p className="text-sm text-stone-500 mt-0.5">Gestisci tutti gli orari e le notifiche del gestionale</p>
+        </div>
+      </div>
+
+      <form onSubmit={handleSalva} className="space-y-5">
+
+        {/* Promemoria Convalida Fiches */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+              <Bell size={16} className="text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-stone-800">Promemoria Convalida Fiches</h3>
+              <p className="text-xs text-stone-500">Avviso in-app per ricordarti di convalidare le fiches giornaliere</p>
+            </div>
+          </div>
+          <div className="px-6 py-5 space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">Giorni attivi</label>
+              <div className="flex gap-2 flex-wrap">
+                {GIORNI_SETTIMANA.map(({ label, value }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleFicheGiorno(value)}
+                    className={`w-12 h-12 rounded-xl text-sm font-semibold transition-all border-2 ${
+                      ficheGiorni.includes(value)
+                        ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                        : 'bg-white border-stone-200 text-stone-500 hover:border-amber-300 hover:text-amber-600'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {ficheGiorni.length === 0 && (
+                <p className="text-xs text-amber-600 mt-2">Nessun giorno selezionato — promemoria disattivato</p>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario</label>
+                <input
+                  type="time"
+                  value={ficheOrario}
+                  onChange={e => { setFicheOrario(e.target.value); setFeedback(null); }}
+                  className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition-colors"
+                />
+              </div>
+              {onTestReminder && (
+                <div className="mt-5">
+                  <button
+                    type="button"
+                    onClick={onTestReminder}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-semibold rounded-xl transition-colors"
+                  >
+                    <Bell size={14} />
+                    Testa avviso
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Avviso appuntamenti in forse */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${inForseAttivo ? 'bg-amber-50' : 'bg-stone-100'}`}>
+              <HelpCircle size={16} className={inForseAttivo ? 'text-amber-600' : 'text-stone-400'} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-stone-800">Avviso Appuntamenti "In Forse"</h3>
+              <p className="text-xs text-stone-500">Banner in agenda quando ci sono appuntamenti incerti tra 2 giorni</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setInForseAttivo(v => !v); setFeedback(null); }}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${inForseAttivo ? 'bg-amber-500' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${inForseAttivo ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          {inForseAttivo && (
+            <div className="px-6 py-5">
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di controllo</label>
+              <input
+                type="time"
+                value={inForseOrario}
+                onChange={e => { setInForseOrario(e.target.value); setFeedback(null); }}
+                className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition-colors"
+              />
+              <p className="text-xs text-stone-400 mt-2">Il banner compare nell'agenda una volta al giorno a quest'ora</p>
+            </div>
+          )}
+        </div>
+
+        {/* Banner compleanni */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${compleannoAttivo ? 'bg-rose-50' : 'bg-stone-100'}`}>
+              <Gift size={16} className={compleannoAttivo ? 'text-rose-500' : 'text-stone-400'} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-stone-800">Banner Compleanni</h3>
+              <p className="text-xs text-stone-500">Banner in agenda quando una cliente compie gli anni oggi</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setCompleannoAttivo(v => !v); setFeedback(null); }}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${compleannoAttivo ? 'bg-rose-500' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${compleannoAttivo ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* WhatsApp automatici */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${!whatsappDisabilitato ? 'bg-emerald-50' : 'bg-stone-100'}`}>
+              <MessageCircle size={16} className={!whatsappDisabilitato ? 'text-emerald-600' : 'text-stone-400'} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-stone-800">Messaggi WhatsApp Automatici</h3>
+              <p className="text-xs text-stone-500">
+                {whatsappDisabilitato
+                  ? 'Pulsante avviso clienti nascosto nell\'agenda'
+                  : 'Pulsante avviso clienti visibile nell\'agenda'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setWhatsappDisabilitato(v => !v); setFeedback(null); }}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${!whatsappDisabilitato ? 'bg-emerald-500' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${!whatsappDisabilitato ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </div>
+
+        {feedback && (
+          <div className={`flex items-start gap-2 px-4 py-3 rounded-xl text-sm ${
+            feedback.tipo === 'ok'
+              ? 'bg-green-50 text-green-700 border border-green-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+          }`}>
+            {feedback.tipo === 'ok'
+              ? <Check size={15} className="flex-shrink-0 mt-0.5" />
+              : <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+            }
+            {feedback.msg}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-2xl transition-colors shadow-sm"
+        >
+          <Check size={15} />
+          {saving ? 'Salvataggio...' : 'Salva tutte le impostazioni'}
+        </button>
+      </form>
     </div>
   );
 }

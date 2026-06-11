@@ -139,6 +139,8 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   useEffect(() => {
     const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
     const check = async () => {
+      const attivo = await getImpostazione('banner_in_forse_attivo');
+      if (attivo === 'false') return;
       const orario = await getImpostazione('orario_avviso_in_forse') ?? '18:00';
       const nowIt = fmt.format(new Date());
       if (nowIt !== orario) return;
@@ -262,17 +264,20 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     const today = new Date();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
-    dbSelect({
-      table: 'clienti',
-      columns: 'id, nome, cognome, telefono, data_nascita',
-      filters: [{ col: 'data_nascita', op: 'not_null' }]
-    }).then((res) => {
-      const nati = ((res.data || []) as { id: string; nome: string; cognome: string; telefono: string | null; data_nascita: string }[])
-        .filter(c => {
-          const [, m, d] = c.data_nascita.split('-');
-          return m === mm && d === dd;
-        });
-      setBirthdayClienti(nati);
+    getImpostazione('banner_compleanno_attivo').then(attivo => {
+      if (attivo === 'false') return;
+      dbSelect({
+        table: 'clienti',
+        columns: 'id, nome, cognome, telefono, data_nascita',
+        filters: [{ col: 'data_nascita', op: 'not_null' }]
+      }).then((res) => {
+        const nati = ((res.data || []) as { id: string; nome: string; cognome: string; telefono: string | null; data_nascita: string }[])
+          .filter(c => {
+            const [, m, d] = c.data_nascita.split('-');
+            return m === mm && d === dd;
+          });
+        setBirthdayClienti(nati);
+      });
     });
   }, []);
 
