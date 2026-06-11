@@ -2090,9 +2090,13 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
 
   const filtered = cards.filter(gp => {
     const stato = statoGiftPass(gp);
+    const compratore = clienti.find(c => c.id === gp.cliente_id);
+    const compratoreNome = compratore ? `${compratore.nome} ${compratore.cognome}`.toLowerCase() : '';
+    const q = search.toLowerCase();
     const matchSearch = !search ||
-      gp.codice.includes(search) ||
-      gp.destinataria_nome.toLowerCase().includes(search.toLowerCase());
+      gp.codice.toLowerCase().includes(q) ||
+      gp.destinataria_nome.toLowerCase().includes(q) ||
+      compratoreNome.includes(q);
     const matchStato = filtroStato === 'tutte' || stato === filtroStato;
     return matchSearch && matchStato;
   });
@@ -2189,10 +2193,30 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                       {gp.tipo === 'prodotto' && gp.prodotto_nome && (
                         <p className="text-xs text-stone-600 mt-0.5 font-medium">{gp.prodotto_nome}</p>
                       )}
-                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        <span className="text-xs text-stone-600 font-medium">{gp.destinataria_nome}</span>
-                        {gp.destinataria_telefono && <span className="text-xs text-stone-400">{gp.destinataria_telefono}</span>}
-                      </div>
+                      {(() => {
+                        const comp = clienti.find(c => c.id === gp.cliente_id);
+                        const compNome = comp ? `${comp.nome} ${comp.cognome}`.trim() : null;
+                        const destNome = gp.destinataria_nome?.trim() || null;
+                        const destTel = gp.destinataria_telefono?.trim() || null;
+                        if (!compNome && !destNome) return null;
+                        return (
+                          <div className="flex items-center gap-x-4 gap-y-0.5 mt-1.5 flex-wrap">
+                            {compNome && (
+                              <span className="text-xs text-stone-500">
+                                <span className="text-stone-400 font-medium">Da: </span>
+                                <span className="font-semibold text-stone-700">{compNome}</span>
+                              </span>
+                            )}
+                            {destNome && (
+                              <span className="text-xs text-stone-500">
+                                <span className="text-stone-400 font-medium">Per: </span>
+                                <span className="font-semibold text-stone-700">{destNome}</span>
+                                {destTel && <span className="text-stone-400 ml-1">{destTel}</span>}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {stato === 'attivata' && gp.scadenza_uso && gp.tipo !== 'valore' && (
                         <div className="flex items-center gap-1 mt-1">
                           <Clock size={11} className="text-amber-500" />
