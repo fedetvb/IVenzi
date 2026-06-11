@@ -4,6 +4,7 @@ import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, U
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 const EDGE_URL = `${SUPABASE_URL}/functions/v1/prenota-online`;
+const PWA_MANIFEST_URL = `${SUPABASE_URL}/functions/v1/pwa-manifest`;
 const MIEI_MSG_URL = `${SUPABASE_URL}/functions/v1/miei-messaggi`;
 const MIE_CARTE_URL = `${SUPABASE_URL}/functions/v1/mie-carte`;
 const AGGIORNA_PROFILO_URL = `${SUPABASE_URL}/functions/v1/aggiorna-profilo`;
@@ -420,6 +421,23 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     } catch { /* ignore */ }
   }, []);
 
+
+  // Inject dynamic PWA manifest for the booking portal
+  useEffect(() => {
+    if (!userId) return;
+    const manifestUrl = `${PWA_MANIFEST_URL}?uid=${encodeURIComponent(userId)}`;
+    let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
+    }
+    link.href = manifestUrl;
+    return () => {
+      // Restore original manifest on unmount
+      if (link) link.href = '/manifest.json';
+    };
+  }, [userId]);
 
   useEffect(() => {
     async function loadInfo() {

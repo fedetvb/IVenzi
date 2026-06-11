@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
@@ -457,6 +457,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const [attiva, setAttiva] = useState(true);
   const [portaleNascosto, setPortaleNascosto] = useState(false);
+  const [nomePwa, setNomePwa] = useState('');
   const [msgConferma, setMsgConferma] = useState('Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!');
   const [msgRifiuto, setMsgRifiuto] = useState('Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.');
   const [indirizzo, setIndirizzo] = useState('');
@@ -487,7 +488,8 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       getImpostazione('indirizzo_salone'),
       getImpostazione('suono_richiesta_appuntamento'),
       getImpostazione('volume_notifiche'),
-    ]).then(([a, pn, mc, mr, logo, ind, suono, vol]) => {
+      getImpostazione('nome_pwa_prenotazione'),
+    ]).then(([a, pn, mc, mr, logo, ind, suono, vol, nomePwaVal]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (pn !== null) setPortaleNascosto(pn === 'true');
       if (mc) setMsgConferma(mc);
@@ -496,6 +498,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       if (ind) setIndirizzo(ind);
       if (suono === 'squillo') setSuonoRichiesta('squillo');
       if (vol !== null) setVolumeNotifiche(Math.max(0, Math.min(100, parseInt(vol) || 70)));
+      if (nomePwaVal) setNomePwa(nomePwaVal);
       setLoading(false);
     });
   }, [user]);
@@ -581,6 +584,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       setImpostazione('indirizzo_salone', indirizzo, user?.id),
       setImpostazione('suono_richiesta_appuntamento', suonoRichiesta, user?.id),
       setImpostazione('volume_notifiche', String(volumeNotifiche), user?.id),
+      setImpostazione('nome_pwa_prenotazione', nomePwa.trim(), user?.id),
     ]);
     setSaving(false);
     setSaved(true);
@@ -751,6 +755,33 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Indirizzo salone */}
+      {/* Nome app PWA */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Smartphone size={16} className="text-violet-500" />
+          </div>
+          <div>
+            <p className="font-semibold text-stone-800">Nome app per le clienti</p>
+            <p className="text-xs text-stone-400 mt-0.5">
+              Testo che appare sotto l'icona quando la cliente installa il portale come app sul telefono (PWA).
+              Se lasciato vuoto si usa "Prenota Online".
+            </p>
+          </div>
+        </div>
+        <input
+          type="text"
+          value={nomePwa}
+          onChange={e => setNomePwa(e.target.value)}
+          placeholder="Es. I Venzi · Prenota"
+          maxLength={30}
+          className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 text-stone-700"
+        />
+        <p className="text-xs text-stone-400">
+          Consiglio: usa un nome breve (max 12–15 caratteri) perché i telefoni troncano i nomi lunghi sotto l'icona. Es. <span className="font-semibold">I Venzi · Prenota</span>
+        </p>
+      </div>
+
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-3">
         <div>
           <p className="font-semibold text-stone-800">Posizione salone</p>
