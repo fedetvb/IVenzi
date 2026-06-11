@@ -176,6 +176,14 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [cartaScontoCode, setCartaScontoCode] = useState('');
   const [giftPassCode, setGiftPassCode] = useState('');
   const [datiError, setDatiError] = useState('');
+  const [datiChecking, setDatiChecking] = useState(false);
+
+  // Conflitto numero (nome+cognome trovati ma telefono diverso)
+  const [conflittoSubStep, setConflittoSubStep] = useState<'choice' | 'cambio'>('choice');
+  const [conflittoVecchioTel, setConflittoVecchioTel] = useState('');
+  const [conflittoNuovoTelConferma, setConflittoNuovoTelConferma] = useState('');
+  const [conflittoError, setConflittoError] = useState('');
+  const [conflittoLoading, setConflittoLoading] = useState(false);
 
   // Le mie carte
   const [mieCarteData, setMieCarteData] = useState<MieCarteData | null>(null);
@@ -575,6 +583,71 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
   }
 
+  // Core "proceed" logic — called after conflict resolution or directly when no conflict
+  async function proceedAfterDati(telOverride?: string) {
+    const tel = (telOverride ?? telefono).trim();
+    const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
+
+    const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: tel };
+    if (codiceCliente.trim()) saved.codiceCliente = codiceCliente.trim().toUpperCase();
+    if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
+    if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
+    localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
+
+    // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
+    try {
+      const clientiRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/clienti?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&deleted_at=is.null&select=id&limit=1`,
+        { headers: anonHeaders }
+      );
+      const clientiRows = await clientiRes.json();
+      const isClienteConfermata = Array.isArray(clientiRows) && clientiRows.length > 0;
+
+      const checkRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&stato=eq.in_attesa&select=id`,
+        { headers: anonHeaders }
+      );
+      const existing = await checkRes.json();
+      if (!Array.isArray(existing) || existing.length === 0) {
+        if (!isClienteConfermata) setIsNuovaScheda(true);
+        await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
+          method: 'POST',
+          headers: { ...anonHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            user_id: userId,
+            nome: nome.trim(),
+            cognome: cognome.trim(),
+            telefono: tel,
+            stato: 'in_attesa',
+            ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
+          }),
+        });
+      }
+    } catch { /* non bloccante */ }
+
+    if (cartaScontoCode.trim()) {
+      try {
+        await fetch(`${MIE_CARTE_URL}/associa-carta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel, codice_carta: cartaScontoCode.trim() }),
+        });
+      } catch { /* non bloccante */ }
+    }
+
+    if (giftPassCode.trim()) {
+      try {
+        await fetch(`${MIE_CARTE_URL}/attiva-gift-pass`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, telefono: tel, nome: nome.trim(), cognome: cognome.trim(), codice: giftPassCode.trim().toUpperCase() }),
+        });
+      } catch { /* non bloccante */ }
+    }
+
+    setStep('scelta');
+  }
+
   async function handleDatiNext() {
     if (!nome.trim() || !cognome.trim() || !telefono.trim()) {
       setDatiError('Tutti i campi sono obbligatori');
@@ -585,9 +658,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       return;
     }
 
-    const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
-
-    // Validazione server-side: blocca se la persona è il mittente originale del codice
+    // Validazione server-side codici carte/gift
     if (giftPassCode.trim() || cartaScontoCode.trim()) {
       try {
         const verRes = await fetch(`${MIE_CARTE_URL}/verifica-codici`, {
@@ -603,83 +674,66 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         const verData = await verRes.json();
         if (verData.gift_pass_error) { setDatiError(verData.gift_pass_error); return; }
         if (verData.carta_sconto_error) { setDatiError(verData.carta_sconto_error); return; }
-      } catch { /* non bloccante se l'edge function fallisce */ }
+      } catch { /* non bloccante */ }
     }
 
-    const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim() };
-    if (codiceCliente.trim()) saved.codiceCliente = codiceCliente.trim().toUpperCase();
-    if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
-    if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
-    localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
     setDatiError('');
 
-    // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
+    // Conflict check: nome+cognome found in DB but with a different telefono?
     try {
-      // Prima controlla se è già una cliente confermata (esiste in clienti)
-      const clientiRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/clienti?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}&deleted_at=is.null&select=id&limit=1`,
-        { headers: anonHeaders }
+      setDatiChecking(true);
+      const res = await fetch(
+        `${AGGIORNA_PROFILO_URL}?action=check_conflict&user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}&nome=${encodeURIComponent(nome.trim())}&cognome=${encodeURIComponent(cognome.trim())}`
       );
-      const clientiRows = await clientiRes.json();
-      const isClienteConfermata = Array.isArray(clientiRows) && clientiRows.length > 0;
-
-      const checkRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}&stato=eq.in_attesa&select=id`,
-        { headers: anonHeaders }
-      );
-      const existing = await checkRes.json();
-      if (!Array.isArray(existing) || existing.length === 0) {
-        if (!isClienteConfermata) setIsNuovaScheda(true);
-        await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
-          method: 'POST',
-          headers: { ...anonHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            user_id: userId,
-            nome: nome.trim(),
-            cognome: cognome.trim(),
-            telefono: telefono.trim(),
-            stato: 'in_attesa',
-            ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
-          }),
-        });
+      const data = await res.json();
+      if (data.conflitto === true) {
+        setConflittoSubStep('choice');
+        setConflittoVecchioTel('');
+        setConflittoNuovoTelConferma('');
+        setConflittoError('');
+        setDatiChecking(false);
+        setStep('conflitto_numero');
+        return;
       }
-    } catch { /* non bloccante */ }
+    } catch { /* non bloccante — se fallisce procedi normalmente */ }
 
-    // Se ha inserito un codice carta sconto, associala tramite edge function
-    if (cartaScontoCode.trim()) {
-      try {
-        await fetch(`${MIE_CARTE_URL}/associa-carta`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            nome: nome.trim(),
-            cognome: cognome.trim(),
-            telefono: telefono.trim(),
-            codice_carta: cartaScontoCode.trim(),
-          }),
-        });
-      } catch { /* non bloccante */ }
+    setDatiChecking(false);
+    await proceedAfterDati();
+  }
+
+  async function handleCambiaNumero() {
+    const vecchio = conflittoVecchioTel.trim();
+    const nuovo = telefono.trim();
+    const conferma = conflittoNuovoTelConferma.trim();
+
+    if (!vecchio) { setConflittoError('Inserisci il tuo vecchio numero.'); return; }
+    if (!conferma) { setConflittoError('Riscrivi il nuovo numero per confermare.'); return; }
+    if (nuovo !== conferma) { setConflittoError('I due numeri nuovi non coincidono. Ricontrolla.'); return; }
+
+    setConflittoLoading(true);
+    setConflittoError('');
+    try {
+      const res = await fetch(AGGIORNA_PROFILO_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cambia_numero',
+          user_id: userId,
+          vecchio_telefono: vecchio,
+          nuovo_telefono: nuovo,
+          nome: nome.trim(),
+          cognome: cognome.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante l\'aggiornamento.');
+    } catch (err) {
+      setConflittoError(err instanceof Error ? err.message : 'Errore. Riprova.');
+      setConflittoLoading(false);
+      return;
     }
-
-    // Se ha inserito un codice Gift Pass, attivalo tramite edge function (collega anche destinataria_cliente_id se esiste)
-    if (giftPassCode.trim()) {
-      try {
-        await fetch(`${MIE_CARTE_URL}/attiva-gift-pass`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            telefono: telefono.trim(),
-            nome: nome.trim(),
-            cognome: cognome.trim(),
-            codice: giftPassCode.trim().toUpperCase(),
-          }),
-        });
-      } catch { /* non bloccante */ }
-    }
-
-    setStep('scelta');
+    setConflittoLoading(false);
+    await proceedAfterDati(nuovo);
   }
 
   function handleFotoAdd(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1198,8 +1252,113 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <p className="text-xs text-stone-400 bg-stone-50 rounded-xl p-3">
                 La prenotazione è una <strong>richiesta</strong> e deve essere confermata dal salone via WhatsApp. Non è garantita finché non ricevi conferma.
               </p>
-              <NextBtn onClick={handleDatiNext}>Avanti</NextBtn>
+              <NextBtn onClick={handleDatiNext} disabled={datiChecking}>
+                {datiChecking ? 'Controllo in corso…' : 'Avanti'}
+              </NextBtn>
             </div>
+          </Card>
+        )}
+
+        {/* STEP: Conflitto numero */}
+        {step === 'conflitto_numero' && (
+          <Card
+            title="Abbiamo trovato il tuo nome"
+            subtitle={`${nome} ${cognome} è già registrata, ma con un numero diverso`}
+          >
+            {conflittoSubStep === 'choice' && (
+              <div className="space-y-4">
+                <p className="text-sm text-stone-500 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+                  Il numero che hai inserito non corrisponde a quello che abbiamo in archivio per <strong>{nome} {cognome}</strong>. Sei tu?
+                </p>
+
+                <button
+                  onClick={() => { setConflittoSubStep('cambio'); setConflittoError(''); }}
+                  className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-md transition-all text-left group"
+                >
+                  <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-100 transition-colors">
+                    <Phone size={26} className="text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-stone-800 text-lg">Sì, ho cambiato numero</p>
+                    <p className="text-sm text-stone-400 mt-0.5">Clicca per aggiornare il tuo numero di telefono</p>
+                  </div>
+                  <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+                </button>
+
+                <button
+                  onClick={() => proceedAfterDati()}
+                  className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-sky-400 hover:shadow-md transition-all text-left group"
+                >
+                  <div className="w-14 h-14 bg-sky-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-sky-100 transition-colors">
+                    <Users size={26} className="text-sky-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-stone-800 text-lg">No, sono una nuova cliente</p>
+                    <p className="text-sm text-stone-400 mt-0.5">Clicca per continuare come nuova registrazione</p>
+                  </div>
+                  <ChevronRight size={20} className="text-stone-300 group-hover:text-sky-400 transition-colors flex-shrink-0" />
+                </button>
+
+                <BackBtn onClick={() => setStep('dati')} />
+              </div>
+            )}
+
+            {conflittoSubStep === 'cambio' && (
+              <div className="space-y-4">
+                <p className="text-sm text-stone-500">
+                  Inserisci il tuo <strong>vecchio numero</strong> per verificare la tua identità, poi conferma il nuovo.
+                </p>
+
+                {conflittoError && (
+                  <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{conflittoError}</p>
+                )}
+
+                <div className="bg-stone-50 rounded-2xl p-4 space-y-1">
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide">Nuovo numero</p>
+                  <p className="text-stone-800 font-semibold">{telefono.trim()}</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-stone-700">Riscrivi il nuovo numero *</label>
+                  <div className="relative">
+                    <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                    <input
+                      value={conflittoNuovoTelConferma}
+                      onChange={e => setConflittoNuovoTelConferma(e.target.value)}
+                      placeholder="+39 333 000 0000"
+                      type="tel"
+                      className="input pl-9"
+                    />
+                  </div>
+                  <p className="text-[11px] text-stone-400">Riscrivilo per essere sicura di non aver sbagliato</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-stone-700">Il tuo vecchio numero *</label>
+                  <div className="relative">
+                    <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                    <input
+                      value={conflittoVecchioTel}
+                      onChange={e => setConflittoVecchioTel(e.target.value)}
+                      placeholder="+39 333 111 2222"
+                      type="tel"
+                      className="input pl-9"
+                    />
+                  </div>
+                  <p className="text-[11px] text-stone-400">Il numero con cui eri registrata in precedenza</p>
+                </div>
+
+                <button
+                  onClick={handleCambiaNumero}
+                  disabled={conflittoLoading}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-2xl transition-colors"
+                >
+                  {conflittoLoading ? 'Verifica in corso…' : 'Aggiorna il mio numero'}
+                </button>
+
+                <BackBtn onClick={() => { setConflittoSubStep('choice'); setConflittoError(''); }} />
+              </div>
+            )}
           </Card>
         )}
 
@@ -3025,11 +3184,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function NextBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function NextBtn({ onClick, children, disabled }: { onClick: () => void; children: React.ReactNode; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}
-      className="w-full py-4 bg-emerald-600 text-white font-semibold rounded-2xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 mt-2"
+      disabled={disabled}
+      className="w-full py-4 bg-emerald-600 text-white font-semibold rounded-2xl hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 mt-2"
     >
       {children}<ChevronRight size={18} />
     </button>
