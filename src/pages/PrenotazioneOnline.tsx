@@ -1180,6 +1180,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             </div>
 
             <button
+              onClick={() => { loadProfilo(); setStep('profilo'); }}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-violet-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-violet-100 transition-colors">
+                <User size={26} className="text-violet-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">Il mio profilo</p>
+                <p className="text-sm text-stone-400 mt-0.5">I tuoi dati personali</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-violet-500 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
               onClick={() => setStep('parrucchiere')}
               className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-md transition-all text-left group"
             >
@@ -1233,20 +1247,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-stone-400 mt-0.5">Carte premium, sconti e movimenti</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-rose-500 transition-colors flex-shrink-0" />
-            </button>
-
-            <button
-              onClick={() => { loadProfilo(); setStep('profilo'); }}
-              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-violet-400 hover:shadow-md transition-all text-left group"
-            >
-              <div className="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-violet-100 transition-colors">
-                <User size={26} className="text-violet-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-stone-800 text-lg">Il mio profilo</p>
-                <p className="text-sm text-stone-400 mt-0.5">I tuoi dati personali</p>
-              </div>
-              <ChevronRight size={20} className="text-stone-300 group-hover:text-violet-500 transition-colors flex-shrink-0" />
             </button>
 
             <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
