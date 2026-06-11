@@ -181,6 +181,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // Conflitto numero (nome+cognome trovati ma telefono diverso)
   const [conflittoSubStep, setConflittoSubStep] = useState<'choice' | 'cambio'>('choice');
   const [conflittoVecchioTel, setConflittoVecchioTel] = useState('');
+  const [conflittoNuovoTel, setConflittoNuovoTel] = useState('');
   const [conflittoNuovoTelConferma, setConflittoNuovoTelConferma] = useState('');
   const [conflittoError, setConflittoError] = useState('');
   const [conflittoLoading, setConflittoLoading] = useState(false);
@@ -703,10 +704,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   async function handleCambiaNumero() {
     const vecchio = conflittoVecchioTel.trim();
-    const nuovo = telefono.trim();
+    const nuovo = conflittoNuovoTel.trim();
     const conferma = conflittoNuovoTelConferma.trim();
 
     if (!vecchio) { setConflittoError('Inserisci il tuo vecchio numero.'); return; }
+    if (!nuovo) { setConflittoError('Inserisci il nuovo numero.'); return; }
+    if (!/^\+?[\d\s\-()]{7,}$/.test(nuovo)) { setConflittoError('Inserisci un numero di telefono valido.'); return; }
     if (!conferma) { setConflittoError('Riscrivi il nuovo numero per confermare.'); return; }
     if (nuovo !== conferma) { setConflittoError('I due numeri nuovi non coincidono. Ricontrolla.'); return; }
 
@@ -733,6 +736,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       return;
     }
     setConflittoLoading(false);
+    setTelefono(nuovo);
     await proceedAfterDati(nuovo);
   }
 
@@ -1272,7 +1276,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 </p>
 
                 <button
-                  onClick={() => { setConflittoSubStep('cambio'); setConflittoError(''); }}
+                  onClick={() => { setConflittoSubStep('cambio'); setConflittoError(''); setConflittoVecchioTel(''); setConflittoNuovoTel(''); setConflittoNuovoTelConferma(''); }}
                   className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-md transition-all text-left group"
                 >
                   <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-100 transition-colors">
@@ -1305,17 +1309,37 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
             {conflittoSubStep === 'cambio' && (
               <div className="space-y-4">
-                <p className="text-sm text-stone-500">
-                  Inserisci il tuo <strong>vecchio numero</strong> per verificare la tua identità, poi conferma il nuovo.
-                </p>
-
                 {conflittoError && (
                   <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{conflittoError}</p>
                 )}
 
-                <div className="bg-stone-50 rounded-2xl p-4 space-y-1">
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide">Nuovo numero</p>
-                  <p className="text-stone-800 font-semibold">{telefono.trim()}</p>
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-stone-700">Vecchio numero *</label>
+                  <div className="relative">
+                    <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                    <input
+                      value={conflittoVecchioTel}
+                      onChange={e => setConflittoVecchioTel(e.target.value)}
+                      placeholder="+39 333 111 2222"
+                      type="tel"
+                      className="input pl-9"
+                    />
+                  </div>
+                  <p className="text-[11px] text-stone-400">Il numero con cui eri registrata in precedenza</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-stone-700">Nuovo numero *</label>
+                  <div className="relative">
+                    <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                    <input
+                      value={conflittoNuovoTel}
+                      onChange={e => setConflittoNuovoTel(e.target.value)}
+                      placeholder="+39 333 000 0000"
+                      type="tel"
+                      className="input pl-9"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -1330,22 +1354,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                       className="input pl-9"
                     />
                   </div>
-                  <p className="text-[11px] text-stone-400">Riscrivilo per essere sicura di non aver sbagliato</p>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-semibold text-stone-700">Il tuo vecchio numero *</label>
-                  <div className="relative">
-                    <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                    <input
-                      value={conflittoVecchioTel}
-                      onChange={e => setConflittoVecchioTel(e.target.value)}
-                      placeholder="+39 333 111 2222"
-                      type="tel"
-                      className="input pl-9"
-                    />
-                  </div>
-                  <p className="text-[11px] text-stone-400">Il numero con cui eri registrata in precedenza</p>
+                  <p className="text-[11px] text-stone-400">Riscrivilo per evitare errori di battitura</p>
                 </div>
 
                 <button
