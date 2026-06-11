@@ -424,13 +424,16 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   async function handleSegnaGiftPassDonata(giftPassId: string): Promise<boolean> {
     try {
-      const res = await fetch(`${MIE_CARTE_URL}/segna-donata`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, telefono: telefono.trim(), gift_pass_id: giftPassId }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      const anonHeaders = {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      };
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/gift_pass?id=eq.${encodeURIComponent(giftPassId)}`,
+        { method: 'PATCH', headers: anonHeaders, body: JSON.stringify({ donata: true }) },
+      );
+      if (!res.ok) throw new Error('Errore aggiornamento');
       await loadMieCarte();
       return true;
     } catch {
