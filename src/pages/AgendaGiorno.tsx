@@ -121,6 +121,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
   const [appModal, setAppModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [inForsePanel, setInForsePanel] = useState<{ open: boolean; appId: string | null }>({ open: false, appId: null });
+  const [altriInForsePanel, setAltriInForsePanel] = useState<{ open: boolean; clienteNome: string; apps: Appuntamento[] }>({ open: false, clienteNome: '', apps: [] });
   const [multiModal, setMultiModal] = useState<{ open: boolean; date?: Date }>({ open: false });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [hiddenParr, setHiddenParr] = useState<Set<string>>(new Set());
@@ -585,16 +586,66 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     load();
   }
 
+  async function checkAltriInForse(clienteId: string, clienteNome: string, excludeId: string) {
+    const { data } = await dbSelect({
+      table: 'appuntamenti',
+      columns: 'id, cliente_id, data_ora, durata_minuti, stato, note, prezzo_totale, created_at, updated_at',
+      filters: [
+        { col: 'cliente_id', op: 'eq', val: clienteId },
+        { col: 'stato', op: 'eq', val: 'in_forse' },
+        { col: 'deleted_at', op: 'is_null' },
+      ],
+      orderBy: [{ col: 'data_ora' }],
+    });
+    const others = ((data || []) as Appuntamento[]).filter(a => a.id !== excludeId);
+    if (others.length > 0) {
+      setAltriInForsePanel({ open: true, clienteNome, apps: others });
+    }
+  }
+
   async function fissaAppuntamento(id: string) {
+    const app = appuntamenti.find(a => a.id === id);
+    const clienteId = app?.cliente_id;
+    const cliente = app?.clienti;
+    const clienteNome = cliente ? `${cliente.nome} ${cliente.cognome}` : '';
     await dbUpdate({ table: 'appuntamenti', id, data: { stato: 'confermato' } });
     setInForsePanel({ open: false, appId: null });
     load();
+    if (clienteId) await checkAltriInForse(clienteId, clienteNome, id);
   }
 
   async function cancellaInForse(id: string) {
+    const app = appuntamenti.find(a => a.id === id);
+    const clienteId = app?.cliente_id;
+    const cliente = app?.clienti;
+    const clienteNome = cliente ? `${cliente.nome} ${cliente.cognome}` : '';
     await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
     setInForsePanel({ open: false, appId: null });
     load();
+    if (clienteId) await checkAltriInForse(clienteId, clienteNome, id);
+  }
+
+  async function fissaInForseFromPanel(appId: string) {
+    await dbUpdate({ table: 'appuntamenti', id: appId, data: { stato: 'confermato' } });
+    setAltriInForsePanel(prev => {
+      const remaining = prev.apps.filter(a => a.id !== appId);
+      return remaining.length === 0 ? { open: false, clienteNome: '', apps: [] } : { ...prev, apps: remaining };
+    });
+    load();
+  }
+
+  async function cancellaInForseFromPanel(appId: string) {
+    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: appId }] });
+    setAltriInForsePanel(prev => {
+      const remaining = prev.apps.filter(a => a.id !== appId);
+      return remaining.length === 0 ? { open: false, clienteNome: '', apps: [] } : { ...prev, apps: remaining };
+    });
+    load();
+  }
+
+  function modificaInForseFromPanel(appId: string) {
+    setAltriInForsePanel({ open: false, clienteNome: '', apps: [] });
+    setAppModal({ open: true, id: appId });
   }
 
   async function updateParrName() {
@@ -1595,6 +1646,65 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           </div>
         );
       })()}
+
+      {/* Pannello altri appuntamenti in forse */}
+      {altriInForsePanel.open && altriInForsePanel.apps.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAltriInForsePanel({ open: false, clienteNome: '', apps: [] })} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm z-10 overflow-hidden max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 flex-shrink-0">
+              <div>
+                <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide mb-0.5">Altri appuntamenti in forse</p>
+                <p className="font-bold text-stone-800 text-base leading-tight">{altriInForsePanel.clienteNome}</p>
+              </div>
+              <button onClick={() => setAltriInForsePanel({ open: false, clienteNome: '', apps: [] })} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors">
+                <X size={16} className="text-stone-400" />
+              </button>
+            </div>
+            {/* List */}
+            <div className="overflow-y-auto flex-1 divide-y divide-stone-100">
+              {altriInForsePanel.apps.map(app => {
+                const dataFmt = new Date(app.data_ora).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+                const oraFmt = new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <div key={app.id} className="px-5 py-3.5">
+                    <div className="flex items-start justify-between gap-3 mb-2.5">
+                      <div>
+                        <p className="font-semibold text-stone-800 text-sm capitalize">{dataFmt}</p>
+                        <p className="text-xs text-stone-400 mt-0.5">Ore {oraFmt} · {app.durata_minuti} min</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => fissaInForseFromPanel(app.id)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <Check size={13} />
+                        Fissa
+                      </button>
+                      <button
+                        onClick={() => modificaInForseFromPanel(app.id)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <Pencil size={13} />
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => cancellaInForseFromPanel(app.id)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <Trash2 size={13} />
+                        Cancella
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Richiesta prenotazione online modal */}
       {richiestaModal.open && richiestaModal.r && (() => {
