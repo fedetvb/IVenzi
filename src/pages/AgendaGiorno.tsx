@@ -627,19 +627,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
   async function fissaInForseFromPanel(appId: string) {
     await dbUpdate({ table: 'appuntamenti', id: appId, data: { stato: 'confermato' } });
-    setAltriInForsePanel(prev => {
-      const remaining = prev.apps.filter(a => a.id !== appId);
-      return remaining.length === 0 ? { open: false, clienteNome: '', apps: [] } : { ...prev, apps: remaining };
-    });
+    setAltriInForsePanel(prev => ({ ...prev, apps: prev.apps.filter(a => a.id !== appId) }));
     load();
   }
 
   async function cancellaInForseFromPanel(appId: string) {
     await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: appId }] });
-    setAltriInForsePanel(prev => {
-      const remaining = prev.apps.filter(a => a.id !== appId);
-      return remaining.length === 0 ? { open: false, clienteNome: '', apps: [] } : { ...prev, apps: remaining };
-    });
+    setAltriInForsePanel(prev => ({ ...prev, apps: prev.apps.filter(a => a.id !== appId) }));
     load();
   }
 
@@ -1664,6 +1658,13 @@ export default function AgendaGiorno({ date, onBack }: Props) {
             </div>
             {/* List */}
             <div className="overflow-y-auto flex-1 divide-y divide-stone-100">
+              {altriInForsePanel.apps.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 px-5 text-center">
+                  <Check size={32} className="text-emerald-400 mb-3" />
+                  <p className="font-semibold text-stone-700 text-sm">Nessun appuntamento in forse rimasto</p>
+                  <p className="text-xs text-stone-400 mt-1">Tutti gli appuntamenti sono stati gestiti</p>
+                </div>
+              )}
               {altriInForsePanel.apps.map(app => {
                 const dataFmt = new Date(app.data_ora).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
                 const oraFmt = new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
