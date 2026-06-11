@@ -1,6 +1,7 @@
-import { Copy, Check, X, MessageSquare, Send, ChevronDown, CreditCard as Edit3, Loader } from 'lucide-react';
+import { Copy, Check, X, MessageSquare, Send, ChevronDown, CreditCard as Edit3, Loader, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { dbSelect, getImpostazione } from '../lib/localDb';
+import { supabase } from '../lib/supabase';
 import { apriWhatsApp } from '../lib/waUtils';
 
 export type AzioneCarta =
@@ -95,11 +96,14 @@ function ScontoCreazionePart({
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedId, setSelectedId] = useState<string>('');
   const [daValue, setDaValue] = useState('');
-  const [messaggio, setMessaggio] = useState(messaggioOverride ? conCornice(messaggioOverride) : '');
+  const [templateRaw, setTemplateRaw] = useState('');
+  const [messaggioOverrideEdit, setMessaggioOverrideEdit] = useState(messaggioOverride ?? '');
   const [copied, setCopied] = useState(false);
   const [showSelect, setShowSelect] = useState(false);
   const [includiMappa, setIncludiMappa] = useState(!messaggioOverride);
   const [indirizzoMappa, setIndirizzoMappa] = useState('via Palermo 15, Roma');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [savedTemplate, setSavedTemplate] = useState(false);
 
   const scontoLabel = azione.tipoSconto === 'percentuale'
     ? `${azione.valoreSconto}%`
@@ -139,7 +143,7 @@ function ScontoCreazionePart({
       const def = list.find(t => t.is_default) ?? list[0];
       if (def) {
         setSelectedId(def.id);
-        setMessaggio(conCornice(applyTemplate(def.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: '' })));
+        setTemplateRaw(def.testo);
       }
       if (ind.data?.[0]?.valore) setIndirizzoMappa(ind.data[0].valore);
       setLoadingTemplates(false);
@@ -151,18 +155,31 @@ function ScontoCreazionePart({
     setShowSelect(false);
     const tmpl = templates.find(t => t.id === id);
     if (!tmpl) return;
-    setMessaggio(conCornice(applyTemplate(tmpl.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: daValue })));
+    setTemplateRaw(tmpl.testo);
+    setSavedTemplate(false);
   }
 
   function handleDaChange(val: string) {
     setDaValue(val);
-    const tmpl = templates.find(t => t.id === selectedId);
-    if (!tmpl) return;
-    setMessaggio(conCornice(applyTemplate(tmpl.testo, { nome: nomeBreve, codice, sconto: scontoLabel, da: val })));
+  }
+
+  async function salvaTemplate() {
+    if (!selectedId) return;
+    setSavingTemplate(true);
+    await supabase.from('template_messaggi_carta_sconto').update({ testo: templateRaw }).eq('id', selectedId);
+    setTemplates(prev => prev.map(t => t.id === selectedId ? { ...t, testo: templateRaw } : t));
+    setSavingTemplate(false);
+    setSavedTemplate(true);
+    setTimeout(() => setSavedTemplate(false), 2000);
   }
 
   const selectedTemplate = templates.find(t => t.id === selectedId);
-  const needsDa = selectedTemplate ? hasDaVar(selectedTemplate.testo) : false;
+  const needsDa = hasDaVar(templateRaw);
+
+  // Messaggio finale costruito dal template grezzo con variabili sostituite
+  const messaggioBuilt = messaggioOverride
+    ? conCornice(messaggioOverrideEdit)
+    : conCornice(applyTemplate(templateRaw, { nome: nomeBreve, codice, sconto: scontoLabel, da: daValue }));
 
   if (loadingTemplates) {
     return (
@@ -240,21 +257,51 @@ function ScontoCreazionePart({
           </div>
         </label>
 
-        {/* Testo editabile */}
+        {/* Template grezzo editabile */}
+        {!messaggioOverride && (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">Testo template</label>
+              <span className="text-[10px] text-stone-400">Usa {'{nome}'}, {'{codice}'}, {'{sconto}'}, {'{da}'}</span>
+            </div>
+            <textarea
+              value={templateRaw}
+              onChange={e => { setTemplateRaw(e.target.value); setSavedTemplate(false); }}
+              rows={4}
+              className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 leading-relaxed focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200 resize-none font-mono transition-colors"
+            />
+            <button
+              onClick={salvaTemplate}
+              disabled={savingTemplate || !selectedId || templateRaw === (selectedTemplate?.testo ?? '')}
+              className="mt-1.5 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+            >
+              {savedTemplate ? <Check size={12} /> : <Save size={12} />}
+              {savingTemplate ? 'Salvataggio...' : savedTemplate ? 'Salvato!' : 'Salva messaggio'}
+            </button>
+          </div>
+        )}
+
+        {/* Anteprima messaggio finale */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">Messaggio</label>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">Anteprima messaggio</label>
             <span className="flex items-center gap-1 text-[10px] text-stone-400">
               <Edit3 size={9} />
-              Modificabile
+              {messaggioOverride ? 'Modificabile' : 'Con variabili sostituite'}
             </span>
           </div>
-          <textarea
-            value={messaggio}
-            onChange={e => setMessaggio(e.target.value)}
-            rows={7}
-            className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 leading-relaxed focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200 resize-none font-mono transition-colors"
-          />
+          {messaggioOverride ? (
+            <textarea
+              value={messaggioOverrideEdit}
+              onChange={e => setMessaggioOverrideEdit(e.target.value)}
+              rows={7}
+              className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 leading-relaxed focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200 resize-none font-mono transition-colors"
+            />
+          ) : (
+            <div className="w-full border border-stone-100 bg-stone-50 rounded-xl px-3 py-2.5 text-xs text-stone-600 leading-relaxed font-mono whitespace-pre-wrap">
+              {messaggioBuilt}
+            </div>
+          )}
           {includiMappa && mapUrl && (
             <p className="text-[10px] text-emerald-600 font-mono mt-1 px-1 truncate">{mapUrl}</p>
           )}
@@ -269,7 +316,7 @@ function ScontoCreazionePart({
 
       {/* Azioni */}
       {(() => {
-        const messaggioCompleto = includiMappa && mapUrl ? `${messaggio}\n\n${mapUrl}` : messaggio;
+        const messaggioCompleto = includiMappa && mapUrl ? `${messaggioBuilt}\n\n${mapUrl}` : messaggioBuilt;
         return (
           <div className="flex gap-2 px-5 py-4">
             <button

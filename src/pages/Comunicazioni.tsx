@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { Search, Send, CheckSquare, Square, MessageSquare, Users, Phone, List, X, BookOpen, ChevronDown } from 'lucide-react';
+import { Search, Send, CheckSquare, Square, MessageSquare, Users, Phone, List, X, BookOpen, ChevronDown, Save, Check } from 'lucide-react';
 import { dbSelect } from '../lib/localDb';
+import { supabase } from '../lib/supabase';
 import { apriWhatsApp } from '../lib/waUtils';
 
 interface Cliente {
@@ -35,6 +36,9 @@ export default function Comunicazioni() {
   const [queueIndex, setQueueIndex] = useState(0);
   const [templates, setTemplates] = useState<TemplateComunicazione[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [lastAppliedTemplateId, setLastAppliedTemplateId] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [savedTemplate, setSavedTemplate] = useState(false);
   const templatesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -122,8 +126,20 @@ export default function Comunicazioni() {
     }
   }
 
+  async function salvaTemplate() {
+    if (!lastAppliedTemplateId) return;
+    setSavingTemplate(true);
+    await supabase.from('template_messaggi_comunicazioni').update({ testo: messaggio }).eq('id', lastAppliedTemplateId);
+    setTemplates(prev => prev.map(t => t.id === lastAppliedTemplateId ? { ...t, testo: messaggio } : t));
+    setSavingTemplate(false);
+    setSavedTemplate(true);
+    setTimeout(() => setSavedTemplate(false), 2000);
+  }
+
   function applyTemplate(t: TemplateComunicazione) {
     setShowTemplates(false);
+    setLastAppliedTemplateId(t.id);
+    setSavedTemplate(false);
 
     const selectedClients = clienti.filter(c => selected.has(c.id));
 
@@ -288,7 +304,7 @@ export default function Comunicazioni() {
 
             <textarea
               value={messaggio}
-              onChange={e => setMessaggio(e.target.value)}
+              onChange={e => { setMessaggio(e.target.value); setSavedTemplate(false); }}
               placeholder="Scrivi qui il tuo messaggio promozionale o scegli un predefinito..."
               rows={7}
               className="w-full text-sm border border-stone-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 text-stone-700 placeholder-stone-300"
@@ -303,6 +319,17 @@ export default function Comunicazioni() {
               )}
               <span className="text-xs text-stone-400 ml-auto">{messaggio.length} caratteri</span>
             </div>
+
+            {lastAppliedTemplateId && messaggio.trim() && (
+              <button
+                onClick={salvaTemplate}
+                disabled={savingTemplate || messaggio === (templates.find(t => t.id === lastAppliedTemplateId)?.testo ?? '')}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+              >
+                {savedTemplate ? <Check size={13} /> : <Save size={13} />}
+                {savingTemplate ? 'Salvataggio...' : savedTemplate ? 'Salvato!' : `Salva come "${templates.find(t => t.id === lastAppliedTemplateId)?.nome ?? 'template'}"`}
+              </button>
+            )}
 
             {/* Opzione 1: apri tutto in una volta */}
             <div className="space-y-2">

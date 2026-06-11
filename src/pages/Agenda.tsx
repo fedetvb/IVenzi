@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, ExternalLink, AlertCircle, Gift, HelpCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, ExternalLink, AlertCircle, Gift, HelpCircle, Check } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
-import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione } from '../lib/localDb';
+import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
 import AgendaGiorno from './AgendaGiorno';
 import BirthdayModal from '../components/BirthdayModal';
@@ -633,6 +633,18 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
   const [includiMappa, setIncludiMappa] = useState(true);
   const rawMapUrl = indirizzo.trim() ? `https://maps.google.com/?q=${encodeURIComponent(indirizzo)}` : '';
   const mapUrl = includiMappa ? rawMapUrl : '';
+  const [templateEdit, setTemplateEdit] = useState(template);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function salvaTemplate() {
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) await setImpostazione('messaggio_avviso_appuntamento', templateEdit, user.id);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -690,7 +702,7 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
                 {clienti.length} client{clienti.length === 1 ? 'e' : 'i'} con appuntamento domani. Clicca il pulsante per aprire WhatsApp con il messaggio precompilato.
               </p>
               {clienti.map((c, i) => {
-                const testo = applyTemplate(template, { nome: c.nome, data: c.data, ora: c.ora });
+                const testo = applyTemplate(templateEdit, { nome: c.nome, data: c.data, ora: c.ora });
                 const testoCompleto = buildWhatsAppTesto(testo, mapUrl);
                 return (
                   <div key={i} className="bg-stone-50 border border-stone-200 rounded-xl overflow-hidden">
@@ -722,8 +734,30 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
           )}
         </div>
 
+        {/* Modifica template */}
+        <div className="px-6 py-4 border-t border-stone-100 flex-shrink-0 space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Modifica template messaggio</p>
+            <span className="text-[10px] text-stone-400">Usa {'{nome}'}, {'{data}'}, {'{ora}'}</span>
+          </div>
+          <textarea
+            value={templateEdit}
+            onChange={e => setTemplateEdit(e.target.value)}
+            rows={3}
+            className="w-full text-xs border border-stone-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 text-stone-700 font-mono transition-colors"
+          />
+          <button
+            onClick={salvaTemplate}
+            disabled={saving || templateEdit === template}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+          >
+            {saved ? <Check size={13} /> : null}
+            {saving ? 'Salvataggio...' : saved ? 'Salvato!' : 'Salva messaggio'}
+          </button>
+        </div>
+
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-stone-100 flex-shrink-0">
+        <div className="px-6 py-3 border-t border-stone-100 flex-shrink-0">
           <button
             onClick={onClose}
             className="w-full py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors"

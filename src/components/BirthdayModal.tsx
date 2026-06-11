@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Gift, Send, CreditCard, ChevronDown, Check, Loader, Euro, Percent } from 'lucide-react';
+import { X, Gift, Send, CreditCard, ChevronDown, Check, Loader, Euro, Percent, Save } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SmsCartaModal from './SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
@@ -158,9 +158,12 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
   const { user } = useAuth();
   const [templates, setTemplates] = useState<TemplateCom[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateRaw, setTemplateRaw] = useState('');
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [savedTemplate, setSavedTemplate] = useState(false);
   // id del cliente per cui si sta scegliendo lo sconto
   const [sceltaScontoId, setSceltaScontoId] = useState<string | null>(null);
   const [creatingCarta, setCreatingCarta] = useState<string | null>(null);
@@ -175,7 +178,7 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
         const list = (data || []) as TemplateCom[];
         setTemplates(list);
         const def = list.find(t => t.is_default) ?? list[0];
-        if (def) setSelectedTemplateId(def.id);
+        if (def) { setSelectedTemplateId(def.id); setTemplateRaw(def.testo); }
         setLoadingTemplates(false);
       });
   }, []);
@@ -191,15 +194,25 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
   }
 
   function buildMessaggio(c: ClienteCompleanno): string {
-    if (!selectedTemplate) return '';
+    if (!templateRaw) return '';
     const saluto = genderSaluto(c.nome);
-    return selectedTemplate.testo
+    return templateRaw
       .replace(/\{nome\}/g, c.nome)
       .replace(/\{cara\/caro\}/gi, saluto)
       .replace(/\{caro\/cara\}/gi, saluto)
       .replace(/cara\/a/gi, saluto)
       .replace(/\bCara\/o\b/g, saluto)
       .replace(/\bCaro\/a\b/g, saluto);
+  }
+
+  async function salvaTemplate() {
+    if (!selectedTemplateId) return;
+    setSavingTemplate(true);
+    await supabase.from('template_messaggi_comunicazioni').update({ testo: templateRaw }).eq('id', selectedTemplateId);
+    setTemplates(prev => prev.map(t => t.id === selectedTemplateId ? { ...t, testo: templateRaw } : t));
+    setSavingTemplate(false);
+    setSavedTemplate(true);
+    setTimeout(() => setSavedTemplate(false), 2000);
   }
 
   function sendAuguri(c: ClienteCompleanno) {
@@ -329,7 +342,7 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => { setSelectedTemplateId(t.id); setShowTemplateDropdown(false); }}
+                        onClick={() => { setSelectedTemplateId(t.id); setTemplateRaw(t.testo); setSavedTemplate(false); setShowTemplateDropdown(false); }}
                         className={`w-full text-left px-4 py-3 text-sm transition-colors border-b border-stone-50 last:border-0 ${
                           t.id === selectedTemplateId ? 'bg-amber-50 text-amber-700 font-semibold' : 'hover:bg-stone-50 text-stone-700'
                         }`}
@@ -340,6 +353,30 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Modifica testo template */}
+          {!loadingTemplates && selectedTemplateId && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide">Testo messaggio</label>
+                <span className="text-[10px] text-stone-400">Usa {'{nome}'}, {'{cara/caro}'}</span>
+              </div>
+              <textarea
+                value={templateRaw}
+                onChange={e => { setTemplateRaw(e.target.value); setSavedTemplate(false); }}
+                rows={3}
+                className="w-full text-xs border border-stone-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700 font-mono transition-colors"
+              />
+              <button
+                onClick={salvaTemplate}
+                disabled={savingTemplate || templateRaw === (templates.find(t => t.id === selectedTemplateId)?.testo ?? '')}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+              >
+                {savedTemplate ? <Check size={12} /> : <Save size={12} />}
+                {savingTemplate ? 'Salvataggio...' : savedTemplate ? 'Salvato!' : 'Salva messaggio'}
+              </button>
             </div>
           )}
 
