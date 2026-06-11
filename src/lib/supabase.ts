@@ -74,6 +74,7 @@ export interface Appuntamento {
   prezzo_totale: number;
   created_at: string;
   updated_at: string;
+  nuova_cliente?: boolean;
   clienti?: Cliente;
   parrucchieri?: Parrucchiere;
   appuntamento_trattamenti?: AppuntamentoTrattamento[];

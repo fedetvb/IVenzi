@@ -885,7 +885,10 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
                       </p>
                       <p className="text-sm text-stone-400 mt-0.5">{app.durata_minuti} minuti</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(app as any).nuova_cliente && (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-600">Nuova cliente</span>
+                      )}
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${stClass}`}>{stLabel}</span>
                       <button onClick={() => setAppModal({ open: true, id: app.id })} className="p-1.5 text-stone-400 hover:text-amber-600 transition-colors">
                         <Edit2 size={14} />

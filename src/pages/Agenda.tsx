@@ -352,6 +352,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
                                 <p className={`font-semibold truncate flex items-center gap-1 ${isCancellato ? 'line-through opacity-80' : ''}`}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                   {hasCarta && <CreditCard size={9} className="opacity-80 flex-shrink-0 inline" />}
+                                  {(app as any).nuova_cliente && <span className="text-[8px] font-bold bg-white/25 rounded px-1 flex-shrink-0 leading-tight">Nuova</span>}
                                 </p>
                                 <p className="opacity-80">{new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · {app.durata_minuti}min</p>
                               </div>

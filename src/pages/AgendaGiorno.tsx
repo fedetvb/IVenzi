@@ -424,6 +424,32 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     // Per richieste "chiunque", usa il parrucchiere della colonna cliccata
     const effectiveParrId = r.chiunque ? (parrucchiereAssegnatoId ?? r.parrucchiere_id) : r.parrucchiere_id;
 
+    // Determina se il cliente è nuovo (0 fiches convalidate)
+    let nuovaCliente = false;
+    if (clienteId) {
+      const { data: prevApps } = await dbSelect({
+        table: 'appuntamenti',
+        columns: 'id',
+        filters: [{ col: 'cliente_id', op: 'eq', val: clienteId }],
+      });
+      const prevAppIds = ((prevApps || []) as { id: string }[]).map(a => a.id);
+      if (prevAppIds.length === 0) {
+        nuovaCliente = true;
+      } else {
+        const { data: fichesConvalidate } = await dbSelect({
+          table: 'fiches',
+          columns: 'id',
+          filters: [
+            { col: 'appuntamento_id', op: 'in', val: prevAppIds },
+            { col: 'convalidata', op: 'eq', val: true },
+          ],
+        });
+        nuovaCliente = (fichesConvalidate || []).length === 0;
+      }
+    } else {
+      nuovaCliente = true;
+    }
+
     // Crea appuntamento con lo stesso flusso di AppuntamentoModal.handleSave
     // (dbInsert gestisce sia SQLite/Electron che IndexedDB+Supabase/browser)
     const { data: app1Data } = await dbInsert({
@@ -438,6 +464,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
         prezzo_totale: 0,
         user_id: user?.id,
         updated_at: new Date().toISOString(),
+        nuova_cliente: nuovaCliente,
       },
     });
 
@@ -473,6 +500,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           prezzo_totale: 0,
           user_id: user?.id,
           updated_at: new Date().toISOString(),
+          nuova_cliente: nuovaCliente,
         },
       });
 
@@ -1269,6 +1297,11 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 <p className={`font-semibold leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' }}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                 </p>
+                                {(app as any).nuova_cliente && !shortBlock && (
+                                  <p className="text-white/90 font-semibold leading-tight mt-0.5" style={{ fontSize: `${0.6 * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.8)' }}>
+                                    Nuova cliente
+                                  </p>
+                                )}
                                 {carteTipi && carteTipi.size > 0 && (
                                   <div className="flex items-center gap-0.5 flex-shrink-0 mt-px">
                                     {(carteTipi.has('premium') || carteTipi.has('premium_vuota')) && (

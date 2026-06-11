@@ -241,12 +241,35 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
       updated_at: new Date().toISOString(),
     };
 
+    let nuovaCliente = false;
+    if (!appuntamentoId && form.cliente_id) {
+      const { data: prevApps } = await dbSelect({
+        table: 'appuntamenti',
+        columns: 'id',
+        filters: [{ col: 'cliente_id', op: 'eq', val: form.cliente_id }],
+      });
+      const prevAppIds = ((prevApps || []) as { id: string }[]).map(a => a.id);
+      if (prevAppIds.length === 0) {
+        nuovaCliente = true;
+      } else {
+        const { data: fichesConvalidate } = await dbSelect({
+          table: 'fiches',
+          columns: 'id',
+          filters: [
+            { col: 'appuntamento_id', op: 'in', val: prevAppIds },
+            { col: 'convalidata', op: 'eq', val: true },
+          ],
+        });
+        nuovaCliente = (fichesConvalidate || []).length === 0;
+      }
+    }
+
     let appId = appuntamentoId;
     if (appId) {
       await dbUpdate({ table: 'appuntamenti', id: appId as string, data: payload });
       await dbDelete({ table: 'appuntamento_trattamenti', filters: [{ col: 'appuntamento_id', op: 'eq', val: appId }] });
     } else {
-      const { data } = await dbInsert({ table: 'appuntamenti', data: { ...payload, user_id: user?.id } });
+      const { data } = await dbInsert({ table: 'appuntamenti', data: { ...payload, user_id: user?.id, nuova_cliente: nuovaCliente } });
       if (data) appId = (data as any).id;
     }
 

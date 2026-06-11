@@ -32,6 +32,7 @@ interface RawAppuntamento {
   stato: string;
   note: string;
   prezzo_totale: number;
+  nuova_cliente?: boolean;
   clienti: { id: string; nome: string; cognome: string } | null;
   parrucchieri: { id: string; nome: string; colore: string } | null;
   appuntamento_trattamenti: { nome_trattamento: string; prezzo: number }[];
@@ -1340,6 +1341,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
       convalidata_at: new Date().toISOString(),
       importo_convalidato: totaleCalcolato,
     });
+
+    for (const app of gruppo.appuntamenti) {
+      if (app.nuova_cliente) {
+        await dbUpdate({ table: 'appuntamenti', id: app.id, data: { nuova_cliente: false } });
+      }
+    }
 
     const rawGruppoId = gruppo.clienteId;
     const clienteGruppoId = rawGruppoId === '__sconosciuto__' ? null
