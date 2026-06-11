@@ -3197,26 +3197,24 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
 
   // Banner compleanni
   const [compleannoAttivo, setCompleannoAttivo] = useState(true);
-
-  // WhatsApp automatici
-  const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+  const [compleannoOrario, setCompleannoOrario] = useState('09:00');
 
   useEffect(() => {
     (async () => {
-      const [g, fo, infa, inoo, ca, wa] = await Promise.all([
+      const [g, fo, infa, inoo, ca, co] = await Promise.all([
         getImpostazione('promemoria_convalida_giorni'),
         getImpostazione('promemoria_convalida_orario'),
         getImpostazione('banner_in_forse_attivo'),
         getImpostazione('orario_avviso_in_forse'),
         getImpostazione('banner_compleanno_attivo'),
-        getImpostazione('whatsapp_avviso_disabilitato'),
+        getImpostazione('banner_compleanno_orario'),
       ]);
       if (g) { try { setFicheGiorni(JSON.parse(g)); } catch { /* keep default */ } }
       if (fo) setFicheOrario(fo);
       setInForseAttivo(infa !== 'false');
       if (inoo) setInForseOrario(inoo);
       setCompleannoAttivo(ca !== 'false');
-      setWhatsappDisabilitato(wa === 'true');
+      if (co) setCompleannoOrario(co);
       setLoading(false);
     })();
   }, []);
@@ -3239,7 +3237,7 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
         setImpostazione('banner_in_forse_attivo', String(inForseAttivo), uid),
         setImpostazione('orario_avviso_in_forse', inForseOrario, uid),
         setImpostazione('banner_compleanno_attivo', String(compleannoAttivo), uid),
-        setImpostazione('whatsapp_avviso_disabilitato', String(whatsappDisabilitato), uid),
+        setImpostazione('banner_compleanno_orario', compleannoOrario, uid),
       ]);
       setSaving(false);
       setFeedback({ tipo: 'ok', msg: 'Impostazioni avvisi salvate.' });
@@ -3331,7 +3329,7 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
 
         {/* Avviso appuntamenti in forse */}
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+          <div className={`px-6 py-4 flex items-center gap-3 ${inForseAttivo ? 'border-b border-stone-100' : ''}`}>
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${inForseAttivo ? 'bg-amber-50' : 'bg-stone-100'}`}>
               <HelpCircle size={16} className={inForseAttivo ? 'text-amber-600' : 'text-stone-400'} />
             </div>
@@ -3363,7 +3361,7 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
 
         {/* Banner compleanni */}
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 flex items-center gap-3">
+          <div className={`px-6 py-4 flex items-center gap-3 ${compleannoAttivo ? 'border-b border-stone-100' : ''}`}>
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${compleannoAttivo ? 'bg-rose-50' : 'bg-stone-100'}`}>
               <Gift size={16} className={compleannoAttivo ? 'text-rose-500' : 'text-stone-400'} />
             </div>
@@ -3379,30 +3377,18 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
               <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${compleannoAttivo ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
           </div>
-        </div>
-
-        {/* WhatsApp automatici */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${!whatsappDisabilitato ? 'bg-emerald-50' : 'bg-stone-100'}`}>
-              <MessageCircle size={16} className={!whatsappDisabilitato ? 'text-emerald-600' : 'text-stone-400'} />
+          {compleannoAttivo && (
+            <div className="px-6 py-5">
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
+              <input
+                type="time"
+                value={compleannoOrario}
+                onChange={e => { setCompleannoOrario(e.target.value); setFeedback(null); }}
+                className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 transition-colors"
+              />
+              <p className="text-xs text-stone-400 mt-2">Il banner compare nell'agenda a partire da quest'ora</p>
             </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-stone-800">Messaggi WhatsApp Automatici</h3>
-              <p className="text-xs text-stone-500">
-                {whatsappDisabilitato
-                  ? 'Pulsante avviso clienti nascosto nell\'agenda'
-                  : 'Pulsante avviso clienti visibile nell\'agenda'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setWhatsappDisabilitato(v => !v); setFeedback(null); }}
-              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${!whatsappDisabilitato ? 'bg-emerald-500' : 'bg-stone-200'}`}
-            >
-              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${!whatsappDisabilitato ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
+          )}
         </div>
 
         {feedback && (

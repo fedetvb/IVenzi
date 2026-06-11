@@ -261,11 +261,17 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   useEffect(() => { loadAppuntamenti(); }, [loadAppuntamenti]);
 
   useEffect(() => {
+    const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
     const today = new Date();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
-    getImpostazione('banner_compleanno_attivo').then(attivo => {
+
+    const checkBirthdays = async () => {
+      const attivo = await getImpostazione('banner_compleanno_attivo');
       if (attivo === 'false') return;
+      const orario = await getImpostazione('banner_compleanno_orario') ?? '09:00';
+      const nowIt = fmt.format(new Date());
+      if (nowIt < orario) return;
       dbSelect({
         table: 'clienti',
         columns: 'id, nome, cognome, telefono, data_nascita',
@@ -278,7 +284,10 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
           });
         setBirthdayClienti(nati);
       });
-    });
+    };
+    checkBirthdays();
+    const id = setInterval(checkBirthdays, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   async function deleteAppuntamento(id: string) {
