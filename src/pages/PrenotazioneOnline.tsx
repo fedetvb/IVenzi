@@ -96,6 +96,7 @@ interface GiftPass {
   tipo: 'valore' | 'prodotto';
   valore_euro: number | null;
   prodotto_nome: string | null;
+  prodotti_rivendita_catalogo: { categoria: string } | null;
   occasione: string;
   attivata_at: string | null;
   scadenza_uso: string | null;
@@ -105,6 +106,7 @@ interface GiftPass {
   destinataria_nome: string;
   destinataria_telefono: string;
   utilizzata: boolean;
+  donata: boolean;
   tipo_carta: 'gift_pass_donatore' | 'gift_pass_ricevente';
 }
 
@@ -1725,11 +1727,11 @@ function MieCarteStep({
       ))}
 
       {(data?.giftPassDonatore ?? []).map(gp => (
-        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} />
+        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome={`${data?.cliente?.nome ?? ''} ${data?.cliente?.cognome ?? ''}`.trim()} />
       ))}
 
       {(data?.giftPassRicevente ?? []).map(gp => (
-        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} />
+        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome="" />
       ))}
 
       <BackBtn onClick={onBack} />
@@ -2105,23 +2107,25 @@ function CartaUsaEGettaCard({
 }
 
 function GiftPassCard({
-  gp, salone, nomeSalone,
+  gp, salone, nomeSalone, compratore_nome,
 }: {
   gp: GiftPass;
   salone: Record<string, string>;
   nomeSalone: string;
+  compratore_nome: string;
 }) {
   const [showDona, setShowDona] = useState(false);
   const [msgDona, setMsgDona] = useState('');
 
   const isDonatore = gp.tipo_carta === 'gift_pass_donatore';
   const valore = gp.tipo === 'prodotto'
-    ? (gp.prodotto_nome ?? 'Prodotto omaggio')
+    ? `${gp.prodotti_rivendita_catalogo?.categoria ? gp.prodotti_rivendita_catalogo.categoria + ' · ' : ''}${gp.prodotto_nome ?? 'Prodotto omaggio'}`
     : `€${gp.valore_euro ?? 0}`;
 
   const scadenzaLabel = (() => {
     const fmt = (d: Date) => d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
     if (isDonatore) {
+      if (gp.donata) return 'Codice inviato';
       if (!gp.scadenza_ritiro_giorni || gp.scadenza_ritiro_giorni <= 0) return 'Nessuna scadenza';
       const d = new Date(gp.created_at);
       d.setDate(d.getDate() + gp.scadenza_ritiro_giorni);
@@ -2209,7 +2213,9 @@ function GiftPassCard({
                 Gift Pass
               </p>
               <p className="text-xs mt-0.5 font-medium" style={{ color: roseGold.accent }}>
-                {isDonatore ? 'Da regalare' : 'Ricevuta'}
+                {isDonatore
+                  ? (gp.donata ? `Donata da ${compratore_nome}` : 'Da regalare')
+                  : 'Ricevuta'}
               </p>
             </div>
             {/* Chip oro rosa */}
@@ -2249,10 +2255,16 @@ function GiftPassCard({
       {/* Messaggio descrittivo */}
       <div className="px-1">
         {isDonatore ? (
-          <p className="text-xs text-stone-500 italic leading-relaxed">
-            Hai acquistato questa Gift Pass da <span className="text-stone-700 font-semibold not-italic">{valore}</span> da regalare.
-            Condividi il codice con chi vuoi per permetterle di usarla in salone.
-          </p>
+          gp.donata ? (
+            <p className="text-xs text-stone-500 italic leading-relaxed">
+              Hai già inviato questo Gift Pass. La destinataria potrà usarlo in salone mostrando il codice <span className="font-mono font-semibold not-italic text-stone-700">{gp.codice}</span> al momento del pagamento.
+            </p>
+          ) : (
+            <p className="text-xs text-stone-500 italic leading-relaxed">
+              Hai acquistato questa Gift Pass da <span className="text-stone-700 font-semibold not-italic">{valore}</span> da regalare.
+              Condividi il codice con chi vuoi per permetterle di usarla in salone.
+            </p>
+          )
         ) : (
           <p className="text-xs text-stone-500 italic leading-relaxed">
             Hai ricevuto questa Gift Pass da <span className="text-stone-700 font-semibold not-italic">{valore}</span>.
@@ -2261,8 +2273,8 @@ function GiftPassCard({
         )}
       </div>
 
-      {/* Bottone dona (solo se donatore) */}
-      {isDonatore && (
+      {/* Bottone dona (solo se donatore e non ancora donata) */}
+      {isDonatore && !gp.donata && (
         <button
           onClick={openDona}
           className="w-full flex items-center justify-center gap-2 font-semibold rounded-2xl px-5 py-3.5 transition-all"
