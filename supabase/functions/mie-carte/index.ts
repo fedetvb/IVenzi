@@ -540,5 +540,72 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // POST /segna-donata — marca il gift pass come donato dalla cliente (portale cliente)
+  if (req.method === "POST" && path === "/segna-donata") {
+    try {
+      const body = await req.json().catch(() => null);
+      if (!body) return json({ error: "Body non valido" }, 400);
+
+      const { user_id, telefono, gift_pass_id } = body;
+      if (!user_id || !telefono || !gift_pass_id) return json({ error: "Parametri mancanti" }, 400);
+
+      const telNorm = normalizePhone(telefono);
+
+      // Verifica che la cliente esista
+      const { data: clienti } = await sb
+        .from("clienti")
+        .select("id, telefono")
+        .eq("user_id", user_id)
+        .is("deleted_at", null);
+
+      const cliente = (clienti ?? []).find((c: { telefono: string }) =>
+        normalizePhone(c.telefono ?? "") === telNorm
+      );
+      if (!cliente) return json({ error: "Cliente non trovata" }, 404);
+
+      // Recupera il gift pass e verifica che appartenga a questa cliente
+      const { data: gp } = await sb
+        .from("gift_pass")
+        .select("id, tipo, scadenza_uso_giorni, cliente_id, fiche_acquisto_id, donata")
+        .eq("id", gift_pass_id)
+        .eq("user_id", user_id)
+        .maybeSingle();
+
+      if (!gp) return json({ error: "Gift pass non trovato" }, 404);
+
+      // Verifica proprietà: cliente_id diretto o via fiche
+      let isOwner = gp.cliente_id === cliente.id;
+      if (!isOwner && gp.fiche_acquisto_id) {
+        const { data: fiche } = await sb
+          .from("fiches")
+          .select("cliente_id")
+          .eq("id", gp.fiche_acquisto_id)
+          .maybeSingle();
+        if (fiche?.cliente_id === cliente.id) isOwner = true;
+      }
+      if (!isOwner) return json({ error: "Non autorizzata" }, 403);
+      if (gp.donata) return json({ success: true });
+
+      const patch: Record<string, unknown> = { donata: true };
+      if (gp.tipo !== "valore" && gp.scadenza_uso_giorni) {
+        const d = new Date();
+        d.setDate(d.getDate() + (gp.scadenza_uso_giorni as number));
+        patch.scadenza_uso = d.toISOString();
+      }
+
+      const { error: patchErr } = await sb
+        .from("gift_pass")
+        .update(patch)
+        .eq("id", gift_pass_id);
+
+      if (patchErr) return json({ error: "Errore nel salvataggio" }, 500);
+
+      return json({ success: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg }, 500);
+    }
+  }
+
   return json({ error: "Not found" }, 404);
 });

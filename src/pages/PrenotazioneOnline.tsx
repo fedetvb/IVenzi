@@ -422,6 +422,22 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
   }
 
+  async function handleSegnaGiftPassDonata(giftPassId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${MIE_CARTE_URL}/segna-donata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, telefono: telefono.trim(), gift_pass_id: giftPassId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      await loadMieCarte();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function handleRegalaCartaSconto(cartaId: string): Promise<boolean> {
     try {
       const res = await fetch(`${MIE_CARTE_URL}/regala`, {
@@ -1272,6 +1288,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             onBack={() => setStep('scelta')}
             onRetry={loadMieCarte}
             onRegala={handleRegalaCartaSconto}
+            onSegnaGiftPassDonata={handleSegnaGiftPassDonata}
             nomeSalone={info?.nomeSalone ?? ''}
           />
         )}
@@ -1651,7 +1668,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 // ─── Le mie carte ─────────────────────────────────────────────────────────────
 
 function MieCarteStep({
-  data, loading, error, onBack, onRetry, onRegala, nomeSalone,
+  data, loading, error, onBack, onRetry, onRegala, onSegnaGiftPassDonata, nomeSalone,
 }: {
   data: MieCarteData | null;
   loading: boolean;
@@ -1659,6 +1676,7 @@ function MieCarteStep({
   onBack: () => void;
   onRetry: () => void;
   onRegala: (cartaId: string) => Promise<boolean>;
+  onSegnaGiftPassDonata: (giftPassId: string) => Promise<boolean>;
   nomeSalone: string;
 }) {
   if (loading) return (
@@ -1727,11 +1745,11 @@ function MieCarteStep({
       ))}
 
       {(data?.giftPassDonatore ?? []).map(gp => (
-        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome={`${data?.cliente?.nome ?? ''} ${data?.cliente?.cognome ?? ''}`.trim()} />
+        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome={`${data?.cliente?.nome ?? ''} ${data?.cliente?.cognome ?? ''}`.trim()} onSegnaGiftPassDonata={onSegnaGiftPassDonata} />
       ))}
 
       {(data?.giftPassRicevente ?? []).map(gp => (
-        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome="" />
+        <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome="" onSegnaGiftPassDonata={onSegnaGiftPassDonata} />
       ))}
 
       <BackBtn onClick={onBack} />
@@ -2107,12 +2125,13 @@ function CartaUsaEGettaCard({
 }
 
 function GiftPassCard({
-  gp, salone, nomeSalone, compratore_nome,
+  gp, salone, nomeSalone, compratore_nome, onSegnaGiftPassDonata,
 }: {
   gp: GiftPass;
   salone: Record<string, string>;
   nomeSalone: string;
   compratore_nome: string;
+  onSegnaGiftPassDonata: (giftPassId: string) => Promise<boolean>;
 }) {
   const [showDona, setShowDona] = useState(false);
   const [msgDona, setMsgDona] = useState('');
@@ -2161,7 +2180,8 @@ function GiftPassCard({
     setShowDona(true);
   }
 
-  function handleInviaDona() {
+  async function handleInviaDona() {
+    await onSegnaGiftPassDonata(gp.id);
     const waText = encodeURIComponent(msgDona);
     window.location.href = `whatsapp://send?text=${waText}`;
     setShowDona(false);
