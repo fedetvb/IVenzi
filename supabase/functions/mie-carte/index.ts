@@ -159,7 +159,7 @@ Deno.serve(async (req: Request) => {
     // Primary: by cliente_id (compratore)
     const { data: gpByClienteId } = await sb
       .from("gift_pass")
-      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata, donata")
+      .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, scadenza_uso_giorni, scadenza_ritiro_giorni, created_at, destinataria_nome, destinataria_telefono, utilizzata, donata")
       .eq("cliente_id", cliente.id)
       .eq("user_id", userId)
       .eq("utilizzata", false)
@@ -181,7 +181,7 @@ Deno.serve(async (req: Request) => {
     if (ficheIds.length > 0) {
       const { data } = await sb
         .from("gift_pass")
-        .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, destinataria_nome, destinataria_telefono, utilizzata, donata")
+        .select("id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, scadenza_uso, scadenza_uso_giorni, scadenza_ritiro_giorni, created_at, destinataria_nome, destinataria_telefono, utilizzata, donata")
         .in("fiche_acquisto_id", ficheIds)
         .eq("user_id", userId)
         .eq("utilizzata", false)
@@ -467,7 +467,7 @@ Deno.serve(async (req: Request) => {
       // Cerca il gift pass per codice (non ancora attivato e non utilizzato)
       const { data: gp } = await sb
         .from("gift_pass")
-        .select("id, tipo, scadenza_uso_giorni")
+        .select("id, tipo, scadenza_uso_giorni, scadenza_uso")
         .eq("user_id", user_id)
         .eq("codice", String(codice).toUpperCase())
         .is("attivata_at", null)
@@ -488,7 +488,8 @@ Deno.serve(async (req: Request) => {
       );
 
       const now = new Date().toISOString();
-      const scadenzaUsoAt = gp.tipo !== "valore" && gp.scadenza_uso_giorni
+      // Calcola scadenza_uso solo se non già impostata al momento della donazione
+      const scadenzaUsoAt = !gp.scadenza_uso && gp.tipo !== "valore" && gp.scadenza_uso_giorni
         ? (() => { const d = new Date(); d.setDate(d.getDate() + (gp.scadenza_uso_giorni as number)); return d.toISOString(); })()
         : null;
 

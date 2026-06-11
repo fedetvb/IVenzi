@@ -99,6 +99,9 @@ interface GiftPass {
   occasione: string;
   attivata_at: string | null;
   scadenza_uso: string | null;
+  scadenza_uso_giorni: number | null;
+  scadenza_ritiro_giorni: number | null;
+  created_at: string;
   destinataria_nome: string;
   destinataria_telefono: string;
   utilizzata: boolean;
@@ -2117,9 +2120,15 @@ function GiftPassCard({
     : `€${gp.valore_euro ?? 0}`;
 
   const scadenzaLabel = (() => {
+    const fmt = (d: Date) => d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
+    if (isDonatore) {
+      if (!gp.scadenza_ritiro_giorni || gp.scadenza_ritiro_giorni <= 0) return 'Nessuna scadenza';
+      const d = new Date(gp.created_at);
+      d.setDate(d.getDate() + gp.scadenza_ritiro_giorni);
+      return `Da donare entro il ${fmt(d)}`;
+    }
     if (!gp.scadenza_uso) return 'Nessuna scadenza';
-    const d = new Date(gp.scadenza_uso);
-    return `Valida fino al ${d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+    return `Da riscattare entro il ${fmt(new Date(gp.scadenza_uso))}`;
   })();
 
   const telefono = salone['azienda_telefono'] ?? '';

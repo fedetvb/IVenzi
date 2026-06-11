@@ -1895,7 +1895,13 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
           </button>
           {hasDestinaratia && hasPhone && (
             <button onClick={async () => {
-              await dbUpdate({ table: 'gift_pass', id: gp.id, data: { donata: true } }).catch(() => {});
+              const donataData: Record<string, unknown> = { donata: true };
+              if (gp.scadenza_uso_giorni && gp.scadenza_uso_giorni > 0) {
+                const scadenza = new Date();
+                scadenza.setDate(scadenza.getDate() + gp.scadenza_uso_giorni);
+                donataData.scadenza_uso = scadenza.toISOString();
+              }
+              await dbUpdate({ table: 'gift_pass', id: gp.id, data: donataData }).catch(() => {});
               apriWhatsApp(gp.destinataria_telefono, messaggio);
               onClose();
             }}
