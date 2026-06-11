@@ -478,9 +478,18 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         setProfiloNote(c.note ?? '');
         setProfiloFotoUrl(c.foto_url ?? '');
         setProfiloFotoPreview(c.foto_url ?? '');
+      } else {
+        // Cliente non ancora registrata: precompila con i dati inseriti al primo step
+        setProfiloNome(nome);
+        setProfiloCognome(cognome);
+        setProfiloTelefono(telefono);
       }
     } catch {
-      setProfiloError('Impossibile caricare i dati. Riprova.');
+      // Anche in caso di errore, precompila con i dati del primo step
+      setProfiloNome(nome);
+      setProfiloCognome(cognome);
+      setProfiloTelefono(telefono);
+      setProfiloError('Impossibile caricare i dati dal database.');
     } finally {
       setLoadingProfilo(false);
     }
