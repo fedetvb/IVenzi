@@ -99,6 +99,16 @@ Deno.serve(async (req: Request) => {
       ...abbinatiNotAlreadyInServizi.map((a) => ({ ...a, servizio_abbinato_online_id: null })),
     ];
 
+    const SOCIAL_KEYS = [
+      "social_instagram", "social_facebook", "social_tiktok", "social_youtube",
+      "social_whatsapp", "social_x", "social_threads", "social_google_business",
+      "social_tripadvisor", "social_altro",
+    ];
+    const social: Record<string, string> = {};
+    for (const k of SOCIAL_KEYS) {
+      if (impostazioni[k]) social[k] = impostazioni[k];
+    }
+
     return json({
       prenotazioniAttive,
       portaleNascosto,
@@ -107,6 +117,7 @@ Deno.serve(async (req: Request) => {
       parrucchieri: pRes.data ?? [],
       servizi: serviziConAbbinati,
       serviziAbbinati,
+      social,
     });
   }
 
