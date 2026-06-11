@@ -497,13 +497,21 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
     // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
     try {
+      // Prima controlla se è già una cliente confermata (esiste in clienti)
+      const clientiRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/clienti?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}&deleted_at=is.null&select=id&limit=1`,
+        { headers: anonHeaders }
+      );
+      const clientiRows = await clientiRes.json();
+      const isClienteConfermata = Array.isArray(clientiRows) && clientiRows.length > 0;
+
       const checkRes = await fetch(
         `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}&stato=eq.in_attesa&select=id`,
         { headers: anonHeaders }
       );
       const existing = await checkRes.json();
       if (!Array.isArray(existing) || existing.length === 0) {
-        setIsNuovaScheda(true);
+        if (!isClienteConfermata) setIsNuovaScheda(true);
         await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
           method: 'POST',
           headers: { ...anonHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
