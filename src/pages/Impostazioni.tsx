@@ -3195,17 +3195,23 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
   const [inForseAttivo, setInForseAttivo] = useState(true);
   const [inForseOrario, setInForseOrario] = useState('18:00');
 
+  // Avviso appuntamenti WhatsApp
+  const [avvisoAppAttivo, setAvvisoAppAttivo] = useState(true);
+  const [avvisoAppOrario, setAvvisoAppOrario] = useState('17:00');
+
   // Banner compleanni
   const [compleannoAttivo, setCompleannoAttivo] = useState(true);
   const [compleannoOrario, setCompleannoOrario] = useState('09:00');
 
   useEffect(() => {
     (async () => {
-      const [g, fo, infa, inoo, ca, co] = await Promise.all([
+      const [g, fo, infa, inoo, wa, wao, ca, co] = await Promise.all([
         getImpostazione('promemoria_convalida_giorni'),
         getImpostazione('promemoria_convalida_orario'),
         getImpostazione('banner_in_forse_attivo'),
         getImpostazione('orario_avviso_in_forse'),
+        getImpostazione('whatsapp_avviso_disabilitato'),
+        getImpostazione('avviso_appuntamenti_orario'),
         getImpostazione('banner_compleanno_attivo'),
         getImpostazione('banner_compleanno_orario'),
       ]);
@@ -3213,6 +3219,8 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
       if (fo) setFicheOrario(fo);
       setInForseAttivo(infa !== 'false');
       if (inoo) setInForseOrario(inoo);
+      setAvvisoAppAttivo(wa !== 'true');
+      if (wao) setAvvisoAppOrario(wao);
       setCompleannoAttivo(ca !== 'false');
       if (co) setCompleannoOrario(co);
       setLoading(false);
@@ -3236,6 +3244,8 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
         setImpostazione('promemoria_convalida_orario', ficheOrario, uid),
         setImpostazione('banner_in_forse_attivo', String(inForseAttivo), uid),
         setImpostazione('orario_avviso_in_forse', inForseOrario, uid),
+        setImpostazione('whatsapp_avviso_disabilitato', String(!avvisoAppAttivo), uid),
+        setImpostazione('avviso_appuntamenti_orario', avvisoAppOrario, uid),
         setImpostazione('banner_compleanno_attivo', String(compleannoAttivo), uid),
         setImpostazione('banner_compleanno_orario', compleannoOrario, uid),
       ]);
@@ -3355,6 +3365,38 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
                 className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition-colors"
               />
               <p className="text-xs text-stone-400 mt-2">Il banner compare nell'agenda una volta al giorno a quest'ora</p>
+            </div>
+          )}
+        </div>
+
+        {/* Avviso appuntamenti WhatsApp */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className={`px-6 py-4 flex items-center gap-3 ${avvisoAppAttivo ? 'border-b border-stone-100' : ''}`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${avvisoAppAttivo ? 'bg-emerald-50' : 'bg-stone-100'}`}>
+              <MessageCircle size={16} className={avvisoAppAttivo ? 'text-emerald-600' : 'text-stone-400'} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-stone-800">Avviso Appuntamenti Clienti</h3>
+              <p className="text-xs text-stone-500">Bottone WhatsApp in agenda per inviare il promemoria appuntamento di domani</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setAvvisoAppAttivo(v => !v); setFeedback(null); }}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${avvisoAppAttivo ? 'bg-emerald-500' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${avvisoAppAttivo ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          {avvisoAppAttivo && (
+            <div className="px-6 py-5">
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
+              <input
+                type="time"
+                value={avvisoAppOrario}
+                onChange={e => { setAvvisoAppOrario(e.target.value); setFeedback(null); }}
+                className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-colors"
+              />
+              <p className="text-xs text-stone-400 mt-2">Il bottone compare nell'agenda a partire da quest'ora</p>
             </div>
           )}
         </div>

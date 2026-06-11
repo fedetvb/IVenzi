@@ -86,12 +86,23 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [birthdayClienti, setBirthdayClienti] = useState<{ id: string; nome: string; cognome: string; telefono: string | null }[]>([]);
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
   const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+  const [avvisoAppuntamentiVisibile, setAvvisoAppuntamentiVisibile] = useState(false);
   const [inForseClienti, setInForseClienti] = useState<ClienteInForseEntry[]>([]);
   const [showInForseBanner, setShowInForseBanner] = useState(false);
   const [showInForseModal, setShowInForseModal] = useState(false);
 
   useEffect(() => {
-    getImpostazione('whatsapp_avviso_disabilitato').then(v => setWhatsappDisabilitato(v === 'true'));
+    const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    const checkAvviso = async () => {
+      const disab = await getImpostazione('whatsapp_avviso_disabilitato');
+      if (disab === 'true') { setAvvisoAppuntamentiVisibile(false); return; }
+      const orario = await getImpostazione('avviso_appuntamenti_orario') ?? '17:00';
+      const nowIt = fmt.format(new Date());
+      setAvvisoAppuntamentiVisibile(nowIt >= orario);
+    };
+    checkAvviso();
+    const id = setInterval(checkAvviso, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   async function loadAvvisoInForse(): Promise<ClienteInForseEntry[]> {
@@ -351,7 +362,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
             <Clock size={14} />
             <span className="text-sm font-semibold tabular-nums">{oraItaliana}</span>
           </div>
-          {!whatsappDisabilitato && (
+          {avvisoAppuntamentiVisibile && (
             <button
               onClick={loadAvvisoClienti}
               disabled={avvisoLoading}
