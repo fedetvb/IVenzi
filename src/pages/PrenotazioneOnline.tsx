@@ -40,7 +40,14 @@ interface SalonInfo {
   serviziAbbinati: ServizioAbbinato[];
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi';
+
+interface Seduta {
+  fiche_id: string;
+  data: string;
+  voci: { tipo: string; nome: string; parrucchiere: string | null }[];
+  prodotti: { nome: string; quantita: number; parrucchiere: string | null }[];
+}
 
 interface AppuntamentoCliente {
   id: string;
@@ -251,6 +258,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // I miei appuntamenti
+  const [mieiServizi, setMieiServizi] = useState<Seduta[]>([]);
+  const [loadingMieiServizi, setLoadingMieiServizi] = useState(false);
+  const [mieiServiziError, setMieiServiziError] = useState('');
+  const [serviziPeriodo, setServiziPeriodo] = useState<'1m' | '3m' | '1y' | 'all'>('all');
+  const [serviziNomeFiltro, setServiziNomeFiltro] = useState('');
+
   const [mieiAppuntamenti, setMieiAppuntamenti] = useState<AppuntamentoCliente[]>([]);
   const [mieiRichiestePendenti, setMieiRichiestePendenti] = useState<AppuntamentoCliente[]>([]);
   const [loadingMieiAppuntamenti, setLoadingMieiAppuntamenti] = useState(false);
@@ -372,6 +385,26 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
     const id = setInterval(poll, 30000);
     return () => { active = false; clearInterval(id); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telefono, userId]);
+
+  // Polling miei servizi (ogni 30s quando step === 'miei_servizi')
+  useEffect(() => {
+    const tel = telefono.trim();
+    if (!tel || !userId) return;
+    let active = true;
+    const poll = async () => {
+      if (!active || stepRef.current !== 'miei_servizi') return;
+      try {
+        const res = await fetch(`${EDGE_URL}/miei-servizi?user_id=${userId}&telefono=${encodeURIComponent(tel)}`);
+        const data = await res.json();
+        if (active && stepRef.current === 'miei_servizi' && !data.error) {
+          setMieiServizi(data.sedute ?? []);
+        }
+      } catch { /* ignora errori di rete */ }
+    };
+    const id2 = setInterval(poll, 30000);
+    return () => { active = false; clearInterval(id2); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telefono, userId]);
 
@@ -908,6 +941,23 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     return messaggi;
   }
 
+  async function loadMieiServizi() {
+    setLoadingMieiServizi(true);
+    setMieiServiziError('');
+    try {
+      const tel = telefono.trim();
+      if (!tel) throw new Error('Nessun numero di telefono');
+      const res = await fetch(`${EDGE_URL}/miei-servizi?user_id=${userId}&telefono=${encodeURIComponent(tel)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      setMieiServizi(data.sedute ?? []);
+    } catch {
+      setMieiServiziError('Impossibile caricare i servizi. Riprova.');
+    } finally {
+      setLoadingMieiServizi(false);
+    }
+  }
+
   async function loadMieiAppuntamenti() {
     setLoadingMieiAppuntamenti(true);
     setMieiAppuntamentiError('');
@@ -1289,7 +1339,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-24">
         {/* Progress indicator */}
-        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && step !== 'mie_carte' && step !== 'profilo' && step !== 'miei_appuntamenti' && (
+        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && step !== 'mie_carte' && step !== 'profilo' && step !== 'miei_appuntamenti' && step !== 'miei_servizi' && (
           <StepProgress step={step} />
         )}
 
@@ -1573,6 +1623,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-stone-400 mt-0.5">Storico e prossimi appuntamenti</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-teal-500 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
+              onClick={() => { loadMieiServizi(); setStep('miei_servizi'); }}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-orange-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-orange-100 transition-colors">
+                <Scissors size={26} className="text-orange-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">I miei servizi</p>
+                <p className="text-sm text-stone-400 mt-0.5">Storico trattamenti e acquisti</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-orange-500 transition-colors flex-shrink-0" />
             </button>
 
             <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
@@ -1894,6 +1958,173 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                       </div>
                       <p className="font-semibold text-stone-600">Nessun appuntamento trovato</p>
                       <p className="text-sm text-stone-400 mt-1">I tuoi prossimi appuntamenti compariranno qui</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* STEP: I miei servizi */}
+        {step === 'miei_servizi' && (() => {
+          const now = new Date();
+          const cutoffMap: Record<string, Date> = {
+            '1m': new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()),
+            '3m': new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()),
+            '1y': new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()),
+            'all': new Date(0),
+          };
+          const cutoff = cutoffMap[serviziPeriodo];
+
+          const filtered = mieiServizi.filter(s => {
+            if (!s.data) return false;
+            const d = new Date(s.data + 'T12:00:00');
+            if (d < cutoff) return false;
+            if (serviziNomeFiltro) {
+              const q = serviziNomeFiltro.toLowerCase();
+              const matchVoci = s.voci.some(v => v.nome.toLowerCase().includes(q));
+              const matchProd = s.prodotti.some(p => p.nome.toLowerCase().includes(q));
+              if (!matchVoci && !matchProd) return false;
+            }
+            return true;
+          });
+
+          const periodoLabels: Record<string, string> = { '1m': 'Ultimo mese', '3m': '3 mesi', '1y': 'Anno', 'all': 'Tutto' };
+
+          function formatDataSeduta(dateStr: string) {
+            const d = new Date(dateStr + 'T12:00:00');
+            return d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+          }
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <button onClick={() => setStep('scelta')} className="w-9 h-9 flex items-center justify-center rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-100 transition-colors flex-shrink-0">
+                  <ChevronLeft size={18} />
+                </button>
+                <div>
+                  <p className="text-xl font-bold text-stone-800">I miei servizi</p>
+                  <p className="text-sm text-stone-400">{nome} {cognome}</p>
+                </div>
+              </div>
+
+              {/* Filtri periodo */}
+              <div className="flex gap-2 flex-wrap">
+                {(['1m', '3m', '1y', 'all'] as const).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setServiziPeriodo(p)}
+                    className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-all ${serviziPeriodo === p ? 'bg-orange-500 text-white shadow-sm' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                  >
+                    {periodoLabels[p]}
+                  </button>
+                ))}
+              </div>
+
+              {/* Filtro per nome */}
+              <div className="relative">
+                <Scissors size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type="text"
+                  value={serviziNomeFiltro}
+                  onChange={e => setServiziNomeFiltro(e.target.value)}
+                  placeholder="Filtra per servizio o prodotto..."
+                  className="w-full border border-stone-200 rounded-xl pl-8 pr-8 py-2.5 text-sm text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-stone-400"
+                />
+                {serviziNomeFiltro && (
+                  <button onClick={() => setServiziNomeFiltro('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {loadingMieiServizi && (
+                <div className="flex justify-center py-10">
+                  <div className="w-7 h-7 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+
+              {mieiServiziError && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
+                  <p className="text-sm text-red-600 mb-3">{mieiServiziError}</p>
+                  <button onClick={loadMieiServizi} className="text-sm font-semibold text-red-700 underline">Riprova</button>
+                </div>
+              )}
+
+              {!loadingMieiServizi && !mieiServiziError && (
+                <>
+                  {filtered.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <Scissors size={28} className="text-stone-300" />
+                      </div>
+                      <p className="font-semibold text-stone-600">Nessuna seduta trovata</p>
+                      <p className="text-sm text-stone-400 mt-1">
+                        {serviziNomeFiltro || serviziPeriodo !== 'all' ? 'Prova a modificare i filtri' : 'Le tue sedute compariranno qui dopo la prima visita'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filtered.map(s => (
+                        <div key={s.fiche_id} className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm">
+                          <div className="bg-orange-50 border-b border-orange-100 px-5 py-3">
+                            <p className="text-sm font-bold text-orange-800 capitalize">{formatDataSeduta(s.data)}</p>
+                          </div>
+                          <div className="px-5 py-4 space-y-3">
+                            {s.voci.filter(v => v.tipo === 'servizio').length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Servizi</p>
+                                <div className="space-y-1.5">
+                                  {s.voci.filter(v => v.tipo === 'servizio').map((v, i) => (
+                                    <div key={i} className="flex items-center justify-between gap-3">
+                                      <span className="text-sm font-medium text-stone-800">{v.nome}</span>
+                                      {v.parrucchiere && (
+                                        <span className="text-xs text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full flex-shrink-0">{v.parrucchiere}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {s.voci.filter(v => v.tipo === 'extra').length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Extra</p>
+                                <div className="space-y-1.5">
+                                  {s.voci.filter(v => v.tipo === 'extra').map((v, i) => (
+                                    <div key={i} className="flex items-center justify-between gap-3">
+                                      <span className="text-sm text-stone-600">{v.nome}</span>
+                                      {v.parrucchiere && (
+                                        <span className="text-xs text-stone-400 flex-shrink-0">{v.parrucchiere}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {s.prodotti.length > 0 && (
+                              <div className="pt-1 border-t border-stone-100">
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Acquistato</p>
+                                <div className="space-y-1.5">
+                                  {s.prodotti.map((p, i) => (
+                                    <div key={i} className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="text-sm text-stone-700">{p.nome}</span>
+                                        {p.quantita > 1 && (
+                                          <span className="text-xs bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded-full flex-shrink-0">x{p.quantita}</span>
+                                        )}
+                                      </div>
+                                      {p.parrucchiere && (
+                                        <span className="text-xs text-stone-400 flex-shrink-0">{p.parrucchiere}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </>
