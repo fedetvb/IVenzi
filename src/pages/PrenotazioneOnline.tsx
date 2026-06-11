@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle, Mail, FileText, Camera } from 'lucide-react';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 const EDGE_URL = `${SUPABASE_URL}/functions/v1/prenota-online`;
 const MIEI_MSG_URL = `${SUPABASE_URL}/functions/v1/miei-messaggi`;
 const MIE_CARTE_URL = `${SUPABASE_URL}/functions/v1/mie-carte`;
+const AGGIORNA_PROFILO_URL = `${SUPABASE_URL}/functions/v1/aggiorna-profilo`;
 
 interface Parrucchiere {
   id: string;
@@ -39,7 +40,7 @@ interface SalonInfo {
   serviziAbbinati: ServizioAbbinato[];
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo';
 
 interface MioMessaggio {
   id: string;
@@ -171,6 +172,24 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [mieCarteData, setMieCarteData] = useState<MieCarteData | null>(null);
   const [loadingMieCarte, setLoadingMieCarte] = useState(false);
   const [mieCarteError, setMieCarteError] = useState('');
+
+  // Il mio profilo
+  const [profiloNome, setProfiloNome] = useState('');
+  const [profiloCognome, setProfiloCognome] = useState('');
+  const [profiloTelefono, setProfiloTelefono] = useState('');
+  const [profiloEmail, setProfiloEmail] = useState('');
+  const [profiloDataNascita, setProfiloDataNascita] = useState('');
+  const [profiloNote, setProfiloNote] = useState('');
+  const [profiloFotoUrl, setProfiloFotoUrl] = useState('');
+  const [profiloFotoBase64, setProfiloFotoBase64] = useState('');
+  const [profiloFotoMime, setProfiloFotoMime] = useState('');
+  const [profiloFotoPreview, setProfiloFotoPreview] = useState('');
+  const [loadingProfilo, setLoadingProfilo] = useState(false);
+  const [profiloSaving, setProfiloSaving] = useState(false);
+  const [profiloError, setProfiloError] = useState('');
+  const [profiloSaved, setProfiloSaved] = useState(false);
+  const profiloFotoRef = useRef<HTMLInputElement>(null);
+  const profiloFotoCameraRef = useRef<HTMLInputElement>(null);
 
   // Selections
   const [parrucchiere, setParrucchiere] = useState<Parrucchiere | null>(null);
@@ -420,6 +439,86 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     } finally {
       setLoadingMieCarte(false);
     }
+  }
+
+  async function loadProfilo() {
+    setLoadingProfilo(true);
+    setProfiloError('');
+    try {
+      const res = await fetch(`${AGGIORNA_PROFILO_URL}?user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      const c = data.cliente;
+      if (c) {
+        setProfiloNome(c.nome ?? '');
+        setProfiloCognome(c.cognome ?? '');
+        setProfiloTelefono(c.telefono ?? '');
+        setProfiloEmail(c.email ?? '');
+        setProfiloDataNascita(c.data_nascita ?? '');
+        setProfiloNote(c.note ?? '');
+        setProfiloFotoUrl(c.foto_url ?? '');
+        setProfiloFotoPreview(c.foto_url ?? '');
+      }
+    } catch {
+      setProfiloError('Impossibile caricare i dati. Riprova.');
+    } finally {
+      setLoadingProfilo(false);
+    }
+  }
+
+  async function handleProfiloSave() {
+    if (!profiloNome.trim() || !profiloCognome.trim()) {
+      setProfiloError('Nome e cognome sono obbligatori.');
+      return;
+    }
+    setProfiloSaving(true);
+    setProfiloError('');
+    setProfiloSaved(false);
+    try {
+      const body: Record<string, string> = {
+        user_id: userId,
+        telefono: telefono.trim(),
+        nome: profiloNome.trim(),
+        cognome: profiloCognome.trim(),
+        email: profiloEmail.trim(),
+        data_nascita: profiloDataNascita,
+        note: profiloNote.trim(),
+      };
+      if (profiloFotoBase64) {
+        body.foto_base64 = profiloFotoBase64;
+        body.foto_mime = profiloFotoMime;
+      }
+      const res = await fetch(AGGIORNA_PROFILO_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      setProfiloSaved(true);
+      setProfiloFotoBase64('');
+      setTimeout(() => setProfiloSaved(false), 3000);
+    } catch (err) {
+      setProfiloError(err instanceof Error ? err.message : 'Errore durante il salvataggio. Riprova.');
+    } finally {
+      setProfiloSaving(false);
+    }
+  }
+
+  function handleProfiloFoto(file: File) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setProfiloError('La foto non deve superare 5 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const data = ev.target?.result as string;
+      setProfiloFotoBase64(data.split(',')[1]);
+      setProfiloFotoMime(file.type || 'image/jpeg');
+      setProfiloFotoPreview(data);
+    };
+    reader.readAsDataURL(file);
   }
 
   async function handleSegnaGiftPassDonata(giftPassId: string): Promise<boolean> {
@@ -1001,7 +1100,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-24">
         {/* Progress indicator */}
-        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && step !== 'mie_carte' && (
+        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && step !== 'mie_carte' && step !== 'profilo' && (
           <StepProgress step={step} />
         )}
 
@@ -1134,6 +1233,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-stone-400 mt-0.5">Carte premium, sconti e movimenti</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-rose-500 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
+              onClick={() => { loadProfilo(); setStep('profilo'); }}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-violet-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-violet-100 transition-colors">
+                <User size={26} className="text-violet-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">Il mio profilo</p>
+                <p className="text-sm text-stone-400 mt-0.5">I tuoi dati personali</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-violet-500 transition-colors flex-shrink-0" />
             </button>
 
             <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
@@ -1301,6 +1414,30 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             onRegala={handleRegalaCartaSconto}
             onSegnaGiftPassDonata={handleSegnaGiftPassDonata}
             nomeSalone={info?.nomeSalone ?? ''}
+          />
+        )}
+
+        {/* STEP: Il mio profilo */}
+        {step === 'profilo' && (
+          <ProfiloStep
+            nome={profiloNome} setNome={setProfiloNome}
+            cognome={profiloCognome} setCognome={setProfiloCognome}
+            telefono={profiloTelefono} setTelefono={setProfiloTelefono}
+            email={profiloEmail} setEmail={setProfiloEmail}
+            dataNascita={profiloDataNascita} setDataNascita={setProfiloDataNascita}
+            note={profiloNote} setNote={setProfiloNote}
+            fotoUrl={profiloFotoUrl}
+            fotoPreview={profiloFotoPreview}
+            fotoRef={profiloFotoRef}
+            fotoCameraRef={profiloFotoCameraRef}
+            onFotoChange={handleProfiloFoto}
+            onFotoRemove={() => { setProfiloFotoBase64(''); setProfiloFotoMime(''); setProfiloFotoPreview(profiloFotoUrl); }}
+            loading={loadingProfilo}
+            saving={profiloSaving}
+            error={profiloError}
+            saved={profiloSaved}
+            onSave={handleProfiloSave}
+            onBack={() => setStep('scelta')}
           />
         )}
 
@@ -2579,6 +2716,223 @@ function MieiMessaggiStep({
           </div>
         </>
       )}
+
+      <BackBtn onClick={onBack} />
+    </div>
+  );
+}
+
+function ProfiloStep({
+  nome, setNome, cognome, setCognome, telefono, setTelefono,
+  email, setEmail, dataNascita, setDataNascita, note, setNote,
+  fotoUrl, fotoPreview, fotoRef, fotoCameraRef, onFotoChange, onFotoRemove,
+  loading, saving, error, saved, onSave, onBack,
+}: {
+  nome: string; setNome: (v: string) => void;
+  cognome: string; setCognome: (v: string) => void;
+  telefono: string; setTelefono: (v: string) => void;
+  email: string; setEmail: (v: string) => void;
+  dataNascita: string; setDataNascita: (v: string) => void;
+  note: string; setNote: (v: string) => void;
+  fotoUrl: string; fotoPreview: string;
+  fotoRef: React.RefObject<HTMLInputElement>;
+  fotoCameraRef: React.RefObject<HTMLInputElement>;
+  onFotoChange: (f: File) => void;
+  onFotoRemove: () => void;
+  loading: boolean; saving: boolean; error: string; saved: boolean;
+  onSave: () => void; onBack: () => void;
+}) {
+  const hasFoto = !!fotoPreview;
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <p className="text-xl font-bold text-stone-800">Il mio profilo</p>
+        <p className="text-sm text-stone-400 mt-0.5">Aggiorna i tuoi dati personali</p>
+      </div>
+
+      {/* Foto */}
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          {hasFoto ? (
+            <img
+              src={fotoPreview}
+              alt="Foto profilo"
+              className="w-28 h-28 rounded-full object-cover border-4 border-violet-200 shadow-lg"
+            />
+          ) : (
+            <div className="w-28 h-28 rounded-full bg-violet-50 border-2 border-dashed border-violet-300 flex flex-col items-center justify-center gap-1">
+              <User size={32} className="text-violet-300" />
+              <span className="text-[10px] text-violet-400 font-medium">Nessuna foto</span>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap justify-center">
+          <button
+            type="button"
+            onClick={() => fotoCameraRef.current?.click()}
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium text-stone-600 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-all"
+          >
+            <Camera size={14} /> Selfie
+          </button>
+          <button
+            type="button"
+            onClick={() => fotoRef.current?.click()}
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium text-stone-600 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-all"
+          >
+            <Image size={14} /> Galleria
+          </button>
+          {hasFoto && (
+            <button
+              type="button"
+              onClick={onFotoRemove}
+              className="flex items-center gap-1.5 px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-all"
+            >
+              <Trash2 size={14} /> Rimuovi
+            </button>
+          )}
+        </div>
+        <input
+          ref={fotoCameraRef}
+          type="file"
+          accept="image/*"
+          capture="user"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) onFotoChange(f); e.target.value = ''; }}
+        />
+        <input
+          ref={fotoRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) onFotoChange(f); e.target.value = ''; }}
+        />
+      </div>
+
+      {/* Form */}
+      <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 space-y-5">
+        {/* Dati personali */}
+        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Dati personali</p>
+
+        <Field label="Nome *">
+          <div className="relative">
+            <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              value={nome}
+              onChange={e => { const v = e.target.value; setNome(v.length > 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v); }}
+              placeholder="Il tuo nome"
+              className="input pl-9"
+            />
+          </div>
+        </Field>
+
+        <Field label="Cognome *">
+          <div className="relative">
+            <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              value={cognome}
+              onChange={e => { const v = e.target.value; setCognome(v.length > 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v); }}
+              placeholder="Il tuo cognome"
+              className="input pl-9"
+            />
+          </div>
+        </Field>
+
+        <Field label="Data di nascita">
+          <div className="relative">
+            <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              type="date"
+              value={dataNascita}
+              onChange={e => setDataNascita(e.target.value)}
+              className="input pl-9"
+            />
+          </div>
+        </Field>
+
+        <div className="h-px bg-stone-100" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Contatti</p>
+
+        <Field label="Telefono">
+          <div className="relative">
+            <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              value={telefono}
+              onChange={e => setTelefono(e.target.value)}
+              placeholder="+39 333 000 0000"
+              type="tel"
+              className="input pl-9"
+              readOnly
+            />
+          </div>
+          <p className="text-[11px] text-stone-400 mt-1">Il numero non può essere modificato da qui</p>
+        </Field>
+
+        <Field label="Email">
+          <div className="relative">
+            <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="nome@esempio.it"
+              type="email"
+              className="input pl-9"
+            />
+          </div>
+        </Field>
+
+        <div className="h-px bg-stone-100" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Note aggiuntive</p>
+
+        <Field label="Allergie / Preferenze">
+          <div className="relative">
+            <FileText size={15} className="absolute left-3 top-3.5 text-stone-400" />
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Allergie, preferenze, informazioni utili..."
+              rows={3}
+              className="w-full border border-stone-200 rounded-2xl pl-9 pr-4 py-3 text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none focus:border-violet-400 resize-none"
+            />
+          </div>
+        </Field>
+      </div>
+
+      {/* Errore */}
+      {error && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+          <X size={15} className="text-red-500 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
+      )}
+
+      {/* Salvato */}
+      {saved && (
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+          <Check size={15} className="text-emerald-600 flex-shrink-0" />
+          <p className="text-sm text-emerald-700 font-medium">Profilo aggiornato!</p>
+        </div>
+      )}
+
+      {/* Salva */}
+      <button
+        onClick={onSave}
+        disabled={saving}
+        className="w-full py-4 bg-violet-600 text-white font-semibold rounded-2xl hover:bg-violet-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+      >
+        {saving ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <><Check size={18} />Salva modifiche</>
+        )}
+      </button>
 
       <BackBtn onClick={onBack} />
     </div>
