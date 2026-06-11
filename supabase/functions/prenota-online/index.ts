@@ -499,6 +499,115 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // GET /miei-appuntamenti?user_id=...&telefono=...
+  if (req.method === "GET" && path === "/miei-appuntamenti") {
+    try {
+      const userId = url.searchParams.get("user_id");
+      const telefono = url.searchParams.get("telefono");
+      if (!userId || !telefono) return json({ error: "Parametri mancanti" }, 400);
+
+      const telNorm = telefono.replace(/\s/g, "");
+
+      // Find cliente by phone
+      const { data: cliente } = await sb
+        .from("clienti")
+        .select("id")
+        .eq("user_id", userId)
+        .ilike("telefono", telNorm)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      // Fetch appuntamenti by cliente_id (all, past + future)
+      let appuntamentiRaw: { id: string; data_ora: string; stato: string; parrucchiere_id: string | null }[] = [];
+      if (cliente?.id) {
+        const { data } = await sb
+          .from("appuntamenti")
+          .select("id, data_ora, stato, parrucchiere_id")
+          .eq("user_id", userId)
+          .eq("cliente_id", cliente.id)
+          .neq("stato", "cancellato")
+          .is("deleted_at", null)
+          .order("data_ora", { ascending: false });
+        appuntamentiRaw = (data ?? []) as typeof appuntamentiRaw;
+      }
+
+      // Fetch trattamenti for all appuntamenti
+      const appIds = appuntamentiRaw.map((a) => a.id);
+      let trattamentiRaw: { appuntamento_id: string; nome_trattamento: string }[] = [];
+      if (appIds.length > 0) {
+        const { data } = await sb
+          .from("appuntamento_trattamenti")
+          .select("appuntamento_id, nome_trattamento")
+          .in("appuntamento_id", appIds);
+        trattamentiRaw = (data ?? []) as typeof trattamentiRaw;
+      }
+
+      // Fetch pending richieste_appuntamento (only future, only in_attesa)
+      const { data: richiesteRaw } = await sb
+        .from("richieste_appuntamento")
+        .select("id, data_ora, parrucchiere_id, servizio_id, chiunque")
+        .eq("user_id", userId)
+        .ilike("telefono", telNorm)
+        .eq("stato", "in_attesa")
+        .gte("data_ora", new Date().toISOString())
+        .order("data_ora", { ascending: true });
+
+      // Collect all parrucchiere IDs
+      const parrIds = [...new Set([
+        ...appuntamentiRaw.map((a) => a.parrucchiere_id),
+        ...((richiesteRaw ?? []) as { parrucchiere_id: string | null }[]).map((r) => r.parrucchiere_id),
+      ].filter(Boolean) as string[])];
+
+      let parrucchieriRaw: { id: string; nome: string; colore: string }[] = [];
+      if (parrIds.length > 0) {
+        const { data } = await sb.from("parrucchieri").select("id, nome, colore").in("id", parrIds);
+        parrucchieriRaw = (data ?? []) as typeof parrucchieriRaw;
+      }
+
+      // Collect all servizio IDs from richieste
+      const servizioIds = [...new Set(
+        ((richiesteRaw ?? []) as { servizio_id: string }[]).map((r) => r.servizio_id).filter(Boolean)
+      )];
+      let serviziRaw: { id: string; nome: string }[] = [];
+      if (servizioIds.length > 0) {
+        const { data } = await sb.from("trattamenti_catalogo").select("id, nome").in("id", servizioIds);
+        serviziRaw = (data ?? []) as typeof serviziRaw;
+      }
+
+      // Build lookup maps
+      const parrMap = Object.fromEntries(parrucchieriRaw.map((p) => [p.id, p]));
+      const servMap = Object.fromEntries(serviziRaw.map((s) => [s.id, s.nome]));
+      const trattByApp: Record<string, string[]> = {};
+      for (const t of trattamentiRaw) {
+        if (!trattByApp[t.appuntamento_id]) trattByApp[t.appuntamento_id] = [];
+        if (t.nome_trattamento) trattByApp[t.appuntamento_id].push(t.nome_trattamento);
+      }
+
+      const appuntamenti = appuntamentiRaw.map((a) => ({
+        id: a.id,
+        data_ora: a.data_ora,
+        stato: a.stato,
+        parrucchiere: a.parrucchiere_id ? (parrMap[a.parrucchiere_id] ?? null) : null,
+        servizi: trattByApp[a.id] ?? [],
+        tipo: "appuntamento" as const,
+      }));
+
+      const richieste = ((richiesteRaw ?? []) as { id: string; data_ora: string; parrucchiere_id: string | null; servizio_id: string; chiunque: boolean }[]).map((r) => ({
+        id: r.id,
+        data_ora: r.data_ora,
+        stato: "in_attesa" as const,
+        parrucchiere: (r.chiunque || !r.parrucchiere_id) ? null : (parrMap[r.parrucchiere_id] ?? null),
+        servizi: r.servizio_id && servMap[r.servizio_id] ? [servMap[r.servizio_id]] : [],
+        tipo: "richiesta" as const,
+      }));
+
+      return json({ appuntamenti, richieste });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg }, 500);
+    }
+  }
+
   return json({ error: "Not found" }, 404);
 });
 

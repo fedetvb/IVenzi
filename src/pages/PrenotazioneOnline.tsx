@@ -40,7 +40,16 @@ interface SalonInfo {
   serviziAbbinati: ServizioAbbinato[];
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti';
+
+interface AppuntamentoCliente {
+  id: string;
+  data_ora: string;
+  stato: string;
+  parrucchiere: { id: string; nome: string; colore: string } | null;
+  servizi: string[];
+  tipo: 'appuntamento' | 'richiesta';
+}
 
 interface MioMessaggio {
   id: string;
@@ -240,6 +249,15 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [msgSubmitting, setMsgSubmitting] = useState(false);
   const [msgError, setMsgError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // I miei appuntamenti
+  const [mieiAppuntamenti, setMieiAppuntamenti] = useState<AppuntamentoCliente[]>([]);
+  const [mieiRichiestePendenti, setMieiRichiestePendenti] = useState<AppuntamentoCliente[]>([]);
+  const [loadingMieiAppuntamenti, setLoadingMieiAppuntamenti] = useState(false);
+  const [mieiAppuntamentiError, setMieiAppuntamentiError] = useState('');
+  const [bannerDismissed, setBannerDismissed] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('appt_banners_v1') ?? '{}'); } catch { return {}; }
+  });
 
   // I miei messaggi
   const [mieiMsg, setMieiMsg] = useState<MioMessaggio[]>([]);
@@ -890,6 +908,30 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     return messaggi;
   }
 
+  async function loadMieiAppuntamenti() {
+    setLoadingMieiAppuntamenti(true);
+    setMieiAppuntamentiError('');
+    try {
+      const tel = telefono.trim();
+      if (!tel) throw new Error('Nessun numero di telefono');
+      const res = await fetch(`${EDGE_URL}/miei-appuntamenti?user_id=${userId}&telefono=${encodeURIComponent(tel)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      setMieiAppuntamenti(data.appuntamenti ?? []);
+      setMieiRichiestePendenti(data.richieste ?? []);
+    } catch {
+      setMieiAppuntamentiError('Impossibile caricare gli appuntamenti. Riprova.');
+    } finally {
+      setLoadingMieiAppuntamenti(false);
+    }
+  }
+
+  function dismissBanner(key: string) {
+    const next = { ...bannerDismissed, [key]: true };
+    setBannerDismissed(next);
+    localStorage.setItem('appt_banners_v1', JSON.stringify(next));
+  }
+
   async function loadMieiMessaggi() {
     setLoadingMieiMsg(true);
     setMieiMsgError('');
@@ -1247,7 +1289,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       <div className="max-w-lg mx-auto px-4 py-6 pb-24">
         {/* Progress indicator */}
-        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && step !== 'mie_carte' && step !== 'profilo' && (
+        {step !== 'successo' && step !== 'scelta' && step !== 'scrivici' && step !== 'successo_messaggio' && step !== 'miei_messaggi' && step !== 'mie_carte' && step !== 'profilo' && step !== 'miei_appuntamenti' && (
           <StepProgress step={step} />
         )}
 
@@ -1519,6 +1561,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <ChevronRight size={20} className="text-stone-300 group-hover:text-rose-500 transition-colors flex-shrink-0" />
             </button>
 
+            <button
+              onClick={() => { loadMieiAppuntamenti(); setStep('miei_appuntamenti'); }}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-teal-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-teal-100 transition-colors">
+                <Calendar size={26} className="text-teal-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">I miei appuntamenti</p>
+                <p className="text-sm text-stone-400 mt-0.5">Storico e prossimi appuntamenti</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-teal-500 transition-colors flex-shrink-0" />
+            </button>
+
             <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
               <p className="text-sm text-sky-700 leading-relaxed">
                 <span className="font-semibold">Hai un'idea in testa ma non sai come spiegarla?</span><br />
@@ -1686,6 +1742,165 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             nomeSalone={info?.nomeSalone ?? ''}
           />
         )}
+
+        {/* STEP: I miei appuntamenti */}
+        {step === 'miei_appuntamenti' && (() => {
+          const now = new Date();
+          const todayDateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+          const tomorrowDateStr = addDays(todayDateStr, 1);
+
+          const allItems = [...mieiAppuntamenti, ...mieiRichiestePendenti];
+          const futuri = allItems
+            .filter(a => new Date(a.data_ora) >= now)
+            .sort((a, b) => new Date(a.data_ora).getTime() - new Date(b.data_ora).getTime());
+          const passati = mieiAppuntamenti
+            .filter(a => new Date(a.data_ora) < now)
+            .sort((a, b) => new Date(b.data_ora).getTime() - new Date(a.data_ora).getTime());
+
+          // Banners: find confirmed future appointments today or tomorrow
+          const bannersToShow = futuri.filter(a => {
+            if (a.tipo !== 'appuntamento') return false;
+            const dataStr = new Date(a.data_ora).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+            return (dataStr === todayDateStr || dataStr === tomorrowDateStr);
+          });
+
+          function formatOra(isoStr: string) {
+            return new Date(isoStr).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+          }
+          function formatDataLunga(isoStr: string) {
+            return new Date(isoStr).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', day: 'numeric', month: 'long', year: 'numeric' });
+          }
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <button onClick={() => setStep('scelta')} className="w-9 h-9 flex items-center justify-center rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-100 transition-colors flex-shrink-0">
+                  <ChevronLeft size={18} />
+                </button>
+                <div>
+                  <p className="text-xl font-bold text-stone-800">I miei appuntamenti</p>
+                  <p className="text-sm text-stone-400">{nome} {cognome}</p>
+                </div>
+              </div>
+
+              {/* Banners oggi/domani */}
+              {bannersToShow.map(a => {
+                const dataStr = new Date(a.data_ora).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+                const isOggi = dataStr === todayDateStr;
+                const bannerKey = `${a.id}_${isOggi ? 'oggi' : 'domani'}`;
+                if (bannerDismissed[bannerKey]) return null;
+                return (
+                  <div key={bannerKey} className="bg-pink-100 border border-pink-300 rounded-2xl px-5 py-4 flex items-start gap-3">
+                    <Bell size={20} className="text-pink-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-pink-800 text-sm">
+                        {isOggi ? 'Oggi' : 'Domani'} hai un appuntamento alle {formatOra(a.data_ora)}
+                      </p>
+                      {a.servizi.length > 0 && (
+                        <p className="text-xs text-pink-600 mt-0.5">{a.servizi.join(' + ')}</p>
+                      )}
+                    </div>
+                    <button onClick={() => dismissBanner(bannerKey)} className="text-pink-400 hover:text-pink-700 transition-colors flex-shrink-0">
+                      <X size={16} />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {loadingMieiAppuntamenti && (
+                <div className="flex justify-center py-10">
+                  <div className="w-7 h-7 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+
+              {mieiAppuntamentiError && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
+                  <p className="text-sm text-red-600 mb-3">{mieiAppuntamentiError}</p>
+                  <button onClick={loadMieiAppuntamenti} className="text-sm font-semibold text-red-700 underline">Riprova</button>
+                </div>
+              )}
+
+              {!loadingMieiAppuntamenti && !mieiAppuntamentiError && (
+                <>
+                  {/* Richieste pendenti */}
+                  {mieiRichiestePendenti.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">In attesa di conferma</p>
+                      {mieiRichiestePendenti.map(r => (
+                        <div key={r.id} className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-stone-800 text-sm">
+                                {new Date(r.data_ora).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long' })}
+                              </p>
+                              <p className="text-stone-600 text-sm mt-0.5">{formatOra(r.data_ora)}{r.parrucchiere ? ` · ${r.parrucchiere.nome}` : ''}</p>
+                              {r.servizi.length > 0 && (
+                                <p className="text-xs text-stone-400 mt-1">{r.servizi.join(' + ')}</p>
+                              )}
+                            </div>
+                            <span className="flex-shrink-0 bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full">In attesa</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Prossimi appuntamenti */}
+                  {futuri.filter(a => a.tipo === 'appuntamento').length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Prossimi</p>
+                      {futuri.filter(a => a.tipo === 'appuntamento').map(a => (
+                        <div key={a.id} className="bg-white border border-stone-200 rounded-2xl px-5 py-4 shadow-sm">
+                          <div className="flex items-start gap-3">
+                            {a.parrucchiere && (
+                              <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: a.parrucchiere.colore }} />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-stone-800">
+                                {new Date(a.data_ora).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long' })}
+                              </p>
+                              <p className="text-teal-700 font-bold text-lg leading-tight">{formatOra(a.data_ora)}</p>
+                              {a.parrucchiere && <p className="text-sm text-stone-500 mt-0.5">{a.parrucchiere.nome}</p>}
+                              {a.servizi.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {a.servizi.map((s, i) => (
+                                    <span key={i} className="bg-teal-50 text-teal-700 text-xs font-medium px-2.5 py-1 rounded-full border border-teal-200">{s}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Passati */}
+                  {passati.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Precedenti</p>
+                      {passati.map(a => (
+                        <div key={a.id} className="bg-stone-50 border border-stone-200 rounded-2xl px-5 py-3.5">
+                          <p className="text-sm text-stone-500">{formatDataLunga(a.data_ora)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {mieiAppuntamenti.length === 0 && mieiRichiestePendenti.length === 0 && (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <Calendar size={28} className="text-stone-300" />
+                      </div>
+                      <p className="font-semibold text-stone-600">Nessun appuntamento trovato</p>
+                      <p className="text-sm text-stone-400 mt-1">I tuoi prossimi appuntamenti compariranno qui</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* STEP: Il mio profilo */}
         {step === 'profilo' && (
