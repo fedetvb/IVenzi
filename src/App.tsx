@@ -145,11 +145,19 @@ export default function App() {
       const romeStr = now.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
       const todayKey = romeStr.split(' ')[0]; // yyyy-mm-dd
 
-      // 1. Banner "ricorda di inviare i messaggi appuntamento" — solo prima delle 11:00 ora italiana
-      const romeTimePart = romeStr.split(' ')[1]; // HH:mm:ss
-      const romeHour = parseInt(romeTimePart.split(':')[0], 10);
-      if (romeHour < 11) {
-        setShowAppBanner(true);
+      // 1. Banner "ricorda di inviare i messaggi appuntamento" — orario configurabile
+      const [appBannerAttivo, appBannerDa, appBannerA] = await Promise.all([
+        getImpostazione('banner_promemoria_app_attivo'),
+        getImpostazione('banner_promemoria_app_da'),
+        getImpostazione('banner_promemoria_app_a'),
+      ]);
+      if (appBannerAttivo !== 'false') {
+        const nowTime = romeStr.split(' ')[1].slice(0, 5); // HH:mm
+        const da = appBannerDa ?? '07:00';
+        const a = appBannerA ?? '11:00';
+        if (nowTime >= da && nowTime <= a) {
+          setShowAppBanner(true);
+        }
       }
 
       // 2. Compleanni del giorno — mostrato ad ogni apertura dell'app
