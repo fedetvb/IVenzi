@@ -236,9 +236,15 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     }
     setClientiConCarte(ids);
 
-    const { data: ficheConv } = await dbSelect({ table: 'fiches', columns: 'appuntamento_id', filters: [{ col: 'convalidata', op: 'eq', val: true }] });
-    const appIdsConFiche = ((ficheConv || []) as { appuntamento_id: string }[]).map(f => f.appuntamento_id).filter(Boolean);
+    const { data: ficheConv } = await dbSelect({ table: 'fiches', columns: 'appuntamento_id, cliente_id', filters: [{ col: 'convalidata', op: 'eq', val: true }] });
+    const ficheList = (ficheConv || []) as { appuntamento_id: string | null; cliente_id: string | null }[];
     const clientiConFiche = new Set<string>();
+    // fiches manuali: hanno cliente_id diretto
+    for (const f of ficheList) {
+      if (f.cliente_id) clientiConFiche.add(f.cliente_id);
+    }
+    // fiches collegate ad appuntamento: risali al cliente tramite appuntamento_id
+    const appIdsConFiche = ficheList.map(f => f.appuntamento_id).filter(Boolean) as string[];
     if (appIdsConFiche.length > 0) {
       const { data: appsConFiche } = await dbSelect({ table: 'appuntamenti', columns: 'cliente_id', filters: [{ col: 'id', op: 'in', val: appIdsConFiche }] });
       for (const a of (appsConFiche || []) as { cliente_id: string | null }[]) {
