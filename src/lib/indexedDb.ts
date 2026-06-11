@@ -152,6 +152,18 @@ export async function invalidateTableCache(table: string, userId: string): Promi
   }
 }
 
+export async function deleteTableCache(table: string, userId: string): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction('table_cache', 'readwrite');
+      tx.objectStore('table_cache').delete(`${table}:${userId}`);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch { /* non-critical */ }
+}
+
 export async function getTableCache(table: string, userId: string): Promise<unknown[] | null> {
   try {
     const db = await openDb();

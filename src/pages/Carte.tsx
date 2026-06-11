@@ -8,7 +8,7 @@ import { localDateStr } from '../lib/supabase';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
-import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete, getImpostazione } from '../lib/localDb';
+import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete, getImpostazione, invalidateTableCache } from '../lib/localDb';
 import { apriWhatsApp } from '../lib/waUtils';
 
 type TipoPagamento = 'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null;
@@ -2065,6 +2065,7 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    await invalidateTableCache('gift_pass');
     const [res, sn] = await Promise.all([
       dbSelect({ table: 'gift_pass', filters: [{ col: 'deleted_at', op: 'is_null' }], orderBy: [{ col: 'created_at', asc: false }] }),
       getImpostazione('azienda_nome'),

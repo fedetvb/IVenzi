@@ -8,7 +8,7 @@
  */
 
 import { supabase } from './supabase';
-import { getTableCache, setTableCache, addPendingMutation } from './indexedDb';
+import { getTableCache, setTableCache, deleteTableCache, addPendingMutation } from './indexedDb';
 
 // ─── Helpers per aggiornamento cache offline ──────────────────────────────────
 
@@ -104,6 +104,11 @@ export function isElectron(): boolean {
 let _currentUserId: string | null = null;
 export function setCurrentUserId(id: string | null) { _currentUserId = id; }
 export function getCurrentUserId(): string | null { return _currentUserId; }
+
+/** Azzera il cache IndexedDB di una tabella per il corrente utente, forzando un reload da Supabase. */
+export async function invalidateTableCache(table: string): Promise<void> {
+  if (_currentUserId) await deleteTableCache(table, _currentUserId);
+}
 
 // ─── Helper: converti booleans SQLite (0/1) in boolean JS ────────────────────
 

@@ -38,6 +38,7 @@ const SYNC_TABLES: string[] = [
   'spese',
   'giorni_parrucchieri',
   'voci_extra_catalogo',
+  'gift_pass',
 ];
 
 // ─── Helper: scarica URL immagine e restituisce data URI base64 ───────────────
