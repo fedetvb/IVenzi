@@ -100,6 +100,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     in_attesa: { label: 'In attesa', class: 'bg-amber-100 text-amber-700' },
     completato: { label: 'Completato', class: 'bg-emerald-100 text-emerald-700' },
     cancellato: { label: 'Cancellato', class: 'bg-red-100 text-red-700' },
+    in_forse: { label: 'In forse', class: 'bg-slate-100 text-slate-600' },
   };
 
   if (loading) return (

@@ -30,6 +30,7 @@ interface Props {
 }
 
 const statoOptions: { value: StatoAppuntamento; label: string }[] = [
+  { value: 'in_forse', label: 'In forse' },
   { value: 'in_attesa', label: 'In attesa' },
   { value: 'confermato', label: 'Confermato' },
   { value: 'completato', label: 'Completato' },

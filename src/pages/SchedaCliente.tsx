@@ -68,12 +68,14 @@ const STATO_LABEL: Record<string, string> = {
   in_attesa: 'In attesa',
   completato: 'Completato',
   cancellato: 'Cancellato',
+  in_forse: 'In forse',
 };
 const STATO_CLASS: Record<string, string> = {
   confermato: 'bg-sky-100 text-sky-700',
   in_attesa: 'bg-amber-100 text-amber-700',
   completato: 'bg-emerald-100 text-emerald-700',
   cancellato: 'bg-red-100 text-red-700',
+  in_forse: 'bg-slate-100 text-slate-600',
 };
 
 // ─── RicaricaCartaModal ───────────────────────────────────────────────────────

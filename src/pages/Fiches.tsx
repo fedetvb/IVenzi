@@ -1694,6 +1694,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     confermato: 'bg-blue-100 text-blue-700',
     in_attesa: 'bg-amber-100 text-amber-700',
     completato: 'bg-emerald-100 text-emerald-700',
+    in_forse: 'bg-slate-100 text-slate-600',
   };
 
   const isManuale = gruppo.appuntamenti.length === 0;

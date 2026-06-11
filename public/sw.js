@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestionale-salone-v6';
+const CACHE_NAME = 'gestionale-salone-v7';
 
 // Asset statici da mettere in cache
 const STATIC_ASSETS = [

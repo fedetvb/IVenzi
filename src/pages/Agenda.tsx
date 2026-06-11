@@ -24,6 +24,7 @@ const STATO_COLORS: Record<string, string> = {
   in_attesa: 'bg-amber-400',
   completato: 'bg-emerald-500',
   cancellato: 'bg-stone-400',
+  in_forse: 'bg-slate-400',
 };
 
 const STATO_LABEL: Record<string, string> = {
@@ -31,6 +32,7 @@ const STATO_LABEL: Record<string, string> = {
   in_attesa: 'In attesa',
   completato: 'Completato',
   cancellato: 'Cancellato',
+  in_forse: 'In forse',
 };
 
 function startOfWeek(d: Date) {
@@ -351,21 +353,26 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
                       {apps.map(app => {
                         const cliente = (app as Appuntamento & { clienti?: { nome: string; cognome: string; id?: string } }).clienti;
                         const isCancellato = app.stato === 'cancellato';
+                        const isInForse = app.stato === 'in_forse';
                         const colorClass = STATO_COLORS[app.stato] ?? STATO_COLORS.confermato;
                         const hasCarta = cliente && (cliente as { id?: string }).id && clientiConCarte.has((cliente as { id: string }).id);
                         return (
                           <div
                             key={app.id}
                             onClick={e => { e.stopPropagation(); if (confirmDelete === app.id) { setConfirmDelete(null); } else { openEdit(app.id); } }}
-                            className={`${colorClass} text-white rounded-md px-2 py-1 text-xs mb-1 cursor-pointer group/app relative ${isCancellato ? 'opacity-70' : ''}`}
+                            className={`${colorClass} text-white rounded-md px-2 py-1 text-xs mb-1 cursor-pointer group/app relative overflow-hidden ${isCancellato ? 'opacity-70' : ''}`}
                             style={isCancellato ? { backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.15) 5px, rgba(0,0,0,0.15) 7px)' } : undefined}
                           >
-                            <div className="flex items-start justify-between gap-1">
+                            {isInForse && (
+                              <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.45) 1.5px, transparent 1.5px)', backgroundSize: '7px 7px' }} />
+                            )}
+                            <div className="relative flex items-start justify-between gap-1">
                               <div className="min-w-0">
                                 <p className={`font-semibold truncate flex items-center gap-1 ${isCancellato ? 'line-through opacity-80' : ''}`}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                   {hasCarta && <CreditCard size={9} className="opacity-80 flex-shrink-0 inline" />}
                                   {app.cliente_id && !clientiConFicheConvalidate.has(app.cliente_id) && <span className="text-[8px] font-bold bg-white/25 rounded px-1 flex-shrink-0 leading-tight">Nuova</span>}
+                                  {isInForse && <span className="text-[8px] font-bold bg-white/25 rounded px-1 flex-shrink-0 leading-tight">In forse</span>}
                                 </p>
                                 <p className="opacity-80">{new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · {app.durata_minuti}min</p>
                               </div>

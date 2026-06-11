@@ -690,6 +690,7 @@ export default function MultiBookModal({ dataIniziale, appuntamentoId, parrucchi
                 onChange={e => setStato(e.target.value as StatoAppuntamento)}
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
+                <option value="in_forse">In forse</option>
                 <option value="confermato">Confermato</option>
                 <option value="in_attesa">In attesa</option>
                 <option value="completato">Completato</option>

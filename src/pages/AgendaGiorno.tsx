@@ -120,6 +120,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [wpLoadingPos, setWpLoadingPos] = useState(false);
 
   const [appModal, setAppModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  const [inForsePanel, setInForsePanel] = useState<{ open: boolean; appId: string | null }>({ open: false, appId: null });
   const [multiModal, setMultiModal] = useState<{ open: boolean; date?: Date }>({ open: false });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [hiddenParr, setHiddenParr] = useState<Set<string>>(new Set());
@@ -581,6 +582,18 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   async function deleteAppuntamento(id: string) {
     await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
     setConfirmDelete(null);
+    load();
+  }
+
+  async function fissaAppuntamento(id: string) {
+    await dbUpdate({ table: 'appuntamenti', id, data: { stato: 'confermato' } });
+    setInForsePanel({ open: false, appId: null });
+    load();
+  }
+
+  async function cancellaInForse(id: string) {
+    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
+    setInForsePanel({ open: false, appId: null });
     load();
   }
 
@@ -1274,12 +1287,23 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 const last = lastTapRef.current;
                                 if (last && last.id === app.id && now - last.time < 450) {
                                   lastTapRef.current = null;
-                                  setAppModal({ open: true, id: app.id });
+                                  if (app.stato === 'in_forse') {
+                                    setInForsePanel({ open: true, appId: app.id });
+                                  } else {
+                                    setAppModal({ open: true, id: app.id });
+                                  }
                                 } else {
                                   lastTapRef.current = { id: app.id, time: now };
+                                  if (app.stato === 'in_forse') {
+                                    setInForsePanel({ open: true, appId: app.id });
+                                  }
                                 }
                               } else {
-                                setAppModal({ open: true, id: app.id });
+                                if (app.stato === 'in_forse') {
+                                  setInForsePanel({ open: true, appId: app.id });
+                                } else {
+                                  setAppModal({ open: true, id: app.id });
+                                }
                               }
                             } else {
                               onPointerUp();
@@ -1296,6 +1320,12 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                             <div
                               className="absolute inset-0 pointer-events-none opacity-25"
                               style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.5) 4px, rgba(0,0,0,0.5) 6px)' }}
+                            />
+                          )}
+                          {app.stato === 'in_forse' && (
+                            <div
+                              className="absolute inset-0 pointer-events-none"
+                              style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.55) 1.5px, transparent 1.5px)', backgroundSize: '7px 7px' }}
                             />
                           )}
 
@@ -1377,7 +1407,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                               <>
                                 <button
                                   onPointerDown={e => { e.stopPropagation(); suppressModalOpen.current = true; }}
-                                  onClick={e => { e.stopPropagation(); setAppModal({ open: true, id: app.id }); }}
+                                  onClick={e => { e.stopPropagation(); if (app.stato === 'in_forse') { setInForsePanel({ open: true, appId: app.id }); } else { setAppModal({ open: true, id: app.id }); } }}
                                   className="bg-black/20 hover:bg-black/40 rounded p-0.5 text-white"
                                 >
                                   <Edit2 size={9} />
@@ -1515,6 +1545,56 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           onSaved={() => { setAppModal({ open: false, id: null }); load(); }}
         />
       )}
+
+      {/* Pannello appuntamento in forse */}
+      {inForsePanel.open && inForsePanel.appId && (() => {
+        const app = appuntamenti.find(a => a.id === inForsePanel.appId);
+        const cliente = app?.clienti;
+        const nomeCliente = cliente ? `${cliente.nome} ${cliente.cognome}` : 'Appuntamento senza cliente';
+        const ora = app ? new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setInForsePanel({ open: false, appId: null })} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm z-10 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+                <div>
+                  <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide mb-0.5">Appuntamento in forse</p>
+                  <p className="font-bold text-stone-800 text-base leading-tight">{nomeCliente}</p>
+                  <p className="text-sm text-stone-400 mt-0.5">Ore {ora} · {app?.durata_minuti} min</p>
+                </div>
+                <button onClick={() => setInForsePanel({ open: false, appId: null })} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors">
+                  <X size={16} className="text-stone-400" />
+                </button>
+              </div>
+              {/* Actions */}
+              <div className="p-4 flex flex-col gap-3">
+                <button
+                  onClick={() => fissaAppuntamento(inForsePanel.appId!)}
+                  className="flex items-center gap-3 w-full px-4 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold transition-colors text-sm"
+                >
+                  <Check size={18} />
+                  Fissa appuntamento
+                </button>
+                <button
+                  onClick={() => { setInForsePanel({ open: false, appId: null }); setAppModal({ open: true, id: inForsePanel.appId }); }}
+                  className="flex items-center gap-3 w-full px-4 py-3.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-semibold transition-colors text-sm"
+                >
+                  <Pencil size={18} />
+                  Modifica appuntamento
+                </button>
+                <button
+                  onClick={() => cancellaInForse(inForsePanel.appId!)}
+                  className="flex items-center gap-3 w-full px-4 py-3.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-semibold transition-colors text-sm"
+                >
+                  <Trash2 size={18} />
+                  Cancella appuntamento
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Richiesta prenotazione online modal */}
       {richiestaModal.open && richiestaModal.r && (() => {
