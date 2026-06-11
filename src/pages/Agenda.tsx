@@ -62,6 +62,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
   const [clientiConCarte, setClientiConCarte] = useState<Set<string>>(new Set());
+  const [clientiConFicheConvalidate, setClientiConFicheConvalidate] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -159,6 +160,18 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
       if (r.cliente_id) ids.add(r.cliente_id);
     }
     setClientiConCarte(ids);
+
+    const { data: ficheConv } = await dbSelect({ table: 'fiches', columns: 'appuntamento_id', filters: [{ col: 'convalidata', op: 'eq', val: true }] });
+    const appIdsConFiche = ((ficheConv || []) as { appuntamento_id: string }[]).map(f => f.appuntamento_id).filter(Boolean);
+    const clientiConFiche = new Set<string>();
+    if (appIdsConFiche.length > 0) {
+      const { data: appsConFiche } = await dbSelect({ table: 'appuntamenti', columns: 'cliente_id', filters: [{ col: 'id', op: 'in', val: appIdsConFiche }] });
+      for (const a of (appsConFiche || []) as { cliente_id: string | null }[]) {
+        if (a.cliente_id) clientiConFiche.add(a.cliente_id);
+      }
+    }
+    setClientiConFicheConvalidate(clientiConFiche);
+
     setLoading(false);
   }, [weekStart]);
 
@@ -352,7 +365,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
                                 <p className={`font-semibold truncate flex items-center gap-1 ${isCancellato ? 'line-through opacity-80' : ''}`}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                   {hasCarta && <CreditCard size={9} className="opacity-80 flex-shrink-0 inline" />}
-                                  {(app as any).nuova_cliente && <span className="text-[8px] font-bold bg-white/25 rounded px-1 flex-shrink-0 leading-tight">Nuova</span>}
+                                  {app.cliente_id && !clientiConFicheConvalidate.has(app.cliente_id) && <span className="text-[8px] font-bold bg-white/25 rounded px-1 flex-shrink-0 leading-tight">Nuova</span>}
                                 </p>
                                 <p className="opacity-80">{new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} · {app.durata_minuti}min</p>
                               </div>

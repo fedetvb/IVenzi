@@ -465,6 +465,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [presentataDa, setPresentataDa] = useState<string | null>(null);
   const [haPortato, setHaPortato] = useState<string[]>([]);
+  const [haFicheConvalidate, setHaFicheConvalidate] = useState(false);
 
   const load = useCallback(async () => {
     const [clRes, scRes, appRes, cscRes, cprRes] = await Promise.all([
@@ -535,6 +536,14 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
     // Caso 1 – fiches legate ad appuntamento del cliente (cliente_id su appuntamenti)
     // Caso 2 – fiches manuali con cliente_id direttamente su fiches
     const appIds = (appRes.data || []).map(a => a.id);
+
+    if (appIds.length > 0) {
+      const { data: ficheConv } = await dbSelect({ table: 'fiches', columns: 'id', filters: [{ col: 'appuntamento_id', op: 'in', val: appIds }, { col: 'convalidata', op: 'eq', val: true }] });
+      setHaFicheConvalidate(((ficheConv || []) as unknown[]).length > 0);
+    } else {
+      setHaFicheConvalidate(false);
+    }
+
     const [vociViaAppRes, vociManualiRes] = await Promise.all([
       appIds.length > 0
         ? dbSelectWithRelated<any>({
@@ -886,7 +895,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
                       <p className="text-sm text-stone-400 mt-0.5">{app.durata_minuti} minuti</p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {(app as any).nuova_cliente && (
+                      {((app as any).nuova_cliente || !haFicheConvalidate) && (
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-600">Nuova cliente</span>
                       )}
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${stClass}`}>{stLabel}</span>

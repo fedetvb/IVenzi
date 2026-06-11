@@ -110,6 +110,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [assenzeMap, setAssenzeMap] = useState<Map<string, string | null>>(new Map());
   const [catalogoPosa, setCatalogoPosa] = useState<Map<string, { inizio_posa: number; durata_posa: number }>>(new Map());
+  const [clientiConFicheConvalidate, setClientiConFicheConvalidate] = useState<Set<string>>(new Set());
 
   const [richieste, setRichieste] = useState<RichiestaAppuntamento[]>([]);
   const [richiestaModal, setRichiestaModal] = useState<{ open: boolean; r: RichiestaAppuntamento | null; parrucchiereAssegnatoId?: string }>({ open: false, r: null });
@@ -226,6 +227,18 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       if (mm === dayMM && dd === dayDD) uniciBirthday.set(c.id, { nome: c.nome, cognome: c.cognome, telefono: c.telefono || undefined });
     }
     setCompleanni(Array.from(uniciBirthday.values()));
+
+    const { data: ficheConv } = await dbSelect({ table: 'fiches', columns: 'appuntamento_id', filters: [{ col: 'convalidata', op: 'eq', val: true }] });
+    const appIdsConFiche = ((ficheConv || []) as { appuntamento_id: string }[]).map(f => f.appuntamento_id).filter(Boolean);
+    const clientiConFiche = new Set<string>();
+    if (appIdsConFiche.length > 0) {
+      const { data: appsConFiche } = await dbSelect({ table: 'appuntamenti', columns: 'cliente_id', filters: [{ col: 'id', op: 'in', val: appIdsConFiche }] });
+      for (const a of (appsConFiche || []) as { cliente_id: string | null }[]) {
+        if (a.cliente_id) clientiConFiche.add(a.cliente_id);
+      }
+    }
+    setClientiConFicheConvalidate(clientiConFiche);
+
     setLoading(false);
   }, [date]);
 
@@ -1297,7 +1310,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 <p className={`font-semibold leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' }}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                 </p>
-                                {(app as any).nuova_cliente && !shortBlock && (
+                                {app.cliente_id && !clientiConFicheConvalidate.has(app.cliente_id) && !shortBlock && (
                                   <p className="text-white/90 font-semibold leading-tight mt-0.5" style={{ fontSize: `${0.6 * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.8)' }}>
                                     Nuova cliente
                                   </p>
