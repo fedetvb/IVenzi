@@ -9,6 +9,7 @@ import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbI
 import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import { generateCartaPremiumStampaPdf } from '../lib/cartePremiumPdfGenerator';
+import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti';
@@ -4131,6 +4132,64 @@ function CartaPremiumPreview() {
   );
 }
 
+// ─── Carta Sconto – anteprima visiva ─────────────────────────────────────────
+
+function CartaScontoPreview() {
+  const [side, setSide] = useState<'fronte' | 'retro'>('fronte');
+  const a0: React.CSSProperties = { position: 'absolute', inset: 0 };
+  const bg = 'linear-gradient(135deg,#0a6b62 0%,#0d8a80 45%,#0fb3a4 80%,#16c9b8 100%)';
+  const glow = 'radial-gradient(circle at 82% 50%,rgba(255,255,255,0.22) 0%,rgba(255,255,255,0.06) 42%,transparent 65%)';
+  return (
+    <div style={{ padding: '16px 20px', background: '#e0f2f0', borderBottom: '1px solid #d0ebe8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: '100%', maxWidth: 320, position: 'relative', aspectRatio: '85.60 / 53.98', borderRadius: 9, overflow: 'hidden', boxShadow: '0 8px 28px rgba(0,0,0,0.22),0 2px 6px rgba(0,0,0,0.12)' }}>
+        {side === 'fronte' ? (
+          <>
+            <div style={{ ...a0, background: bg }} />
+            <div style={{ ...a0, background: glow }} />
+            {/* CARTA SCONTO */}
+            <div style={{ position:'absolute', top:'7%', left:'4.5%', fontSize:'clamp(5px,2.2%,9px)', fontWeight:900, color:'rgba(255,255,255,0.96)', letterSpacing:'0.3em', whiteSpace:'nowrap', fontFamily:'Arial,sans-serif' }}>CARTA SCONTO</div>
+            {/* Gift icon */}
+            <div style={{ position:'absolute', top:'7%', right:'4%', width:'10%', aspectRatio:'1/1', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width:'100%', height:'100%' }}>
+                <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/>
+                <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+              </svg>
+            </div>
+            {/* MONOUSO badge (large) */}
+            <div style={{ position:'absolute', top:'63%', left:'4.5%', fontSize:'clamp(5px,2%,8px)', fontWeight:700, color:'rgba(255,255,255,0.96)', background:'rgba(255,255,255,0.18)', padding:'1.5% 2.5%', borderRadius:'4px', border:'0.5px solid rgba(255,255,255,0.35)', whiteSpace:'nowrap', fontFamily:'Arial,sans-serif', letterSpacing:'0.08em' }}>MONOUSO</div>
+            {/* Sconto % label area */}
+            <div style={{ position:'absolute', top:'63%', left:'36%', width:'38%', height:'22%', border:'0.5px dashed rgba(255,255,255,0.4)', borderRadius:2 }} />
+            <div style={{ position:'absolute', top:'87%', left:'36%', fontSize:'clamp(3px,1.4%,6px)', color:'rgba(255,255,255,0.55)', fontFamily:'Arial,sans-serif' }}>AREA SCONTO % (50×13 mm)</div>
+          </>
+        ) : (
+          /* RETRO: teal + QR */
+          <>
+            <div style={{ ...a0, background: bg }} />
+            <div style={{ ...a0, background: glow }} />
+            {/* Code label area */}
+            <div style={{ position:'absolute', top:'42%', left:'5%', width:'43%', height:'20%', border:'0.5px dashed rgba(255,255,255,0.4)', borderRadius:2 }} />
+            <div style={{ position:'absolute', top:'64%', left:'5%', fontSize:'clamp(3px,1.4%,6px)', color:'rgba(255,255,255,0.55)', fontFamily:'Arial,sans-serif' }}>AREA CODICE (50×13 mm)</div>
+            {/* QR placeholder */}
+            <div style={{ position:'absolute', top:'20%', right:'5%', width:'28%', aspectRatio:'1/1', background:'rgba(255,255,255,0.92)', borderRadius:4, display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'2%', padding:'5%', boxSizing:'border-box' }}>
+              {[1,1,1,0,1,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,0,1,1,1].map((v,i) => (
+                <div key={i} style={{ background: v ? '#0a3a35':'transparent', borderRadius:1, aspectRatio:'1/1' }} />
+              ))}
+            </div>
+            <div style={{ position:'absolute', top:'10%', right:'5%', width:'28%', textAlign:'center', fontSize:'clamp(3px,1.3%,5.5px)', color:'rgba(255,255,255,0.75)', fontFamily:'Arial,sans-serif', letterSpacing:'0.05em' }}>PRENOTA ONLINE</div>
+            {/* Watermark */}
+            <div style={{ position:'absolute', bottom:'5%', left:0, right:0, textAlign:'center', fontSize:'clamp(3px,1.3%,5.5px)', color:'rgba(255,255,255,0.18)', fontFamily:'Arial,sans-serif', letterSpacing:'0.2em' }}>CARTA SCONTO</div>
+          </>
+        )}
+      </div>
+      <div style={{ display:'flex', gap:6 }}>
+        {(['fronte','retro'] as const).map(s => (
+          <button key={s} onClick={() => setSide(s)} style={{ padding:'3px 14px', fontSize:10, fontWeight: side===s ? 700:400, color: side===s ? '#0a6b62':'#4a7a72', background: side===s ? 'rgba(10,107,98,0.10)':'transparent', border: side===s ? '1px solid rgba(10,107,98,0.4)':'1px solid transparent', borderRadius:20, cursor:'pointer', transition:'all 0.15s', textTransform:'uppercase', fontFamily:'inherit' }}>{s}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Pagina Scarica File e Documenti ─────────────────────────────────────────
 
 function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
@@ -4357,6 +4416,26 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
     setLoading(null);
   }
 
+  // ── Stampa Carta Sconto ──────────────────────────────────────────────────
+  async function scaricaCartaScontoPdf() {
+    setLoading('carta_sconto_pdf');
+    try {
+      const [nomeVal, urlVal] = await Promise.all([
+        getImpostazione('azienda_nome'),
+        getImpostazione('azienda_sito_prenotazioni'),
+      ]);
+      const blob = await generateCartaScontoPdfStampa({
+        saloneName: nomeVal ?? '',
+        bookingUrl: urlVal ?? '',
+      });
+      await saveFile('fiches', 'carta-sconto-stampa.pdf', blob);
+      showFeedback('carta_sconto_pdf', 'PDF scaricato: carta-sconto-stampa.pdf');
+    } catch {
+      showFeedback('carta_sconto_pdf', 'Errore durante la generazione del PDF.', false);
+    }
+    setLoading(null);
+  }
+
   // ── Fiches PDF ────────────────────────────────────────────────────────────
   async function scaricaFichePdf() {
     setLoading('fiches_pdf');
@@ -4426,6 +4505,7 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
       hoverColor: 'text-amber-600',
       voci: [
         { key: 'carta_premium_pdf', label: 'Carta Premium – Fronte + Retro (PDF)', fn: scaricaCartaPremiumPdf },
+        { key: 'carta_sconto_pdf', label: 'Carta Sconto – Fronte + Retro (PDF)', fn: scaricaCartaScontoPdf },
       ],
     },
     {
@@ -4506,7 +4586,12 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
               />
             )}
           </div>
-          {cat.key === 'stampa_carte' && <CartaPremiumPreview />}
+          {cat.key === 'stampa_carte' && (
+            <>
+              <CartaPremiumPreview />
+              <CartaScontoPreview />
+            </>
+          )}
           <div className="divide-y divide-stone-50">
             {cat.voci.map(voce => {
               const isLoading = loading === voce.key;
