@@ -109,6 +109,14 @@ Deno.serve(async (req: Request) => {
       if (impostazioni[k]) social[k] = impostazioni[k];
     }
 
+    const annuncio = {
+      attivo: impostazioni["annuncio_attivo"] === "true",
+      sfondo: impostazioni["annuncio_sfondo"] ?? "generico",
+      testo: impostazioni["annuncio_testo"] ?? "",
+      id: impostazioni["annuncio_id"] ?? "",
+      compleannoTesto: impostazioni["annuncio_compleanno_testo"] ?? "",
+    };
+
     return json({
       prenotazioniAttive,
       portaleNascosto,
@@ -118,6 +126,7 @@ Deno.serve(async (req: Request) => {
       servizi: serviziConAbbinati,
       serviziAbbinati,
       social,
+      annuncio,
     });
   }
 

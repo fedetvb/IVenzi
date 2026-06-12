@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle, Mail, FileText, Camera } from 'lucide-react';
+import AnnuncioModal, { COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
@@ -41,6 +42,13 @@ interface SalonInfo {
   servizi: Servizio[];
   serviziAbbinati: ServizioAbbinato[];
   social?: Record<string, string>;
+  annuncio?: {
+    attivo: boolean;
+    sfondo: string;
+    testo: string;
+    id: string;
+    compleannoTesto: string;
+  };
 }
 
 type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi';
@@ -275,6 +283,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     try { return JSON.parse(localStorage.getItem('appt_banners_v1') ?? '{}'); } catch { return {}; }
   });
 
+  // Annuncio / compleanno
+  const [showAnnuncio, setShowAnnuncio] = useState<null | 'annuncio' | 'compleanno'>(null);
+  const [clienteDataNascita, setClienteDataNascita] = useState('');
+
   // I miei messaggi
   const [mieiMsg, setMieiMsg] = useState<MioMessaggio[]>([]);
   const [loadingMieiMsg, setLoadingMieiMsg] = useState(false);
@@ -369,6 +381,35 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   // Tieni stepRef sincronizzato
   useEffect(() => { stepRef.current = step; }, [step]);
+
+  // Mostra annuncio / compleanno al passaggio a 'scelta'
+  useEffect(() => {
+    if (step !== 'scelta') return;
+    const today = new Date();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayMmDd = `${mm}-${dd}`;
+    const year = today.getFullYear();
+
+    // Compleanno
+    if (clienteDataNascita && clienteDataNascita.length >= 5) {
+      const nascitaMmDd = clienteDataNascita.substring(5); // "MM-DD"
+      const birthdayKey = `birthday_ann_${userId}_${year}`;
+      if (nascitaMmDd === todayMmDd && localStorage.getItem(birthdayKey) !== '1') {
+        setShowAnnuncio('compleanno');
+        return;
+      }
+    }
+
+    // Annuncio normale
+    const ann = info?.annuncio;
+    if (ann?.attivo && ann.id && ann.testo) {
+      const annKey = `ann_seen_${userId}_${ann.id}`;
+      if (localStorage.getItem(annKey) !== '1') {
+        setShowAnnuncio('annuncio');
+      }
+    }
+  }, [step, clienteDataNascita]);
 
   // Polling risposte in background (ogni 30s, dopo che l'utente ha inserito i dati)
   useEffect(() => {
@@ -742,6 +783,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           );
           const profData = await profRes.json();
           isClienteConfermata = !!(profData.cliente);
+          if (profData.cliente?.data_nascita) {
+            setClienteDataNascita(profData.cliente.data_nascita);
+          }
         } catch { /* non bloccante */ }
       }
 
@@ -1210,6 +1254,32 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   return (
     <div className="min-h-screen bg-stone-50">
+      {/* Annuncio / Birthday modal */}
+      {showAnnuncio === 'compleanno' && (
+        <AnnuncioModal
+          sfondo="compleanno"
+          testo={info.annuncio?.compleannoTesto || COMPLEANNO_DEFAULT_TESTO}
+          nome={nome}
+          isCompleanno
+          onClose={() => {
+            const year = new Date().getFullYear();
+            localStorage.setItem(`birthday_ann_${userId}_${year}`, '1');
+            setShowAnnuncio(null);
+          }}
+        />
+      )}
+      {showAnnuncio === 'annuncio' && info.annuncio && (
+        <AnnuncioModal
+          sfondo={info.annuncio.sfondo}
+          testo={info.annuncio.testo}
+          nome={nome}
+          onClose={() => {
+            localStorage.setItem(`ann_seen_${userId}_${info.annuncio!.id}`, '1');
+            setShowAnnuncio(null);
+          }}
+        />
+      )}
+
       <SalonHeader info={info} />
 
       {/* PWA install banner */}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link } from 'lucide-react';
+import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
@@ -916,6 +917,7 @@ function PaginaCanaleSocial({ onBack }: { onBack: () => void }) {
 
 function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  const [localPage, setLocalPage] = useState<null | 'annuncio'>(null);
   const [attiva, setAttiva] = useState(true);
   const [portaleNascosto, setPortaleNascosto] = useState(false);
   const [nomePwa, setNomePwa] = useState('');
@@ -1074,6 +1076,8 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     }
   }
 
+  if (localPage === 'annuncio') return <PaginaAnnuncio onBack={() => setLocalPage(null)} userId={user?.id} />;
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -1091,6 +1095,21 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           <p className="text-sm text-stone-400 mt-0.5">Gestisci la pagina pubblica di prenotazione</p>
         </div>
       </div>
+
+      {/* Annuncio ai clienti */}
+      <button
+        onClick={() => setLocalPage('annuncio')}
+        className="w-full flex items-center gap-4 bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-violet-200 rounded-2xl p-5 hover:from-violet-100 hover:to-fuchsia-100 hover:border-violet-300 transition-all text-left group shadow-sm"
+      >
+        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+          <Megaphone size={20} className="text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-stone-800">Annuncio ai clienti</p>
+          <p className="text-xs text-stone-400 mt-0.5">Mostra un messaggio al primo accesso — ferie, auguri, comunicazioni</p>
+        </div>
+        <ChevronRight size={18} className="text-stone-300 group-hover:text-violet-500 transition-colors flex-shrink-0" />
+      </button>
 
       {/* Toggle attiva/disattiva */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
@@ -1380,6 +1399,299 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           'Salva impostazioni'
         )}
       </button>
+    </div>
+  );
+}
+
+// ─── Annuncio ai Clienti ──────────────────────────────────────────────────────
+
+const SFONDO_ORDER = ['ferie', 'natale', 'capodanno', 'estate', 'pasqua', 'san_valentino', 'autunno', 'halloween', 'primavera', 'generico'] as const;
+
+const SFONDO_GRADIENTS: Record<string, string> = {
+  ferie:         'linear-gradient(135deg, #0099cc, #33ccaa, #ffd166)',
+  natale:        'linear-gradient(135deg, #0d3b1e, #4a0000)',
+  capodanno:     'linear-gradient(135deg, #050d1f, #1a0a3d)',
+  estate:        'linear-gradient(135deg, #ff4500, #ffd700)',
+  pasqua:        'linear-gradient(135deg, #fce7f3, #d1fae5)',
+  san_valentino: 'linear-gradient(135deg, #7b0028, #f06292)',
+  autunno:       'linear-gradient(135deg, #7c2d12, #c2410c)',
+  halloween:     'linear-gradient(135deg, #0d0d0d, #3d1a00)',
+  primavera:     'linear-gradient(135deg, #bae6fd, #fbcfe8, #bbf7d0)',
+  generico:      'linear-gradient(135deg, #1c1917, #3d3835)',
+};
+
+function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: string }) {
+  const [attivo, setAttivo] = useState(false);
+  const [sfondo, setSfondo] = useState('generico');
+  const [testo, setTesto] = useState(SFONDO_META['generico']?.defaultTesto ?? '');
+  const [compleannoTesto, setCompleannoTesto] = useState(COMPLEANNO_DEFAULT_TESTO);
+  const [annuncioId, setAnnuncioId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState(false);
+  const [tab, setTab] = useState<'annuncio' | 'compleanno'>('annuncio');
+
+  useEffect(() => {
+    if (!userId) return;
+    Promise.all([
+      getImpostazione('annuncio_attivo'),
+      getImpostazione('annuncio_sfondo'),
+      getImpostazione('annuncio_testo'),
+      getImpostazione('annuncio_id'),
+      getImpostazione('annuncio_compleanno_testo'),
+    ]).then(([a, s, t, id, ct]) => {
+      if (a !== null) setAttivo(a === 'true');
+      if (s) setSfondo(s);
+      if (t) setTesto(t);
+      if (id) setAnnuncioId(id);
+      if (ct) setCompleannoTesto(ct);
+      setLoading(false);
+    });
+  }, [userId]);
+
+  async function handleSave() {
+    setSaving(true);
+    await Promise.all([
+      setImpostazione('annuncio_attivo', attivo ? 'true' : 'false', userId),
+      setImpostazione('annuncio_sfondo', sfondo, userId),
+      setImpostazione('annuncio_testo', testo, userId),
+      setImpostazione('annuncio_compleanno_testo', compleannoTesto, userId),
+    ]);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  async function handlePubblica() {
+    setPublishing(true);
+    const newId = String(Date.now());
+    setAnnuncioId(newId);
+    await Promise.all([
+      setImpostazione('annuncio_attivo', 'true', userId),
+      setImpostazione('annuncio_sfondo', sfondo, userId),
+      setImpostazione('annuncio_testo', testo, userId),
+      setImpostazione('annuncio_id', newId, userId),
+      setImpostazione('annuncio_compleanno_testo', compleannoTesto, userId),
+    ]);
+    setAttivo(true);
+    setPublishing(false);
+    setPublished(true);
+    setTimeout(() => setPublished(false), 3000);
+  }
+
+  function applyPreset() {
+    const preset = SFONDO_META[sfondo]?.defaultTesto;
+    if (preset) setTesto(preset);
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Annuncio ai Clienti</h2>
+          <p className="text-sm text-stone-400 mt-0.5">Messaggio di benvenuto al primo accesso</p>
+        </div>
+      </div>
+
+      {/* Tab switcher */}
+      <div className="flex bg-stone-100 rounded-2xl p-1 gap-1">
+        <button
+          onClick={() => setTab('annuncio')}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${tab === 'annuncio' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+        >
+          Annuncio
+        </button>
+        <button
+          onClick={() => setTab('compleanno')}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${tab === 'compleanno' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+        >
+          🎂 Compleanno
+        </button>
+      </div>
+
+      {tab === 'annuncio' && (
+        <>
+          {/* Toggle attivo */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-stone-800">Annuncio attivo</p>
+              <p className="text-xs text-stone-400 mt-0.5">
+                {attivo ? 'Le clienti vedranno questo annuncio al primo accesso' : 'Annuncio disattivato — nessuno lo vedrà'}
+              </p>
+            </div>
+            <button
+              onClick={() => setAttivo(v => !v)}
+              className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${attivo ? 'bg-violet-500' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${attivo ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          {/* Selezione sfondo */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+            <p className="text-sm font-semibold text-stone-700">Sfondo</p>
+            <div className="grid grid-cols-5 gap-2">
+              {SFONDO_ORDER.map(key => {
+                const meta = SFONDO_META[key];
+                const selected = sfondo === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setSfondo(key)}
+                    className={`relative flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all ${
+                      selected ? 'border-violet-500 scale-105 shadow-md' : 'border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <div
+                      className="w-full rounded-lg aspect-square"
+                      style={{ background: SFONDO_GRADIENTS[key] }}
+                    >
+                      <span className="flex items-center justify-center w-full h-full text-xl">
+                        {meta?.emoji}
+                      </span>
+                    </div>
+                    <p className={`text-[9px] font-semibold leading-tight text-center ${selected ? 'text-violet-700' : 'text-stone-500'}`}>
+                      {meta?.label}
+                    </p>
+                    {selected && (
+                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center">
+                        <Check size={9} className="text-white" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Testo annuncio */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-stone-700">Testo annuncio</p>
+              <button
+                onClick={applyPreset}
+                className="text-xs text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1 transition-colors"
+              >
+                <RotateCcw size={11} />
+                Testo predefinito
+              </button>
+            </div>
+            <p className="text-xs text-stone-400">Puoi usare <span className="font-mono bg-stone-100 px-1 rounded">{'{nome}'}</span> per inserire il nome della cliente.</p>
+            <textarea
+              value={testo}
+              onChange={e => setTesto(e.target.value)}
+              rows={6}
+              className="w-full text-sm border border-stone-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400 text-stone-700 placeholder-stone-300 transition-colors"
+              placeholder="Scrivi qui il tuo messaggio..."
+            />
+          </div>
+
+          {/* Info ultimo annuncio pubblicato */}
+          {annuncioId && (
+            <div className="bg-violet-50 border border-violet-200 rounded-2xl px-5 py-4 flex items-start gap-3">
+              <Megaphone size={15} className="text-violet-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-violet-700 leading-relaxed">
+                Ultimo annuncio pubblicato il{' '}
+                <span className="font-semibold">
+                  {new Date(parseInt(annuncioId)).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+                . Le clienti che lo hanno già chiuso non lo rivedrannno — usa "Pubblica annuncio" per generarne uno nuovo visibile a tutte.
+              </p>
+            </div>
+          )}
+
+          {/* Azioni */}
+          <div className="flex gap-3">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className={`flex-1 py-3.5 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                saved ? 'bg-emerald-500 text-white' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+              } disabled:opacity-50`}
+            >
+              {saved ? <><Check size={15} /> Salvato!</> : saving ? <div className="w-4 h-4 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" /> : 'Salva bozza'}
+            </button>
+            <button
+              onClick={handlePubblica}
+              disabled={publishing || !testo.trim()}
+              className={`flex-1 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm ${
+                published ? 'bg-emerald-500 text-white' : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white'
+              } disabled:opacity-50`}
+            >
+              {published ? (
+                <><Check size={15} /> Pubblicato!</>
+              ) : publishing ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <><Megaphone size={15} /> Pubblica annuncio</>
+              )}
+            </button>
+          </div>
+        </>
+      )}
+
+      {tab === 'compleanno' && (
+        <>
+          {/* Info compleanno */}
+          <div className="bg-gradient-to-r from-amber-50 to-pink-50 border border-amber-200 rounded-2xl px-5 py-4 space-y-2">
+            <p className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+              🎂 Annuncio automatico di compleanno
+            </p>
+            <p className="text-xs text-amber-700 leading-relaxed">
+              Se la data di nascita della cliente è registrata nel gestionale, nel giorno del suo compleanno vedrà automaticamente questo messaggio speciale — indipendentemente dall'annuncio normale.
+            </p>
+          </div>
+
+          {/* Preview sfondo compleanno */}
+          <div className="rounded-2xl overflow-hidden h-16 flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #92400e, #c026d3, #4f46e5)' }}>
+            <p className="text-white font-bold text-sm tracking-wide">✨ Sfondo compleanno (automatico) ✨</p>
+          </div>
+
+          {/* Testo compleanno */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+            <p className="text-sm font-semibold text-stone-700">Testo di auguri</p>
+            <p className="text-xs text-stone-400">
+              Usa <span className="font-mono bg-stone-100 px-1 rounded">{'{nome}'}</span> per inserire il nome. Il titolo "Tanti auguri, [Nome]!" è sempre automatico.
+            </p>
+            <textarea
+              value={compleannoTesto}
+              onChange={e => setCompleannoTesto(e.target.value)}
+              rows={6}
+              className="w-full text-sm border border-stone-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-pink-200 focus:border-pink-400 text-stone-700 placeholder-stone-300 transition-colors"
+            />
+            <button
+              onClick={() => setCompleannoTesto(COMPLEANNO_DEFAULT_TESTO)}
+              className="text-xs text-pink-600 hover:text-pink-700 font-medium flex items-center gap-1 transition-colors"
+            >
+              <RotateCcw size={11} />
+              Ripristina testo predefinito
+            </button>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`w-full py-3.5 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+              saved ? 'bg-emerald-500 text-white' : 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white'
+            } disabled:opacity-50`}
+          >
+            {saved ? <><Check size={15} /> Salvato!</> : saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Check size={15} /> Salva testo auguri</>}
+          </button>
+        </>
+      )}
     </div>
   );
 }
