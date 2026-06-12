@@ -6,6 +6,11 @@ import {
   Palette, Clock, Star, AlertCircle, CheckCircle, Info, Zap, X,
 } from 'lucide-react';
 
+interface ComparisonRow {
+  label: string;
+  values: string[];
+}
+
 interface GuideItem {
   id: string;
   section: string;
@@ -16,6 +21,7 @@ interface GuideItem {
   steps?: string[];
   tips?: string[];
   warnings?: string[];
+  comparisonTable?: { headers: string[]; rows: ComparisonRow[] };
   tags: string[];
 }
 
@@ -409,6 +415,31 @@ const GUIDE_ITEMS: GuideItem[] = [
       'Gift Pass → buono regalo acquistato da qualcuno per qualcun altro (o per sé), in valore € o prodotto specifico.',
     ],
     tags: ['carte', 'panoramica', 'tipi di carte', 'sconto', 'premium', 'gift pass', 'buono'],
+  },
+  {
+    id: 'carte-griglia',
+    section: 'Carte',
+    sectionIcon: CreditCard,
+    sectionColor: 'teal',
+    title: 'Griglia di confronto — tutti i tipi di carta',
+    description: 'Confronto rapido tra Carta Sconto, Carta Premium e Gift Pass su tutte le caratteristiche principali.',
+    comparisonTable: {
+      headers: ['Caratteristica', 'Carta Sconto', 'Carta Premium', 'Gift Pass'],
+      rows: [
+        { label: 'Funzione', values: ['Riduce il totale di una fiche', 'Credito prepagato (con bonus)', 'Buono regalo da riscattare'] },
+        { label: 'Nominativa', values: ['Opzionale', 'Sempre sì', 'Opzionale'] },
+        { label: 'Formato codice', values: ['SCONTO-XXXX-XXXX', 'PREMIUM-XXXX-XXXX', '5 cifre (es. 47382)'] },
+        { label: 'Tipi disponibili', values: ['%, Fisso €, Listino', 'Unico (ricaricabile)', 'Valore € / Prodotto'] },
+        { label: 'Usa e getta', values: ['Sì / No (a scelta)', 'No (sempre ricaricabile)', 'Sì (monouso)'] },
+        { label: 'Scadenza', values: ['No', 'No', 'Solo tipo Prodotto'] },
+        { label: 'Genera fiche', values: ['No', 'Sì (alla creazione e ricarica standard)', 'Sì (intestata al compratore)'] },
+        { label: 'Chi applica la carta', values: ['Tu (sulla fiche)', 'Tu (su richiesta della cliente)', 'Tu (quando la destinataria si presenta)'] },
+        { label: 'Donabile', values: ['Sì (con tracciamento donatrice)', 'No', 'Sì — è la funzione principale'] },
+        { label: 'Messaggio WhatsApp', values: ['Sì (codice + sconto)', 'Sì (saldo e movimenti)', 'Sì (codice alla destinataria)'] },
+        { label: 'Tracciabilità utilizzo', values: ['Storico per ogni fiche', 'Storico ricariche + detrazioni', 'Flag utilizzata + data'] },
+      ],
+    },
+    tags: ['carte', 'griglia', 'confronto', 'sconto', 'premium', 'gift pass', 'tabella'],
   },
   {
     id: 'carte-sconto-funzione',
@@ -956,6 +987,56 @@ function GuideCard({ item, isOpen, onToggle }: { item: GuideItem; isOpen: boolea
       {isOpen && (
         <div className="px-5 pb-5 border-t border-stone-100 pt-4 space-y-4">
           <p className="text-sm text-stone-600 leading-relaxed">{item.description}</p>
+
+          {item.comparisonTable && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <CreditCard size={13} className="text-teal-500" />
+                <p className="text-xs font-bold text-stone-700 uppercase tracking-wide">Confronto carte</p>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-stone-200">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr>
+                      {item.comparisonTable.headers.map((h, i) => (
+                        <th
+                          key={i}
+                          className={`px-3 py-2.5 text-left font-semibold border-b border-stone-200 whitespace-nowrap ${
+                            i === 0
+                              ? 'bg-stone-50 text-stone-500 w-36'
+                              : i === 1
+                              ? 'bg-amber-50 text-amber-700'
+                              : i === 2
+                              ? 'bg-teal-50 text-teal-700'
+                              : 'bg-violet-50 text-violet-700'
+                          }`}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {item.comparisonTable.rows.map((row, ri) => (
+                      <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-stone-50/50'}>
+                        <td className="px-3 py-2.5 font-semibold text-stone-600 border-r border-stone-100 whitespace-nowrap">
+                          {row.label}
+                        </td>
+                        {row.values.map((val, vi) => (
+                          <td
+                            key={vi}
+                            className={`px-3 py-2.5 text-stone-600 leading-snug border-r border-stone-100 last:border-r-0 align-top`}
+                          >
+                            {val}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {item.steps && item.steps.length > 0 && (
             <div>
