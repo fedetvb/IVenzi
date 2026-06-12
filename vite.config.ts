@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
     base: isElectron ? './' : '/',
     build: {
       outDir: 'dist',
+      copyPublicDir: true,
     },
   };
 });
