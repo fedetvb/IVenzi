@@ -4111,10 +4111,8 @@ function CartaPremiumPreview() {
         ) : (
           <>
             <div style={{ ...a0, background:'#ffffff' }} />
-            <div style={{ position:'absolute', top:'42%', left:'5%', width:'43%', height:'20%', border:'0.5px dashed #ccc', borderRadius:2 }} />
-            <div style={{ position:'absolute', top:'64%', left:'5%', fontSize:'clamp(3px,1.4vw,6px)', color:'#bbb', fontFamily:'Arial,sans-serif' }}>ETICHETTA CODICE (50×13 mm)</div>
-            <div style={{ position:'absolute', top:'10%', right:'4%', width:'30%', textAlign:'center', fontSize:'clamp(3px,1.5vw,6px)', fontWeight:700, color:'#555', fontFamily:'Arial,sans-serif', letterSpacing:'0.1em' }}>PRENOTA ONLINE</div>
-            <img src="/files_10187331-2026-06-12T22-27-21-679Z-image.png" style={{ position:'absolute', top:'18%', right:'4%', width:'30%', aspectRatio:'1/1', objectFit:'contain' }} />
+            <div style={{ position:'absolute', top:'8%', left:0, right:0, textAlign:'center', fontSize:'clamp(4px,1.7vw,7px)', fontWeight:700, color:'#555', fontFamily:'Arial,sans-serif', letterSpacing:'0.12em' }}>PRENOTA ONLINE</div>
+            <img src="/files_10187331-2026-06-12T21-52-00-862Z-image.png" style={{ position:'absolute', top:'18%', left:'50%', transform:'translateX(-50%)', width:'58%', aspectRatio:'1/1', objectFit:'contain' }} />
           </>
         )}
       </div>
@@ -4162,7 +4160,7 @@ function CartaScontoPreview() {
             <div style={{ position:'absolute', top:'42%', left:'5%', width:'43%', height:'20%', border:'0.5px dashed #ccc', borderRadius:2 }} />
             <div style={{ position:'absolute', top:'64%', left:'5%', fontSize:'clamp(3px,1.4vw,6px)', color:'#bbb', fontFamily:'Arial,sans-serif' }}>ETICHETTA CODICE (50×13 mm)</div>
             <div style={{ position:'absolute', top:'10%', right:'4%', width:'30%', textAlign:'center', fontSize:'clamp(3px,1.5vw,6px)', fontWeight:700, color:'#555', fontFamily:'Arial,sans-serif', letterSpacing:'0.1em' }}>PRENOTA ONLINE</div>
-            <img src="/files_10187331-2026-06-12T22-27-21-679Z-image.png" style={{ position:'absolute', top:'18%', right:'4%', width:'30%', aspectRatio:'1/1', objectFit:'contain' }} />
+            <img src="/files_10187331-2026-06-12T21-52-00-862Z-image.png" style={{ position:'absolute', top:'18%', right:'4%', width:'30%', aspectRatio:'1/1', objectFit:'contain' }} />
           </>
         )}
       </div>

@@ -98,8 +98,8 @@ async function generateQrWithLogo(url: string, logoDataUrl?: string): Promise<st
   });
 }
 
-// ── BACK — white, code area left, static QR image right ─────────────────
-async function buildBackHtml(_bookingUrl: string, _logoDataUrl?: string): Promise<string> {
+// ── BACK — white, code area left, large QR with logo right ───────────────
+async function buildBackHtml(bookingUrl: string, logoDataUrl?: string): Promise<string> {
   const labelW = mm(50);
   const labelH = mm(13);
   const labelLeft = mm(B_MM + 6);
@@ -113,13 +113,7 @@ async function buildBackHtml(_bookingUrl: string, _logoDataUrl?: string): Promis
   const labelFs = mm(4.5);
 
   let qrSrc = '';
-  try {
-    const resp = await fetch('/files_10187331-2026-06-12T22-27-21-679Z-image.png');
-    const blob = await resp.blob();
-    qrSrc = await new Promise<string>(res => {
-      const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(blob);
-    });
-  } catch { /* blank */ }
+  try { qrSrc = await generateQrWithLogo(bookingUrl, logoDataUrl); } catch { /* blank */ }
 
   const qrImg = qrSrc
     ? `<img src="${qrSrc}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz}px;height:${qrSz}px;" />`
