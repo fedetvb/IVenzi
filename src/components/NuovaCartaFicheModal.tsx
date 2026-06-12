@@ -111,6 +111,7 @@ export default function NuovaCartaFicheModal({ onClose, onSaved, clienteId, clie
       codice: codicePremium,
       cliente_id: clienteId,
       saldo: importoPremium,
+      attiva: true,
       note: notePremium.trim(),
       user_id: user?.id,
     }});
