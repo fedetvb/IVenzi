@@ -57,6 +57,8 @@ interface SalonInfo {
     googleMaps: string;
     sitoWeb: string;
     note: string;
+    orariJson: string | null;
+    orariNota: string;
   };
 }
 
@@ -2727,6 +2729,51 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 </a>
               )}
             </div>
+
+            {info.contatti?.orariJson && (() => {
+              const GIORNI_LABEL = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
+              let orari: { aperto: boolean; apertura: string; chiusura: string; pausa_inizio: string; pausa_fine: string; pausa_attiva: boolean }[] = [];
+              try { orari = JSON.parse(info.contatti!.orariJson!); } catch { return null; }
+              if (!orari.length) return null;
+              const dowJs = new Date().getDay();
+              const idxOggi = dowJs === 0 ? 6 : dowJs - 1;
+              return (
+                <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
+                    <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                      <Clock size={18} className="text-amber-500" />
+                    </div>
+                    <p className="font-semibold text-stone-800 text-sm">Orari di apertura</p>
+                  </div>
+                  <div className="divide-y divide-stone-50">
+                    {orari.map((g, i) => {
+                      const isOggi = i === idxOggi;
+                      return (
+                        <div key={i} className={`flex items-center justify-between px-5 py-3 ${isOggi ? 'bg-amber-50/60' : ''}`}>
+                          <div className="flex items-center gap-2">
+                            {isOggi && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />}
+                            <p className={`text-sm ${isOggi ? 'font-bold text-stone-800' : 'font-medium text-stone-600'}`}>{GIORNI_LABEL[i]}</p>
+                          </div>
+                          {g.aperto ? (
+                            <div className="text-right">
+                              <p className={`text-sm ${isOggi ? 'font-bold text-amber-700' : 'text-stone-600'}`}>{g.apertura} – {g.chiusura}</p>
+                              {g.pausa_attiva && <p className="text-xs text-stone-400">pausa {g.pausa_inizio}–{g.pausa_fine}</p>}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-stone-400 italic">Chiuso</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {info.contatti!.orariNota && (
+                    <div className="px-5 py-3 border-t border-stone-100 bg-stone-50/50">
+                      <p className="text-xs text-stone-500 italic leading-relaxed">{info.contatti!.orariNota}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {info.contatti?.note && (
               <div className="bg-stone-50 border border-stone-200 rounded-2xl px-5 py-4">

@@ -125,6 +125,8 @@ Deno.serve(async (req: Request) => {
       googleMaps: impostazioni["azienda_google_maps"] ?? "",
       sitoWeb: impostazioni["azienda_sito_prenotazioni"] ?? "",
       note: impostazioni["azienda_note"] ?? "",
+      orariJson: impostazioni["orari_salone_json"] ?? null,
+      orariNota: impostazioni["orari_salone_nota"] ?? "",
     };
 
     return json({
