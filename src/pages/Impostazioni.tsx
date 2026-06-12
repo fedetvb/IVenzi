@@ -1630,7 +1630,11 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
                 return (
                   <button
                     key={key}
-                    onClick={() => setSfondo(key)}
+                    onClick={() => {
+                      setSfondo(key);
+                      const preset = SFONDO_META[key]?.defaultTesto;
+                      if (preset) setTesto(preset);
+                    }}
                     className={`relative flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all ${
                       selected ? 'border-violet-500 scale-105 shadow-md' : 'border-stone-200 hover:border-stone-300'
                     }`}
