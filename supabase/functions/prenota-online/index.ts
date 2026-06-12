@@ -621,6 +621,132 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // GET /miei-servizi?user_id=...&telefono=...
+  if (req.method === "GET" && path === "/miei-servizi") {
+    try {
+      const userId = url.searchParams.get("user_id");
+      const telefono = url.searchParams.get("telefono");
+      if (!userId || !telefono) return json({ error: "Parametri mancanti" }, 400);
+
+      const telNorm = telefono.replace(/\s/g, "");
+
+      // Trova la cliente per telefono (match parziale per gestire prefissi diversi)
+      const { data: clientiAll } = await sb
+        .from("clienti")
+        .select("id, telefono")
+        .eq("user_id", userId)
+        .is("deleted_at", null);
+
+      function normPhone(t: string): string {
+        let s = (t ?? "").replace(/\D/g, "");
+        if (s.startsWith("0039")) s = s.slice(4);
+        else if (s.startsWith("39") && s.length > 10) s = s.slice(2);
+        return s.slice(-9);
+      }
+
+      const targetNorm = normPhone(telNorm);
+      const cliente = ((clientiAll ?? []) as { id: string; telefono: string }[])
+        .find((c) => normPhone(c.telefono ?? "") === targetNorm);
+
+      if (!cliente) return json({ sedute: [] });
+
+      // Fiches convalidate via cliente_id diretto
+      const { data: fichesDirectRaw } = await sb
+        .from("fiches")
+        .select("id, data_riferimento, appuntamento_id")
+        .eq("user_id", userId)
+        .eq("cliente_id", cliente.id)
+        .eq("convalidata", true)
+        .is("deleted_at", null);
+
+      // Fiches convalidate via appuntamento del cliente
+      const { data: appuntamentiRaw } = await sb
+        .from("appuntamenti")
+        .select("id, data_ora")
+        .eq("user_id", userId)
+        .eq("cliente_id", cliente.id)
+        .is("deleted_at", null);
+
+      const appIds = (appuntamentiRaw ?? []).map((a: { id: string }) => a.id);
+      const appDataMap = new Map<string, string>(
+        (appuntamentiRaw ?? []).map((a: { id: string; data_ora: string }) => [a.id, a.data_ora])
+      );
+
+      const { data: fichesViaAppRaw } = appIds.length > 0
+        ? await sb
+            .from("fiches")
+            .select("id, data_riferimento, appuntamento_id")
+            .eq("user_id", userId)
+            .in("appuntamento_id", appIds)
+            .eq("convalidata", true)
+            .is("deleted_at", null)
+        : { data: [] };
+
+      // Deduplica e costruisce mappa fiche_id -> data
+      type FicheRaw = { id: string; data_riferimento: string | null; appuntamento_id: string | null };
+      const ficheMap = new Map<string, string>();
+      for (const f of ([...(fichesDirectRaw ?? []), ...(fichesViaAppRaw ?? [])] as FicheRaw[])) {
+        if (ficheMap.has(f.id)) continue;
+        const data = f.data_riferimento ?? (f.appuntamento_id ? appDataMap.get(f.appuntamento_id) : undefined) ?? null;
+        if (data) ficheMap.set(f.id, data);
+      }
+
+      if (ficheMap.size === 0) return json({ sedute: [] });
+
+      const ficheIds = Array.from(ficheMap.keys());
+
+      // Voci della fiche (tutti i servizi e le voci extra — fonte canonica dello storico)
+      const { data: vociRaw } = await sb
+        .from("fiche_voci")
+        .select("fiche_id, tipo, nome_voce, parrucchiere_id, parrucchieri(nome)")
+        .in("fiche_id", ficheIds);
+
+      // Prodotti venduti collegati alla fiche
+      const { data: prodottiRaw } = await sb
+        .from("rivendita_prodotti")
+        .select("fiche_id, nome_prodotto, quantita, parrucchiere_id, parrucchieri(nome)")
+        .in("fiche_id", ficheIds);
+
+      type Voce = { fiche_id: string; tipo: string; nome_voce: string; parrucchieri: { nome: string } | null };
+      type Prod = { fiche_id: string; nome_prodotto: string; quantita: number; parrucchieri: { nome: string } | null };
+
+      const vociByFiche = new Map<string, Voce[]>();
+      for (const v of (vociRaw ?? []) as Voce[]) {
+        if (!vociByFiche.has(v.fiche_id)) vociByFiche.set(v.fiche_id, []);
+        vociByFiche.get(v.fiche_id)!.push(v);
+      }
+
+      const prodByFiche = new Map<string, Prod[]>();
+      for (const p of (prodottiRaw ?? []) as Prod[]) {
+        if (!p.fiche_id) continue;
+        if (!prodByFiche.has(p.fiche_id)) prodByFiche.set(p.fiche_id, []);
+        prodByFiche.get(p.fiche_id)!.push(p);
+      }
+
+      const sedute = Array.from(ficheMap.entries())
+        .map(([ficheId, data]) => {
+          const voci = (vociByFiche.get(ficheId) ?? []).map((v) => ({
+            tipo: v.tipo,
+            nome: v.nome_voce,
+            parrucchiere: v.parrucchieri?.nome ?? null,
+          }));
+          const prodotti = (prodByFiche.get(ficheId) ?? []).map((p) => ({
+            nome: p.nome_prodotto,
+            quantita: p.quantita ?? 1,
+            parrucchiere: p.parrucchieri?.nome ?? null,
+          }));
+          return { fiche_id: ficheId, data, voci, prodotti };
+        })
+        .filter((s) => s.voci.length > 0 || s.prodotti.length > 0)
+        .sort((a, b) => b.data.localeCompare(a.data));
+
+      return json({ sedute });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Errore interno";
+      return json({ error: msg }, 500);
+    }
+  }
+
   return json({ error: "Not found" }, 404);
 });
 

@@ -10,6 +10,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
+import NuovaCartaFicheModal, { type CartaFicheResult } from '../components/NuovaCartaFicheModal';
 import { useAuth } from '../lib/AuthContext';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated, dbRpc } from '../lib/localDb';
 import { saveFile } from '../lib/fileSaver';
@@ -929,6 +930,10 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [showServiziPicker, setShowServiziPicker] = useState(false);
   const [cercaServizio, setCercaServizio] = useState('');
 
+  // Nuova carta da fiche
+  const [showNuovaCartaFiche, setShowNuovaCartaFiche] = useState(false);
+  const [pendingGiftPassIds, setPendingGiftPassIds] = useState<string[]>([]);
+
   // Cassetto carte sconto regalate + gift pass orfani
   const [showCassetto, setShowCassetto] = useState(false);
   const [cassettoCarte, setCassettoCarte] = useState<CartaScontoSimple[]>([]);
@@ -1265,6 +1270,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
       ficheFields.data_riferimento = selectedDate;
     } else {
       ficheFields.appuntamento_id = gruppo.appuntamenti[0].id;
+      ficheFields.data_riferimento = selectedDate;
     }
 
     let ficheId: string | null = gruppo.ficheIds[0] ?? null;
@@ -1484,6 +1490,12 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           ...(!giftPass.attivata_at ? { attivata_at: new Date().toISOString() } : {}),
         } });
       }
+
+      // Linka gift pass creati dalla fiche alla fiche convalidata
+      for (const gpId of pendingGiftPassIds) {
+        await dbUpdate({ table: 'gift_pass', id: gpId, data: { fiche_acquisto_id: ficheId } });
+      }
+      if (pendingGiftPassIds.length > 0) setPendingGiftPassIds([]);
     }
 
     setConvalidando(false);
@@ -1904,9 +1916,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                   </div>
                 </div>
               )}
-              {/* Trattamenti e Prodotti → modale */}
+              {/* Trattamenti, Prodotti e Carte → modale */}
               <div>
-                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Trattamenti e prodotti</p>
+                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Trattamenti, prodotti e carte</p>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => { setShowServiziPicker(true); setCercaServizio(''); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-stone-300 bg-stone-50 text-stone-700 hover:bg-stone-100 hover:border-stone-400 transition-all hover:shadow-sm active:scale-95"
@@ -1920,6 +1932,14 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                     <ShoppingBag size={10} />
                     Prodotti Rivendita
                   </button>
+                  {!isConvalidata && (
+                    <button type="button" onClick={() => setShowNuovaCartaFiche(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:border-teal-500 transition-all hover:shadow-sm active:scale-95"
+                    >
+                      <Plus size={10} />
+                      Nuova Carta / Gift Pass
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -2634,6 +2654,42 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           onClose={() => { setSmsModal(null); onConvalidata(); }}
         />
       )}
+
+      {/* Modal nuova carta/gift pass da fiche */}
+      {showNuovaCartaFiche && (() => {
+        const rawId = gruppo.clienteId;
+        const cid = rawId === '__sconosciuto__' ? null
+          : rawId.startsWith('__manuale__') ? rawId.replace('__manuale__', '')
+          : rawId.startsWith('__premium__') ? (gruppo.clienteUuid ?? null)
+          : rawId;
+        const ficheClienteId = cid && /^[0-9a-f-]{36}$/i.test(cid) ? cid : null;
+        return (
+          <NuovaCartaFicheModal
+            clienteId={ficheClienteId}
+            clienteNome={`${gruppo.clienteNome} ${gruppo.clienteCognome}`.trim()}
+            onClose={() => setShowNuovaCartaFiche(false)}
+            onSaved={(result: CartaFicheResult) => {
+              setShowNuovaCartaFiche(false);
+              const label = result.tipo === 'carta_premium'
+                ? `Carta Premium ${result.codice}`
+                : `Gift Pass #${result.codice}`;
+              setVoci(prev => [...prev, {
+                id: crypto.randomUUID(),
+                tipo: 'extra' as const,
+                nome_voce: label,
+                parrucchiere_id: null,
+                nome_parrucchiere: '',
+                prezzo: result.importo,
+                note: '',
+                ordine: prev.length,
+              }]);
+              if (result.tipo === 'gift_pass' && result.recordId) {
+                setPendingGiftPassIds(prev => [...prev, result.recordId]);
+              }
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

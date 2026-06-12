@@ -45,6 +45,15 @@ interface FicheVoceCliente {
   data_ora: string;
 }
 
+interface FicheConvalidata {
+  id: string;
+  appuntamento_id: string | null;
+  data_riferimento: string | null;
+  importo_convalidato: number;
+  tipo_fiche: string | null;
+  data_ora: string; // resolved: data_riferimento ?? data_ora appuntamento
+}
+
 interface CartaScontoCliente {
   id: string; codice: string; descrizione: string;
   tipo_sconto: 'percentuale' | 'fisso'; valore_sconto: number;
@@ -456,6 +465,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [passwordGatePending, setPasswordGatePending] = useState<CartaPremiumCliente | null>(null);
   const [smsModal, setSmsModal] = useState<{ codice: string; azione: AzioneCarta } | null>(null);
   const [ficheVoci, setFicheVoci] = useState<FicheVoceCliente[]>([]);
+  const [fichesConvalidate, setFichesConvalidate] = useState<FicheConvalidata[]>([]);
   const [showGraficoGate, setShowGraficoGate] = useState(false);
   const [showGrafico, setShowGrafico] = useState(false);
   const [fotoZoom, setFotoZoom] = useState(false);
@@ -546,49 +556,64 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
       setHaFicheConvalidate(false);
     }
 
-    const [vociViaAppRes, vociManualiRes] = await Promise.all([
+    // Step 1: trova tutte le fiches convalidate del cliente (via appuntamento e/o cliente_id diretto)
+    type FicheRaw = { id: string; appuntamento_id: string | null; data_riferimento: string | null; convalidata: boolean; importo_convalidato: number; tipo_fiche: string | null };
+    const [ficheViaAppRes, ficheManualiRes] = await Promise.all([
       appIds.length > 0
-        ? dbSelectWithRelated<any>({
-            table: 'fiche_voci',
-            filters: [{ col: 'fiches.appuntamento_id', op: 'in', val: appIds }],
-            relations: [
-              { key: 'fiches', table: 'fiches', fk: 'fiche_id' },
+        ? dbSelect<FicheRaw>({
+            table: 'fiches',
+            columns: 'id, appuntamento_id, data_riferimento, convalidata, importo_convalidato, tipo_fiche',
+            filters: [
+              { col: 'appuntamento_id', op: 'in', val: appIds },
+              { col: 'convalidata', op: 'eq', val: true },
             ],
-            supabaseSelect: 'fiche_id, nome_voce, tipo, prezzo, fiches!inner(convalidata, appuntamento_id, appuntamenti!inner(data_ora, cliente_id))',
           })
-        : Promise.resolve({ data: [] } as any),
-      dbSelectWithRelated<any>({
-        table: 'fiche_voci',
+        : Promise.resolve({ data: [] as FicheRaw[], error: null }),
+      dbSelect<FicheRaw>({
+        table: 'fiches',
+        columns: 'id, appuntamento_id, data_riferimento, convalidata, importo_convalidato, tipo_fiche',
         filters: [
-          { col: 'fiches.convalidata', op: 'eq', val: true },
-          { col: 'fiches.cliente_id', op: 'eq', val: clienteId },
+          { col: 'cliente_id', op: 'eq', val: clienteId },
+          { col: 'convalidata', op: 'eq', val: true },
+          { col: 'deleted_at', op: 'is_null' },
         ],
-        relations: [
-          { key: 'fiches', table: 'fiches', fk: 'fiche_id' },
-        ],
-        supabaseSelect: 'fiche_id, nome_voce, tipo, prezzo, fiches!inner(convalidata, cliente_id, data_riferimento)',
       }),
     ]);
 
-    const vociFlat: FicheVoceCliente[] = [];
-
-    for (const v of (vociViaAppRes.data || []) as Array<{
-      fiche_id: string; nome_voce: string; tipo: string; prezzo: number;
-      fiches: { convalidata: boolean; appuntamento_id: string; appuntamenti: { data_ora: string; cliente_id: string } | null } | null;
-    }>) {
-      const dataOra = v.fiches?.appuntamenti?.data_ora;
-      if (!dataOra) continue;
-      vociFlat.push({ fiche_id: v.fiche_id, nome_voce: v.nome_voce ?? '', tipo: v.tipo ?? 'servizio', prezzo: v.prezzo, data_ora: dataOra });
+    // Deduplica e costruisce mappa fiche_id -> data_ora
+    const ficheDataMap = new Map<string, string>();
+    const appDataMap = new Map<string, string>();
+    for (const a of (appRes.data || []) as Array<{ id: string; data_ora: string }>) {
+      appDataMap.set(a.id, a.data_ora);
     }
 
-    for (const v of (vociManualiRes.data || []) as Array<{
-      fiche_id: string; nome_voce: string; tipo: string; prezzo: number;
-      fiches: { convalidata: boolean; cliente_id: string | null; data_riferimento: string | null } | null;
-    }>) {
-      const dataOra = v.fiches?.data_riferimento;
+    const ficheConvalidateList: FicheConvalidata[] = [];
+    const seenFicheIds = new Set<string>();
+    for (const f of ([...(ficheViaAppRes.data || []), ...(ficheManualiRes.data || [])] as FicheRaw[])) {
+      if (seenFicheIds.has(f.id)) continue;
+      seenFicheIds.add(f.id);
+      const data = f.data_riferimento ?? (f.appuntamento_id ? appDataMap.get(f.appuntamento_id) : undefined) ?? null;
+      if (!data) continue;
+      ficheDataMap.set(f.id, data);
+      ficheConvalidateList.push({ id: f.id, appuntamento_id: f.appuntamento_id, data_riferimento: f.data_riferimento, importo_convalidato: f.importo_convalidato || 0, tipo_fiche: f.tipo_fiche ?? null, data_ora: data });
+    }
+    setFichesConvalidate(ficheConvalidateList);
+
+    const allFicheIds = Array.from(ficheDataMap.keys());
+
+    // Step 2: voci per tutte le fiches trovate
+    const { data: vociRawData } = allFicheIds.length > 0
+      ? await dbSelect<{ fiche_id: string; nome_voce: string; tipo: string; prezzo: number }>({
+          table: 'fiche_voci',
+          columns: 'fiche_id, nome_voce, tipo, prezzo',
+          filters: [{ col: 'fiche_id', op: 'in', val: allFicheIds }],
+        })
+      : { data: [] };
+
+    const vociFlat: FicheVoceCliente[] = [];
+    for (const v of (vociRawData || []) as Array<{ fiche_id: string; nome_voce: string; tipo: string; prezzo: number }>) {
+      const dataOra = ficheDataMap.get(v.fiche_id);
       if (!dataOra) continue;
-      // evita duplicati (una fiche manuale potrebbe rientrare in entrambe le query se ha anche appuntamento_id)
-      if (vociFlat.some(x => x.fiche_id === v.fiche_id && x.nome_voce === v.nome_voce)) continue;
       vociFlat.push({ fiche_id: v.fiche_id, nome_voce: v.nome_voce ?? '', tipo: v.tipo ?? 'servizio', prezzo: v.prezzo, data_ora: dataOra });
     }
 
@@ -985,6 +1010,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
       {tab === 'storico' && (
         <StoricoTab
           appuntamenti={appuntamenti}
+          fichesConvalidate={fichesConvalidate}
           clienteCreatedAt={cliente.created_at}
           onOpenGrafico={() => setShowGraficoGate(true)}
         />
@@ -1751,30 +1777,41 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appuntamenti: Appuntamento[]; clienteCreatedAt: string; onOpenGrafico: () => void }) {
+function StoricoTab({ appuntamenti, fichesConvalidate, clienteCreatedAt, onOpenGrafico }: { appuntamenti: Appuntamento[]; fichesConvalidate: FicheConvalidata[]; clienteCreatedAt: string; onOpenGrafico: () => void }) {
   type AppExt = Appuntamento & { appuntamento_trattamenti?: { nome_trattamento: string; prezzo: number }[] };
 
-  const tutti = appuntamenti as AppExt[];
-  const completati = tutti.filter(a => a.stato !== 'cancellato');
   const now = new Date();
 
-  // Raggruppa per giorno (YYYY-MM-DD) — accorpa appuntamenti dello stesso giorno (tutti, inclusi cancellati)
-  const perGiorno: Record<string, AppExt[]> = {};
-  for (const a of tutti) {
-    const d = new Date(a.data_ora);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    if (!perGiorno[key]) perGiorno[key] = [];
-    perGiorno[key].push(a);
+  // Mappa appuntamento_id -> appuntamento per lookup veloce
+  const appMap = new Map<string, AppExt>();
+  for (const a of appuntamenti as AppExt[]) appMap.set(a.id, a);
+
+  // Mappa appuntamento_id -> fiche convalidata (per sapere quali appuntamenti hanno fiche)
+  const fichePerApp = new Map<string, FicheConvalidata>();
+  for (const f of fichesConvalidate) {
+    if (f.appuntamento_id) fichePerApp.set(f.appuntamento_id, f);
   }
 
-  // Giorni con almeno un appuntamento non cancellato (per statistiche visite)
-  const giorniUnici = Object.keys(perGiorno).filter(k => perGiorno[k].some(a => a.stato !== 'cancellato'));
-  // Tutti i giorni (inclusi solo-cancellati) per la timeline
-  const tuttiGiorni = Object.keys(perGiorno);
+  function toDayKey(dateStr: string) {
+    const d = new Date(dateStr);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // Giorni di visita reale = giorni con almeno una fiche convalidata
+  const giorniUnici = [...new Set(fichesConvalidate.map(f => toDayKey(f.data_ora)))].sort();
   const nGiorni = giorniUnici.length;
 
-  // Giorni-cancellazione: giorni in cui TUTTI gli appuntamenti sono cancellati
-  const giorniCancellati = tuttiGiorni.filter(k => perGiorno[k].every(a => a.stato === 'cancellato'));
+  // Giorni di cancellazione = giorni in cui TUTTI gli appuntamenti sono cancellati E nessuna fiche convalidata
+  const appCancellatPerGiorno: Record<string, AppExt[]> = {};
+  for (const a of appuntamenti as AppExt[]) {
+    const k = toDayKey(a.data_ora);
+    if (!appCancellatPerGiorno[k]) appCancellatPerGiorno[k] = [];
+    appCancellatPerGiorno[k].push(a);
+  }
+  const giorniUniciSet = new Set(giorniUnici);
+  const giorniCancellati = Object.keys(appCancellatPerGiorno).filter(
+    k => !giorniUniciSet.has(k) && appCancellatPerGiorno[k].every(a => a.stato === 'cancellato')
+  );
 
   // Cancellazioni anno solare corrente (1 gen – oggi)
   const annoCorrente = now.getFullYear();
@@ -1809,11 +1846,11 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
   }
   const anniVisite = Object.keys(visitiPerAnno).map(Number).sort((a, b) => b - a);
 
-  // Spesa per anno solare (solo completati/confermati)
+  // Spesa per anno solare (da fiches convalidate)
   const spesaPerAnno: Record<number, number> = {};
-  for (const a of completati) {
-    const anno = new Date(a.data_ora).getFullYear();
-    spesaPerAnno[anno] = (spesaPerAnno[anno] || 0) + (a.prezzo_totale || 0);
+  for (const f of fichesConvalidate) {
+    const anno = new Date(f.data_ora).getFullYear();
+    spesaPerAnno[anno] = (spesaPerAnno[anno] || 0) + (f.importo_convalidato || 0);
   }
 
   // Media fiches per anno (spesa / visite di quel anno)
@@ -1848,8 +1885,8 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
   const giorniUltimi12 = giorniUnici.filter(k => new Date(k) >= twelveMonthsAgo).length;
   const freqMensile = giorniUltimi12 / 12;
 
-  // Spesa totale (somma tutti gli appuntamenti, non i giorni)
-  const spesaTotale = completati.reduce((s, a) => s + (a.prezzo_totale || 0), 0);
+  // Spesa totale (da fiches convalidate)
+  const spesaTotale = fichesConvalidate.reduce((s, f) => s + (f.importo_convalidato || 0), 0);
   const mediaFicheTotale = nGiorni > 0 ? spesaTotale / nGiorni : 0;
   const spesaMediaGiorno = nGiorni > 0 ? spesaTotale / nGiorni : 0;
 
@@ -1864,7 +1901,8 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
     intervallioMedio = totalDays / (sorted.length - 1);
   }
 
-  // Raggruppa giorni per mese per la timeline (tutti, inclusi cancellati)
+  // Raggruppa giorni per mese per la timeline (visite reali + solo-cancellati)
+  const tuttiGiorni = [...new Set([...giorniUnici, ...giorniCancellati])].sort().reverse();
   const perMese: Record<string, string[]> = {};
   for (const dayKey of tuttiGiorni) {
     const [y, m] = dayKey.split('-');
@@ -1888,10 +1926,10 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
   }
   const maxBar = Math.max(...barMesi.map(b => b.count), 1);
 
-  if (tutti.length === 0) {
+  if (fichesConvalidate.length === 0 && giorniCancellati.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center text-stone-400 text-sm">
-        Nessun appuntamento nello storico
+        Nessuna visita registrata
       </div>
     );
   }
@@ -2436,86 +2474,127 @@ function StoricoTab({ appuntamenti, clienteCreatedAt, onOpenGrafico }: { appunta
         </div>
       </div>
 
-      {/* Timeline raggruppata per giorno */}
+      {/* Timeline raggruppata per mese — una riga per fiche convalidata o giorno solo-cancellato */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
         <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-4">Cronologia visite</p>
         <div className="space-y-5">
           {mesiOrdinati.map(mese => {
             const giorniMese = perMese[mese].sort((a, b) => b.localeCompare(a));
+            const visiteMese = giorniMese.filter(k => giorniUniciSet.has(k)).length;
+            const cancMese = giorniMese.filter(k => !giorniUniciSet.has(k)).length;
             return (
               <div key={mese}>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs font-bold text-stone-700 capitalize">{mese}</span>
                   <div className="flex-1 h-px bg-stone-100" />
                   <span className="text-[10px] text-stone-400">
-                    {giorniMese.filter(k => perGiorno[k].some(a => a.stato !== 'cancellato')).length} visita{giorniMese.filter(k => perGiorno[k].some(a => a.stato !== 'cancellato')).length !== 1 ? 'e' : ''}
-                    {giorniMese.some(k => perGiorno[k].every(a => a.stato === 'cancellato')) && (
-                      <span className="ml-1 text-stone-300">· {giorniMese.filter(k => perGiorno[k].every(a => a.stato === 'cancellato')).length} canc.</span>
-                    )}
+                    {visiteMese} visita{visiteMese !== 1 ? 'e' : ''}
+                    {cancMese > 0 && <span className="ml-1 text-stone-300">· {cancMese} canc.</span>}
                   </span>
                 </div>
                 <div className="space-y-2 pl-2">
-                  {giorniMese.map(dayKey => {
-                    const apps = perGiorno[dayKey].sort((a, b) => new Date(a.data_ora).getTime() - new Date(b.data_ora).getTime());
-                    const firstApp = apps[0];
+                  {giorniMese.map(dk => {
+                    const isCancellato = !giorniUniciSet.has(dk);
 
-                    const isTuttoCancellato = apps.every(a => a.stato === 'cancellato');
-
-                    // Solo appuntamenti non cancellati per prezzo e trattamenti
-                    const appsAttivi = apps.filter(a => a.stato !== 'cancellato');
-                    const giornoPrezzoTotale = appsAttivi.reduce((s, a) => s + (a.prezzo_totale || 0), 0);
-
-                    const tuttiTrattamenti: string[] = [];
-                    for (const app of apps) {
-                      const tt = app.appuntamento_trattamenti;
-                      if (tt && tt.length > 0) {
-                        for (const t of tt) tuttiTrattamenti.push(t.nome_trattamento);
-                      }
+                    if (isCancellato) {
+                      // Giorno solo-cancellato: mostra appuntamenti cancellati
+                      const appsCancellati = (appCancellatPerGiorno[dk] || []).sort((a, b) => new Date(a.data_ora).getTime() - new Date(b.data_ora).getTime());
+                      const firstApp = appsCancellati[0];
+                      if (!firstApp) return null;
+                      const orarioInizio = new Date(firstApp.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <div key={dk} className="flex items-start gap-3 py-2.5 border-b border-stone-50 last:border-0 opacity-50">
+                          <div className="flex flex-col items-center flex-shrink-0 mt-0.5">
+                            <div className="w-2 h-2 rounded-full bg-stone-300" />
+                            <div className="w-px flex-1 bg-stone-100 mt-1" style={{ minHeight: 16 }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold line-through text-stone-400">
+                                {new Date(firstApp.data_ora).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })}
+                                {' · '}{orarioInizio}
+                              </span>
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Cancellato</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
                     }
 
-                    // Stato predominante
-                    const stato = isTuttoCancellato ? 'cancellato'
-                      : apps.every(a => a.stato === 'completato') ? 'completato'
-                      : apps.find(a => a.stato === 'confermato') ? 'confermato'
-                      : firstApp.stato;
-                    const statoClass = STATO_CLASS[stato] ?? STATO_CLASS.confermato;
+                    // Giorno con fiche convalidate: raggruppa normale + carta_premium/gift_pass nello stesso giorno in una sola visita
+                    const ficheDel = fichesConvalidate.filter(f => toDayKey(f.data_ora) === dk).sort((a, b) => new Date(a.data_ora).getTime() - new Date(b.data_ora).getTime());
+                    const isSpeciale = (f: FicheConvalidata) => f.tipo_fiche === 'carta_premium' || f.tipo_fiche === 'gift_pass';
+                    const ficheNormali = ficheDel.filter(f => !isSpeciale(f));
+                    const ficheSpeciali = ficheDel.filter(f => isSpeciale(f));
 
-                    const orarioInizio = new Date(firstApp.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                    const lastApp = apps[apps.length - 1];
-                    const fineMs = new Date(lastApp.data_ora).getTime() + lastApp.durata_minuti * 60000;
-                    const orarioFine = new Date(fineMs).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-
-                    return (
-                      <div key={dayKey} className={`flex items-start gap-3 py-2.5 border-b border-stone-50 last:border-0 ${isTuttoCancellato ? 'opacity-50' : ''}`}>
-                        <div className="flex flex-col items-center flex-shrink-0 mt-0.5">
-                          <div className={`w-2 h-2 rounded-full ${isTuttoCancellato ? 'bg-stone-300' : 'bg-amber-400'}`} />
-                          <div className="w-px flex-1 bg-stone-100 mt-1" style={{ minHeight: 16 }} />
+                    if (ficheNormali.length > 0) {
+                      // Una riga unica che accorpa tutto il giorno
+                      const importoTotale = ficheDel.reduce((s, f) => s + (f.importo_convalidato || 0), 0);
+                      const fiche = ficheNormali[0];
+                      const app = fiche.appuntamento_id ? appMap.get(fiche.appuntamento_id) : undefined;
+                      const tuttiTrattamenti: string[] = [];
+                      if (app?.appuntamento_trattamenti) {
+                        for (const t of app.appuntamento_trattamenti) tuttiTrattamenti.push(t.nome_trattamento);
+                      }
+                      const stato = app ? (app.stato === 'cancellato' ? 'confermato' : app.stato) : 'confermato';
+                      const statoClass = STATO_CLASS[stato] ?? STATO_CLASS.confermato;
+                      const orarioInizio = app ? new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
+                      const extraLabel = ficheSpeciali.map(f => f.tipo_fiche === 'carta_premium' ? '+ ricarica carta' : '+ gift pass').join(' ');
+                      return (
+                        <div key={dk} className="flex items-start gap-3 py-2.5 border-b border-stone-50 last:border-0">
+                          <div className="flex flex-col items-center flex-shrink-0 mt-0.5">
+                            <div className="w-2 h-2 rounded-full bg-amber-400" />
+                            <div className="w-px flex-1 bg-stone-100 mt-1" style={{ minHeight: 16 }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-stone-800">
+                                {new Date(fiche.data_ora).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })}
+                                {orarioInizio && <>{' · '}{orarioInizio}</>}
+                              </span>
+                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${statoClass}`}>
+                                {STATO_LABEL[stato] ?? stato}
+                              </span>
+                              {!app && <span className="text-[10px] text-stone-400">accesso diretto</span>}
+                            </div>
+                            {tuttiTrattamenti.length > 0 && (
+                              <p className="text-xs mt-0.5 text-stone-500">{tuttiTrattamenti.join(' · ')}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {importoTotale > 0 && <p className="text-xs font-semibold text-stone-600">€{importoTotale.toFixed(2)}</p>}
+                              {extraLabel && <p className="text-[10px] text-stone-400">{extraLabel}</p>}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-sm font-semibold ${isTuttoCancellato ? 'line-through text-stone-400' : 'text-stone-800'}`}>
-                              {new Date(firstApp.data_ora).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })}
-                              {' · '}
-                              {orarioInizio}{apps.length > 1 ? ` → ${orarioFine}` : ''}
-                            </span>
-                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${statoClass}`}>
-                              {STATO_LABEL[stato] ?? stato}
-                            </span>
-                            {apps.length > 1 && (
-                              <span className="text-[10px] text-stone-400">{apps.length} servizi</span>
+                      );
+                    }
+
+                    // Solo fiches speciali (nessuna normale quel giorno): una riga per fiche
+                    return ficheSpeciali.map(fiche => {
+                      const app = fiche.appuntamento_id ? appMap.get(fiche.appuntamento_id) : undefined;
+                      const orarioInizio = app ? new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
+                      const tipoLabel = fiche.tipo_fiche === 'carta_premium' ? 'Ricarica carta' : 'Gift Pass';
+                      return (
+                        <div key={fiche.id} className="flex items-start gap-3 py-2.5 border-b border-stone-50 last:border-0">
+                          <div className="flex flex-col items-center flex-shrink-0 mt-0.5">
+                            <div className="w-2 h-2 rounded-full bg-amber-400" />
+                            <div className="w-px flex-1 bg-stone-100 mt-1" style={{ minHeight: 16 }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-stone-800">
+                                {new Date(fiche.data_ora).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })}
+                                {orarioInizio && <>{' · '}{orarioInizio}</>}
+                              </span>
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">{tipoLabel}</span>
+                            </div>
+                            {fiche.importo_convalidato > 0 && (
+                              <p className="text-xs font-semibold text-stone-600 mt-0.5">€{fiche.importo_convalidato.toFixed(2)}</p>
                             )}
                           </div>
-                          {tuttiTrattamenti.length > 0 && (
-                            <p className={`text-xs mt-0.5 ${isTuttoCancellato ? 'line-through text-stone-300' : 'text-stone-500'}`}>
-                              {tuttiTrattamenti.join(' · ')}
-                            </p>
-                          )}
-                          {!isTuttoCancellato && giornoPrezzoTotale > 0 && (
-                            <p className="text-xs font-semibold text-stone-600 mt-0.5">€{giornoPrezzoTotale.toFixed(2)}</p>
-                          )}
                         </div>
-                      </div>
-                    );
+                      );
+                    });
                   })}
                 </div>
               </div>
