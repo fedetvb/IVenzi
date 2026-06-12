@@ -12,67 +12,67 @@ export const SFONDO_META: Record<string, {
   ferie: {
     label: 'Ferie',
     emoji: '🌴',
-    defaultTesto: 'Siamo in ferie!\n\nRiapriamo i battenti il [DATA].\n\nNel frattempo puoi già prenotare qui — ti ricontatteremo appena siamo di rientro. Non vediamo l\'ora di rivederti!',
+    defaultTesto: 'Ciao {nome}!\n\nVolevamo avvisarti che il nostro salone sarà chiuso per ferie dal [DATA INIZIO] al [DATA FINE].\n\nSiamo già al lavoro per tornare con tanta energia e tante novità per te!\n\nPuoi già prenotare il tuo appuntamento per la riapertura — saremo felici di rivederti presto.\n\nBuone vacanze!',
     tagColor: 'bg-sky-100 text-sky-700',
   },
   natale: {
     label: 'Natale',
     emoji: '🎄',
-    defaultTesto: 'Buon Natale!\n\nIl salone sarà chiuso dal [DATA] al [DATA].\n\nAuguri di cuore da tutto il nostro team. Ci vediamo nel nuovo anno!',
+    defaultTesto: 'Ciao {nome}!\n\nLe feste si avvicinano e tutto il nostro team vuole augurarti un Natale pieno di calore, gioia e momenti speciali con le persone che ami.\n\nIl salone sarà chiuso dal [DATA INIZIO] al [DATA FINE].\n\nSe vuoi essere al top per le feste, prenota subito il tuo appuntamento pre-natalizio — i posti disponibili sono limitati!\n\nBuon Natale!',
     tagColor: 'bg-green-100 text-green-700',
   },
   capodanno: {
     label: 'Capodanno',
     emoji: '🎆',
-    defaultTesto: 'Buon Anno Nuovo!\n\nSiamo felici di iniziare questo nuovo anno con voi.\n\nTutte le prenotazioni sono aperte — vi aspettiamo!',
+    defaultTesto: 'Ciao {nome}!\n\nUn anno nuovo è alle porte e noi siamo qui per aiutarti a salutarlo nel migliore dei modi!\n\nChe il nuovo anno ti porti salute, serenità e tante giornate da trascorrere viziandoti.\n\nPrenota il tuo look da Capodanno — e inizia il nuovo anno con il piede giusto!\n\nFelice Anno Nuovo!',
     tagColor: 'bg-yellow-100 text-yellow-700',
   },
   estate: {
     label: 'Estate',
     emoji: '☀️',
-    defaultTesto: 'È arrivata l\'estate!\n\nOrari estivi in vigore dal [DATA].\n\nPrenota il tuo trattamento e goditi la stagione al meglio. Vi aspettiamo!',
+    defaultTesto: 'Ciao {nome}!\n\nL\'estate è arrivata e il sole chiama! È il momento perfetto per prendersi cura dei capelli dopo le giornate all\'aria aperta, il mare e il caldo.\n\nTrattamenti idratanti, colori luminosi e tagli freschi ti aspettano.\n\nPrenota ora il tuo appuntamento estivo — perché i capelli sani partono da qui!\n\nA presto!',
     tagColor: 'bg-orange-100 text-orange-700',
   },
   pasqua: {
     label: 'Pasqua',
     emoji: '🐣',
-    defaultTesto: 'Buona Pasqua!\n\nIl salone sarà chiuso il [DATA].\n\nAuguri di serenità e felicità a voi e alle vostre famiglie!',
+    defaultTesto: 'Ciao {nome}!\n\nLa Pasqua si avvicina e con essa l\'aria di primavera, la voglia di rinnovamento e di nuovi inizi.\n\nChe questa Pasqua ti porti leggerezza, serenità e tanta dolcezza!\n\nSe vuoi un look fresco e rinnovato per le feste, siamo qui ad aspettarti.\n\nBuona Pasqua!',
     tagColor: 'bg-rose-100 text-rose-700',
   },
   san_valentino: {
     label: 'San Valentino',
     emoji: '❤️',
-    defaultTesto: 'Buon San Valentino!\n\nOggi è il giorno perfetto per prendersi cura di sé.\n\nRegala o regalati un momento di bellezza. Ti aspettiamo!',
+    defaultTesto: 'Ciao {nome}!\n\nSan Valentino si avvicina e l\'amore è nell\'aria! Che tu lo trascorra con il tuo partner, le amiche o semplicemente con te stessa, meriti di sentirti bellissima.\n\nPrenditi del tempo per te — un appuntamento in salone è il regalo più bello che puoi farti.\n\nPrenota il tuo momento di coccole, perché l\'amore inizia da sé stesse!\n\nBuon San Valentino!',
     tagColor: 'bg-pink-100 text-pink-700',
   },
   autunno: {
     label: 'Autunno',
     emoji: '🍂',
-    defaultTesto: 'L\'autunno è arrivato!\n\nÈ il momento di rinnovare il look per affrontare la nuova stagione.\n\nSiamo qui per te — prenota il tuo appuntamento!',
+    defaultTesto: 'Ciao {nome}!\n\nL\'autunno è la stagione dei cambiamenti, dei colori caldi e del ritorno alle coccole. È il momento perfetto per rinnovare il tuo look con tonalità calde e trattamenti nutrienti.\n\nLasciati ispirare dai colori della stagione: ramati, castani profondi, biondi dorati.\n\nPrenota il tuo appuntamento autunnale — un nuovo look ti aspetta!\n\nA presto!',
     tagColor: 'bg-amber-100 text-amber-700',
   },
   halloween: {
     label: 'Halloween',
     emoji: '🎃',
-    defaultTesto: 'Buon Halloween!\n\nIl salone si trasforma per questa notte speciale.\n\nVieni a trovarci — se ne hai il coraggio! 👻',
+    defaultTesto: 'Ciao {nome}!\n\nHalloween si avvicina e l\'atmosfera si fa misteriosa... ma il tuo look non deve esserlo!\n\nChe tu stia pianificando un costume da paura o voglia semplicemente qualcosa di audace e diverso, siamo pronti a trasformarti.\n\nPrenota il tuo appuntamento speciale — promesso, non ti spaventeremo!\n\nBuon Halloween!',
     tagColor: 'bg-orange-100 text-orange-700',
   },
   primavera: {
     label: 'Primavera',
     emoji: '🌸',
-    defaultTesto: 'Benvenuta primavera!\n\nNuova stagione, nuovo look. È il momento di sbocciare!\n\nPrenota il tuo appuntamento e lasciati coccolare.',
+    defaultTesto: 'Ciao {nome}!\n\nLa primavera è finalmente arrivata! Giornate più lunghe, aria profumata e voglia di leggerezza e colore.\n\nÈ il momento ideale per un nuovo taglio, un colore fresco o un trattamento rigenerante dopo l\'inverno.\n\nPrenota il tuo appuntamento primaverile — perché anche i tuoi capelli meritano di fiorire!\n\nA presto!',
     tagColor: 'bg-emerald-100 text-emerald-700',
   },
   generico: {
     label: 'Comunicazione',
     emoji: '📢',
-    defaultTesto: 'Ciao!\n\nAbbiamo un annuncio importante per te.\n\nContattaci per maggiori informazioni. Ti aspettiamo!',
+    defaultTesto: 'Ciao {nome}!\n\nAbbiamo un avviso importante da condividere con te e con tutte le nostre clienti.\n\nTi invitiamo a leggere con attenzione questo messaggio e a contattarci per qualsiasi informazione o chiarimento.\n\nSiamo sempre a tua disposizione — non esitare a scriverci o chiamarci.\n\nGrazie per la tua fiducia!',
     tagColor: 'bg-stone-100 text-stone-700',
   },
 };
 
 export const COMPLEANNO_DEFAULT_TESTO =
-  'Oggi è il tuo giorno speciale e noi siamo felicissime di festeggiarlo con te!\n\nVieni a trovarci e lasciati coccolare — oggi meriti solo il meglio.\n\nTutto il team ti abbraccia con affetto! 💐';
+  'Oggi è il tuo giorno speciale e tutto il nostro team vuole farti sentire l\'affetto che proviamo per te!\n\nTanti auguri di cuore — che questo compleanno ti porti gioia, salute e tante cose meravigliose.\n\nCome piccolo omaggio, hai diritto a una sorpresa speciale al tuo prossimo appuntamento da noi!\n\nCon tutto il nostro affetto!';
 
 // ─── CSS Keyframes ─────────────────────────────────────────────────────────────
 
