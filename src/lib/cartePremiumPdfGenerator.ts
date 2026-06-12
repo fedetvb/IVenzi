@@ -207,6 +207,3 @@ export async function generateCartaPremiumStampaPdf(opts: {
 
   return doc.output('blob');
 }
-
-
-export { generateCartaPremiumStampaPdf }
