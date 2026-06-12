@@ -26,6 +26,7 @@ import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing, Star, Gift, HelpCircle } from 'lucide-react';
 import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
 import AiChat from './components/AiChat';
+import { InForseModal, loadAvvisoInForse, type ClienteInForseEntry } from './components/InForseModal';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione } from './lib/localDb';
 import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
 import { flushPendingSync } from './lib/offlineFetch';
@@ -78,6 +79,8 @@ export default function App() {
   const [showInForseBanner, setShowInForseBanner] = useState(false);
   const [inForseCount, setInForseCount] = useState(0);
   const [inForseNome, setInForseNome] = useState('');
+  const [showInForseModal, setShowInForseModal] = useState(false);
+  const [inForseModalClienti, setInForseModalClienti] = useState<ClienteInForseEntry[]>([]);
 
   // Modal compleanni
   const [birthdayClienti, setBirthdayClienti] = useState<ClienteCompleanno[]>([]);
@@ -1377,7 +1380,12 @@ export default function App() {
             </div>
             <button
               className="flex-1 text-left"
-              onClick={() => { setShowInForseBanner(false); navigateTo('agenda'); }}
+              onClick={async () => {
+                setShowInForseBanner(false);
+                const entries = await loadAvvisoInForse();
+                setInForseModalClienti(entries);
+                setShowInForseModal(true);
+              }}
             >
               <p className="text-sm font-bold text-orange-900">Appuntamenti "in forse" tra 2 giorni</p>
               <p className="text-xs text-orange-700 mt-0.5">
@@ -1401,6 +1409,14 @@ export default function App() {
         <BirthdayModal
           clienti={birthdayClienti}
           onClose={() => setShowBirthdayModal(false)}
+        />
+      )}
+
+      {/* Modal appuntamenti in forse */}
+      {showInForseModal && (
+        <InForseModal
+          clienti={inForseModalClienti}
+          onClose={() => setShowInForseModal(false)}
         />
       )}
 
