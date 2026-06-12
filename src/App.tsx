@@ -132,6 +132,21 @@ export default function App() {
     setShowReminderBanner(true);
   }
 
+  function triggerInForseTest() {
+    window.dispatchEvent(new CustomEvent('test_in_forse_banner'));
+  }
+
+  function triggerPromAppTest() {
+    setShowAppBanner(true);
+  }
+
+  function triggerCompleannoTest() {
+    if (birthdayClienti.length === 0) {
+      setBirthdayClienti([{ id: 'test', nome: 'Esempio', cognome: 'Cliente', telefono: null }]);
+    }
+    setShowBirthdayModal(true);
+  }
+
   function handleSelectCliente(id: string, tab?: 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi') {
     setSelectedCliente(id);
     setSelectedClienteTab(tab);
@@ -1343,7 +1358,7 @@ export default function App() {
         {page === 'comunicazioni' && <Comunicazioni />}
         {page === 'magazzino' && <Magazzino />}
         {page === 'parrucchieri' && <Parrucchieri />}
-        {page === 'impostazioni' && <Impostazioni onTestReminder={triggerReminderTest} />}
+        {page === 'impostazioni' && <Impostazioni onTestReminder={triggerReminderTest} onTestInForse={triggerInForseTest} onTestPromApp={triggerPromAppTest} onTestCompleanno={triggerCompleannoTest} />}
         {page === 'cestino' && <Cestino />}
         {page === 'guida' && <Guida />}
       </Layout>

@@ -11,7 +11,7 @@ import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone';
 
-export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
+export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
   const [sub, setSub] = useState<SubPage>(null);
   const [msgOpen, setMsgOpen] = useState(false);
@@ -35,7 +35,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
     </StatisticheGate>
   );
   if (sub === 'password') return <PaginaPassword onBack={() => setSub(null)} />;
-  if (sub === 'avvisi_banner') return <PaginaAvvisiBanner onBack={() => setSub(null)} onTestReminder={onTestReminder} />;
+  if (sub === 'avvisi_banner') return <PaginaAvvisiBanner onBack={() => setSub(null)} onTestReminder={onTestReminder} onTestInForse={onTestInForse} onTestPromApp={onTestPromApp} onTestCompleanno={onTestCompleanno} />;
   if (sub === 'promemoria') return <PaginaPromemoria onBack={() => setSub(null)} onTestReminder={onTestReminder} />;
   if (sub === 'messaggio_avviso') return <PaginaMessaggioAvviso onBack={() => setSub(null)} />;
   if (sub === 'template_carta') return <PaginaTemplateCarta onBack={() => setSub(null)} />;
@@ -3703,7 +3703,7 @@ function PaginaPassword({ onBack }: { onBack: () => void }) {
 
 // ─── PaginaAvvisiBanner ───────────────────────────────────────────────────────
 
-function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; onTestReminder?: () => void }) {
+function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onBack: () => void; onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
@@ -3893,12 +3893,24 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
           {inForseAttivo && (
             <div className="px-6 py-5">
               <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di controllo</label>
-              <input
-                type="time"
-                value={inForseOrario}
-                onChange={e => { setInForseOrario(e.target.value); setFeedback(null); }}
-                className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition-colors"
-              />
+              <div className="flex items-center gap-4">
+                <input
+                  type="time"
+                  value={inForseOrario}
+                  onChange={e => { setInForseOrario(e.target.value); setFeedback(null); }}
+                  className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition-colors"
+                />
+                {onTestInForse && (
+                  <button
+                    type="button"
+                    onClick={onTestInForse}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-semibold rounded-xl transition-colors"
+                  >
+                    <Bell size={14} />
+                    Testa avviso
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-stone-400 mt-2">Il banner compare nell'agenda una volta al giorno a quest'ora</p>
             </div>
           )}
@@ -3923,26 +3935,38 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
             </button>
           </div>
           {promAppAttivo && (
-            <div className="px-6 py-5 grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
-                <input
-                  type="time"
-                  value={promAppDa}
-                  onChange={e => { setPromAppDa(e.target.value); setFeedback(null); }}
-                  className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400 transition-colors"
-                />
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
+                  <input
+                    type="time"
+                    value={promAppDa}
+                    onChange={e => { setPromAppDa(e.target.value); setFeedback(null); }}
+                    className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di scomparsa</label>
+                  <input
+                    type="time"
+                    value={promAppA}
+                    onChange={e => { setPromAppA(e.target.value); setFeedback(null); }}
+                    className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400 transition-colors"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di scomparsa</label>
-                <input
-                  type="time"
-                  value={promAppA}
-                  onChange={e => { setPromAppA(e.target.value); setFeedback(null); }}
-                  className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400 transition-colors"
-                />
-              </div>
-              <p className="col-span-2 text-xs text-stone-400 -mt-1">Il banner compare all'apertura dell'app solo nell'intervallo di orario impostato</p>
+              <p className="text-xs text-stone-400">Il banner compare all'apertura dell'app solo nell'intervallo di orario impostato</p>
+              {onTestPromApp && (
+                <button
+                  type="button"
+                  onClick={onTestPromApp}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-semibold rounded-xl transition-colors"
+                >
+                  <Bell size={14} />
+                  Testa avviso
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -4000,12 +4024,24 @@ function PaginaAvvisiBanner({ onBack, onTestReminder }: { onBack: () => void; on
           {compleannoAttivo && (
             <div className="px-6 py-5">
               <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
-              <input
-                type="time"
-                value={compleannoOrario}
-                onChange={e => { setCompleannoOrario(e.target.value); setFeedback(null); }}
-                className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 transition-colors"
-              />
+              <div className="flex items-center gap-4">
+                <input
+                  type="time"
+                  value={compleannoOrario}
+                  onChange={e => { setCompleannoOrario(e.target.value); setFeedback(null); }}
+                  className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 transition-colors"
+                />
+                {onTestCompleanno && (
+                  <button
+                    type="button"
+                    onClick={onTestCompleanno}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-semibold rounded-xl transition-colors"
+                  >
+                    <Bell size={14} />
+                    Testa avviso
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-stone-400 mt-2">Il banner compare nell'agenda a partire da quest'ora</p>
             </div>
           )}

@@ -167,7 +167,24 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     };
     check();
     const id = setInterval(check, 60_000);
-    return () => clearInterval(id);
+
+    async function handleTestInForse() {
+      const entries = await loadAvvisoInForse();
+      if (entries.length > 0) {
+        setInForseClienti(entries);
+      } else {
+        const dopodomani = addDays(new Date(), 2);
+        const dataLabel = dopodomani.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Rome' });
+        setInForseClienti([{ nome: 'Esempio Cliente', telefono: '', appImmediato: { data: dataLabel, ora: '10:00' }, altriApp: [] }]);
+      }
+      setShowInForseBanner(true);
+    }
+
+    window.addEventListener('test_in_forse_banner', handleTestInForse);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('test_in_forse_banner', handleTestInForse);
+    };
   }, []);
 
   async function loadAvvisoClienti() {
