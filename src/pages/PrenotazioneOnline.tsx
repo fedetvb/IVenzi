@@ -2914,6 +2914,7 @@ function MieCarteStep({
 
 function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: MieCarteData['cliente'] }) {
   const [showMovimenti, setShowMovimenti] = useState(false);
+  const saldoEsaurito = carta.saldo <= 0;
 
   const movimenti = [
     ...carta.ricariche.map(r => ({ ...r, tipo: 'ricarica' as const, importo: r.importo })),
@@ -2922,35 +2923,64 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
 
   return (
     <div className="space-y-3">
-      {/* Card grafica nero/oro */}
+      {/* Card grafica premium */}
       <div
         className="relative w-full rounded-3xl overflow-hidden shadow-xl"
         style={{
-          background: 'linear-gradient(135deg, #111008 0%, #2a2000 25%, #1a1500 50%, #2d2200 75%, #0d0a00 100%)',
+          background: saldoEsaurito
+            ? 'linear-gradient(135deg, #3d0000 0%, #6b0f0f 25%, #4a0808 50%, #7a1010 75%, #2d0000 100%)'
+            : 'linear-gradient(135deg, #111008 0%, #2a2000 25%, #1a1500 50%, #2d2200 75%, #0d0a00 100%)',
           minHeight: 210,
         }}
       >
-        {/* Striscia oro orizzontale in alto */}
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, #b8860b, #f5e17a, #d4af37, #f5e17a, #b8860b)' }} />
-        {/* Pattern decorativo oro — più visibile */}
+        {/* Striscia in alto */}
+        <div className="absolute top-0 left-0 right-0 h-1" style={{
+          background: saldoEsaurito
+            ? 'linear-gradient(90deg, #8b0000, #e05252, #c0392b, #e05252, #8b0000)'
+            : 'linear-gradient(90deg, #b8860b, #f5e17a, #d4af37, #f5e17a, #b8860b)',
+        }} />
+        {/* Pattern decorativo diagonale */}
         <div className="absolute inset-0 opacity-20" style={{
-          backgroundImage: 'repeating-linear-gradient(45deg, #d4af37 0px, #d4af37 1px, transparent 0px, transparent 28px)',
+          backgroundImage: saldoEsaurito
+            ? 'repeating-linear-gradient(45deg, #c0392b 0px, #c0392b 1px, transparent 0px, transparent 28px)'
+            : 'repeating-linear-gradient(45deg, #d4af37 0px, #d4af37 1px, transparent 0px, transparent 28px)',
           backgroundSize: '28px 28px',
         }} />
-        {/* Alone oro grande in alto a destra */}
-        <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: 'radial-gradient(circle, rgba(212,175,55,0.35) 0%, transparent 70%)' }} />
-        {/* Alone oro piccolo in basso a sinistra */}
-        <div className="absolute -left-4 -bottom-4 w-32 h-32 rounded-full" style={{ background: 'radial-gradient(circle, rgba(212,175,55,0.2) 0%, transparent 70%)' }} />
+        {/* Alone grande in alto a destra */}
+        <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{
+          background: saldoEsaurito
+            ? 'radial-gradient(circle, rgba(192,57,43,0.35) 0%, transparent 70%)'
+            : 'radial-gradient(circle, rgba(212,175,55,0.35) 0%, transparent 70%)',
+        }} />
+        {/* Alone piccolo in basso a sinistra */}
+        <div className="absolute -left-4 -bottom-4 w-32 h-32 rounded-full" style={{
+          background: saldoEsaurito
+            ? 'radial-gradient(circle, rgba(192,57,43,0.2) 0%, transparent 70%)'
+            : 'radial-gradient(circle, rgba(212,175,55,0.2) 0%, transparent 70%)',
+        }} />
 
         <div className="relative p-6 flex flex-col h-full" style={{ minHeight: 210 }}>
           {/* Header */}
           <div className="flex items-start justify-between mb-auto">
             <div>
-              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: '#f5e17a', textShadow: '0 0 8px rgba(212,175,55,0.6)' }}>Carta Premium</p>
+              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{
+                color: saldoEsaurito ? '#f9a8a8' : '#f5e17a',
+                textShadow: saldoEsaurito ? '0 0 8px rgba(192,57,43,0.6)' : '0 0 8px rgba(212,175,55,0.6)',
+              }}>Carta Premium</p>
             </div>
-            {/* Chip oro realistico */}
-            <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #b8860b 0%, #f5e17a 40%, #d4af37 60%, #8b6914 100%)', boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
-              <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(139,105,20,0.6)', background: 'linear-gradient(135deg, #d4af37 0%, #f5e17a 50%, #b8860b 100%)' }} />
+            {/* Chip */}
+            <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{
+              background: saldoEsaurito
+                ? 'linear-gradient(135deg, #8b1a1a 0%, #e05252 40%, #c0392b 60%, #7a0c0c 100%)'
+                : 'linear-gradient(135deg, #b8860b 0%, #f5e17a 40%, #d4af37 60%, #8b6914 100%)',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+            }}>
+              <div className="w-7 h-5 rounded-sm border" style={{
+                borderColor: saldoEsaurito ? 'rgba(139,26,26,0.6)' : 'rgba(139,105,20,0.6)',
+                background: saldoEsaurito
+                  ? 'linear-gradient(135deg, #c0392b 0%, #e05252 50%, #8b1a1a 100%)'
+                  : 'linear-gradient(135deg, #d4af37 0%, #f5e17a 50%, #b8860b 100%)',
+              }} />
             </div>
           </div>
 
@@ -2959,7 +2989,7 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
             <p className="text-white font-bold text-lg tracking-wide" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
               {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
             </p>
-            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: '#f5e17a' }}>
+            <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: saldoEsaurito ? '#f9a8a8' : '#f5e17a' }}>
               {carta.codice}
             </p>
           </div>
@@ -2967,13 +2997,25 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
           {/* Saldo */}
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-xs font-medium" style={{ color: 'rgba(245,225,122,0.7)' }}>Saldo disponibile</p>
-              <p className="text-3xl font-bold" style={{ color: '#f5e17a', textShadow: '0 0 12px rgba(212,175,55,0.5)' }}>€ {carta.saldo.toFixed(2)}</p>
+              <p className="text-xs font-medium" style={{ color: saldoEsaurito ? 'rgba(249,168,168,0.7)' : 'rgba(245,225,122,0.7)' }}>Saldo disponibile</p>
+              <p className="text-3xl font-bold" style={{
+                color: saldoEsaurito ? '#f9a8a8' : '#f5e17a',
+                textShadow: saldoEsaurito ? '0 0 12px rgba(192,57,43,0.5)' : '0 0 12px rgba(212,175,55,0.5)',
+              }}>€ {carta.saldo.toFixed(2)}</p>
             </div>
+            {saldoEsaurito && (
+              <div className="text-xs font-semibold px-3 py-1 rounded-full" style={{ color: '#f9a8a8', background: 'rgba(192,57,43,0.25)', border: '1px solid rgba(192,57,43,0.4)' }}>
+                Credito esaurito
+              </div>
+            )}
           </div>
         </div>
-        {/* Striscia oro in basso */}
-        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, #d4af37, #f5e17a, #d4af37, transparent)' }} />
+        {/* Striscia in basso */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{
+          background: saldoEsaurito
+            ? 'linear-gradient(90deg, transparent, #c0392b, #e05252, #c0392b, transparent)'
+            : 'linear-gradient(90deg, transparent, #d4af37, #f5e17a, #d4af37, transparent)',
+        }} />
       </div>
 
       {/* Frase risparmio */}
