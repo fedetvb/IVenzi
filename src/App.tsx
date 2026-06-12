@@ -23,7 +23,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
-import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing, Star, Gift } from 'lucide-react';
+import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing, Star, Gift, HelpCircle } from 'lucide-react';
 import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
 import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione } from './lib/localDb';
@@ -73,6 +73,11 @@ export default function App() {
 
   // Banner promemoria invio messaggi appuntamento (all'avvio)
   const [showAppBanner, setShowAppBanner] = useState(false);
+
+  // Banner appuntamenti in forse
+  const [showInForseBanner, setShowInForseBanner] = useState(false);
+  const [inForseCount, setInForseCount] = useState(0);
+  const [inForseNome, setInForseNome] = useState('');
 
   // Modal compleanni
   const [birthdayClienti, setBirthdayClienti] = useState<ClienteCompleanno[]>([]);
@@ -132,8 +137,27 @@ export default function App() {
     setShowReminderBanner(true);
   }
 
-  function triggerInForseTest() {
-    window.dispatchEvent(new CustomEvent('test_in_forse_banner'));
+  async function triggerInForseTest() {
+    const dopodomani = new Date(Date.now() + 2 * 86400000);
+    const ddKey = dopodomani.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+    const start = new Date(ddKey + 'T00:00:00').toISOString();
+    const end = new Date(ddKey + 'T23:59:59').toISOString();
+    const { data } = await supabase
+      .from('appuntamenti')
+      .select('id, clienti(nome)')
+      .eq('stato', 'in_forse')
+      .gte('data_ora', start)
+      .lte('data_ora', end)
+      .is('deleted_at', null);
+    if (data && data.length > 0) {
+      setInForseCount(data.length);
+      const first = data[0] as { clienti?: { nome?: string } | null };
+      setInForseNome(first?.clienti?.nome ?? '');
+    } else {
+      setInForseCount(1);
+      setInForseNome('Esempio Cliente');
+    }
+    setShowInForseBanner(true);
   }
 
   function triggerPromAppTest() {
@@ -208,6 +232,40 @@ export default function App() {
     }
 
     checkStartupAlerts();
+  }, []);
+
+  // Banner appuntamenti in forse — check ogni minuto all'orario configurato
+  useEffect(() => {
+    const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    const check = async () => {
+      const attivo = await getImpostazione('banner_in_forse_attivo');
+      if (attivo === 'false') return;
+      const orario = await getImpostazione('orario_avviso_in_forse') ?? '18:00';
+      const nowIt = fmt.format(new Date());
+      if (nowIt !== orario) return;
+      const dopodomani = new Date(Date.now() + 2 * 86400000);
+      const ddKey = dopodomani.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+      const lsKey = `avviso_in_forse_shown_${ddKey}`;
+      if (localStorage.getItem(lsKey)) return;
+      const start = new Date(ddKey + 'T00:00:00').toISOString();
+      const end = new Date(ddKey + 'T23:59:59').toISOString();
+      const { data } = await supabase
+        .from('appuntamenti')
+        .select('id, cliente_id, clienti(nome)')
+        .eq('stato', 'in_forse')
+        .gte('data_ora', start)
+        .lte('data_ora', end)
+        .is('deleted_at', null);
+      if (!data || data.length === 0) return;
+      localStorage.setItem(lsKey, '1');
+      setInForseCount(data.length);
+      const first = data[0] as { clienti?: { nome?: string } | null };
+      setInForseNome(first?.clienti?.nome ?? '');
+      setShowInForseBanner(true);
+    };
+    check();
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   // Controlla se SQLite e' pronto in Electron; se non lo e', si usa Supabase direttamente
@@ -1300,6 +1358,34 @@ export default function App() {
             <button
               onClick={() => setShowAppBanner(false)}
               className="p-1 hover:bg-sky-100 rounded-lg transition-colors text-sky-500 hover:text-sky-700 flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner appuntamenti in forse */}
+      {showInForseBanner && (
+        <div className={`fixed left-1/2 -translate-x-1/2 z-[98] w-full max-w-md px-4 transition-all duration-300 ${
+          showReminderBanner && showAppBanner ? 'top-44' :
+          showReminderBanner || showAppBanner ? 'top-24' : 'top-4'
+        }`}>
+          <div className="bg-orange-50 border border-orange-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <HelpCircle size={16} className="text-orange-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-orange-900">Appuntamenti "in forse" tra 2 giorni</p>
+              <p className="text-xs text-orange-700 mt-0.5">
+                {inForseCount === 1
+                  ? `Chiedi conferma a ${inForseNome} per l'appuntamento di dopodomani`
+                  : `${inForseCount} clienti con appuntamento incerto — chiedi conferma`}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowInForseBanner(false)}
+              className="p-1 hover:bg-orange-100 rounded-lg transition-colors text-orange-500 hover:text-orange-700 flex-shrink-0"
             >
               <X size={15} />
             </button>
