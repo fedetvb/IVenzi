@@ -1375,14 +1375,17 @@ export default function App() {
             <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
               <HelpCircle size={16} className="text-orange-600" />
             </div>
-            <div className="flex-1">
+            <button
+              className="flex-1 text-left"
+              onClick={() => { setShowInForseBanner(false); navigateTo('agenda'); }}
+            >
               <p className="text-sm font-bold text-orange-900">Appuntamenti "in forse" tra 2 giorni</p>
               <p className="text-xs text-orange-700 mt-0.5">
                 {inForseCount === 1
                   ? `Chiedi conferma a ${inForseNome} per l'appuntamento di dopodomani`
                   : `${inForseCount} clienti con appuntamento incerto — chiedi conferma`}
               </p>
-            </div>
+            </button>
             <button
               onClick={() => setShowInForseBanner(false)}
               className="p-1 hover:bg-orange-100 rounded-lg transition-colors text-orange-500 hover:text-orange-700 flex-shrink-0"
