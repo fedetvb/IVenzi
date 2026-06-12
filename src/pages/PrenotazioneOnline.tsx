@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle, Mail, FileText, Camera } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle, Mail, FileText, Camera, MapPin, Globe, ExternalLink } from 'lucide-react';
 import AnnuncioModal, { COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
@@ -49,9 +49,18 @@ interface SalonInfo {
     id: string;
     compleannoTesto: string;
   };
+  contatti?: {
+    telefono: string;
+    email: string;
+    pec: string;
+    indirizzo: string;
+    googleMaps: string;
+    sitoWeb: string;
+    note: string;
+  };
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'contatti';
 
 interface Seduta {
   fiche_id: string;
@@ -1788,6 +1797,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <ChevronRight size={20} className="text-stone-300 group-hover:text-orange-500 transition-colors flex-shrink-0" />
             </button>
 
+            <button
+              onClick={() => setStep('contatti')}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-teal-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-teal-100 transition-colors">
+                <MapPin size={26} className="text-teal-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">Contatti</p>
+                <p className="text-sm text-stone-400 mt-0.5">Indirizzo, telefono, email e come trovarci</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-teal-500 transition-colors flex-shrink-0" />
+            </button>
+
             <div className="mt-2 bg-sky-50 border border-sky-200 rounded-2xl px-5 py-4 text-center">
               <p className="text-sm text-sky-700 leading-relaxed">
                 <span className="font-semibold">Hai un'idea in testa ma non sai come spiegarla?</span><br />
@@ -2615,6 +2638,114 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           </Card>
         )}
 
+        {/* STEP: Contatti */}
+        {step === 'contatti' && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3 mb-2">
+              <button onClick={() => setStep('scelta')} className="w-9 h-9 flex items-center justify-center rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-100 transition-colors flex-shrink-0">
+                <ChevronLeft size={18} />
+              </button>
+              <div>
+                <p className="text-xl font-bold text-stone-800">Contatti</p>
+                <p className="text-sm text-stone-400 mt-0.5">{info.nomeSalone}</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden divide-y divide-stone-100">
+              {info.contatti?.indirizzo && (
+                <div className="flex items-start gap-4 px-6 py-4">
+                  <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <MapPin size={18} className="text-teal-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-0.5">Indirizzo</p>
+                    <p className="text-sm text-stone-800 leading-snug">{info.contatti.indirizzo}</p>
+                    {info.contatti.googleMaps && (
+                      <a href={info.contatti.googleMaps} target="_blank" rel="noopener noreferrer"
+                        className="mt-1.5 inline-flex items-center gap-1 text-xs text-teal-600 font-semibold hover:text-teal-700 transition-colors">
+                        <ExternalLink size={11} />
+                        Apri in Google Maps
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {info.contatti?.telefono && (
+                <a href={`tel:${info.contatti.telefono.replace(/\s/g, '')}`}
+                  className="flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-100 transition-colors">
+                    <Phone size={18} className="text-emerald-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-0.5">Telefono</p>
+                    <p className="text-sm font-semibold text-stone-800">{info.contatti.telefono}</p>
+                  </div>
+                  <ExternalLink size={14} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+                </a>
+              )}
+
+              {info.contatti?.email && (
+                <a href={`mailto:${info.contatti.email}`}
+                  className="flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group">
+                  <div className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0 group-hover:bg-sky-100 transition-colors">
+                    <Mail size={18} className="text-sky-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-0.5">Email</p>
+                    <p className="text-sm font-semibold text-stone-800 truncate">{info.contatti.email}</p>
+                  </div>
+                  <ExternalLink size={14} className="text-stone-300 group-hover:text-sky-500 transition-colors flex-shrink-0" />
+                </a>
+              )}
+
+              {info.contatti?.pec && (
+                <a href={`mailto:${info.contatti.pec}`}
+                  className="flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                    <FileText size={18} className="text-indigo-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-0.5">PEC</p>
+                    <p className="text-sm font-semibold text-stone-800 truncate">{info.contatti.pec}</p>
+                  </div>
+                  <ExternalLink size={14} className="text-stone-300 flex-shrink-0" />
+                </a>
+              )}
+
+              {info.contatti?.sitoWeb && (
+                <a href={info.contatti.sitoWeb} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-100 transition-colors">
+                    <Globe size={18} className="text-amber-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-0.5">Sito web</p>
+                    <p className="text-sm font-semibold text-stone-800 truncate">{info.contatti.sitoWeb}</p>
+                  </div>
+                  <ExternalLink size={14} className="text-stone-300 group-hover:text-amber-500 transition-colors flex-shrink-0" />
+                </a>
+              )}
+            </div>
+
+            {info.contatti?.note && (
+              <div className="bg-stone-50 border border-stone-200 rounded-2xl px-5 py-4">
+                <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Note</p>
+                <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-line">{info.contatti.note}</p>
+              </div>
+            )}
+
+            {(!info.contatti?.telefono && !info.contatti?.email && !info.contatti?.indirizzo && !info.contatti?.sitoWeb) && (
+              <div className="text-center py-8 text-stone-400">
+                <MapPin size={28} className="mx-auto mb-2 opacity-40" />
+                <p className="text-sm">Nessun contatto disponibile al momento.</p>
+              </div>
+            )}
+
+            <SocialStrip social={info?.social} />
+          </div>
+        )}
+
         {/* STEP: Successo */}
         {step === 'successo' && (
           <div className="text-center py-12">
@@ -2652,6 +2783,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               >
                 <MessageCircle size={16} />
                 Scrivici
+              </button>
+              <button
+                onClick={() => setStep('scelta')}
+                className="px-8 py-3 bg-stone-100 text-stone-500 font-medium rounded-2xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <ChevronLeft size={16} />
+                Torna alla home
               </button>
             </div>
           </div>

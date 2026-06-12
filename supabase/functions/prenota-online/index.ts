@@ -117,6 +117,16 @@ Deno.serve(async (req: Request) => {
       compleannoTesto: impostazioni["annuncio_compleanno_testo"] ?? "",
     };
 
+    const contatti = {
+      telefono: impostazioni["azienda_telefono"] ?? "",
+      email: impostazioni["azienda_email"] ?? "",
+      pec: impostazioni["azienda_pec"] ?? "",
+      indirizzo: impostazioni["azienda_indirizzo"] ?? "",
+      googleMaps: impostazioni["azienda_google_maps"] ?? "",
+      sitoWeb: impostazioni["azienda_sito_prenotazioni"] ?? "",
+      note: impostazioni["azienda_note"] ?? "",
+    };
+
     return json({
       prenotazioniAttive,
       portaleNascosto,
@@ -127,6 +137,7 @@ Deno.serve(async (req: Request) => {
       serviziAbbinati,
       social,
       annuncio,
+      contatti,
     });
   }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search } from 'lucide-react';
 import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
@@ -17,6 +17,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   const [sub, setSub] = useState<SubPage>(null);
   const [msgOpen, setMsgOpen] = useState(false);
   const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     getImpostazione('whatsapp_avviso_disabilitato').then(v => {
@@ -53,6 +54,36 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'canali_social') return <PaginaCanaleSocial onBack={() => setSub(null)} />;
   if (sub === 'orari_salone') return <PaginaOrariSalone onBack={() => setSub(null)} />;
 
+  const sq = searchQuery.trim().toLowerCase();
+  function show(...texts: string[]) {
+    if (!sq) return true;
+    return texts.some(t => t.toLowerCase().includes(sq));
+  }
+  const msgGroupVisible = show(
+    'Messaggi e Comunicazioni', 'Avvisi appuntamento, template carta sconto e messaggi comunicazioni',
+    'Messaggio Avviso Appuntamento', 'Personalizza il testo WhatsApp per il promemoria appuntamento',
+    'Messaggi WhatsApp automatici', 'Pulsante avviso clienti',
+    'Template Messaggi Carta Sconto', 'Modelli per carte sconto',
+    'Template Messaggi Comunicazioni', 'Messaggi predefiniti per comunicazioni',
+  );
+  const anyVisible = show('Account e Credenziali', 'Modifica email e password') ||
+    show('Avvisi e Banner', 'Orari e attivazione di tutti gli avvisi') ||
+    show('Backup e Ripristino', 'Esporta tutti i dati') ||
+    show('Canali Social', 'Instagram Facebook TikTok YouTube') ||
+    show('Cartelle di salvataggio', 'Configura le cartelle di destinazione') ||
+    show('Connessione Cloud', 'Modifica le chiavi API') ||
+    show('Dati Azienda', 'Ragione sociale indirizzo P.IVA telefono') ||
+    show('Keep-alive automatico', 'ping automatico database Supabase') ||
+    show('Messaggi clienti', 'Password eliminazione messaggi') ||
+    msgGroupVisible ||
+    show('Notifiche Push', 'Ricevi notifiche sul telefono') ||
+    show('Orari Salone', 'Giorni di apertura e orari di lavoro') ||
+    show('Password', 'Gestisci le password di accesso') ||
+    show('Prenotazioni Online', 'Attiva disattiva pagina pubblica prenotazione') ||
+    show('Promemoria Convalida Fiches', 'Configura giorni e orario promemoria') ||
+    show('QR Code Registrazione Clienti', 'Stampa il QR code nuove clienti') ||
+    show('Tema e Personalizzazione', 'Colori sidebar icona logo');
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="text-center">
@@ -60,10 +91,37 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         <p className="text-xs text-stone-400 mt-1 tracking-wide uppercase font-medium">In ordine alfabetico</p>
       </div>
 
+      {/* Barra di ricerca */}
+      <div className="relative">
+        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Cerca nelle impostazioni..."
+          className="w-full pl-10 pr-10 py-3 bg-white border border-stone-200 rounded-2xl text-sm text-stone-700 placeholder-stone-300 focus:outline-none focus:ring-2 focus:ring-stone-200 focus:border-stone-300 transition-colors shadow-sm"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg hover:bg-stone-100 transition-colors text-stone-400"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden divide-y divide-stone-100">
+      {!anyVisible && (
+        <div className="px-6 py-10 text-center text-stone-400">
+          <Search size={24} className="mx-auto mb-2 opacity-30" />
+          <p className="text-sm">Nessun risultato per "<span className="font-medium text-stone-500">{searchQuery}</span>"</p>
+        </div>
+      )}
         {/* Account e Credenziali */}
         <button
           onClick={() => setSub('account')}
+          style={show('Account e Credenziali', 'Modifica email e password di accesso al gestionale') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -79,6 +137,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Avvisi e Banner */}
         <button
           onClick={() => setSub('avvisi_banner')}
+          style={show('Avvisi e Banner', 'Orari e attivazione di tutti gli avvisi, banner e notifiche del gestionale') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-teal-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -94,6 +153,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Backup e Ripristino */}
         <button
           onClick={() => setSub('backup')}
+          style={show('Backup e Ripristino', 'Esporta tutti i dati in un file o ripristina da un backup precedente') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-teal-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -109,6 +169,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Canali Social */}
         <button
           onClick={() => setSub('canali_social')}
+          style={show('Canali Social', 'Instagram, Facebook, TikTok, YouTube e altri canali del salone') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-pink-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -124,6 +185,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Cartelle di salvataggio */}
         <button
           onClick={() => setSub('cartelle')}
+          style={show('Cartelle di salvataggio', 'Configura le cartelle di destinazione per file scaricabili e salvataggio automatico') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -139,6 +201,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Connessione Cloud */}
         <button
           onClick={() => setSub('connessione')}
+          style={show('Connessione Cloud', 'Modifica le chiavi API per connettere il gestionale al database') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -154,6 +217,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Dati Azienda */}
         <button
           onClick={() => setSub('dati_azienda')}
+          style={show('Dati Azienda', 'Ragione sociale, indirizzo, P.IVA, telefono, Google Maps e sito web') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-teal-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -169,6 +233,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Keep-alive automatico */}
         <button
           onClick={() => setSub('keepalive')}
+          style={show('Keep-alive automatico', 'Stato del ping automatico che mantiene attivo il database Supabase') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -184,6 +249,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Messaggi clienti */}
         <button
           onClick={() => setSub('messaggi_clienti')}
+          style={show('Messaggi clienti', 'Password eliminazione messaggi e cancellazione globale dello schedario') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-sky-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -197,6 +263,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         </button>
 
         {/* Messaggi e Comunicazioni */}
+        {msgGroupVisible && (
         <div>
           <button
             onClick={() => setMsgOpen(o => !o)}
@@ -209,14 +276,15 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
               <p className="text-sm font-semibold text-stone-800">Messaggi e Comunicazioni</p>
               <p className="text-xs text-stone-400 mt-0.5">Avvisi appuntamento, template carta sconto e messaggi comunicazioni</p>
             </div>
-            <ChevronDown size={16} className={`text-stone-400 transition-transform duration-200 ${msgOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown size={16} className={`text-stone-400 transition-transform duration-200 ${msgOpen || sq ? 'rotate-180' : ''}`} />
           </button>
 
-          {msgOpen && (
+          {(msgOpen || !!sq) && (
             <div className="border-t border-stone-100 divide-y divide-stone-50 bg-stone-50/60">
               {/* Messaggio Avviso Appuntamento */}
               <button
                 onClick={() => setSub('messaggio_avviso')}
+                style={show('Messaggio Avviso Appuntamento', 'Personalizza il testo WhatsApp per il promemoria appuntamento') ? {} : {display:'none'}}
                 className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
               >
                 <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-emerald-300 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -230,7 +298,10 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
               </button>
 
               {/* Messaggi WhatsApp automatici */}
-              <div className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5">
+              <div
+                style={show('Messaggi WhatsApp automatici', 'Pulsante avviso clienti') ? {} : {display:'none'}}
+                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5"
+              >
                 <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${whatsappDisabilitato ? 'bg-white border-stone-200' : 'bg-white border-emerald-200'}`}>
                   <MessageCircle size={15} className={whatsappDisabilitato ? 'text-stone-300' : 'text-emerald-500'} />
                 </div>
@@ -251,6 +322,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
               {/* Template Messaggi Carta Sconto */}
               <button
                 onClick={() => setSub('template_carta')}
+                style={show('Template Messaggi Carta Sconto', 'Modelli per carte sconto Natale compleanno regalo') ? {} : {display:'none'}}
                 className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
               >
                 <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-rose-300 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -266,6 +338,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
               {/* Template Messaggi Comunicazioni */}
               <button
                 onClick={() => setSub('template_comunicazioni')}
+                style={show('Template Messaggi Comunicazioni', 'Messaggi predefiniti per comunicazioni compleanno feste promo') ? {} : {display:'none'}}
                 className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
               >
                 <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-sky-300 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -280,10 +353,12 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
             </div>
           )}
         </div>
+        )}
 
         {/* Notifiche Push */}
         <button
           onClick={() => setSub('notifiche_push')}
+          style={show('Notifiche Push', 'Ricevi notifiche sul telefono quando arriva una prenotazione online') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -299,6 +374,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Orari Salone */}
         <button
           onClick={() => setSub('orari_salone')}
+          style={show('Orari Salone', 'Giorni di apertura e orari di lavoro del salone') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -314,6 +390,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Password */}
         <button
           onClick={() => setSub('password')}
+          style={show('Password', 'Gestisci le password di accesso alle sezioni protette') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -329,6 +406,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Prenotazioni Online */}
         <button
           onClick={() => setSub('prenotazioni_online')}
+          style={show('Prenotazioni Online', 'Attiva disattiva la pagina pubblica di prenotazione e personalizza i messaggi') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -344,6 +422,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Promemoria Convalida Fiches */}
         <button
           onClick={() => setSub('promemoria')}
+          style={show('Promemoria Convalida Fiches', 'Configura giorni e orario per il promemoria di convalida giornaliero') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -359,6 +438,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* QR Code Registrazione Clienti */}
         <button
           onClick={() => setSub('qrcode')}
+          style={show('QR Code Registrazione Clienti', 'Stampa il QR code da esporre in salone per le nuove clienti') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
@@ -374,6 +454,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
         {/* Tema e Personalizzazione */}
         <button
           onClick={() => setSub('tema')}
+          style={show('Tema e Personalizzazione', 'Colori sidebar, icona e logo del salone per questo dispositivo') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-violet-100 flex items-center justify-center flex-shrink-0 transition-colors">
