@@ -8,6 +8,7 @@ import { useAuth } from '../lib/AuthContext';
 import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione, compressImage } from '../lib/localDb';
 import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
+import { generateCartaPremiumStampaPdf } from '../lib/cartePremiumPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti';
@@ -4289,6 +4290,26 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
     setLoading(null);
   }
 
+  // ── Stampa Carta Premium ─────────────────────────────────────────────────
+  async function scaricaCartaPremiumPdf() {
+    setLoading('carta_premium_pdf');
+    try {
+      const [nomeVal, urlVal] = await Promise.all([
+        getImpostazione('azienda_nome'),
+        getImpostazione('azienda_sito_prenotazioni'),
+      ]);
+      const blob = await generateCartaPremiumStampaPdf({
+        saloneName: nomeVal ?? '',
+        bookingUrl: urlVal ?? '',
+      });
+      await saveFile('fiches', 'carta-premium-stampa.pdf', blob);
+      showFeedback('carta_premium_pdf', 'PDF scaricato: carta-premium-stampa.pdf');
+    } catch {
+      showFeedback('carta_premium_pdf', 'Errore durante la generazione del PDF.', false);
+    }
+    setLoading(null);
+  }
+
   // ── Fiches PDF ────────────────────────────────────────────────────────────
   async function scaricaFichePdf() {
     setLoading('fiches_pdf');
@@ -4347,6 +4368,17 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
         { key: 'schede_colore_csv', label: 'Schede colore (CSV)', fn: scaricaSchedeColoreCsv },
         { key: 'carte_premium_csv', label: 'Carte Premium (CSV)', fn: scaricaCartePremiumCsv },
         { key: 'carte_sconto_csv', label: 'Carte Sconto (CSV)', fn: scaricaCarteScontoCsv },
+      ],
+    },
+    {
+      key: 'stampa_carte',
+      titolo: 'Stampa Carte',
+      descrizione: 'Template PDF fronte/retro formato CR80 (85,6×54 mm + bleed 3mm) per tipografia PVC',
+      icon: <Download size={18} />,
+      color: 'bg-amber-100',
+      hoverColor: 'text-amber-600',
+      voci: [
+        { key: 'carta_premium_pdf', label: 'Carta Premium – Fronte + Retro (PDF)', fn: scaricaCartaPremiumPdf },
       ],
     },
     {
