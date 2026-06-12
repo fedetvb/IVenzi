@@ -4,7 +4,7 @@ import {
   RefreshCw, Check, Copy, AlertCircle, Wallet, History, Percent, Euro,
   Gift, Package, Send, Clock, ShieldCheck, List, Pencil, ChevronRight, BookOpen,
 } from 'lucide-react';
-import { localDateStr } from '../lib/supabase';
+import { localDateStr, supabase } from '../lib/supabase';
 import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
@@ -1933,6 +1933,19 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
                 donataData.scadenza_uso = scadenza.toISOString();
               }
               await dbUpdate({ table: 'gift_pass', id: gp.id, data: donataData }).catch(() => {});
+
+              // Popup "ha donato" solo se la ricevente non ha né scheda cliente né scheda da confermare
+              const telRicevente = gp.destinataria_telefono?.trim();
+              if (telRicevente) {
+                const [{ data: existCliente }, { data: existScheda }] = await Promise.all([
+                  supabase.from('clienti').select('id').eq('telefono', telRicevente).is('deleted_at', null).limit(1).maybeSingle(),
+                  supabase.from('schede_clienti_da_confermare').select('id').eq('telefono', telRicevente).eq('stato', 'in_attesa').limit(1).maybeSingle(),
+                ]);
+                if (!existCliente && !existScheda) {
+                  window.dispatchEvent(new CustomEvent('carta_donata', { detail: { donatrice: compratore_nome ?? '' } }));
+                }
+              }
+
               apriWhatsApp(gp.destinataria_telefono, messaggio);
               onClose();
             }}

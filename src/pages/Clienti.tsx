@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar, ShieldOff, Ban } from 'lucide-react';
+import { Plus, Search, Phone, Mail, ChevronRight, Trash2, Users, CreditCard, ClipboardList, Check, X, UserPlus, Clock, FileSpreadsheet, FileText, ChevronDown, MessageCircle, Calendar, ShieldOff, Ban, Star } from 'lucide-react';
 import { supabase, type Cliente } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione } from '../lib/localDb';
 import { apriWhatsApp, apriWhatsAppSenzaNumero } from '../lib/waUtils';
@@ -39,7 +39,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [tab, setTab] = useState<'clienti' | 'da_confermare' | 'blacklist'>('clienti');
+  const [tab, setTab] = useState<'clienti' | 'da_confermare' | 'blacklist' | 'ambasciatori'>('clienti');
   const [schede, setSchede] = useState<SchedaDaConfermare[]>([]);
   const [schedeLoading, setSchedeLoading] = useState(false);
   const [schedaAperta, setSchedaAperta] = useState<SchedaDaConfermare | null>(null);
@@ -47,6 +47,96 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
   const [eliminaGate, setEliminaGate] = useState<string | null>(null);
   const [eliminaClienteGate, setEliminaClienteGate] = useState<string | null>(null);
   const [messaggioConferma, setMessaggioConferma] = useState<{ nome: string; testo: string; clienteId: string; telefono: string } | null>(null);
+
+  // Ambasciatori
+  interface AmbasciatoreReferral {
+    clienteId: string;
+    nome: string;
+    cognome: string;
+    presentate: Array<{ nome: string; cognome: string; clienteId: string | null }>;
+  }
+  const [ambasciatori, setAmbasciatori] = useState<AmbasciatoreReferral[]>([]);
+  const [ambLoadng, setAmbLoading] = useState(false);
+  const [ambExpanded, setAmbExpanded] = useState<Set<string>>(new Set());
+
+  const loadAmbasciatori = useCallback(async () => {
+    setAmbLoading(true);
+    // Recupera tutte le gift_pass con cliente_id (donatore) e destinataria_cliente_id
+    // e tutte le carte_sconto con regalata_da_cliente_id
+    const [gpRes, csRes, schedaRes] = await Promise.all([
+      supabase.from('gift_pass')
+        .select('cliente_id, destinataria_cliente_id, destinataria_nome')
+        .not('cliente_id', 'is', null)
+        .is('deleted_at', null),
+      supabase.from('carte_sconto')
+        .select('regalata_da_cliente_id, cliente_id')
+        .not('regalata_da_cliente_id', 'is', null)
+        .is('deleted_at', null),
+      supabase.from('schede_clienti_da_confermare')
+        .select('nome, cognome, codice_gift_pass, codice_carta_sconto')
+        .eq('stato', 'in_attesa'),
+    ]);
+
+    // Mappa: donatore_id -> lista presentate
+    const map = new Map<string, Array<{ nome: string; cognome: string; clienteId: string | null }>>();
+
+    // Da gift pass con destinataria cliente confermata
+    for (const gp of (gpRes.data || []) as Array<{ cliente_id: string; destinataria_cliente_id: string | null; destinataria_nome: string }>) {
+      if (!gp.cliente_id) continue;
+      if (!map.has(gp.cliente_id)) map.set(gp.cliente_id, []);
+      if (gp.destinataria_cliente_id) {
+        const dest = clienti.find(c => c.id === gp.destinataria_cliente_id);
+        if (dest) {
+          const exists = map.get(gp.cliente_id)!.some(p => p.clienteId === dest.id);
+          if (!exists) map.get(gp.cliente_id)!.push({ nome: dest.nome, cognome: dest.cognome, clienteId: dest.id });
+        }
+      }
+    }
+
+    // Da carte_sconto regalate con destinataria cliente confermata
+    for (const cs of (csRes.data || []) as Array<{ regalata_da_cliente_id: string; cliente_id: string | null }>) {
+      if (!cs.regalata_da_cliente_id) continue;
+      if (!map.has(cs.regalata_da_cliente_id)) map.set(cs.regalata_da_cliente_id, []);
+      if (cs.cliente_id) {
+        const dest = clienti.find(c => c.id === cs.cliente_id);
+        if (dest) {
+          const exists = map.get(cs.regalata_da_cliente_id)!.some(p => p.clienteId === dest.id);
+          if (!exists) map.get(cs.regalata_da_cliente_id)!.push({ nome: dest.nome, cognome: dest.cognome, clienteId: dest.id });
+        }
+      }
+    }
+
+    // Da schede in attesa (non ancora confermate) che hanno presentata_da_nome
+    for (const s of (schedaRes.data || []) as Array<{ nome: string; cognome: string; codice_gift_pass: string | null; codice_carta_sconto: string | null }>) {
+      // Troviamo il donatore tramite il codice della carta
+      if (s.codice_gift_pass) {
+        const { data: gp } = await supabase.from('gift_pass').select('cliente_id').eq('codice', s.codice_gift_pass).maybeSingle();
+        if (gp?.cliente_id) {
+          if (!map.has(gp.cliente_id)) map.set(gp.cliente_id, []);
+          const exists = map.get(gp.cliente_id)!.some(p => p.nome === s.nome && p.cognome === s.cognome);
+          if (!exists) map.get(gp.cliente_id)!.push({ nome: s.nome, cognome: s.cognome, clienteId: null });
+        }
+      }
+      if (s.codice_carta_sconto) {
+        const { data: cs } = await supabase.from('carte_sconto').select('regalata_da_cliente_id').eq('codice', s.codice_carta_sconto).maybeSingle();
+        if (cs?.regalata_da_cliente_id) {
+          if (!map.has(cs.regalata_da_cliente_id)) map.set(cs.regalata_da_cliente_id, []);
+          const exists = map.get(cs.regalata_da_cliente_id)!.some(p => p.nome === s.nome && p.cognome === s.cognome);
+          if (!exists) map.get(cs.regalata_da_cliente_id)!.push({ nome: s.nome, cognome: s.cognome, clienteId: null });
+        }
+      }
+    }
+
+    const result: AmbasciatoreReferral[] = [];
+    for (const [clienteId, presentate] of map) {
+      const c = clienti.find(cl => cl.id === clienteId);
+      if (!c || presentate.length === 0) continue;
+      result.push({ clienteId, nome: c.nome, cognome: c.cognome, presentate });
+    }
+    result.sort((a, b) => b.presentate.length - a.presentate.length);
+    setAmbasciatori(result);
+    setAmbLoading(false);
+  }, [clienti]);
 
   const loadClienti = useCallback(async () => {
     setLoading(true);
@@ -89,6 +179,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => { loadClienti(); }, [loadClienti]);
+  useEffect(() => { if (tab === 'ambasciatori' && clienti.length > 0) loadAmbasciatori(); }, [tab, clienti, loadAmbasciatori]);
 
   // Carica schede in attesa all'avvio
   useEffect(() => { loadSchede(); }, [loadSchede]);
@@ -578,6 +669,18 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
             <span className="text-xs bg-red-500 text-white rounded-full px-2 py-0.5">{clienti.filter(c => c.in_blacklist).length}</span>
           )}
         </button>
+        <button
+          onClick={() => setTab('ambasciatori')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            tab === 'ambasciatori' ? 'bg-white text-amber-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+          }`}
+        >
+          <Star size={15} />
+          Ambasciatori
+          {ambasciatori.length > 0 && (
+            <span className="text-xs bg-amber-500 text-white rounded-full px-2 py-0.5">{ambasciatori.length}</span>
+          )}
+        </button>
       </div>
 
       {tab === 'clienti' && (
@@ -897,6 +1000,97 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
           </>
         );
       })()}
+
+      {tab === 'ambasciatori' && (
+        <>
+          <div className="flex items-center justify-between mb-5">
+            <p className="text-sm text-stone-500">
+              Clienti che hanno presentato nuove clienti al salone tramite donazione di carte.
+            </p>
+            <button
+              onClick={loadAmbasciatori}
+              className="text-xs text-amber-600 hover:text-amber-700 font-semibold"
+            >
+              Aggiorna
+            </button>
+          </div>
+
+          {ambLoadng ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="w-7 h-7 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : ambasciatori.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-stone-200 p-16 text-center">
+              <Star size={32} className="text-stone-300 mx-auto mb-3" />
+              <p className="text-stone-500 font-medium">Nessuna ambasciatrice ancora</p>
+              <p className="text-stone-400 text-sm mt-1">Quando una cliente dona una carta e la ricevente si registra, appare qui.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {ambasciatori.map(amb => {
+                const isExpanded = ambExpanded.has(amb.clienteId);
+                return (
+                  <div key={amb.clienteId} className="bg-white rounded-2xl border border-amber-200 overflow-hidden">
+                    <div className="px-5 py-4 flex items-center gap-4">
+                      <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Star size={16} className="text-amber-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <button
+                          onClick={() => onSelectCliente(amb.clienteId)}
+                          className="font-semibold text-stone-800 hover:text-amber-700 transition-colors text-left"
+                        >
+                          {amb.cognome} {amb.nome}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => setAmbExpanded(prev => {
+                          const next = new Set(prev);
+                          if (next.has(amb.clienteId)) next.delete(amb.clienteId);
+                          else next.add(amb.clienteId);
+                          return next;
+                        })}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors flex-shrink-0"
+                      >
+                        <span className="text-sm font-bold text-amber-700">
+                          {amb.presentate.length} {amb.presentate.length === 1 ? 'cliente' : 'clienti'}
+                        </span>
+                        <ChevronDown
+                          size={14}
+                          className={`text-amber-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <div className="border-t border-amber-100 px-5 py-3 space-y-2 bg-amber-50/40">
+                        {amb.presentate.map((p, i) => (
+                          <div key={i} className="flex items-center gap-3">
+                            <div className="w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-[10px] font-bold text-amber-700">{i + 1}</span>
+                            </div>
+                            {p.clienteId ? (
+                              <button
+                                onClick={() => onSelectCliente(p.clienteId!)}
+                                className="text-sm text-stone-700 hover:text-amber-700 font-medium transition-colors text-left"
+                              >
+                                {p.cognome} {p.nome}
+                              </button>
+                            ) : (
+                              <span className="text-sm text-stone-500 italic">
+                                {p.cognome} {p.nome} <span className="text-[10px] text-amber-500 font-semibold ml-1">(in attesa di conferma)</span>
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
 
       {showModal && (
         <ClienteModal

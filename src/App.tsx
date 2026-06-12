@@ -23,7 +23,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
-import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing } from 'lucide-react';
+import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing, Star, Gift } from 'lucide-react';
 import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
 import AiChat from './components/AiChat';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione } from './lib/localDb';
@@ -105,6 +105,18 @@ export default function App() {
   richiestaPrenotaIdRef.current = richiestaPrenotaId;
   const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
   const [volumeNotifiche, setVolumeNotifiche] = useState(70);
+
+  // Popup referral: "ha presentato"
+  interface ReferralPopup { donatrice: string; nuovaCliente: string; tipoCarta: string }
+  const [referralPopups, setReferralPopups] = useState<ReferralPopup[]>([]);
+
+  // Popup referral: "ha donato"
+  interface DonazionePopup { donatrice: string }
+  const [donazionePopups, setDonazionePopups] = useState<DonazionePopup[]>([]);
+
+  // Popup record ambasciatori
+  interface RecordPopup { donatrice: string; count: number; isFirst: boolean }
+  const [recordPopups, setRecordPopups] = useState<RecordPopup[]>([]);
 
   // Banner richiesta permesso notifiche push
   const [showPushBanner, setShowPushBanner] = useState(false);
@@ -669,6 +681,97 @@ export default function App() {
     };
   }, [user]);
 
+  // Realtime: popup "ha presentato" quando una scheda con carta donata arriva
+  useEffect(() => {
+    if (!user) return;
+
+    let channelRef: ReturnType<typeof supabase.channel> | null = null;
+    let destroyed = false;
+
+    async function getReferralCount(donatoreId: string): Promise<number> {
+      // Conta le presentate da gift_pass (destinatarie confermate)
+      const [gpRes, csRes] = await Promise.all([
+        supabase.from('gift_pass').select('id', { count: 'exact', head: true })
+          .eq('cliente_id', donatoreId)
+          .not('destinataria_cliente_id', 'is', null),
+        supabase.from('carte_sconto').select('id', { count: 'exact', head: true })
+          .eq('regalata_da_cliente_id', donatoreId)
+          .not('cliente_id', 'is', null),
+      ]);
+      return (gpRes.count ?? 0) + (csRes.count ?? 0);
+    }
+
+    function addReferralPopup(donatrice: string, nuovaCliente: string, tipoCarta: string) {
+      setReferralPopups(prev => [...prev, { donatrice, nuovaCliente, tipoCarta }]);
+    }
+
+    async function handleNuovaScheda(row: Record<string, unknown>) {
+      const codiceGp = row.codice_gift_pass as string | null;
+      const codiceCs = row.codice_carta_sconto as string | null;
+
+      if (!codiceGp && !codiceCs) return;
+
+      const nuovaCliente = [row.nome, row.cognome].filter(Boolean).join(' ') || 'Nuova cliente';
+
+      if (codiceGp) {
+        const { data: gp } = await supabase.from('gift_pass')
+          .select('cliente_id, clienti(nome, cognome)')
+          .eq('codice', codiceGp)
+          .maybeSingle();
+        if (gp?.cliente_id && gp.clienti) {
+          const cl = gp.clienti as { nome: string; cognome: string };
+          const donatrice = [cl.nome, cl.cognome].filter(Boolean).join(' ');
+          addReferralPopup(donatrice, nuovaCliente, 'Gift Pass');
+          // Check record
+          const count = await getReferralCount(gp.cliente_id as string);
+          if (count > 0 && count % 5 === 0) {
+            setRecordPopups(prev => [...prev, { donatrice, count, isFirst: count === 5 }]);
+          }
+        }
+      } else if (codiceCs) {
+        const { data: cs } = await supabase.from('carte_sconto')
+          .select('regalata_da_cliente_id, clienti:regalata_da_cliente_id(nome, cognome)')
+          .eq('codice', codiceCs)
+          .maybeSingle();
+        if (cs?.regalata_da_cliente_id && cs.clienti) {
+          const cl = cs.clienti as { nome: string; cognome: string };
+          const donatrice = [cl.nome, cl.cognome].filter(Boolean).join(' ');
+          addReferralPopup(donatrice, nuovaCliente, 'Carta Sconto');
+          const count = await getReferralCount(cs.regalata_da_cliente_id as string);
+          if (count > 0 && count % 5 === 0) {
+            setRecordPopups(prev => [...prev, { donatrice, count, isFirst: count === 5 }]);
+          }
+        }
+      }
+    }
+
+    channelRef = supabase
+      .channel(`referral_schede_${Date.now()}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'schede_clienti_da_confermare',
+      }, (payload) => {
+        if (destroyed) return;
+        const row = payload.new as Record<string, unknown>;
+        handleNuovaScheda(row);
+      })
+      .subscribe();
+
+    // Listener per evento "carta donata" lanciato da Carte.tsx
+    function handleCartaDonata(e: Event) {
+      const { donatrice } = (e as CustomEvent).detail as { donatrice: string };
+      setDonazionePopups(prev => [...prev, { donatrice }]);
+    }
+    window.addEventListener('carta_donata', handleCartaDonata);
+
+    return () => {
+      destroyed = true;
+      if (channelRef) supabase.removeChannel(channelRef);
+      window.removeEventListener('carta_donata', handleCartaDonata);
+    };
+  }, [user]);
+
   // Realtime + polling: avviso nuova richiesta prenotazione online
   useEffect(() => {
     if (!user) return;
@@ -1085,6 +1188,86 @@ export default function App() {
               <X size={15} />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Popup referral: ha presentato */}
+      {referralPopups.length > 0 && (
+        <div className="fixed right-4 top-4 z-[110] flex flex-col gap-2 max-w-sm">
+          {referralPopups.map((p, i) => (
+            <div key={i} className="bg-emerald-600 rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Star size={16} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white">Nuova cliente presentata!</p>
+                <p className="text-xs text-emerald-100 mt-0.5 leading-relaxed">
+                  <span className="font-semibold">{p.donatrice}</span> ha presentato{' '}
+                  <span className="font-semibold">{p.nuovaCliente}</span> tramite {p.tipoCarta}.
+                </p>
+              </div>
+              <button
+                onClick={() => setReferralPopups(prev => prev.filter((_, j) => j !== i))}
+                className="p-1 hover:bg-emerald-500 rounded-lg transition-colors text-emerald-200 hover:text-white flex-shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Popup referral: ha donato */}
+      {donazionePopups.length > 0 && (
+        <div className="fixed right-4 bottom-4 z-[110] flex flex-col gap-2 max-w-sm">
+          {donazionePopups.map((p, i) => (
+            <div key={i} className="bg-violet-600 rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
+              <div className="w-9 h-9 rounded-xl bg-violet-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Gift size={16} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white">Carta donata!</p>
+                <p className="text-xs text-violet-100 mt-0.5">
+                  <span className="font-semibold">{p.donatrice}</span> ha donato la sua carta!
+                </p>
+              </div>
+              <button
+                onClick={() => setDonazionePopups(prev => prev.filter((_, j) => j !== i))}
+                className="p-1 hover:bg-violet-500 rounded-lg transition-colors text-violet-200 hover:text-white flex-shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Popup record ambasciatori */}
+      {recordPopups.length > 0 && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-4 z-[112] flex flex-col gap-2 max-w-sm w-full px-4">
+          {recordPopups.map((p, i) => (
+            <div key={i} className="bg-amber-500 rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
+              <div className="w-9 h-9 rounded-xl bg-amber-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Star size={16} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white">
+                  {p.isFirst ? 'Nuovo record!' : 'Record superato!'}
+                </p>
+                <p className="text-xs text-amber-100 mt-0.5 leading-relaxed">
+                  {p.isFirst
+                    ? <><span className="font-semibold">{p.donatrice}</span> ha raggiunto il record di {p.count} clienti!</>
+                    : <><span className="font-semibold">{p.donatrice}</span> ha raggiunto un nuovo record! {p.count} clienti</>}
+                </p>
+              </div>
+              <button
+                onClick={() => setRecordPopups(prev => prev.filter((_, j) => j !== i))}
+                className="p-1 hover:bg-amber-400 rounded-lg transition-colors text-amber-200 hover:text-white flex-shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
