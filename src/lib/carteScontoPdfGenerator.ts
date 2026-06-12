@@ -74,60 +74,62 @@ function buildFrontHtml(saloneName: string): string {
   `;
 }
 
-// ── BACK ──────────────────────────────────────────────────────────────────
-async function buildBackHtml(bookingUrl: string, saloneName: string): Promise<string> {
+// ── QR code with logo overlay (error correction H) ───────────────────────
+async function generateQrWithLogo(url: string, logoDataUrl?: string): Promise<string> {
+  const qrCanvas = document.createElement('canvas');
+  await QRCode.toCanvas(qrCanvas, url || 'https://ivenzi.it', {
+    width: 800, margin: 3, errorCorrectionLevel: 'H',
+    color: { dark: '#111111', light: '#ffffff' },
+  });
+  if (!logoDataUrl) return qrCanvas.toDataURL('image/png');
+  const ctx = qrCanvas.getContext('2d')!;
+  const sz = qrCanvas.width;
+  const logoSz = Math.round(sz * 0.21);
+  const cx = Math.round((sz - logoSz) / 2);
+  const cy = Math.round((sz - logoSz) / 2);
+  const pad = Math.round(logoSz * 0.16);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(cx - pad, cy - pad, logoSz + 2 * pad, logoSz + 2 * pad);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, cx, cy, logoSz, logoSz); resolve(qrCanvas.toDataURL('image/png')); };
+    img.onerror = () => resolve(qrCanvas.toDataURL('image/png'));
+    img.src = logoDataUrl;
+  });
+}
+
+// ── BACK — white, code area left, large QR with logo right ───────────────
+async function buildBackHtml(bookingUrl: string, logoDataUrl?: string): Promise<string> {
   // Code label area: left side, vertically centered
   const labelW = mm(50);
   const labelH = mm(13);
   const labelLeft = mm(B_MM + 6);
   const labelTop = Math.round((TH_PX - labelH) / 2);
+  const labelLabelFs = mm(3.5);
 
-  // QR code: right side, vertically centered
-  const qrMM = 22;
+  // QR: right side, vertically centered (25mm)
+  const qrMM = 25;
   const qrSz = mm(qrMM);
-  const qrPad = mm(1.5); // white padding around QR
-  const qrLeft = TW_PX - mm(B_MM + 4) - qrSz - 2 * qrPad;
-  const qrTop = Math.round((TH_PX - qrSz - 2 * qrPad) / 2);
-  const qrLabelFs = mm(4.5);
-  const titleFs = mm(5.2);
-  const bottomPad = mm(B_MM + 3);
-  const smallFs = mm(3.8);
+  const qrLeft = TW_PX - mm(B_MM + 4) - qrSz;
+  const qrTop = Math.round((TH_PX - qrSz) / 2);
+  const labelFs = mm(4.5);
 
-  let qrHtml = '';
-  if (bookingUrl) {
-    try {
-      const qrDataUrl = await QRCode.toDataURL(bookingUrl, {
-        width: 700,
-        margin: 1,
-        errorCorrectionLevel: 'M',
-        color: { dark: '#0a3a35', light: '#ffffff' },
-      });
-      qrHtml = `
-        <div style="position:absolute;top:${qrTop - mm(6.5)}px;left:${qrLeft}px;width:${qrSz + 2 * qrPad}px;text-align:center;font-size:${qrLabelFs}px;font-weight:700;color:rgba(255,255,255,0.80);letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
-        <div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz + 2*qrPad}px;height:${qrSz + 2*qrPad}px;background:rgba(255,255,255,0.94);border-radius:${mm(1.2)}px;display:flex;align-items:center;justify-content:center;">
-          <img src="${qrDataUrl}" style="width:${qrSz}px;height:${qrSz}px;" />
-        </div>
-      `;
-    } catch {
-      qrHtml = `<div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz}px;height:${qrSz}px;border:${mm(0.2)}px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;"><span style="font-size:${mm(4)}px;color:rgba(255,255,255,0.4);">QR</span></div>`;
-    }
-  }
+  let qrSrc = '';
+  try { qrSrc = await generateQrWithLogo(bookingUrl, logoDataUrl); } catch { /* blank */ }
+
+  const qrImg = qrSrc
+    ? `<img src="${qrSrc}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz}px;height:${qrSz}px;" />`
+    : `<div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz}px;height:${qrSz}px;border:${mm(0.3)}px solid #ccc;"></div>`;
 
   return `
-    <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;">
-      ${backgroundHtml()}
-
-      <!-- Code label area: 50×13mm (testo nero su trasparente) -->
-      <div style="position:absolute;top:${labelTop}px;left:${labelLeft}px;width:${labelW}px;height:${labelH}px;"></div>
-
-      ${qrHtml}
-
-      <!-- CARTA SCONTO watermark -->
-      <div style="position:absolute;bottom:${bottomPad}px;left:0;right:0;text-align:center;font-size:${titleFs}px;font-weight:900;color:rgba(255,255,255,0.18);letter-spacing:${mm(0.55)}px;">CARTA SCONTO</div>
-
-      ${saloneName ? `<div style="position:absolute;bottom:${mm(B_MM+8)}px;left:0;right:0;text-align:center;font-size:${smallFs}px;font-weight:600;color:rgba(255,255,255,0.22);letter-spacing:${mm(0.12)}px;text-transform:uppercase;">${saloneName.toUpperCase()}</div>` : ''}
-    </div>
-  `;
+    <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;background:#ffffff;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;">
+      <!-- Code label area: 50×13mm (etichetta codice, testo nero su trasparente) -->
+      <div style="position:absolute;top:${labelTop}px;left:${labelLeft}px;width:${labelW}px;height:${labelH}px;border:${mm(0.2)}px dashed #ccc;border-radius:${mm(0.5)}px;"></div>
+      <div style="position:absolute;top:${labelTop + labelH + mm(1.5)}px;left:${labelLeft}px;font-size:${labelLabelFs}px;color:#bbb;letter-spacing:${mm(0.04)}px;">ETICHETTA CODICE (50×13 mm)</div>
+      <!-- PRENOTA ONLINE label above QR -->
+      <div style="position:absolute;top:${qrTop - mm(7)}px;left:${qrLeft}px;width:${qrSz}px;text-align:center;font-size:${labelFs}px;font-weight:700;color:#555;letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
+      ${qrImg}
+    </div>`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -168,9 +170,10 @@ async function captureHtml(html: string): Promise<string> {
 export async function generateCartaScontoPdfStampa(opts: {
   saloneName: string;
   bookingUrl: string;
+  logoDataUrl?: string;
 }): Promise<Blob> {
   const frontHtml = buildFrontHtml(opts.saloneName);
-  const backHtml = await buildBackHtml(opts.bookingUrl, opts.saloneName);
+  const backHtml = await buildBackHtml(opts.bookingUrl, opts.logoDataUrl);
 
   const frontImg = await captureHtml(frontHtml);
   const backImgRaw = await captureHtml(backHtml);

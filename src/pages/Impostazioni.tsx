@@ -4108,20 +4108,29 @@ function CartaPremiumPreview() {
             <div style={{ position:'absolute', top:'42%', left:'4.5%', width:'58%', height:'22%', border:'0.5px dashed rgba(180,140,20,0.4)', borderRadius:2 }} />
             <div style={{ position:'absolute', top:'67%', left:'4.5%', fontSize:'clamp(4px,1.5vw,6px)', color:'rgba(150,110,20,0.55)', fontWeight:600, fontFamily:'Arial,sans-serif', letterSpacing:'0.04em' }}>AREA NOME (50 × 13 mm)</div>
           </>
-        ) : (
-          /* RETRO: sfondo bianco, solo QR */
-          <>
-            <div style={{ ...a0, background:'#ffffff' }} />
-            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <div style={{ width:'50%', aspectRatio:'1/1', display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'2.5%', padding:'5%', boxSizing:'border-box', background:'#fff', border:'1px solid #ddd', borderRadius:4 }}>
-                {[1,1,1,0,1,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,0,1,1,1].map((v,i) => (
-                  <div key={i} style={{ background: v ? '#111':'transparent', borderRadius:1, aspectRatio:'1/1' }} />
-                ))}
+        ) : (() => {
+          const logoB64 = getLogoCacheB64();
+          return (
+            /* RETRO: bianco, QR grande centrato con logo */
+            <>
+              <div style={{ ...a0, background:'#ffffff' }} />
+              <div style={{ position:'absolute', top:'8%', left:0, right:0, textAlign:'center', fontSize:'clamp(4px,1.7vw,7px)', fontWeight:700, color:'#555', fontFamily:'Arial,sans-serif', letterSpacing:'0.12em' }}>PRENOTA ONLINE</div>
+              {/* QR con logo centrato */}
+              <div style={{ position:'absolute', top:'18%', left:'50%', transform:'translateX(-50%)', width:'58%', aspectRatio:'1/1', position:'absolute' }}>
+                <div style={{ width:'100%', height:'100%', position:'relative', border:'1px solid #eee', borderRadius:4, overflow:'hidden', background:'#fff' }}>
+                  <div style={{ width:'100%', height:'100%', display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1.5%', padding:'4%', boxSizing:'border-box' }}>
+                    {[1,1,1,0,1,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,0,1,1,1].map((v,i)=>(
+                      <div key={i} style={{ background:v?'#111':'transparent', borderRadius:1, aspectRatio:'1/1' }} />
+                    ))}
+                  </div>
+                  <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'26%', height:'26%', background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', borderRadius:2 }}>
+                    {logoB64 ? <img src={logoB64} style={{ width:'100%', height:'100%', objectFit:'contain' }} /> : <div style={{ width:'70%', height:'70%', borderRadius:'50%', border:'1.5px solid #ddd' }} />}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div style={{ position:'absolute', bottom:'5%', left:0, right:0, textAlign:'center', fontSize:'clamp(4px,1.5vw,6px)', color:'#bbb', fontFamily:'Arial,sans-serif', letterSpacing:'0.1em' }}>retro ruotato 180° nel PDF per stampa fronte/retro</div>
-          </>
-        )}
+            </>
+          );
+        })()}
       </div>
       <div style={{ display:'flex', gap:6 }}>
         {(['fronte','retro'] as const).map(s => (
@@ -4161,25 +4170,33 @@ function CartaScontoPreview() {
             <div style={{ position:'absolute', top:'63%', left:'36%', width:'38%', height:'22%', border:'0.5px dashed rgba(255,255,255,0.4)', borderRadius:2 }} />
             <div style={{ position:'absolute', top:'87%', left:'36%', fontSize:'clamp(3px,1.4%,6px)', color:'rgba(255,255,255,0.55)', fontFamily:'Arial,sans-serif' }}>AREA SCONTO % (50×13 mm)</div>
           </>
-        ) : (
-          /* RETRO: teal + QR */
-          <>
-            <div style={{ ...a0, background: bg }} />
-            <div style={{ ...a0, background: glow }} />
-            {/* Code label area */}
-            <div style={{ position:'absolute', top:'42%', left:'5%', width:'43%', height:'20%', border:'0.5px dashed rgba(255,255,255,0.4)', borderRadius:2 }} />
-            <div style={{ position:'absolute', top:'64%', left:'5%', fontSize:'clamp(3px,1.4%,6px)', color:'rgba(255,255,255,0.55)', fontFamily:'Arial,sans-serif' }}>AREA CODICE (50×13 mm)</div>
-            {/* QR placeholder */}
-            <div style={{ position:'absolute', top:'20%', right:'5%', width:'28%', aspectRatio:'1/1', background:'rgba(255,255,255,0.92)', borderRadius:4, display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'2%', padding:'5%', boxSizing:'border-box' }}>
-              {[1,1,1,0,1,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,0,1,1,1].map((v,i) => (
-                <div key={i} style={{ background: v ? '#0a3a35':'transparent', borderRadius:1, aspectRatio:'1/1' }} />
-              ))}
-            </div>
-            <div style={{ position:'absolute', top:'10%', right:'5%', width:'28%', textAlign:'center', fontSize:'clamp(3px,1.3%,5.5px)', color:'rgba(255,255,255,0.75)', fontFamily:'Arial,sans-serif', letterSpacing:'0.05em' }}>PRENOTA ONLINE</div>
-            {/* Watermark */}
-            <div style={{ position:'absolute', bottom:'5%', left:0, right:0, textAlign:'center', fontSize:'clamp(3px,1.3%,5.5px)', color:'rgba(255,255,255,0.18)', fontFamily:'Arial,sans-serif', letterSpacing:'0.2em' }}>CARTA SCONTO</div>
-          </>
-        )}
+        ) : (() => {
+          const logoB64 = getLogoCacheB64();
+          return (
+            /* RETRO: bianco, area codice sx, QR grande dx con logo */
+            <>
+              <div style={{ ...a0, background:'#ffffff' }} />
+              {/* Code label area */}
+              <div style={{ position:'absolute', top:'42%', left:'5%', width:'43%', height:'20%', border:'0.5px dashed #ccc', borderRadius:2 }} />
+              <div style={{ position:'absolute', top:'64%', left:'5%', fontSize:'clamp(3px,1.4vw,6px)', color:'#bbb', fontFamily:'Arial,sans-serif' }}>ETICHETTA CODICE (50×13 mm)</div>
+              {/* PRENOTA ONLINE label */}
+              <div style={{ position:'absolute', top:'10%', right:'4%', width:'30%', textAlign:'center', fontSize:'clamp(3px,1.5vw,6px)', fontWeight:700, color:'#555', fontFamily:'Arial,sans-serif', letterSpacing:'0.1em' }}>PRENOTA ONLINE</div>
+              {/* QR con logo */}
+              <div style={{ position:'absolute', top:'20%', right:'4%', width:'30%', aspectRatio:'1/1', position:'absolute' }}>
+                <div style={{ width:'100%', height:'100%', position:'relative', border:'1px solid #eee', borderRadius:4, overflow:'hidden', background:'#fff' }}>
+                  <div style={{ width:'100%', height:'100%', display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'1.5%', padding:'4%', boxSizing:'border-box' }}>
+                    {[1,1,1,0,1,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,0,1,1,1].map((v,i)=>(
+                      <div key={i} style={{ background:v?'#111':'transparent', borderRadius:1, aspectRatio:'1/1' }} />
+                    ))}
+                  </div>
+                  <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'26%', height:'26%', background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', borderRadius:2 }}>
+                    {logoB64 ? <img src={logoB64} style={{ width:'100%', height:'100%', objectFit:'contain' }} /> : <div style={{ width:'70%', height:'70%', borderRadius:'50%', border:'1.5px solid #ddd' }} />}
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
       <div style={{ display:'flex', gap:6 }}>
         {(['fronte','retro'] as const).map(s => (
@@ -4404,9 +4421,11 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
         getImpostazione('azienda_nome'),
         getImpostazione('azienda_sito_prenotazioni'),
       ]);
+      const logoDataUrl = getLogoCacheB64() || undefined;
       const blob = await generateCartaPremiumStampaPdf({
         saloneName: nomeVal ?? '',
         bookingUrl: urlVal ?? '',
+        logoDataUrl,
       });
       await saveFile('fiches', 'carta-premium-stampa.pdf', blob);
       showFeedback('carta_premium_pdf', 'PDF scaricato: carta-premium-stampa.pdf');
@@ -4424,9 +4443,11 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
         getImpostazione('azienda_nome'),
         getImpostazione('azienda_sito_prenotazioni'),
       ]);
+      const logoDataUrl = getLogoCacheB64() || undefined;
       const blob = await generateCartaScontoPdfStampa({
         saloneName: nomeVal ?? '',
         bookingUrl: urlVal ?? '',
+        logoDataUrl,
       });
       await saveFile('fiches', 'carta-sconto-stampa.pdf', blob);
       showFeedback('carta_sconto_pdf', 'PDF scaricato: carta-sconto-stampa.pdf');

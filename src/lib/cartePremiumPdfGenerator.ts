@@ -88,27 +88,51 @@ function buildFrontHtml(saloneName: string): string {
   `;
 }
 
-// ── BACK HTML — white background, QR code only ────────────────────────────
-async function buildBackHtml(bookingUrl: string): Promise<string> {
-  const qrMM = 30;
+// ── QR code with logo overlay (error correction H) ───────────────────────
+async function generateQrWithLogo(url: string, logoDataUrl?: string): Promise<string> {
+  const qrCanvas = document.createElement('canvas');
+  await QRCode.toCanvas(qrCanvas, url || 'https://ivenzi.it', {
+    width: 800, margin: 3, errorCorrectionLevel: 'H',
+    color: { dark: '#111111', light: '#ffffff' },
+  });
+  if (!logoDataUrl) return qrCanvas.toDataURL('image/png');
+  const ctx = qrCanvas.getContext('2d')!;
+  const sz = qrCanvas.width;
+  const logoSz = Math.round(sz * 0.21);
+  const cx = Math.round((sz - logoSz) / 2);
+  const cy = Math.round((sz - logoSz) / 2);
+  const pad = Math.round(logoSz * 0.16);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(cx - pad, cy - pad, logoSz + 2 * pad, logoSz + 2 * pad);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, cx, cy, logoSz, logoSz); resolve(qrCanvas.toDataURL('image/png')); };
+    img.onerror = () => resolve(qrCanvas.toDataURL('image/png'));
+    img.src = logoDataUrl;
+  });
+}
+
+// ── BACK HTML — white, large centered QR with logo ────────────────────────
+async function buildBackHtml(bookingUrl: string, logoDataUrl?: string): Promise<string> {
+  const qrMM = 36;
   const qrSize = mm(qrMM);
   const qrLeft = Math.round((TW_PX - qrSize) / 2);
+  const labelFs = mm(4.8);
+  const labelTop = Math.round((TH_PX - qrSize) / 2) - mm(7);
   const qrTop = Math.round((TH_PX - qrSize) / 2);
 
-  let qrHtml = `<div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border:${mm(0.3)}px solid #bbb;display:flex;align-items:center;justify-content:center;"><span style="font-size:${mm(5)}px;color:#888;font-family:Arial;">QR CODE</span></div>`;
-  if (bookingUrl) {
-    try {
-      const qrDataUrl = await QRCode.toDataURL(bookingUrl, {
-        width: 800,
-        margin: 2,
-        errorCorrectionLevel: 'M',
-        color: { dark: '#111111', light: '#ffffff' },
-      });
-      qrHtml = `<img src="${qrDataUrl}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;" />`;
-    } catch { /* use placeholder */ }
-  }
+  let qrSrc = '';
+  try { qrSrc = await generateQrWithLogo(bookingUrl, logoDataUrl); } catch { /* blank */ }
 
-  return `<div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;background:#ffffff;box-sizing:border-box;">${qrHtml}</div>`;
+  const qrImg = qrSrc
+    ? `<img src="${qrSrc}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;" />`
+    : `<div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border:${mm(0.3)}px solid #ccc;"></div>`;
+
+  return `
+    <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;background:#ffffff;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;">
+      <div style="position:absolute;top:${labelTop}px;left:${qrLeft}px;width:${qrSize}px;text-align:center;font-size:${labelFs}px;font-weight:700;color:#555;letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
+      ${qrImg}
+    </div>`;
 }
 
 // ── Rotate captured image 180° (back face for double-sided printing) ─────
@@ -155,9 +179,10 @@ async function captureHtml(html: string): Promise<string> {
 export async function generateCartaPremiumStampaPdf(opts: {
   saloneName: string;
   bookingUrl: string;
+  logoDataUrl?: string;
 }): Promise<Blob> {
   const frontHtml = buildFrontHtml(opts.saloneName);
-  const backHtml = await buildBackHtml(opts.bookingUrl);
+  const backHtml = await buildBackHtml(opts.bookingUrl, opts.logoDataUrl);
 
   const frontImg = await captureHtml(frontHtml);
   const backImgRaw = await captureHtml(backHtml);
