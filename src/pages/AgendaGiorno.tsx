@@ -37,10 +37,12 @@ const LONG_PRESS_MS = 500;
 
 function getSlots(startHour: number, endHour: number) {
   const slots: string[] = [];
-  for (let h = startHour; h < endHour; h++) {
-    for (let m = 0; m < 60; m += SLOT_DURATION) {
-      slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-    }
+  const startMin = Math.round(startHour * 60);
+  const endMin = endHour * 60;
+  for (let m = startMin; m < endMin; m += SLOT_DURATION) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    slots.push(`${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
   }
   return slots;
 }
@@ -996,9 +998,16 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                   onChange={e => { const v = Number(e.target.value); if (v < endHour) setStartHour(v); }}
                   className="text-xs border border-stone-200 bg-white rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-200 text-stone-700"
                 >
-                  {Array.from({ length: 24 }, (_, i) => i).filter(h => h < endHour).map(h => (
-                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
-                  ))}
+                  {(() => {
+                    const opts: Array<{ value: number; label: string }> = [];
+                    for (let h = 0; h < 24; h++) {
+                      opts.push({ value: h, label: `${String(h).padStart(2, '0')}:00` });
+                      if (h === 8) opts.push({ value: 8.5, label: '08:30' });
+                    }
+                    return opts.filter(o => o.value < endHour).map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ));
+                  })()}
                 </select>
                 <span className="text-xs text-stone-500">alle</span>
                 <select

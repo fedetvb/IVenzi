@@ -1563,8 +1563,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         {step === 'scelta' && (
           <div className="space-y-4">
             <div className="text-center mb-6">
-              <p className="text-xl font-bold text-stone-800">Ciao, {nome}!</p>
-              <p className="text-sm text-stone-400 mt-1">Cosa vuoi fare oggi?</p>
+              <p className="text-3xl font-bold text-stone-800">Ciao, {nome}!</p>
+              <p className="text-base text-stone-400 mt-1">Cosa vuoi fare oggi?</p>
             </div>
 
             {/* Banner promemoria appuntamenti oggi/domani */}
@@ -3921,6 +3921,18 @@ const SOCIAL_META: Array<{
   },
 ];
 
+function buildSocialHref(key: string, value: string): string {
+  if (key === 'social_whatsapp') {
+    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('wa.me')) {
+      return value;
+    }
+    // Plain number: strip non-digits (except leading +)
+    const digits = value.replace(/[^\d+]/g, '').replace(/^\+/, '');
+    return `https://wa.me/${digits}`;
+  }
+  return value;
+}
+
 function SocialStrip({ social }: { social?: Record<string, string> }) {
   if (!social) return null;
   const attivi = SOCIAL_META.filter(s => social[s.key]);
@@ -3933,7 +3945,7 @@ function SocialStrip({ social }: { social?: Record<string, string> }) {
         {attivi.map(s => (
           <a
             key={s.key}
-            href={social[s.key]}
+            href={buildSocialHref(s.key, social[s.key])}
             target="_blank"
             rel="noopener noreferrer"
             title={s.label}
