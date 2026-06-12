@@ -4174,6 +4174,69 @@ function CartaScontoPreview() {
   );
 }
 
+// ─── Carta Sconto Infinity – anteprima visiva ────────────────────────────────
+
+function CartaInfinityPreview() {
+  const [side, setSide] = useState<'fronte' | 'retro'>('fronte');
+  const a0: React.CSSProperties = { position: 'absolute', inset: 0 };
+  return (
+    <div style={{ padding: '16px 20px', background: '#f0eeeb', borderBottom: '1px solid #e2dfd8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: '100%', maxWidth: 320, position: 'relative', aspectRatio: '85.60 / 53.98', borderRadius: 9, overflow: 'hidden', boxShadow: '0 8px 28px rgba(0,0,0,0.18),0 2px 6px rgba(0,0,0,0.10)', border: '1px solid rgba(180,180,180,0.35)' }}>
+        {side === 'fronte' ? (
+          <>
+            {/* Background bianco/grigio chiaro */}
+            <div style={{ ...a0, background: 'linear-gradient(135deg,#ffffff 0%,#f2f2f2 30%,#fafafa 60%,#e9e9e9 100%)' }} />
+            {/* Texture diagonale */}
+            <div style={{ ...a0, backgroundImage: 'repeating-linear-gradient(45deg,rgba(160,160,160,0.06) 0px,rgba(160,160,160,0.06) 1px,transparent 0px,transparent 28px)', backgroundSize: '28px 28px' }} />
+            {/* Alone in alto a destra */}
+            <div style={{ position:'absolute', top:'-10%', right:'-8%', width:'55%', height:'90%', borderRadius:'50%', background:'radial-gradient(circle,rgba(200,200,200,0.25) 0%,transparent 70%)' }} />
+            {/* Striscia argento top */}
+            <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg,#c0c0c0,#e8e8e8,#f5f5f5,#e8e8e8,#c0c0c0)' }} />
+
+            {/* CARTA SCONTO INFINITY */}
+            <div style={{ position:'absolute', top:'7%', left:'4.5%', fontSize:'clamp(4px,2vw,8px)', fontWeight:800, color:'#888888', letterSpacing:'0.25em', whiteSpace:'nowrap', fontFamily:'Arial,sans-serif' }}>CARTA SCONTO INFINITY</div>
+
+            {/* Chip argento top-right */}
+            <div style={{ position:'absolute', top:'7%', right:'4%', width:'11%', aspectRatio:'1.3/1', background:'linear-gradient(135deg,#b0b0b0 0%,#e8e8e8 40%,#c8c8c8 60%,#989898 100%)', borderRadius:3, boxShadow:'0 1px 4px rgba(0,0,0,0.22)', overflow:'hidden' }}>
+              <div style={{ position:'absolute', top:'15%', left:'10%', right:'10%', bottom:'15%', border:'0.5px solid rgba(140,140,140,0.38)', borderRadius:2, background:'linear-gradient(135deg,#d4d4d4 0%,#f0f0f0 50%,#b8b8b8 100%)' }} />
+              <div style={{ position:'absolute', top:'50%', left:'8%', right:'8%', height:1, background:'rgba(140,140,140,0.35)', transform:'translateY(-50%)' }} />
+              <div style={{ position:'absolute', top:'10%', bottom:'10%', left:'30%', width:1, background:'rgba(140,140,140,0.35)' }} />
+              <div style={{ position:'absolute', top:'10%', bottom:'10%', right:'28%', width:1, background:'rgba(140,140,140,0.35)' }} />
+            </div>
+
+            {/* Area nome: 50×13mm dashed */}
+            <div style={{ position:'absolute', top:'30%', left:'4.5%', width:'58%', height:'22%', border:'0.5px dashed rgba(160,160,160,0.5)', borderRadius:2 }} />
+            <div style={{ position:'absolute', top:'54%', left:'4.5%', fontSize:'clamp(3px,1.3vw,5.5px)', color:'rgba(160,160,160,0.65)', fontFamily:'Arial,sans-serif' }}>NOME (50 × 13 mm)</div>
+
+            {/* Area sconto %: 50×13mm dashed */}
+            <div style={{ position:'absolute', top:'68%', left:'4.5%', width:'58%', height:'22%', border:'0.5px dashed rgba(160,160,160,0.5)', borderRadius:2 }} />
+            <div style={{ position:'absolute', top:'92%', left:'4.5%', fontSize:'clamp(3px,1.3vw,5.5px)', color:'rgba(160,160,160,0.65)', fontFamily:'Arial,sans-serif' }}>SCONTO % (50 × 13 mm)</div>
+
+            {/* Non scade badge – grande */}
+            <div style={{ position:'absolute', bottom:'7%', right:'4%', fontSize:'clamp(5px,2vw,8px)', fontWeight:600, color:'#555555', background:'rgba(0,0,0,0.055)', border:'0.5px solid rgba(0,0,0,0.14)', padding:'1.5% 3%', borderRadius:20, fontStyle:'italic', whiteSpace:'nowrap', fontFamily:'Arial,sans-serif' }}>Non scade</div>
+
+            {/* Striscia argento bottom */}
+            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:1, background:'linear-gradient(90deg,transparent,#c8c8c8,#e0e0e0,#c8c8c8,transparent)' }} />
+          </>
+        ) : (
+          <>
+            <div style={{ ...a0, background:'#ffffff' }} />
+            <div style={{ position:'absolute', top:'42%', left:'5%', width:'43%', height:'20%', border:'0.5px dashed #ccc', borderRadius:2 }} />
+            <div style={{ position:'absolute', top:'64%', left:'5%', fontSize:'clamp(3px,1.4vw,6px)', color:'#bbb', fontFamily:'Arial,sans-serif' }}>ETICHETTA CODICE (50×13 mm)</div>
+            <div style={{ position:'absolute', top:'10%', right:'4%', width:'30%', textAlign:'center', fontSize:'clamp(3px,1.5vw,6px)', fontWeight:700, color:'#555', fontFamily:'Arial,sans-serif', letterSpacing:'0.1em' }}>PRENOTA ONLINE</div>
+            <img src="/files_10187331-2026-06-12T21-52-00-862Z-image.png" style={{ position:'absolute', top:'18%', right:'4%', width:'30%', aspectRatio:'1/1', objectFit:'contain' }} />
+          </>
+        )}
+      </div>
+      <div style={{ display:'flex', gap:6 }}>
+        {(['fronte','retro'] as const).map(s => (
+          <button key={s} onClick={() => setSide(s)} style={{ padding:'3px 14px', fontSize:10, fontWeight: side===s ? 700:400, color: side===s ? '#555555':'#888888', background: side===s ? 'rgba(0,0,0,0.06)':'transparent', border: side===s ? '1px solid rgba(0,0,0,0.18)':'1px solid transparent', borderRadius:20, cursor:'pointer', transition:'all 0.15s', textTransform:'uppercase', fontFamily:'inherit' }}>{s}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Pagina Scarica File e Documenti ─────────────────────────────────────────
 
 function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
@@ -4601,6 +4664,7 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
             <>
               <CartaPremiumPreview />
               <CartaScontoPreview />
+              <CartaInfinityPreview />
             </>
           )}
           <div className="divide-y divide-stone-50">
