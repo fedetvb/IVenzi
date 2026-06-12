@@ -88,69 +88,45 @@ function buildFrontHtml(saloneName: string): string {
   `;
 }
 
-// ── BACK HTML ──────────────────────────────────────────────────────────────
-async function buildBackHtml(bookingUrl: string, saloneName: string): Promise<string> {
-  const padX = mm(B_MM + 4);
-  const padY = mm(B_MM + 4);
-
-  // Code label zone: centered vertically, left-aligned horizontally
-  const labelW = mm(50);
-  const labelH = mm(13);
-  const labelLeft = mm(B_MM + 6);
-  const labelTop = Math.round((TH_PX - labelH) / 2);
-
-  // QR code: right side, centered vertically
-  const qrMM = 22;
+// ── BACK HTML — white background, QR code only ────────────────────────────
+async function buildBackHtml(bookingUrl: string): Promise<string> {
+  const qrMM = 30;
   const qrSize = mm(qrMM);
-  const qrLeft = TW_PX - mm(B_MM + 4) - qrSize;
+  const qrLeft = Math.round((TW_PX - qrSize) / 2);
   const qrTop = Math.round((TH_PX - qrSize) / 2);
 
-  const titleFs = mm(5.2);
-  const smallFs = mm(3.8);
-  const qrLabelFs = mm(4.5);
-  const bottomPad = mm(B_MM + 3);
-
-  let qrImgHtml = '';
+  let qrHtml = `<div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border:${mm(0.3)}px solid #bbb;display:flex;align-items:center;justify-content:center;"><span style="font-size:${mm(5)}px;color:#888;font-family:Arial;">QR CODE</span></div>`;
   if (bookingUrl) {
     try {
       const qrDataUrl = await QRCode.toDataURL(bookingUrl, {
-        width: 700,
-        margin: 1,
+        width: 800,
+        margin: 2,
         errorCorrectionLevel: 'M',
-        color: { dark: '#DAA520', light: '#1a1200' },
+        color: { dark: '#111111', light: '#ffffff' },
       });
-      qrImgHtml = `
-        <!-- QR label above -->
-        <div style="position:absolute;top:${qrTop - mm(6)}px;left:${qrLeft}px;width:${qrSize}px;text-align:center;font-size:${qrLabelFs}px;font-weight:700;color:rgba(210,155,20,0.80);letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
-        <!-- QR code image -->
-        <img src="${qrDataUrl}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border-radius:${mm(0.8)}px;" />
-      `;
-    } catch {
-      qrImgHtml = `
-        <div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border:${mm(0.2)}px solid rgba(180,130,18,0.3);display:flex;align-items:center;justify-content:center;">
-          <span style="font-size:${mm(4)}px;color:rgba(180,130,18,0.4);text-align:center;">QR<br>CODE</span>
-        </div>
-      `;
-    }
+      qrHtml = `<img src="${qrDataUrl}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;" />`;
+    } catch { /* use placeholder */ }
   }
 
-  return `
-    <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;">
-      ${backgroundHtml()}
+  return `<div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;background:#ffffff;box-sizing:border-box;">${qrHtml}</div>`;
+}
 
-      <!-- Code label area: background-integrated blank zone -->
-      <div style="position:absolute;top:${labelTop}px;left:${labelLeft}px;width:${labelW}px;height:${labelH}px;"></div>
-
-      ${qrImgHtml}
-
-      <!-- CARTA PREMIUM watermark (bottom-center, subtle) -->
-      <div style="position:absolute;bottom:${bottomPad}px;left:0;right:0;text-align:center;font-size:${titleFs}px;font-weight:900;color:rgba(180,130,18,0.22);letter-spacing:${mm(0.55)}px;">CARTA PREMIUM</div>
-
-      ${saloneName ? `
-      <div style="position:absolute;bottom:${mm(B_MM + 8)}px;left:0;right:0;text-align:center;font-size:${smallFs}px;font-weight:600;color:rgba(180,130,18,0.30);letter-spacing:${mm(0.12)}px;text-transform:uppercase;">${saloneName.toUpperCase()}</div>
-      ` : ''}
-    </div>
-  `;
+// ── Rotate captured image 180° (back face for double-sided printing) ─────
+function rotateImage180(dataUrl: string): Promise<string> {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.translate(img.width, img.height);
+      ctx.rotate(Math.PI);
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.96));
+    };
+    img.src = dataUrl;
+  });
 }
 
 // ── Capture helper ────────────────────────────────────────────────────────
@@ -181,21 +157,21 @@ export async function generateCartaPremiumStampaPdf(opts: {
   bookingUrl: string;
 }): Promise<Blob> {
   const frontHtml = buildFrontHtml(opts.saloneName);
-  const backHtml = await buildBackHtml(opts.bookingUrl, opts.saloneName);
+  const backHtml = await buildBackHtml(opts.bookingUrl);
 
-  const [frontImg, backImg] = await Promise.all([
-    captureHtml(frontHtml),
-    captureHtml(backHtml),
-  ]);
+  const frontImg = await captureHtml(frontHtml);
+  const backImgRaw = await captureHtml(backHtml);
+  // Back rotated 180° for head-to-head double-sided printing
+  const backImg = await rotateImage180(backImgRaw);
 
-  // Create PDF: each page is TW_MM x TH_MM mm
-  const doc = new jsPDF({ unit: 'mm', format: [TW_MM, TH_MM] });
+  // CR80 + bleed, landscape
+  const doc = new jsPDF({ unit: 'mm', format: [TW_MM, TH_MM], orientation: 'landscape' });
 
   // Page 1: FRONTE
   doc.addImage(frontImg, 'JPEG', 0, 0, TW_MM, TH_MM);
 
-  // Page 2: RETRO
-  doc.addPage([TW_MM, TH_MM]);
+  // Page 2: RETRO (rotated 180° for printing)
+  doc.addPage([TW_MM, TH_MM], 'landscape');
   doc.addImage(backImg, 'JPEG', 0, 0, TW_MM, TH_MM);
 
   // PDF metadata

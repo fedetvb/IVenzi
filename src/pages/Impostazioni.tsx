@@ -4084,6 +4084,53 @@ function PaginaAccount({ onBack }: { onBack: () => void }) {
   );
 }
 
+// ─── Carta Premium – anteprima visiva ────────────────────────────────────────
+
+function CartaPremiumPreview() {
+  const [side, setSide] = useState<'fronte' | 'retro'>('fronte');
+  const a0: React.CSSProperties = { position: 'absolute', inset: 0 };
+  return (
+    <div style={{ padding: '16px 20px', background: '#eeebe4', borderBottom: '1px solid #e2dfd8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      {/* Aspect ratio CR80 = 85.60 / 53.98, max 320 px wide */}
+      <div style={{ width: '100%', maxWidth: 320, position: 'relative', aspectRatio: '85.60 / 53.98', borderRadius: 9, overflow: 'hidden', boxShadow: '0 8px 28px rgba(0,0,0,0.30),0 2px 6px rgba(0,0,0,0.15)' }}>
+        {side === 'fronte' ? (
+          <>
+            <div style={{ ...a0, background: 'linear-gradient(130deg,#1a1200 0%,#1f1600 45%,#2d1e00 75%,#3c2700 100%)' }} />
+            <div style={{ ...a0, background: 'radial-gradient(ellipse 65% 85% at 83% 48%,rgba(210,155,15,0.42) 0%,rgba(160,110,8,0.18) 42%,transparent 72%)' }} />
+            <div style={{ ...a0, backgroundImage: 'repeating-linear-gradient(-50deg,transparent 0,transparent 6px,rgba(205,162,22,0.13) 6px,rgba(205,162,22,0.13) 7px)' }} />
+            <div style={{ position:'absolute', top:'7%', left:'4.5%', fontSize:'clamp(5px,2.2vw,9px)', fontWeight:900, color:'#DAA520', letterSpacing:'0.3em', whiteSpace:'nowrap', textShadow:'0 1px 2px rgba(0,0,0,0.5)', fontFamily:'Arial,sans-serif' }}>CARTA PREMIUM</div>
+            <div style={{ position:'absolute', top:'8%', right:'4%', width:'10%', aspectRatio:'1.3/1', background:'linear-gradient(135deg,#e8c035 0%,#c89010 40%,#DAA520 65%,#b8860b 100%)', borderRadius:3, boxShadow:'0 1px 4px rgba(0,0,0,0.5)', overflow:'hidden' }}>
+              <div style={{ position:'absolute', top:'48%', left:'8%', right:'8%', height:1, background:'rgba(70,45,0,0.5)', transform:'translateY(-50%)' }} />
+              <div style={{ position:'absolute', top:'10%', bottom:'10%', left:'31%', width:1, background:'rgba(70,45,0,0.5)' }} />
+              <div style={{ position:'absolute', top:'10%', bottom:'10%', right:'29%', width:1, background:'rgba(70,45,0,0.5)' }} />
+            </div>
+            <div style={{ position:'absolute', top:'42%', left:'4.5%', width:'58%', height:'22%', border:'0.5px dashed rgba(180,140,20,0.4)', borderRadius:2 }} />
+            <div style={{ position:'absolute', top:'67%', left:'4.5%', fontSize:'clamp(4px,1.5vw,6px)', color:'rgba(150,110,20,0.55)', fontWeight:600, fontFamily:'Arial,sans-serif', letterSpacing:'0.04em' }}>AREA NOME (50 × 13 mm)</div>
+          </>
+        ) : (
+          /* RETRO: sfondo bianco, solo QR */
+          <>
+            <div style={{ ...a0, background:'#ffffff' }} />
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <div style={{ width:'50%', aspectRatio:'1/1', display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'2.5%', padding:'5%', boxSizing:'border-box', background:'#fff', border:'1px solid #ddd', borderRadius:4 }}>
+                {[1,1,1,0,1,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,0,1,1,1].map((v,i) => (
+                  <div key={i} style={{ background: v ? '#111':'transparent', borderRadius:1, aspectRatio:'1/1' }} />
+                ))}
+              </div>
+            </div>
+            <div style={{ position:'absolute', bottom:'5%', left:0, right:0, textAlign:'center', fontSize:'clamp(4px,1.5vw,6px)', color:'#bbb', fontFamily:'Arial,sans-serif', letterSpacing:'0.1em' }}>retro ruotato 180° nel PDF per stampa fronte/retro</div>
+          </>
+        )}
+      </div>
+      <div style={{ display:'flex', gap:6 }}>
+        {(['fronte','retro'] as const).map(s => (
+          <button key={s} onClick={() => setSide(s)} style={{ padding:'3px 14px', fontSize:10, fontWeight: side===s ? 700 : 400, color: side===s ? '#b8860b' : '#8a7a60', background: side===s ? 'rgba(218,165,32,0.12)' : 'transparent', border: side===s ? '1px solid rgba(218,165,32,0.4)' : '1px solid transparent', borderRadius:20, cursor:'pointer', transition:'all 0.15s', textTransform:'uppercase', fontFamily:'inherit' }}>{s}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Pagina Scarica File e Documenti ─────────────────────────────────────────
 
 function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
@@ -4459,6 +4506,7 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
               />
             )}
           </div>
+          {cat.key === 'stampa_carte' && <CartaPremiumPreview />}
           <div className="divide-y divide-stone-50">
             {cat.voci.map(voce => {
               const isLoading = loading === voce.key;
