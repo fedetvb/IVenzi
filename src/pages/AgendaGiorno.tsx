@@ -27,8 +27,6 @@ interface RichiestaAppuntamento {
 }
 
 const SLOT_DURATION = 15;
-const START_HOUR = 8;
-const END_HOUR = 20;
 const SLOT_HEIGHT_DEFAULT = 28;
 const SLOT_HEIGHT_MIN = 8;
 const SLOT_HEIGHT_MAX = 72;
@@ -37,9 +35,9 @@ const FONT_SIZE_MIN = 60;
 const FONT_SIZE_MAX = 160;
 const LONG_PRESS_MS = 500;
 
-function getSlots() {
+function getSlots(startHour: number, endHour: number) {
   const slots: string[] = [];
-  for (let h = START_HOUR; h < END_HOUR; h++) {
+  for (let h = startHour; h < endHour; h++) {
     for (let m = 0; m < 60; m += SLOT_DURATION) {
       slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
     }
@@ -135,6 +133,26 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     const saved = localStorage.getItem('agenda_fontSize');
     return saved ? Number(saved) : FONT_SIZE_DEFAULT;
   });
+  const [startHour, setStartHour] = useState(() => {
+    const saved = localStorage.getItem('agenda_startHour');
+    return saved ? Number(saved) : 8;
+  });
+  const [endHour, setEndHour] = useState(() => {
+    const saved = localStorage.getItem('agenda_endHour');
+    return saved ? Number(saved) : 20;
+  });
+  const [clienteBold, setClienteBold] = useState(() => localStorage.getItem('agenda_cliente_bold') !== 'false');
+  const [clienteItalic, setClienteItalic] = useState(() => localStorage.getItem('agenda_cliente_italic') === 'true');
+  const [serviziBold, setServiziBold] = useState(() => localStorage.getItem('agenda_servizi_bold') === 'true');
+  const [serviziItalic, setServiziItalic] = useState(() => localStorage.getItem('agenda_servizi_italic') === 'true');
+  const [clienteSizeMul, setClienteSizeMul] = useState(() => {
+    const saved = localStorage.getItem('agenda_cliente_size');
+    return saved ? Number(saved) : 1.0;
+  });
+  const [serviziSizeMul, setServiziSizeMul] = useState(() => {
+    const saved = localStorage.getItem('agenda_servizi_size');
+    return saved ? Number(saved) : 1.0;
+  });
 
   // Drag & drop state
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -150,8 +168,16 @@ export default function AgendaGiorno({ date, onBack }: Props) {
 
   useEffect(() => { localStorage.setItem('agenda_slotHeight', String(slotHeight)); }, [slotHeight]);
   useEffect(() => { localStorage.setItem('agenda_fontSize', String(fontSize)); }, [fontSize]);
+  useEffect(() => { localStorage.setItem('agenda_startHour', String(startHour)); }, [startHour]);
+  useEffect(() => { localStorage.setItem('agenda_endHour', String(endHour)); }, [endHour]);
+  useEffect(() => { localStorage.setItem('agenda_cliente_bold', String(clienteBold)); }, [clienteBold]);
+  useEffect(() => { localStorage.setItem('agenda_cliente_italic', String(clienteItalic)); }, [clienteItalic]);
+  useEffect(() => { localStorage.setItem('agenda_servizi_bold', String(serviziBold)); }, [serviziBold]);
+  useEffect(() => { localStorage.setItem('agenda_servizi_italic', String(serviziItalic)); }, [serviziItalic]);
+  useEffect(() => { localStorage.setItem('agenda_cliente_size', String(clienteSizeMul)); }, [clienteSizeMul]);
+  useEffect(() => { localStorage.setItem('agenda_servizi_size', String(serviziSizeMul)); }, [serviziSizeMul]);
 
-  const slots = getSlots();
+  const slots = getSlots(startHour, endHour);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -308,7 +334,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       .map(a => {
         const t = new Date(a.data_ora);
         const startMin = t.getHours() * 60 + t.getMinutes();
-        const dayStart = START_HOUR * 60;
+        const dayStart = startHour * 60;
         const topPx = ((startMin - dayStart) / SLOT_DURATION) * slotHeight;
         const heightPx = Math.max((a.durata_minuti / SLOT_DURATION) * slotHeight, slotHeight);
         return { ...a, topPx, heightPx, layer: 0, totalLayers: 1 };
@@ -672,7 +698,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   }
 
   function topPxToTime(topPx: number): Date {
-    const totalMinutes = START_HOUR * 60 + Math.round(topPx / slotHeight) * SLOT_DURATION;
+    const totalMinutes = startHour * 60 + Math.round(topPx / slotHeight) * SLOT_DURATION;
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
     const d = new Date(date);
@@ -939,80 +965,148 @@ export default function AgendaGiorno({ date, onBack }: Props) {
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-bold text-stone-500 uppercase tracking-wide">Visualizzazione agenda</span>
               <button
-                onClick={() => { setSlotHeight(SLOT_HEIGHT_DEFAULT); setFontSize(FONT_SIZE_DEFAULT); }}
+                onClick={() => {
+                  setSlotHeight(SLOT_HEIGHT_DEFAULT);
+                  setFontSize(FONT_SIZE_DEFAULT);
+                  setStartHour(8);
+                  setEndHour(20);
+                  setClienteBold(true);
+                  setClienteItalic(false);
+                  setServiziBold(false);
+                  setServiziItalic(false);
+                  setClienteSizeMul(1.0);
+                  setServiziSizeMul(1.0);
+                }}
                 className="text-xs text-stone-400 hover:text-amber-600 transition-colors font-medium"
               >
                 Ripristina
               </button>
             </div>
 
+            {/* Ore visibili */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <CalendarClock size={13} className="text-stone-500" />
+                <span className="text-xs font-semibold text-stone-700">Ore visibili in agenda</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-stone-500">Dalle</span>
+                <select
+                  value={startHour}
+                  onChange={e => { const v = Number(e.target.value); if (v < endHour) setStartHour(v); }}
+                  className="text-xs border border-stone-200 bg-white rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-200 text-stone-700"
+                >
+                  {Array.from({ length: 24 }, (_, i) => i).filter(h => h < endHour).map(h => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+                <span className="text-xs text-stone-500">alle</span>
+                <select
+                  value={endHour}
+                  onChange={e => { const v = Number(e.target.value); if (v > startHour) setEndHour(v); }}
+                  className="text-xs border border-stone-200 bg-white rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-200 text-stone-700"
+                >
+                  {Array.from({ length: 24 }, (_, i) => i + 1).filter(h => h > startHour).map(h => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Zoom */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <ZoomIn size={13} className="text-stone-500" />
                   <span className="text-xs font-semibold text-stone-700">Zoom agenda</span>
                 </div>
-                <span className="text-xs font-mono text-stone-500 bg-white border border-stone-200 px-2 py-0.5 rounded-md">{Math.round((slotHeight / SLOT_HEIGHT_DEFAULT) * 100)}%</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={Math.round((SLOT_HEIGHT_MIN / SLOT_HEIGHT_DEFAULT) * 100)}
+                    max={Math.round((SLOT_HEIGHT_MAX / SLOT_HEIGHT_DEFAULT) * 100)}
+                    value={Math.round((slotHeight / SLOT_HEIGHT_DEFAULT) * 100)}
+                    onChange={e => {
+                      const pct = Math.max(Math.round((SLOT_HEIGHT_MIN / SLOT_HEIGHT_DEFAULT) * 100), Math.min(Math.round((SLOT_HEIGHT_MAX / SLOT_HEIGHT_DEFAULT) * 100), Number(e.target.value)));
+                      setSlotHeight(Math.round((pct / 100) * SLOT_HEIGHT_DEFAULT));
+                    }}
+                    className="w-14 text-xs font-mono text-stone-500 bg-white border border-stone-200 px-1.5 py-0.5 rounded-md text-center focus:outline-none focus:ring-2 focus:ring-amber-200"
+                  />
+                  <span className="text-xs text-stone-400">%</span>
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setSlotHeight(h => Math.max(SLOT_HEIGHT_MIN, h - 4))}
-                  disabled={slotHeight <= SLOT_HEIGHT_MIN}
-                  className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0"
-                >
+                <button onClick={() => setSlotHeight(h => Math.max(SLOT_HEIGHT_MIN, h - 4))} disabled={slotHeight <= SLOT_HEIGHT_MIN} className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0">
                   <ZoomOut size={14} />
                 </button>
-                <input
-                  type="range"
-                  min={SLOT_HEIGHT_MIN}
-                  max={SLOT_HEIGHT_MAX}
-                  step={4}
-                  value={slotHeight}
-                  onChange={e => setSlotHeight(Number(e.target.value))}
-                  className="flex-1 accent-amber-500"
-                />
-                <button
-                  onClick={() => setSlotHeight(h => Math.min(SLOT_HEIGHT_MAX, h + 4))}
-                  disabled={slotHeight >= SLOT_HEIGHT_MAX}
-                  className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0"
-                >
+                <input type="range" min={SLOT_HEIGHT_MIN} max={SLOT_HEIGHT_MAX} step={1} value={slotHeight} onChange={e => setSlotHeight(Number(e.target.value))} className="flex-1 accent-amber-500" />
+                <button onClick={() => setSlotHeight(h => Math.min(SLOT_HEIGHT_MAX, h + 4))} disabled={slotHeight >= SLOT_HEIGHT_MAX} className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0">
                   <ZoomIn size={14} />
                 </button>
               </div>
             </div>
 
+            {/* Dimensione testo globale */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <Type size={13} className="text-stone-500" />
-                  <span className="text-xs font-semibold text-stone-700">Dimensione testo</span>
+                  <span className="text-xs font-semibold text-stone-700">Dimensione testo globale</span>
                 </div>
-                <span className="text-xs font-mono text-stone-500 bg-white border border-stone-200 px-2 py-0.5 rounded-md">{fontSize}%</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={FONT_SIZE_MIN}
+                    max={FONT_SIZE_MAX}
+                    value={fontSize}
+                    onChange={e => setFontSize(Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, Number(e.target.value))))}
+                    className="w-14 text-xs font-mono text-stone-500 bg-white border border-stone-200 px-1.5 py-0.5 rounded-md text-center focus:outline-none focus:ring-2 focus:ring-amber-200"
+                  />
+                  <span className="text-xs text-stone-400">%</span>
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setFontSize(f => Math.max(FONT_SIZE_MIN, f - 10))}
-                  disabled={fontSize <= FONT_SIZE_MIN}
-                  className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0 font-bold text-xs"
-                >
-                  A-
-                </button>
+                <button onClick={() => setFontSize(f => Math.max(FONT_SIZE_MIN, f - 5))} disabled={fontSize <= FONT_SIZE_MIN} className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0 font-bold text-xs">A-</button>
+                <input type="range" min={FONT_SIZE_MIN} max={FONT_SIZE_MAX} step={5} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="flex-1 accent-amber-500" />
+                <button onClick={() => setFontSize(f => Math.min(FONT_SIZE_MAX, f + 5))} disabled={fontSize >= FONT_SIZE_MAX} className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0 font-bold text-xs">A+</button>
+              </div>
+            </div>
+
+            {/* Stile nome cliente */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <User size={13} className="text-stone-500" />
+                <span className="text-xs font-semibold text-stone-700">Nome cliente</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setClienteBold(b => !b)} className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${clienteBold ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-white border-stone-200 text-stone-500'}`}>B</button>
+                <button onClick={() => setClienteItalic(b => !b)} className={`px-2.5 py-1 rounded-lg text-xs italic border transition-colors ${clienteItalic ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-white border-stone-200 text-stone-500'}`}>I</button>
                 <input
-                  type="range"
-                  min={FONT_SIZE_MIN}
-                  max={FONT_SIZE_MAX}
-                  step={10}
-                  value={fontSize}
-                  onChange={e => setFontSize(Number(e.target.value))}
-                  className="flex-1 accent-amber-500"
+                  type="range" min={0.7} max={1.5} step={0.05}
+                  value={clienteSizeMul}
+                  onChange={e => setClienteSizeMul(Number(e.target.value))}
+                  className="flex-1 accent-amber-500 min-w-[80px]"
                 />
-                <button
-                  onClick={() => setFontSize(f => Math.min(FONT_SIZE_MAX, f + 10))}
-                  disabled={fontSize >= FONT_SIZE_MAX}
-                  className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 disabled:opacity-30 transition-colors flex-shrink-0 font-bold text-xs"
-                >
-                  A+
-                </button>
+                <span className="text-xs font-mono text-stone-400 w-10 text-right">{Math.round(clienteSizeMul * 100)}%</span>
+              </div>
+            </div>
+
+            {/* Stile servizi */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Type size={13} className="text-stone-500" />
+                <span className="text-xs font-semibold text-stone-700">Servizi</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setServiziBold(b => !b)} className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${serviziBold ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-white border-stone-200 text-stone-500'}`}>B</button>
+                <button onClick={() => setServiziItalic(b => !b)} className={`px-2.5 py-1 rounded-lg text-xs italic border transition-colors ${serviziItalic ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-white border-stone-200 text-stone-500'}`}>I</button>
+                <input
+                  type="range" min={0.7} max={1.5} step={0.05}
+                  value={serviziSizeMul}
+                  onChange={e => setServiziSizeMul(Number(e.target.value))}
+                  className="flex-1 accent-amber-500 min-w-[80px]"
+                />
+                <span className="text-xs font-mono text-stone-400 w-10 text-right">{Math.round(serviziSizeMul * 100)}%</span>
               </div>
             </div>
           </div>
@@ -1111,7 +1205,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                 const absenceTopPx = assenzaParziale ? (() => {
                   const [h, m] = assenzaParziale.split(':').map(Number);
                   const absMin = h * 60 + m;
-                  const dayStartMin = START_HOUR * 60;
+                  const dayStartMin = startHour * 60;
                   return Math.max(0, ((absMin - dayStartMin) / SLOT_DURATION) * slotHeight);
                 })() : null;
 
@@ -1198,7 +1292,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                         if (!r.parrucchieri_candidati?.includes(p.id)) return [];
                         const t = new Date(r.data_ora);
                         const startMin = t.getHours() * 60 + t.getMinutes();
-                        const dayStart = START_HOUR * 60;
+                        const dayStart = startHour * 60;
                         const topPx = Math.max(0, ((startMin - dayStart) / SLOT_DURATION) * slotHeight);
                         const heightPx = Math.max(((r.durata_minuti ?? 60) / SLOT_DURATION) * slotHeight, slotHeight * 2);
                         return [(
@@ -1238,7 +1332,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                         const servNome = isPrimary ? r.servizio_nome : r.servizio2_nome;
                         const t = new Date(dataOra);
                         const startMin = t.getHours() * 60 + t.getMinutes();
-                        const dayStart = START_HOUR * 60;
+                        const dayStart = startHour * 60;
                         const topPx = Math.max(0, ((startMin - dayStart) / SLOT_DURATION) * slotHeight);
                         const heightPx = Math.max((durata / SLOT_DURATION) * slotHeight, slotHeight * 2);
                         return (
@@ -1382,13 +1476,22 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                           <div className="relative z-10 px-2 py-1 h-full flex flex-col justify-between overflow-hidden">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-1 min-w-0">
-                                <p className={`font-semibold leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' }}>
+                                <p className={`leading-tight truncate ${isCancellato ? 'line-through text-white/80' : 'text-white'}`} style={{ fontSize: `${(shortBlock ? 0.68 : 0.76) * (fontSize / 100) * clienteSizeMul}rem`, fontWeight: clienteBold ? '700' : '400', fontStyle: clienteItalic ? 'italic' : 'normal', textShadow: '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' }}>
                                   {cliente ? `${cliente.nome} ${cliente.cognome}` : '—'}
                                 </p>
-                                {app.cliente_id && !clientiConFicheConvalidate.has(app.cliente_id) && !shortBlock && (
-                                  <p className="text-white/90 font-semibold leading-tight mt-0.5" style={{ fontSize: `${0.6 * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.8)' }}>
-                                    Nuova cliente
-                                  </p>
+                                {!shortBlock && (
+                                  <div className="flex flex-wrap gap-x-1.5 gap-y-0">
+                                    {app.cliente_id && !clientiConFicheConvalidate.has(app.cliente_id) && (
+                                      <p className="text-white/90 font-semibold leading-tight mt-0.5" style={{ fontSize: `${0.6 * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.8)' }}>
+                                        Nuova cliente
+                                      </p>
+                                    )}
+                                    {app.stato === 'in_forse' && (
+                                      <p className="text-white/90 font-semibold leading-tight mt-0.5" style={{ fontSize: `${0.6 * (fontSize / 100)}rem`, textShadow: '0 0 3px rgba(0,0,0,0.8)' }}>
+                                        In forse
+                                      </p>
+                                    )}
+                                  </div>
                                 )}
                                 {carteTipi && carteTipi.size > 0 && (
                                   <div className="flex items-center gap-0.5 flex-shrink-0 mt-px">
@@ -1418,7 +1521,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 )}
                               </div>
                               {!shortBlock && tratt.length > 0 && (
-                                <p className="truncate leading-tight mt-0.5" style={{ fontSize: `${0.64 * (fontSize / 100)}rem`, color: 'rgba(255,255,255,0.9)', textShadow: posaCfg ? '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' : undefined }}>
+                                <p className="truncate leading-tight mt-0.5" style={{ fontSize: `${0.64 * (fontSize / 100) * serviziSizeMul}rem`, color: 'rgba(255,255,255,0.9)', fontWeight: serviziBold ? '700' : '400', fontStyle: serviziItalic ? 'italic' : 'normal', textShadow: posaCfg ? '0 0 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.85), 0 2px 12px rgba(0,0,0,0.7)' : undefined }}>
                                   {tratt.map(t => t.nome_trattamento).join(', ')}
                                 </p>
                               )}

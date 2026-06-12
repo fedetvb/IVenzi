@@ -9,7 +9,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone';
 
 export default function Impostazioni({ onTestReminder }: { onTestReminder?: () => void }) {
   const { user } = useAuth();
@@ -50,6 +50,7 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
   if (sub === 'messaggi_clienti') return <PaginaMessaggiClienti onBack={() => setSub(null)} userId={user?.id} />;
   if (sub === 'dati_azienda') return <PaginaDatiAzienda onBack={() => setSub(null)} />;
   if (sub === 'canali_social') return <PaginaCanaleSocial onBack={() => setSub(null)} />;
+  if (sub === 'orari_salone') return <PaginaOrariSalone onBack={() => setSub(null)} />;
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -290,6 +291,21 @@ export default function Impostazioni({ onTestReminder }: { onTestReminder?: () =
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Notifiche Push</p>
             <p className="text-xs text-stone-400 mt-0.5">Ricevi notifiche sul telefono quando arriva una prenotazione online</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Orari Salone */}
+        <button
+          onClick={() => setSub('orari_salone')}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Clock size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Orari Salone</p>
+            <p className="text-xs text-stone-400 mt-0.5">Giorni di apertura e orari di lavoro del salone</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -621,6 +637,180 @@ const SOCIAL_CANALI: Array<{
     Icon: SocialIconLink,
   },
 ];
+
+// ─── Orari Salone ────────────────────────────────────────────────────────────
+
+const GIORNI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'] as const;
+
+interface GiornoOrario {
+  aperto: boolean;
+  apertura: string;
+  chiusura: string;
+  pausa_inizio: string;
+  pausa_fine: string;
+  pausa_attiva: boolean;
+}
+
+const GIORNO_DEFAULT: GiornoOrario = { aperto: true, apertura: '09:00', chiusura: '19:00', pausa_inizio: '13:00', pausa_fine: '14:00', pausa_attiva: false };
+const DOMENICA_DEFAULT: GiornoOrario = { aperto: false, apertura: '09:00', chiusura: '13:00', pausa_inizio: '13:00', pausa_fine: '14:00', pausa_attiva: false };
+
+function PaginaOrariSalone({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [orari, setOrari] = useState<GiornoOrario[]>(() =>
+    GIORNI.map((_, i) => i === 6 ? { ...DOMENICA_DEFAULT } : { ...GIORNO_DEFAULT })
+  );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [nota, setNota] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([
+      getImpostazione('orari_salone_json'),
+      getImpostazione('orari_salone_nota'),
+    ]).then(([jsonStr, notaVal]) => {
+      if (jsonStr) {
+        try { setOrari(JSON.parse(jsonStr)); } catch {}
+      }
+      setNota(notaVal ?? '');
+      setLoading(false);
+    });
+  }, [user]);
+
+  function updateGiorno(i: number, patch: Partial<GiornoOrario>) {
+    setOrari(prev => prev.map((g, idx) => idx === i ? { ...g, ...patch } : g));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    await Promise.all([
+      setImpostazione('orari_salone_json', JSON.stringify(orari), user?.id),
+      setImpostazione('orari_salone_nota', nota, user?.id),
+    ]);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Orari Salone</h2>
+          <p className="text-sm text-stone-400 mt-0.5">Giorni di apertura e orari di lavoro</p>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3.5 flex items-start gap-3">
+        <Clock size={15} className="text-amber-600 mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-amber-700 leading-relaxed">
+          Questi orari sono <span className="font-semibold">informativi</span> e non influenzano le prenotazioni online. Servono come riferimento per il salone e per i clienti.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden divide-y divide-stone-100">
+        {GIORNI.map((giorno, i) => {
+          const g = orari[i];
+          return (
+            <div key={giorno} className="px-5 py-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-stone-800">{giorno}</p>
+                <button
+                  onClick={() => updateGiorno(i, { aperto: !g.aperto })}
+                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${g.aperto ? 'bg-amber-500' : 'bg-stone-200'}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${g.aperto ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+
+              {g.aperto && (
+                <div className="space-y-2.5 pl-0.5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-stone-500 w-20 flex-shrink-0">Apertura</span>
+                    <input
+                      type="time"
+                      value={g.apertura}
+                      onChange={e => updateGiorno(i, { apertura: e.target.value })}
+                      className="text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700"
+                    />
+                    <span className="text-xs text-stone-400">→</span>
+                    <input
+                      type="time"
+                      value={g.chiusura}
+                      onChange={e => updateGiorno(i, { chiusura: e.target.value })}
+                      className="text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-stone-500 w-20 flex-shrink-0">Pausa pranzo</span>
+                    <button
+                      onClick={() => updateGiorno(i, { pausa_attiva: !g.pausa_attiva })}
+                      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${g.pausa_attiva ? 'bg-amber-400' : 'bg-stone-200'}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${g.pausa_attiva ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </button>
+                    {g.pausa_attiva && (
+                      <>
+                        <input
+                          type="time"
+                          value={g.pausa_inizio}
+                          onChange={e => updateGiorno(i, { pausa_inizio: e.target.value })}
+                          className="text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700"
+                        />
+                        <span className="text-xs text-stone-400">→</span>
+                        <input
+                          type="time"
+                          value={g.pausa_fine}
+                          onChange={e => updateGiorno(i, { pausa_fine: e.target.value })}
+                          className="text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700"
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!g.aperto && (
+                <p className="text-xs text-stone-400 pl-0.5 italic">Chiuso</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Nota informativa</label>
+        <textarea
+          value={nota}
+          onChange={e => setNota(e.target.value)}
+          rows={3}
+          placeholder="Es: Chiusi durante le festività nazionali. Su appuntamento anche il lunedì mattina."
+          className="w-full text-sm border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700 placeholder-stone-300 resize-none transition-colors"
+        />
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm shadow-sm transition-all"
+      >
+        {saved ? <Check size={16} /> : <Clock size={16} />}
+        {saving ? 'Salvataggio...' : saved ? 'Salvato!' : 'Salva orari'}
+      </button>
+    </div>
+  );
+}
 
 function PaginaCanaleSocial({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
