@@ -10,6 +10,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import { generateCartaPremiumStampaPdf } from '../lib/cartePremiumPdfGenerator';
 import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
+import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti';
@@ -4423,6 +4424,28 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
     setLoading(null);
   }
 
+  // ── Stampa Carta Infinity ────────────────────────────────────────────────
+  async function scaricaCartaInfinityPdf() {
+    setLoading('carta_infinity_pdf');
+    try {
+      const [nomeVal, urlVal] = await Promise.all([
+        getImpostazione('azienda_nome'),
+        getImpostazione('azienda_sito_prenotazioni'),
+      ]);
+      const logoDataUrl = getLogoCacheB64() || undefined;
+      const blob = await generateCartaInfinityPdfStampa({
+        saloneName: nomeVal ?? '',
+        bookingUrl: urlVal ?? '',
+        logoDataUrl,
+      });
+      await saveFile('fiches', 'carta-infinity-stampa.pdf', blob);
+      showFeedback('carta_infinity_pdf', 'PDF scaricato: carta-infinity-stampa.pdf');
+    } catch {
+      showFeedback('carta_infinity_pdf', 'Errore durante la generazione del PDF.', false);
+    }
+    setLoading(null);
+  }
+
   // ── Fiches PDF ────────────────────────────────────────────────────────────
   async function scaricaFichePdf() {
     setLoading('fiches_pdf');
@@ -4493,6 +4516,7 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
       voci: [
         { key: 'carta_premium_pdf', label: 'Carta Premium – Fronte + Retro (PDF)', fn: scaricaCartaPremiumPdf },
         { key: 'carta_sconto_pdf', label: 'Carta Sconto – Fronte + Retro (PDF)', fn: scaricaCartaScontoPdf },
+        { key: 'carta_infinity_pdf', label: 'Carta Sconto Infinity – Fronte + Retro (PDF)', fn: scaricaCartaInfinityPdf },
       ],
     },
     {
