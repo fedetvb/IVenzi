@@ -4089,6 +4089,7 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ key: string; msg: string; ok: boolean } | null>(null);
+  const [ficheData, setFicheData] = useState(localDateStr());
 
   function oggi() {
     return new Date().toLocaleDateString('it-IT').replace(/\//g, '-');
@@ -4288,6 +4289,37 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
     setLoading(null);
   }
 
+  // ── Fiches PDF ────────────────────────────────────────────────────────────
+  async function scaricaFichePdf() {
+    setLoading('fiches_pdf');
+    try {
+      const { tutte } = await fetchFichesForDate(ficheData);
+      const dateLabel = new Date(ficheData).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
+      const blob = await generateFichesPdf(tutte, dateLabel, `Fiches – ${dateLabel}`);
+      const filename = `fiches_${ficheData}.pdf`;
+      await saveFile('fiches', filename, blob);
+      showFeedback('fiches_pdf', `PDF scaricato: ${filename}`);
+    } catch {
+      showFeedback('fiches_pdf', 'Errore durante la generazione del PDF.', false);
+    }
+    setLoading(null);
+  }
+
+  async function scaricaFicheXls() {
+    setLoading('fiches_xls');
+    try {
+      const { tutte } = await fetchFichesForDate(ficheData);
+      const dateLabel = new Date(ficheData).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
+      const csv = generateFichesXls(tutte, dateLabel, `Fiches – ${dateLabel}`);
+      const filename = `fiches_${ficheData}.csv`;
+      await saveFile('fiches', filename, '\uFEFF' + csv);
+      showFeedback('fiches_xls', `CSV scaricato: ${filename}`);
+    } catch {
+      showFeedback('fiches_xls', 'Errore durante la generazione del CSV.', false);
+    }
+    setLoading(null);
+  }
+
   type DownloadCategory = {
     key: string;
     titolo: string;
@@ -4315,6 +4347,18 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
         { key: 'schede_colore_csv', label: 'Schede colore (CSV)', fn: scaricaSchedeColoreCsv },
         { key: 'carte_premium_csv', label: 'Carte Premium (CSV)', fn: scaricaCartePremiumCsv },
         { key: 'carte_sconto_csv', label: 'Carte Sconto (CSV)', fn: scaricaCarteScontoCsv },
+      ],
+    },
+    {
+      key: 'fiches',
+      titolo: 'Fiches',
+      descrizione: 'Fiches giornaliere in PDF o CSV per la data selezionata',
+      icon: <DatabaseBackup size={18} />,
+      color: 'bg-rose-100',
+      hoverColor: 'text-rose-600',
+      voci: [
+        { key: 'fiches_pdf', label: 'Fiches del giorno (PDF)', fn: scaricaFichePdf },
+        { key: 'fiches_xls', label: 'Fiches del giorno (CSV)', fn: scaricaFicheXls },
       ],
     },
     {
@@ -4370,10 +4414,18 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
             <div className={`w-9 h-9 rounded-xl ${cat.color} flex items-center justify-center flex-shrink-0`}>
               <span className={cat.hoverColor}>{cat.icon}</span>
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="font-semibold text-stone-800 text-sm">{cat.titolo}</p>
               <p className="text-xs text-stone-400">{cat.descrizione}</p>
             </div>
+            {cat.key === 'fiches' && (
+              <input
+                type="date"
+                value={ficheData}
+                onChange={e => setFicheData(e.target.value)}
+                className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 text-stone-700 focus:outline-none focus:ring-1 focus:ring-rose-300 bg-white"
+              />
+            )}
           </div>
           <div className="divide-y divide-stone-50">
             {cat.voci.map(voce => {
