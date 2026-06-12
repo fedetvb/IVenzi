@@ -112,25 +112,32 @@ async function generateQrWithLogo(url: string, logoDataUrl?: string): Promise<st
   });
 }
 
-// ── BACK HTML — white, large centered QR with logo ────────────────────────
+// ── BACK HTML — identical to CartaSconto back (code area left, QR right) ──
 async function buildBackHtml(bookingUrl: string, logoDataUrl?: string): Promise<string> {
-  const qrMM = 36;
-  const qrSize = mm(qrMM);
-  const qrLeft = Math.round((TW_PX - qrSize) / 2);
-  const labelFs = mm(4.8);
-  const labelTop = Math.round((TH_PX - qrSize) / 2) - mm(7);
-  const qrTop = Math.round((TH_PX - qrSize) / 2);
+  const labelW = mm(50);
+  const labelH = mm(13);
+  const labelLeft = mm(B_MM + 6);
+  const labelTop = Math.round((TH_PX - labelH) / 2);
+  const labelLabelFs = mm(3.5);
+
+  const qrMM = 25;
+  const qrSz = mm(qrMM);
+  const qrLeft = TW_PX - mm(B_MM + 4) - qrSz;
+  const qrTop = Math.round((TH_PX - qrSz) / 2);
+  const labelFs = mm(4.5);
 
   let qrSrc = '';
   try { qrSrc = await generateQrWithLogo(bookingUrl, logoDataUrl); } catch { /* blank */ }
 
   const qrImg = qrSrc
-    ? `<img src="${qrSrc}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;" />`
-    : `<div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border:${mm(0.3)}px solid #ccc;"></div>`;
+    ? `<img src="${qrSrc}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz}px;height:${qrSz}px;" />`
+    : `<div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz}px;height:${qrSz}px;border:${mm(0.3)}px solid #ccc;"></div>`;
 
   return `
     <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;background:#ffffff;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;">
-      <div style="position:absolute;top:${labelTop}px;left:${qrLeft}px;width:${qrSize}px;text-align:center;font-size:${labelFs}px;font-weight:700;color:#555;letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
+      <div style="position:absolute;top:${labelTop}px;left:${labelLeft}px;width:${labelW}px;height:${labelH}px;border:${mm(0.2)}px dashed #ccc;border-radius:${mm(0.5)}px;"></div>
+      <div style="position:absolute;top:${labelTop + labelH + mm(1.5)}px;left:${labelLeft}px;font-size:${labelLabelFs}px;color:#bbb;letter-spacing:${mm(0.04)}px;">ETICHETTA CODICE (50×13 mm)</div>
+      <div style="position:absolute;top:${qrTop - mm(7)}px;left:${qrLeft}px;width:${qrSz}px;text-align:center;font-size:${labelFs}px;font-weight:700;color:#555;letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
       ${qrImg}
     </div>`;
 }
