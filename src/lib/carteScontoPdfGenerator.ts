@@ -98,16 +98,14 @@ async function generateQrWithLogo(url: string, logoDataUrl?: string): Promise<st
   });
 }
 
-// ── BACK — white, code area left, large QR with logo right ───────────────
-async function buildBackHtml(bookingUrl: string, logoDataUrl?: string): Promise<string> {
-  // Code label area: left side, vertically centered
+// ── BACK — white, code area left, static QR image right ─────────────────
+async function buildBackHtml(_bookingUrl: string, _logoDataUrl?: string): Promise<string> {
   const labelW = mm(50);
   const labelH = mm(13);
   const labelLeft = mm(B_MM + 6);
   const labelTop = Math.round((TH_PX - labelH) / 2);
   const labelLabelFs = mm(3.5);
 
-  // QR: right side, vertically centered (25mm)
   const qrMM = 25;
   const qrSz = mm(qrMM);
   const qrLeft = TW_PX - mm(B_MM + 4) - qrSz;
@@ -115,7 +113,13 @@ async function buildBackHtml(bookingUrl: string, logoDataUrl?: string): Promise<
   const labelFs = mm(4.5);
 
   let qrSrc = '';
-  try { qrSrc = await generateQrWithLogo(bookingUrl, logoDataUrl); } catch { /* blank */ }
+  try {
+    const resp = await fetch('/files_10187331-2026-06-12T22-27-21-679Z-image.png');
+    const blob = await resp.blob();
+    qrSrc = await new Promise<string>(res => {
+      const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(blob);
+    });
+  } catch { /* blank */ }
 
   const qrImg = qrSrc
     ? `<img src="${qrSrc}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSz}px;height:${qrSz}px;" />`
@@ -123,10 +127,8 @@ async function buildBackHtml(bookingUrl: string, logoDataUrl?: string): Promise<
 
   return `
     <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;background:#ffffff;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;">
-      <!-- Code label area: 50×13mm (etichetta codice, testo nero su trasparente) -->
       <div style="position:absolute;top:${labelTop}px;left:${labelLeft}px;width:${labelW}px;height:${labelH}px;border:${mm(0.2)}px dashed #ccc;border-radius:${mm(0.5)}px;"></div>
       <div style="position:absolute;top:${labelTop + labelH + mm(1.5)}px;left:${labelLeft}px;font-size:${labelLabelFs}px;color:#bbb;letter-spacing:${mm(0.04)}px;">ETICHETTA CODICE (50×13 mm)</div>
-      <!-- PRENOTA ONLINE label above QR -->
       <div style="position:absolute;top:${qrTop - mm(7)}px;left:${qrLeft}px;width:${qrSz}px;text-align:center;font-size:${labelFs}px;font-weight:700;color:#555;letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
       ${qrImg}
     </div>`;
