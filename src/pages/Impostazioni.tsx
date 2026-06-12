@@ -10,7 +10,7 @@ import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -53,6 +53,11 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'dati_azienda') return <PaginaDatiAzienda onBack={() => setSub(null)} />;
   if (sub === 'canali_social') return <PaginaCanaleSocial onBack={() => setSub(null)} />;
   if (sub === 'orari_salone') return <PaginaOrariSalone onBack={() => setSub(null)} />;
+  if (sub === 'scarica_documenti') return (
+    <StatisticheGate isActive={sub === 'scarica_documenti'} chiave="password_documenti" sezione="scarica file e documenti" sessionKey="documenti_unlocked">
+      <PaginaScaricaDocumenti onBack={() => setSub(null)} />
+    </StatisticheGate>
+  );
 
   const sq = searchQuery.trim().toLowerCase();
   function show(...texts: string[]) {
@@ -82,7 +87,8 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     show('Prenotazioni Online', 'Attiva disattiva pagina pubblica prenotazione') ||
     show('Promemoria Convalida Fiches', 'Configura giorni e orario promemoria') ||
     show('QR Code Registrazione Clienti', 'Stampa il QR code nuove clienti') ||
-    show('Tema e Personalizzazione', 'Colori sidebar icona logo');
+    show('Tema e Personalizzazione', 'Colori sidebar icona logo') ||
+    show('Scarica File e Documenti', 'Esporta e scarica file PDF CSV backup dal gestionale');
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -447,6 +453,22 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">QR Code Registrazione Clienti</p>
             <p className="text-xs text-stone-400 mt-0.5">Stampa il QR code da esporre in salone per le nuove clienti</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Scarica File e Documenti */}
+        <button
+          onClick={() => setSub('scarica_documenti')}
+          style={show('Scarica File e Documenti', 'Esporta e scarica file PDF CSV backup dal gestionale') ? {} : {display:'none'}}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-teal-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Download size={18} className="text-stone-500 group-hover:text-teal-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Scarica File e Documenti</p>
+            <p className="text-xs text-stone-400 mt-0.5">Esporta e scarica PDF, CSV e backup da tutte le sezioni del gestionale</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -3632,6 +3654,7 @@ const PASSWORD_VOCI = [
   { chiave: 'password_chat_stats', titolo: 'Chat — Incassi, Servizi, Parrucchieri', descrizione: "Accesso alle statistiche di incassi, servizi e parrucchieri nella chat assistente", feedbackMsg: "Password aggiornata. Sarà richiesta al prossimo accesso alle statistiche nella chat.", onSaved: () => sessionStorage.removeItem('chat_stats_unlocked') },
   { chiave: 'password_stampa_fiches', titolo: 'Stampa Fiches', descrizione: "Accesso alla stampa/esportazione PDF delle fiches giornaliere", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima stampa delle fiches.", onSaved: () => {} },
   { chiave: 'password_messaggi_clienti', titolo: 'Elimina Messaggi Clienti', descrizione: "Eliminazione di messaggi singoli o di tutti i messaggi nella scheda cliente", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima eliminazione di messaggi.", onSaved: () => {} },
+  { chiave: 'password_documenti', titolo: 'Scarica File e Documenti', descrizione: "Accesso alla sezione per esportare e scaricare PDF, CSV e backup da tutte le sezioni", feedbackMsg: "Password aggiornata. Sarà richiesta al prossimo accesso alla sezione documenti.", onSaved: () => sessionStorage.removeItem('documenti_unlocked') },
 ];
 
 // ─── PaginaAccount ────────────────────────────────────────────────────────────
@@ -4056,6 +4079,340 @@ function PaginaAccount({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Pagina Scarica File e Documenti ─────────────────────────────────────────
+
+function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ key: string; msg: string; ok: boolean } | null>(null);
+
+  function oggi() {
+    return new Date().toLocaleDateString('it-IT').replace(/\//g, '-');
+  }
+
+  function showFeedback(key: string, msg: string, ok = true) {
+    setFeedback({ key, msg, ok });
+    setTimeout(() => setFeedback(f => f?.key === key ? null : f), 3500);
+  }
+
+  async function scaricaCSV(
+    filename: string,
+    header: string[],
+    rows: string[][],
+    tipo: Parameters<typeof saveFile>[0],
+    key: string,
+  ) {
+    const csv = [header, ...rows]
+      .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n');
+    await saveFile(tipo, filename, '\uFEFF' + csv);
+    showFeedback(key, `File scaricato: ${filename}`);
+  }
+
+  // ── Clienti CSV ───────────────────────────────────────────────────────────
+  async function scaricaClientiCsv() {
+    if (!user) return;
+    setLoading('clienti_csv');
+    const { data } = await supabase.from('clienti')
+      .select('*').eq('user_id', user.id).is('deleted_at', null)
+      .order('cognome', { ascending: true });
+    const rows = (data ?? []).map((c: Record<string, unknown>) => [
+      String(c.cognome ?? ''), String(c.nome ?? ''), String(c.telefono ?? ''),
+      String(c.email ?? ''),
+      c.data_nascita ? new Date(c.data_nascita as string).toLocaleDateString('it-IT') : '',
+      (String(c.note ?? '')).replace(/\n/g, ' '),
+    ]);
+    await scaricaCSV(`clienti-${oggi()}.csv`,
+      ['Cognome', 'Nome', 'Telefono', 'Email', 'Data nascita', 'Note'],
+      rows, 'clienti', 'clienti_csv');
+    setLoading(null);
+  }
+
+  // ── Carte Premium CSV ─────────────────────────────────────────────────────
+  async function scaricaCartePremiumCsv() {
+    if (!user) return;
+    setLoading('carte_premium_csv');
+    const { data } = await supabase.from('carte_premium')
+      .select('*, clienti(nome, cognome, telefono)')
+      .eq('user_id', user.id).is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    const rows = (data ?? []).map((cp: Record<string, unknown>) => {
+      const cl = cp.clienti as Record<string, string> | null;
+      return [
+        cl ? `${cl.cognome ?? ''} ${cl.nome ?? ''}`.trim() : '',
+        cl?.telefono ?? '',
+        String(cp.codice ?? ''),
+        (cp.attiva as boolean) ? 'Attiva' : 'Disattiva',
+        `€${Number(cp.saldo ?? 0).toFixed(2).replace('.', ',')}`,
+        (String(cp.note ?? '')).replace(/\n/g, ' '),
+        cp.created_at ? new Date(cp.created_at as string).toLocaleDateString('it-IT') : '',
+      ];
+    });
+    await scaricaCSV(`carte-premium-${oggi()}.csv`,
+      ['Cliente', 'Telefono', 'Codice', 'Stato', 'Saldo', 'Note', 'Data creazione'],
+      rows, 'clienti', 'carte_premium_csv');
+    setLoading(null);
+  }
+
+  // ── Carte Sconto CSV ──────────────────────────────────────────────────────
+  async function scaricaCarteScontoCsv() {
+    if (!user) return;
+    setLoading('carte_sconto_csv');
+    const { data } = await supabase.from('carte_sconto')
+      .select('*, clienti(nome, cognome, telefono)')
+      .eq('user_id', user.id).is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    const rows = (data ?? []).map((cs: Record<string, unknown>) => {
+      const cl = cs.clienti as Record<string, string> | null;
+      return [
+        cl ? `${cl.cognome ?? ''} ${cl.nome ?? ''}`.trim() : '(Generica)',
+        cl?.telefono ?? '',
+        String(cs.codice ?? ''),
+        String(cs.descrizione ?? ''),
+        cs.tipo_sconto === 'percentuale' ? `${cs.valore_sconto}%` : `€${Number(cs.valore_sconto).toFixed(2).replace('.', ',')}`,
+        (cs.attiva as boolean) ? 'Attiva' : 'Disattiva',
+        (cs.nominativa as boolean) ? 'Si' : 'No',
+        (cs.usa_e_getta as boolean) ? 'Si' : 'No',
+        cs.created_at ? new Date(cs.created_at as string).toLocaleDateString('it-IT') : '',
+      ];
+    });
+    await scaricaCSV(`carte-sconto-${oggi()}.csv`,
+      ['Cliente', 'Telefono', 'Codice', 'Descrizione', 'Sconto', 'Stato', 'Nominativa', 'Monouso', 'Data creazione'],
+      rows, 'clienti', 'carte_sconto_csv');
+    setLoading(null);
+  }
+
+  // ── Backup JSON ───────────────────────────────────────────────────────────
+  async function scaricaBackup() {
+    setLoading('backup');
+    try {
+      const cloudApiUrl = `${localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-database`;
+      const cloudHeaders = {
+        'Authorization': `Bearer ${localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      };
+      const res = await fetch(cloudApiUrl, { headers: cloudHeaders });
+      if (!res.ok) throw new Error('Errore esportazione');
+      const data = await res.json();
+      const filename = `backup-salone-${localDateStr()}.json`;
+      await saveFile('backup', filename, JSON.stringify(data, null, 2));
+      showFeedback('backup', `Backup scaricato: ${filename}`);
+    } catch {
+      showFeedback('backup', 'Errore durante il backup. Riprova.', false);
+    }
+    setLoading(null);
+  }
+
+  // ── Magazzino CSV ─────────────────────────────────────────────────────────
+  async function scaricaMagazzinoCsv() {
+    if (!user) return;
+    setLoading('magazzino_csv');
+    const { data } = await supabase.from('magazzino_prodotti')
+      .select('*').eq('user_id', user.id)
+      .order('nome', { ascending: true });
+    const rows = (data ?? []).map((p: Record<string, unknown>) => [
+      String(p.nome ?? ''),
+      String(p.categoria ?? ''),
+      String(p.marca ?? ''),
+      String(p.quantita ?? '0'),
+      String(p.quantita_minima ?? '0'),
+      p.prezzo_acquisto != null ? `€${Number(p.prezzo_acquisto).toFixed(2).replace('.', ',')}` : '',
+      p.prezzo_vendita != null ? `€${Number(p.prezzo_vendita).toFixed(2).replace('.', ',')}` : '',
+      (String(p.note ?? '')).replace(/\n/g, ' '),
+    ]);
+    await scaricaCSV(`magazzino-${oggi()}.csv`,
+      ['Nome', 'Categoria', 'Marca', 'Quantità', 'Quantità minima', 'Prezzo acquisto', 'Prezzo vendita', 'Note'],
+      rows, 'magazzino', 'magazzino_csv');
+    setLoading(null);
+  }
+
+  // ── Schede Colore CSV ─────────────────────────────────────────────────────
+  async function scaricaSchedeColoreCsv() {
+    if (!user) return;
+    setLoading('schede_colore_csv');
+    const [{ data: schede }, { data: clientiData }] = await Promise.all([
+      supabase.from('schede_colore').select('*').eq('user_id', user.id).is('deleted_at', null).order('data_trattamento', { ascending: false }),
+      supabase.from('clienti').select('id, nome, cognome, telefono').eq('user_id', user.id).is('deleted_at', null),
+    ]);
+    const mapC = Object.fromEntries((clientiData ?? []).map((c: Record<string, string>) => [c.id, c]));
+    const rows = (schede ?? []).map((s: Record<string, unknown>) => {
+      const c = mapC[s.cliente_id as string] as Record<string, string> | undefined;
+      return [
+        c ? `${c.cognome ?? ''} ${c.nome ?? ''}`.trim() : '',
+        c?.telefono ?? '',
+        s.data_trattamento ? new Date(s.data_trattamento as string).toLocaleDateString('it-IT') : '',
+        String(s.tecnica ?? ''),
+        String(s.colore_base ?? ''),
+        String(s.colore_target ?? ''),
+        String(s.formula_colore ?? ''),
+        String(s.ossidante ?? ''),
+        s.tempo_posa ? String(s.tempo_posa) : '',
+        (String(s.note ?? '')).replace(/\n/g, ' '),
+      ];
+    });
+    await scaricaCSV(`schede-colore-${oggi()}.csv`,
+      ['Cliente', 'Telefono', 'Data trattamento', 'Tecnica', 'Colore base', 'Colore target', 'Formula', 'Ossidante', 'Posa (min)', 'Note'],
+      rows, 'clienti', 'schede_colore_csv');
+    setLoading(null);
+  }
+
+  // ── Appuntamenti CSV ──────────────────────────────────────────────────────
+  async function scaricaAppuntamentiCsv() {
+    if (!user) return;
+    setLoading('appuntamenti_csv');
+    const { data } = await supabase.from('appuntamenti')
+      .select('*, clienti(nome, cognome, telefono), parrucchieri(nome)')
+      .eq('user_id', user.id).is('deleted_at', null)
+      .order('data_ora', { ascending: false });
+    const rows = (data ?? []).map((a: Record<string, unknown>) => {
+      const cl = a.clienti as Record<string, string> | null;
+      const par = a.parrucchieri as Record<string, string> | null;
+      return [
+        a.data_ora ? new Date(a.data_ora as string).toLocaleDateString('it-IT') : '',
+        a.data_ora ? new Date(a.data_ora as string).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '',
+        cl ? `${cl.cognome ?? ''} ${cl.nome ?? ''}`.trim() : '',
+        cl?.telefono ?? '',
+        par?.nome ?? '',
+        (String(a.servizi ?? '')).replace(/\n/g, ' '),
+        String(a.stato ?? ''),
+        (String(a.note ?? '')).replace(/\n/g, ' '),
+      ];
+    });
+    await scaricaCSV(`appuntamenti-${oggi()}.csv`,
+      ['Data', 'Ora', 'Cliente', 'Telefono', 'Parrucchiere', 'Servizi', 'Stato', 'Note'],
+      rows, 'fiches', 'appuntamenti_csv');
+    setLoading(null);
+  }
+
+  type DownloadCategory = {
+    key: string;
+    titolo: string;
+    descrizione: string;
+    icon: JSX.Element;
+    color: string;
+    hoverColor: string;
+    voci: {
+      key: string;
+      label: string;
+      fn: () => Promise<void>;
+    }[];
+  };
+
+  const categorie: DownloadCategory[] = [
+    {
+      key: 'clienti',
+      titolo: 'Clienti',
+      descrizione: 'Anagrafiche clienti, schede colore, carte',
+      icon: <UserCog size={18} />,
+      color: 'bg-amber-100',
+      hoverColor: 'text-amber-600',
+      voci: [
+        { key: 'clienti_csv', label: 'Elenco clienti (CSV)', fn: scaricaClientiCsv },
+        { key: 'schede_colore_csv', label: 'Schede colore (CSV)', fn: scaricaSchedeColoreCsv },
+        { key: 'carte_premium_csv', label: 'Carte Premium (CSV)', fn: scaricaCartePremiumCsv },
+        { key: 'carte_sconto_csv', label: 'Carte Sconto (CSV)', fn: scaricaCarteScontoCsv },
+      ],
+    },
+    {
+      key: 'agenda',
+      titolo: 'Agenda',
+      descrizione: 'Elenco appuntamenti',
+      icon: <CalendarDays size={18} />,
+      color: 'bg-emerald-100',
+      hoverColor: 'text-emerald-600',
+      voci: [
+        { key: 'appuntamenti_csv', label: 'Appuntamenti (CSV)', fn: scaricaAppuntamentiCsv },
+      ],
+    },
+    {
+      key: 'magazzino',
+      titolo: 'Magazzino',
+      descrizione: 'Prodotti e scorte',
+      icon: <FolderOpen size={18} />,
+      color: 'bg-sky-100',
+      hoverColor: 'text-sky-600',
+      voci: [
+        { key: 'magazzino_csv', label: 'Prodotti magazzino (CSV)', fn: scaricaMagazzinoCsv },
+      ],
+    },
+    {
+      key: 'backup',
+      titolo: 'Backup',
+      descrizione: 'Esporta tutti i dati del gestionale',
+      icon: <DatabaseBackup size={18} />,
+      color: 'bg-stone-100',
+      hoverColor: 'text-stone-600',
+      voci: [
+        { key: 'backup', label: 'Backup completo (JSON)', fn: scaricaBackup },
+      ],
+    },
+  ];
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-4">
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={onBack} className="p-2 rounded-xl hover:bg-stone-100 transition-colors">
+          <ArrowLeft size={18} className="text-stone-600" />
+        </button>
+        <div>
+          <h2 className="font-bold text-stone-800 text-lg">Scarica File e Documenti</h2>
+          <p className="text-xs text-stone-400">Esporta e scarica file da tutte le sezioni del gestionale</p>
+        </div>
+      </div>
+
+      {categorie.map(cat => (
+        <div key={cat.key} className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
+            <div className={`w-9 h-9 rounded-xl ${cat.color} flex items-center justify-center flex-shrink-0`}>
+              <span className={cat.hoverColor}>{cat.icon}</span>
+            </div>
+            <div>
+              <p className="font-semibold text-stone-800 text-sm">{cat.titolo}</p>
+              <p className="text-xs text-stone-400">{cat.descrizione}</p>
+            </div>
+          </div>
+          <div className="divide-y divide-stone-50">
+            {cat.voci.map(voce => {
+              const isLoading = loading === voce.key;
+              const fb = feedback?.key === voce.key;
+              return (
+                <button
+                  key={voce.key}
+                  onClick={async () => { if (!loading) await voce.fn(); }}
+                  disabled={!!loading}
+                  className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-stone-50 transition-colors group disabled:opacity-60"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-stone-100 group-hover:bg-teal-100 flex items-center justify-center flex-shrink-0 transition-colors">
+                      {isLoading
+                        ? <RefreshCw size={13} className="text-teal-500 animate-spin" />
+                        : fb && feedback?.ok
+                        ? <Check size={13} className="text-emerald-500" />
+                        : <Download size={13} className="text-stone-400 group-hover:text-teal-600 transition-colors" />
+                      }
+                    </div>
+                    <div className="text-left min-w-0">
+                      <p className="text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors">{voce.label}</p>
+                      {fb && (
+                        <p className={`text-xs mt-0.5 ${feedback?.ok ? 'text-emerald-600' : 'text-red-500'}`}>{feedback?.msg}</p>
+                      )}
+                    </div>
+                  </div>
+                  {!isLoading && !fb && (
+                    <span className="text-xs text-stone-300 group-hover:text-stone-400 transition-colors flex-shrink-0">
+                      {voce.label.includes('CSV') ? 'CSV' : voce.label.includes('JSON') ? 'JSON' : 'PDF'}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
