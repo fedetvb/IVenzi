@@ -1,190 +1,212 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
+import html2canvas from 'html2canvas';
 
-// CR80 standard card + 3mm bleed (mm)
-const W = 85.60;
-const H = 53.98;
-const B = 3; // bleed
-const TW = W + B * 2; // 91.60
-const TH = H + B * 2; // 59.98
+// CR80 + 3mm bleed (mm)
+const TW_MM = 91.60;
+const TH_MM = 59.98;
+const B_MM = 3;
 
-function fill(doc: jsPDF, r: number, g: number, b: number) {
-  doc.setFillColor(r, g, b);
-}
-function strokeColor(doc: jsPDF, r: number, g: number, b: number) {
-  doc.setDrawColor(r, g, b);
-}
-function tc(doc: jsPDF, r: number, g: number, b: number) {
-  doc.setTextColor(r, g, b);
-}
+// Rendering at 300 DPI equivalent:
+// In the browser div space, 1mm = TW_PX / TW_MM
+const TW_PX = 1084;
+const TH_PX = 709;
+const MM = TW_PX / TW_MM; // px per mm ≈ 11.83
 
-function drawBackground(doc: jsPDF) {
-  // Dark brownish base
-  fill(doc, 26, 20, 5);
-  doc.rect(0, 0, TW, TH, 'F');
+function mm(v: number) { return Math.round(v * MM); }
 
-  // Radial golden glow (right-center)
-  const cx = TW * 0.78;
-  const cy = TH * 0.50;
-  const maxR = 38;
-  const steps = 28;
-  for (let i = 0; i <= steps; i++) {
-    const t = 1 - i / steps;
-    const r = maxR * (1 - i / steps);
-    const rr = Math.round(26 + (218 - 26) * t * 0.32);
-    const rg = Math.round(20 + (165 - 20) * t * 0.32);
-    const rb = Math.round(5 + (32 - 5) * t * 0.32);
-    fill(doc, rr, rg, rb);
-    doc.circle(cx, cy, r, 'F');
-  }
-
-  // Diagonal stripe pattern (subtle golden lines at ~45°)
-  strokeColor(doc, 180, 140, 28);
-  doc.setLineWidth(0.06);
-  const step = 4.5;
-  for (let offset = -(TH * 2); offset < TW + TH; offset += step) {
-    doc.line(offset, 0, offset + TH * 1.5, TH);
-  }
+// ── Card background HTML ───────────────────────────────────────────────────
+function backgroundHtml(): string {
+  return `
+    <!-- Base dark gradient -->
+    <div style="position:absolute;inset:0;background:linear-gradient(130deg,#1a1200 0%,#1f1600 45%,#2d1e00 75%,#3c2700 100%);"></div>
+    <!-- Radial golden glow (right-center) -->
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse 65% 85% at 83% 48%,rgba(210,155,15,0.42) 0%,rgba(160,110,8,0.18) 42%,transparent 72%);"></div>
+    <!-- Diagonal stripe pattern -->
+    <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(-50deg,transparent 0px,transparent 20px,rgba(205,162,22,0.13) 20px,rgba(205,162,22,0.13) 22px);"></div>
+  `;
 }
 
-function drawChip(doc: jsPDF, x: number, y: number) {
-  fill(doc, 184, 134, 11);
-  doc.roundedRect(x, y, 11, 8.5, 1.2, 1.2, 'F');
-  fill(doc, 218, 165, 32);
-  doc.roundedRect(x + 1, y + 1, 9, 6.5, 0.8, 0.8, 'F');
-  strokeColor(doc, 140, 100, 8);
-  doc.setLineWidth(0.28);
-  doc.line(x + 3.5, y + 1, x + 3.5, y + 7.5);
-  doc.line(x + 7.5, y + 1, x + 7.5, y + 7.5);
-  doc.line(x + 1, y + 4, x + 10, y + 4);
+// ── Chip HTML ───────────────────────────────────────────────────────────────
+function chipHtml(): string {
+  const w = mm(11), h = mm(8.5), r = mm(1.4);
+  const lw = Math.max(1, mm(0.28));
+  return `
+    <div style="width:${w}px;height:${h}px;background:linear-gradient(135deg,#e8c035 0%,#c89010 40%,#DAA520 65%,#b8860b 100%);border-radius:${r}px;box-shadow:0 ${mm(0.3)}px ${mm(1)}px rgba(0,0,0,0.65),inset 0 1px ${mm(0.5)}px rgba(255,255,255,0.22);position:relative;overflow:hidden;">
+      <div style="position:absolute;top:47%;left:8%;right:8%;height:${lw}px;background:rgba(70,45,0,0.55);transform:translateY(-50%);"></div>
+      <div style="position:absolute;top:10%;bottom:10%;left:31%;width:${lw}px;background:rgba(70,45,0,0.55);"></div>
+      <div style="position:absolute;top:10%;bottom:10%;right:29%;width:${lw}px;background:rgba(70,45,0,0.55);"></div>
+    </div>
+  `;
 }
 
-function drawCropMarks(doc: jsPDF) {
-  strokeColor(doc, 180, 140, 28);
-  doc.setLineWidth(0.15);
-  doc.setLineDashPattern([], 0);
-  const m = 1.8;
-  const g = 0.5;
-  doc.line(B - g - m, B, B - g, B);
-  doc.line(B, B - g - m, B, B - g);
-  doc.line(TW - B + g, B, TW - B + g + m, B);
-  doc.line(TW - B, B - g - m, TW - B, B - g);
-  doc.line(B - g - m, TH - B, B - g, TH - B);
-  doc.line(B, TH - B + g, B, TH - B + g + m);
-  doc.line(TW - B + g, TH - B, TW - B + g + m, TH - B);
-  doc.line(TW - B, TH - B + g, TW - B, TH - B + g + m);
+// ── FRONT HTML ─────────────────────────────────────────────────────────────
+function buildFrontHtml(saloneName: string): string {
+  const padX = mm(B_MM + 4);   // bleed + 4mm inner margin
+  const padY = mm(B_MM + 4);
+
+  // "CARTA PREMIUM" label
+  const titleFs = mm(6.8);
+  const titleLetterSpacing = mm(0.55);
+
+  // Name label zone: 50×13mm — left-aligned, at about 43% from top of total card
+  // In original screenshot the name appears roughly 43–55% down
+  const labelTop = mm(B_MM + 21);
+  const labelLeft = mm(B_MM + 4);
+  const labelW = mm(50);
+  const labelH = mm(13);
+
+  // Chip position
+  const chipTop = mm(B_MM + 3);
+  const chipRight = mm(B_MM + 3);
+
+  // Salon name at bottom-right (very subtle)
+  const bottomPad = mm(B_MM + 3);
+  const smallFs = mm(3.8);
+
+  return `
+    <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;">
+      ${backgroundHtml()}
+
+      <!-- CARTA PREMIUM label -->
+      <div style="position:absolute;top:${padY}px;left:${padX}px;font-size:${titleFs}px;font-weight:900;color:#DAA520;letter-spacing:${titleLetterSpacing}px;text-shadow:0 1px ${mm(0.4)}px rgba(0,0,0,0.55);white-space:nowrap;">CARTA PREMIUM</div>
+
+      <!-- Chip (top-right) -->
+      <div style="position:absolute;top:${chipTop}px;right:${chipRight}px;">
+        ${chipHtml()}
+      </div>
+
+      <!-- Name label area: fully integrated with background — no border, no content -->
+      <!-- 50mm × 13mm at (${labelLeft}px, ${labelTop}px) — leave blank for transparent sticker -->
+      <div style="position:absolute;top:${labelTop}px;left:${labelLeft}px;width:${labelW}px;height:${labelH}px;"></div>
+
+      ${saloneName ? `
+      <!-- Salon name (bottom-right, very subtle gold) -->
+      <div style="position:absolute;bottom:${bottomPad}px;right:${mm(B_MM + 3)}px;font-size:${smallFs}px;font-weight:600;color:rgba(180,130,18,0.42);letter-spacing:${mm(0.12)}px;text-transform:uppercase;">${saloneName.toUpperCase()}</div>
+      ` : ''}
+    </div>
+  `;
 }
 
-function drawFront(doc: jsPDF, saloneName: string) {
-  // CARTA PREMIUM label
-  tc(doc, 218, 165, 32);
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.text('C A R T A  P R E M I U M', B + 4, B + 9);
+// ── BACK HTML ──────────────────────────────────────────────────────────────
+async function buildBackHtml(bookingUrl: string, saloneName: string): Promise<string> {
+  const padX = mm(B_MM + 4);
+  const padY = mm(B_MM + 4);
 
-  // Chip
-  drawChip(doc, TW - B - 15, B + 3);
+  // Code label zone: centered vertically, left-aligned horizontally
+  const labelW = mm(50);
+  const labelH = mm(13);
+  const labelLeft = mm(B_MM + 6);
+  const labelTop = Math.round((TH_PX - labelH) / 2);
 
-  // Blank label area for NAME (50mm × 13mm, lower-left)
-  strokeColor(doc, 120, 90, 16);
-  doc.setLineWidth(0.12);
-  doc.setLineDashPattern([0.7, 0.7], 0);
-  const nx = B + 4;
-  const ny = TH - B - 18;
-  doc.rect(nx, ny, 50, 13, 'S');
-  doc.setLineDashPattern([], 0);
+  // QR code: right side, centered vertically
+  const qrMM = 22;
+  const qrSize = mm(qrMM);
+  const qrLeft = TW_PX - mm(B_MM + 4) - qrSize;
+  const qrTop = Math.round((TH_PX - qrSize) / 2);
 
-  tc(doc, 95, 70, 14);
-  doc.setFontSize(3.5);
-  doc.setFont('helvetica', 'normal');
-  doc.text('AREA ETICHETTA NOME', nx, ny + 14.5);
+  const titleFs = mm(5.2);
+  const smallFs = mm(3.8);
+  const qrLabelFs = mm(4.5);
+  const bottomPad = mm(B_MM + 3);
 
-  // Salon name bottom-right (subtle)
-  if (saloneName) {
-    tc(doc, 95, 72, 15);
-    doc.setFontSize(5);
-    doc.text(saloneName.toUpperCase(), TW - B - 4, TH - B - 3.5, { align: 'right' });
-  }
-
-  drawCropMarks(doc);
-}
-
-async function drawBack(doc: jsPDF, bookingUrl: string, saloneName: string) {
-  // Code label area (50mm × 13mm, left-center)
-  const codeX = B + 4;
-  const codeY = TH / 2 - 6.5;
-  strokeColor(doc, 120, 90, 16);
-  doc.setLineWidth(0.12);
-  doc.setLineDashPattern([0.7, 0.7], 0);
-  doc.rect(codeX, codeY, 50, 13, 'S');
-  doc.setLineDashPattern([], 0);
-
-  tc(doc, 95, 70, 14);
-  doc.setFontSize(3.5);
-  doc.setFont('helvetica', 'normal');
-  doc.text('AREA ETICHETTA CODICE', codeX, codeY + 14.5);
-
-  // QR Code (right side)
-  const qrSize = 22;
-  const qrX = TW - B - qrSize - 4;
-  const qrY = TH / 2 - qrSize / 2;
-
+  let qrImgHtml = '';
   if (bookingUrl) {
     try {
-      const qrCanvas = document.createElement('canvas');
-      await QRCode.toCanvas(qrCanvas, bookingUrl, {
-        width: 600,
+      const qrDataUrl = await QRCode.toDataURL(bookingUrl, {
+        width: 700,
         margin: 1,
-        color: { dark: '#DAA520', light: '#1a1400' },
+        errorCorrectionLevel: 'M',
+        color: { dark: '#DAA520', light: '#1a1200' },
       });
-      const qrDataUrl = qrCanvas.toDataURL('image/png');
-      doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+      qrImgHtml = `
+        <!-- QR label above -->
+        <div style="position:absolute;top:${qrTop - mm(6)}px;left:${qrLeft}px;width:${qrSize}px;text-align:center;font-size:${qrLabelFs}px;font-weight:700;color:rgba(210,155,20,0.80);letter-spacing:${mm(0.1)}px;">PRENOTA ONLINE</div>
+        <!-- QR code image -->
+        <img src="${qrDataUrl}" style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border-radius:${mm(0.8)}px;" />
+      `;
     } catch {
-      // Placeholder if URL invalid
-      fill(doc, 38, 28, 6);
-      doc.rect(qrX, qrY, qrSize, qrSize, 'F');
-      tc(doc, 130, 100, 20);
-      doc.setFontSize(5);
-      doc.text('QR CODE', qrX + qrSize / 2, qrY + qrSize / 2 + 1.5, { align: 'center' });
+      qrImgHtml = `
+        <div style="position:absolute;top:${qrTop}px;left:${qrLeft}px;width:${qrSize}px;height:${qrSize}px;border:${mm(0.2)}px solid rgba(180,130,18,0.3);display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:${mm(4)}px;color:rgba(180,130,18,0.4);text-align:center;">QR<br>CODE</span>
+        </div>
+      `;
     }
   }
 
-  // PRENOTA ONLINE label above QR
-  tc(doc, 175, 135, 26);
-  doc.setFontSize(5);
-  doc.setFont('helvetica', 'bold');
-  doc.text('PRENOTA ONLINE', qrX + qrSize / 2, qrY - 2, { align: 'center' });
+  return `
+    <div style="width:${TW_PX}px;height:${TH_PX}px;position:relative;overflow:hidden;font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;">
+      ${backgroundHtml()}
 
-  // CARTA PREMIUM watermark (bottom center, subtle)
-  tc(doc, 70, 54, 10);
-  doc.setFontSize(5.5);
-  doc.text('C A R T A  P R E M I U M', TW / 2, TH - B - 3.5, { align: 'center' });
+      <!-- Code label area: background-integrated blank zone -->
+      <div style="position:absolute;top:${labelTop}px;left:${labelLeft}px;width:${labelW}px;height:${labelH}px;"></div>
 
-  if (saloneName) {
-    tc(doc, 95, 72, 15);
-    doc.setFontSize(4.5);
-    doc.setFont('helvetica', 'normal');
-    doc.text(saloneName.toUpperCase(), TW / 2, TH - B - 7.5, { align: 'center' });
-  }
+      ${qrImgHtml}
 
-  drawCropMarks(doc);
+      <!-- CARTA PREMIUM watermark (bottom-center, subtle) -->
+      <div style="position:absolute;bottom:${bottomPad}px;left:0;right:0;text-align:center;font-size:${titleFs}px;font-weight:900;color:rgba(180,130,18,0.22);letter-spacing:${mm(0.55)}px;">CARTA PREMIUM</div>
+
+      ${saloneName ? `
+      <div style="position:absolute;bottom:${mm(B_MM + 8)}px;left:0;right:0;text-align:center;font-size:${smallFs}px;font-weight:600;color:rgba(180,130,18,0.30);letter-spacing:${mm(0.12)}px;text-transform:uppercase;">${saloneName.toUpperCase()}</div>
+      ` : ''}
+    </div>
+  `;
 }
 
+// ── Capture helper ────────────────────────────────────────────────────────
+async function captureHtml(html: string): Promise<string> {
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = `position:fixed;top:-9999px;left:-9999px;width:${TW_PX}px;height:${TH_PX}px;overflow:hidden;`;
+  wrapper.innerHTML = html;
+  document.body.appendChild(wrapper);
+  try {
+    const canvas = await html2canvas(wrapper, {
+      width: TW_PX,
+      height: TH_PX,
+      scale: 1,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: null,
+      logging: false,
+    });
+    return canvas.toDataURL('image/jpeg', 0.96);
+  } finally {
+    document.body.removeChild(wrapper);
+  }
+}
+
+// ── Main export ───────────────────────────────────────────────────────────
 export async function generateCartaPremiumStampaPdf(opts: {
   saloneName: string;
   bookingUrl: string;
 }): Promise<Blob> {
-  // Page size = TW x TH mm (CR80 + 3mm bleed all sides)
-  const doc = new jsPDF({ unit: 'mm', format: [TW, TH] });
+  const frontHtml = buildFrontHtml(opts.saloneName);
+  const backHtml = await buildBackHtml(opts.bookingUrl, opts.saloneName);
 
-  // Page 1 – FRONTE
-  drawBackground(doc);
-  drawFront(doc, opts.saloneName);
+  const [frontImg, backImg] = await Promise.all([
+    captureHtml(frontHtml),
+    captureHtml(backHtml),
+  ]);
 
-  // Page 2 – RETRO
-  doc.addPage([TW, TH]);
-  drawBackground(doc);
-  await drawBack(doc, opts.bookingUrl, opts.saloneName);
+  // Create PDF: each page is TW_MM x TH_MM mm
+  const doc = new jsPDF({ unit: 'mm', format: [TW_MM, TH_MM] });
+
+  // Page 1: FRONTE
+  doc.addImage(frontImg, 'JPEG', 0, 0, TW_MM, TH_MM);
+
+  // Page 2: RETRO
+  doc.addPage([TW_MM, TH_MM]);
+  doc.addImage(backImg, 'JPEG', 0, 0, TW_MM, TH_MM);
+
+  // PDF metadata
+  doc.setProperties({
+    title: 'Carta Premium – Stampa Tipografia',
+    subject: `CR80 ${TW_MM}x${TH_MM}mm (bleed 3mm) – Fronte e Retro`,
+    creator: opts.saloneName || 'Gestionale Salone',
+  });
 
   return doc.output('blob');
 }
+
+
+export { generateCartaPremiumStampaPdf }
