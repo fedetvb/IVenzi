@@ -1,6 +1,6 @@
 {
-  "name": "Gestionale Parrucchieri",
-  "short_name": "Salone",
+  "name": "MyVenzi",
+  "short_name": "MyVenzi",
   "description": "Gestionale completo per salone di parrucchieri",
   "start_url": "/",
   "scope": "/",
