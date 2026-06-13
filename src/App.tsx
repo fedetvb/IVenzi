@@ -251,7 +251,7 @@ export default function App() {
       lastFiredMinute = nowIt;
       const dopodomani = new Date(Date.now() + 2 * 86400000);
       const ddKey = dopodomani.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
-      const lsKey = `avviso_in_forse_shown_${ddKey}`;
+      const lsKey = `avviso_in_forse_shown_${ddKey}_${orario.replace(':', '')}`;
       if (localStorage.getItem(lsKey)) return;
       const start = new Date(ddKey + 'T00:00:00').toISOString();
       const end = new Date(ddKey + 'T23:59:59').toISOString();
