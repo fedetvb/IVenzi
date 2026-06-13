@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle, Mail, FileText, Camera, MapPin, Globe, ExternalLink } from 'lucide-react';
 import AnnuncioModal, { COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
+import { applyWaTemplate, DEFAULT_WA_CS_DONA, DEFAULT_WA_GP_CLIENTE } from '../lib/waUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
@@ -3233,12 +3234,27 @@ function CartaUsaEGettaCard({
   const telefono = salone['azienda_telefono'] ?? '';
   const maps = salone['azienda_google_maps'] ?? '';
   const sito = salone['azienda_sito_prenotazioni'] ?? '';
+  const includiMappa = salone['wa_includi_mappa'] === 'true';
 
   const scontoDesc = carta.tipo_sconto === 'percentuale'
     ? `${carta.valore_sconto}%`
     : `€ ${carta.valore_sconto?.toFixed(2)}`;
 
-  const msgBase = `Ciao 😊 Stefano e Federico del salone "${nomeSalone}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme alla mia carta sconto monouso per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${carta.codice}\nLa carta include uno sconto del ${scontoDesc} sul tuo primo appuntamento.\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${telefono} oppure richiedi una consulenza direttamente online su ${sito}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${maps}\n\nSpero che ti concederai questo momento di totale relax.`;
+  const tplCs = salone['wa_template_cs_dona'] || DEFAULT_WA_CS_DONA;
+  const msgBase = (() => {
+    let msg = applyWaTemplate(tplCs, {
+      nome_salone: nomeSalone,
+      codice: carta.codice,
+      telefono,
+      sito,
+      sconto: scontoDesc,
+      valore: '',
+      destinataria: '',
+      donante: '',
+    });
+    if (includiMappa && maps) msg = msg.trimEnd() + `\n\n${maps}`;
+    return msg;
+  })();
 
   useEffect(() => {
     if (showRegala) setMsgRegala(msgBase);
@@ -3401,22 +3417,22 @@ function GiftPassCard({
   const telefono = salone['azienda_telefono'] ?? '';
   const sito = salone['azienda_sito_prenotazioni'] ?? '';
   const maps = salone['azienda_google_maps'] ?? '';
+  const includiMappaGp = salone['wa_includi_mappa'] === 'true';
+  const tplGpCliente = salone['wa_template_gp_cliente'] || DEFAULT_WA_GP_CLIENTE;
 
   const msgBase = (() => {
-    const sn = nomeSalone || 'il salone';
-    const codice = gp.codice;
-    const tel = telefono;
-    const link = sito;
-    const mapLink = maps;
-    if (gp.tipo === 'prodotto') {
-      return `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-    } else if (gp.occasione === 'compleanno') {
-      return `Ciao 😊 Per il tuo compleanno ho voluto regalarti un'esperienza speciale da Stefano e Federico del salone "${sn}". Sono i ragazzi che si prendono cura dei miei capelli e volevo farti provare lo stesso entusiasmo, l'ascolto e la cura che dedicano a me ogni volta.\n\nTi lascio questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro ?? 0} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-    } else if (gp.occasione === 'regalo') {
-      return `Ciao 😊 Ho pensato di dedicare un pensiero speciale a te che sei una persona importante, per farti provare l'entusiasmo e la cura con cui Stefano e Federico del salone "${sn}" ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere questo benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro ?? 0} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax.`;
-    } else {
-      return `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass con un bonus di €${gp.valore_euro ?? 0} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-    }
+    let msg = applyWaTemplate(tplGpCliente, {
+      nome_salone: nomeSalone || 'il salone',
+      codice: gp.codice,
+      telefono,
+      sito,
+      valore: String(gp.valore_euro ?? 0),
+      sconto: '',
+      destinataria: '',
+      donante: compratore_nome || '',
+    });
+    if (includiMappaGp && maps) msg = msg.trimEnd() + `\n\n${maps}`;
+    return msg;
   })();
 
   function openDona() {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search } from 'lucide-react';
 import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
+import { DEFAULT_WA_GP_SALONE, DEFAULT_WA_GP_CLIENTE, DEFAULT_WA_CS_DONA } from '../lib/waUtils';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
@@ -13,7 +14,7 @@ import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -56,6 +57,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'dati_azienda') return <PaginaDatiAzienda onBack={() => setSub(null)} />;
   if (sub === 'canali_social') return <PaginaCanaleSocial onBack={() => setSub(null)} />;
   if (sub === 'orari_salone') return <PaginaOrariSalone onBack={() => setSub(null)} />;
+  if (sub === 'wa_carte') return <PaginaWACarte onBack={() => setSub(null)} />;
   if (sub === 'scarica_documenti') return (
     <StatisticheGate isActive={sub === 'scarica_documenti'} chiave="password_documenti" sezione="scarica file e documenti" sessionKey="documenti_unlocked">
       <PaginaScaricaDocumenti onBack={() => setSub(null)} />
@@ -73,6 +75,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     'Messaggi WhatsApp automatici', 'Pulsante avviso clienti',
     'Template Messaggi Carta Sconto', 'Modelli per carte sconto',
     'Template Messaggi Comunicazioni', 'Messaggi predefiniti per comunicazioni',
+    'Messaggi WA Carte da Donare', 'Gift Pass Carta Sconto donazione mappa posizione',
   );
   const anyVisible = show('Account e Credenziali', 'Modifica email e password') ||
     show('Avvisi e Banner', 'Orari e attivazione di tutti gli avvisi') ||
@@ -356,6 +359,22 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
                 <div className="flex-1 text-left">
                   <p className="text-sm font-medium text-stone-700">Template Messaggi Comunicazioni</p>
                   <p className="text-xs text-stone-400 mt-0.5">Messaggi predefiniti per comunicazioni (compleanno, feste, promo...)</p>
+                </div>
+                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
+              </button>
+
+              {/* Messaggi WA Carte da Donare */}
+              <button
+                onClick={() => setSub('wa_carte')}
+                style={show('Messaggi WA Carte da Donare', 'Gift Pass Carta Sconto donazione mappa posizione') ? {} : {display:'none'}}
+                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-emerald-300 flex items-center justify-center flex-shrink-0 transition-colors">
+                  <Gift size={15} className="text-stone-400 group-hover:text-emerald-600 transition-colors" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-stone-700">Messaggi WA Carte da Donare</p>
+                  <p className="text-xs text-stone-400 mt-0.5">Testi WhatsApp per Gift Pass e Carta Sconto monouso, con toggle mappa</p>
                 </div>
                 <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
               </button>
@@ -7427,6 +7446,183 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
           {deleting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Trash2 size={15} /> Elimina tutti i messaggi</>}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Pagina Messaggi WA Carte da Donare ──────────────────────────────────────
+
+function PaginaWACarte({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  type WaTab = 'gp_salone' | 'gp_cliente' | 'cs_dona';
+
+  const [tab, setTab] = useState<WaTab>('gp_salone');
+  const [tplGpSalone, setTplGpSalone] = useState('');
+  const [tplGpCliente, setTplGpCliente] = useState('');
+  const [tplCsDona, setTplCsDona] = useState('');
+  const [includiMappa, setIncludiMappa] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      getImpostazione('wa_template_gp_salone'),
+      getImpostazione('wa_template_gp_cliente'),
+      getImpostazione('wa_template_cs_dona'),
+      getImpostazione('wa_includi_mappa'),
+    ]).then(([gs, gc, cs, im]) => {
+      setTplGpSalone(gs ?? DEFAULT_WA_GP_SALONE);
+      setTplGpCliente(gc ?? DEFAULT_WA_GP_CLIENTE);
+      setTplCsDona(cs ?? DEFAULT_WA_CS_DONA);
+      setIncludiMappa(im === 'true');
+    });
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    await Promise.all([
+      setImpostazione('wa_template_gp_salone', tplGpSalone, user?.id),
+      setImpostazione('wa_template_gp_cliente', tplGpCliente, user?.id),
+      setImpostazione('wa_template_cs_dona', tplCsDona, user?.id),
+      setImpostazione('wa_includi_mappa', includiMappa ? 'true' : 'false', user?.id),
+    ]);
+    setSaving(false);
+    setFeedback('Salvato!');
+    setTimeout(() => setFeedback(''), 2500);
+  }
+
+  const TABS: { key: WaTab; label: string; hint: string; placeholders: string[] }[] = [
+    {
+      key: 'gp_salone',
+      label: 'Gift Pass · Dal salone',
+      hint: 'Inviato dal gestionale alla destinataria del regalo',
+      placeholders: ['{nome_salone}', '{codice}', '{telefono}', '{sito}', '{valore}', '{destinataria}', '{donante}'],
+    },
+    {
+      key: 'gp_cliente',
+      label: 'Gift Pass · Dalla cliente',
+      hint: "Messaggio che la donatrice invia da sola all'amica",
+      placeholders: ['{nome_salone}', '{codice}', '{telefono}', '{sito}', '{valore}'],
+    },
+    {
+      key: 'cs_dona',
+      label: 'Carta Sconto · Donazione',
+      hint: 'Messaggio per donare la carta sconto monouso',
+      placeholders: ['{nome_salone}', '{codice}', '{telefono}', '{sito}', '{sconto}'],
+    },
+  ];
+
+  const currentTab = TABS.find(t => t.key === tab)!;
+  const currentText = tab === 'gp_salone' ? tplGpSalone : tab === 'gp_cliente' ? tplGpCliente : tplCsDona;
+  const setCurrentText = tab === 'gp_salone' ? setTplGpSalone : tab === 'gp_cliente' ? setTplGpCliente : setTplCsDona;
+  const defaultText = tab === 'gp_salone' ? DEFAULT_WA_GP_SALONE : tab === 'gp_cliente' ? DEFAULT_WA_GP_CLIENTE : DEFAULT_WA_CS_DONA;
+
+  function insertPlaceholder(p: string) {
+    const ta = document.getElementById('wa-tpl-textarea') as HTMLTextAreaElement | null;
+    if (!ta) { setCurrentText(prev => prev + p); return; }
+    const start = ta.selectionStart ?? currentText.length;
+    const end = ta.selectionEnd ?? currentText.length;
+    const next = currentText.slice(0, start) + p + currentText.slice(end);
+    setCurrentText(next);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + p.length, start + p.length); }, 0);
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-5">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} className="text-stone-600" />
+        </button>
+        <div>
+          <h2 className="text-lg font-bold text-stone-800">Messaggi WA Carte da Donare</h2>
+          <p className="text-xs text-stone-400">Personalizza i testi WhatsApp per i regali</p>
+        </div>
+      </div>
+
+      {/* Toggle includi mappa */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <MapPin size={16} className="text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-stone-800">Includi link mappa in fondo</p>
+            <p className="text-xs text-stone-400 mt-0.5">Aggiunge il link Google Maps (Dati Azienda) alla fine del messaggio</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIncludiMappa(v => !v)}
+          className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${includiMappa ? 'bg-emerald-500' : 'bg-stone-200'}`}
+        >
+          <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${includiMappa ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      {/* Editor template */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+        <div className="flex border-b border-stone-100">
+          {TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex-1 py-3 text-xs font-semibold transition-colors ${
+                tab === t.key
+                  ? 'text-emerald-700 border-b-2 border-emerald-500 bg-emerald-50/60'
+                  : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-stone-400 italic">{currentTab.hint}</p>
+
+          <div>
+            <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Segnaposti — clicca per inserire nel testo</p>
+            <div className="flex flex-wrap gap-1.5">
+              {currentTab.placeholders.map(p => (
+                <button
+                  key={p}
+                  onClick={() => insertPlaceholder(p)}
+                  className="px-2.5 py-1 bg-stone-100 hover:bg-emerald-100 text-stone-600 hover:text-emerald-700 rounded-lg text-xs font-mono transition-colors border border-transparent hover:border-emerald-200"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <textarea
+            id="wa-tpl-textarea"
+            value={currentText}
+            onChange={e => setCurrentText(e.target.value)}
+            rows={14}
+            className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-700 leading-relaxed focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200 resize-none font-mono transition-colors"
+            placeholder="Scrivi il messaggio..."
+          />
+
+          <button
+            onClick={() => setCurrentText(defaultText)}
+            className="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1.5 transition-colors"
+          >
+            <RotateCcw size={11} />
+            Ripristina testo predefinito per questa scheda
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={save}
+        disabled={saving}
+        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-2xl transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+      >
+        {saving
+          ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          : <Check size={16} />}
+        {feedback || 'Salva tutte le modifiche'}
+      </button>
     </div>
   );
 }

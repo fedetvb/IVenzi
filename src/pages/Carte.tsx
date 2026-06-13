@@ -9,7 +9,7 @@ import PasswordGateModal from '../components/PasswordGateModal';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 import { useAuth } from '../lib/AuthContext';
 import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete, getImpostazione, invalidateTableCache } from '../lib/localDb';
-import { apriWhatsApp } from '../lib/waUtils';
+import { apriWhatsApp, applyWaTemplate, DEFAULT_WA_GP_SALONE, DEFAULT_WA_GP_CLIENTE } from '../lib/waUtils';
 
 type TipoPagamento = 'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null;
 
@@ -1814,6 +1814,9 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
   const [telefono, setTelefono] = useState('');
   const [maps, setMaps] = useState('');
   const [sito, setSito] = useState('');
+  const [tplSalone, setTplSalone] = useState('');
+  const [tplCliente, setTplCliente] = useState('');
+  const [includiMappa, setIncludiMappa] = useState(false);
   const [loading, setLoading] = useState(true);
   const [messaggio, setMessaggio] = useState('');
   const [copied, setCopied] = useState(false);
@@ -1823,61 +1826,52 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
       getImpostazione('azienda_telefono'),
       getImpostazione('azienda_google_maps'),
       getImpostazione('azienda_sito_prenotazioni'),
-    ]).then(([tel, mp, sit]) => {
+      getImpostazione('wa_template_gp_salone'),
+      getImpostazione('wa_template_gp_cliente'),
+      getImpostazione('wa_includi_mappa'),
+    ]).then(([tel, mp, sit, ts, tc, im]) => {
       setTelefono(tel ?? '');
       setMaps(mp ?? '');
       setSito(sit ?? '');
+      setTplSalone(ts ?? DEFAULT_WA_GP_SALONE);
+      setTplCliente(tc ?? DEFAULT_WA_GP_CLIENTE);
+      setIncludiMappa(im === 'true');
       setLoading(false);
     });
   }, []);
 
   useEffect(() => {
     if (loading) return;
-    const codice = gp.codice;
-    const tel = telefono;
-    const link = sito;
-    const mapLink = maps;
+    const isFromSalone = !!gp.destinataria_nome;
+    const tpl = isFromSalone ? tplSalone : tplCliente;
     const sn = nomeSalone || 'il salone';
     const dest = gp.destinataria_nome ? gp.destinataria_nome.split(' ')[0] : '';
-    const saluto = dest ? `Ciao ${dest}! 😊` : 'Ciao! 😊';
     const primoNome = (compratore_nome ?? '').split(' ')[0].toLowerCase();
     const genere = primoNome.endsWith('a') ? 'f' : 'm';
-    const donante = compratore_nome
+    const donanteStr = compratore_nome
       ? (genere === 'f' ? `La tua amica ${compratore_nome}` : `Il tuo amico ${compratore_nome}`)
-      : null;
-    const donanteConA = compratore_nome
-      ? (genere === 'f' ? `alla tua amica ${compratore_nome}` : `al tuo amico ${compratore_nome}`)
-      : null;
-    let msg = '';
+      : '';
 
-    if (gp.destinataria_nome) {
-      // Messaggi con destinataria nota: tono "il salone informa la destinataria del regalo" (inviati dal gestionale)
-      if (gp.tipo === 'prodotto') {
-        msg = `${saluto} ${donante} ha pensato a te e ha voluto dedicarti un invito speciale da Stefano e Federico del salone "${sn}", per farti provare l'entusiasmo e la cura con cui la ascoltiamo e ci prendiamo cura dei suoi capelli, quindi ha pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al suo Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
-      } else if (gp.occasione === 'compleanno') {
-        msg = `${saluto} Per il tuo compleanno ${donante} ha voluto regalarti un'esperienza speciale da Stefano e Federico del salone "${sn}". Siamo i ragazzi che si prendono cura dei suoi capelli e ha voluto farti provare lo stesso entusiasmo, l'ascolto e la cura che dedichiamo a lei ogni volta.\n\nTi lascia questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
-      } else if (gp.occasione === 'regalo') {
-        msg = `${saluto} ${donante} ha pensato di dedicarti un pensiero speciale, per farti provare l'entusiasmo e la cura con cui noi, Stefano e Federico del salone "${sn}", la ascoltiamo e ci prendiamo cura dei suoi capelli, quindi ha pensato che ti facesse piacere ricevere questo benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax.`;
-      } else {
-        msg = `${saluto} Noi, Stefano e Federico del salone "${sn}", abbiamo dato la possibilità ${donanteConA} di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui la ascoltiamo e ci prendiamo cura dei suoi capelli, e ha scelto proprio te. Ti lascia così il nostro invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSperiamo che tu ti conceda questo momento di totale relax!`;
-      }
-    } else {
-      // Messaggi senza destinataria: tono "amica che scrive ad amica" (per invio dal sito prenotazioni tramite la donatrice)
-      if (gp.tipo === 'prodotto') {
-        msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass per ricevere un prodotto speciale in omaggio durante il tuo primo appuntamento.\n\nQuesto è il codice da comunicare in salone: ${codice}\n(Il pass è valido abbinato a un qualsiasi servizio effettuato in salone)\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-      } else if (gp.occasione === 'compleanno') {
-        msg = `Ciao 😊 Per il tuo compleanno ho voluto regalarti un'esperienza speciale da Stefano e Federico del salone "${sn}". Sono i ragazzi che si prendono cura dei miei capelli e volevo farti provare lo stesso entusiasmo, l'ascolto e la cura che dedicano a me ogni volta.\n\nTi lascio questo invito di benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per festeggiare il tuo giorno speciale.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti e festeggiarti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-      } else if (gp.occasione === 'regalo') {
-        msg = `Ciao 😊 Ho pensato di dedicare un pensiero speciale a te che sei una persona importante, per farti provare l'entusiasmo e la cura con cui Stefano e Federico del salone "${sn}" ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere questo benvenuto insieme al tuo Gift Pass con un bonus di €${gp.valore_euro} in regalo, da spendere come vuoi nel salone per dedicarti un momento tutto tuo.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax.`;
-      } else {
-        msg = `Ciao 😊 Stefano e Federico del salone "${sn}", mi hanno dato la possibilità di dedicare un invito a una persona cara, per farle provare l'entusiasmo e la cura con cui ascoltano me e si prendono cura dei miei capelli, quindi ho pensato che ti facesse piacere ricevere il loro invito di benvenuto insieme al mio Gift Pass con un bonus di €${gp.valore_euro} in regalo da spendere come vuoi nel salone per il tuo primo appuntamento.\n\nQuesto è il codice da comunicare al momento del pagamento: ${codice}\n\nPer fissare il tuo appuntamento e dedicarti il tempo corretto, telefona in salone al ${tel} oppure richiedi una consulenza direttamente online su ${link}. I ragazzi saranno davvero lieti di conoscerti!\n\nEcco dove si trova il salone sulla mappa: ${mapLink}\n\nSpero che ti concederai questo momento di totale relax!`;
-      }
+    let msg = applyWaTemplate(tpl, {
+      nome_salone: sn,
+      codice: gp.codice,
+      telefono,
+      sito,
+      valore: String(gp.valore_euro ?? 0),
+      destinataria: dest,
+      donante: donanteStr,
+      sconto: '',
+    });
+
+    if (includiMappa && maps) {
+      msg = msg.trimEnd() + `\n\n${maps}`;
     }
+
     if (gp.scadenza_uso_giorni && gp.scadenza_uso_giorni > 0) {
       msg += `\n\nHai ${gp.scadenza_uso_giorni} giorni di tempo per riscattare il tuo omaggio.`;
     }
     setMessaggio(msg);
-  }, [loading, gp, telefono, maps, sito, nomeSalone, compratore_nome]);
+  }, [loading, gp, telefono, maps, sito, tplSalone, tplCliente, includiMappa, nomeSalone, compratore_nome]);
 
   const hasDestinaratia = !!gp.destinataria_nome;
   const hasPhone = !!gp.destinataria_telefono?.trim();

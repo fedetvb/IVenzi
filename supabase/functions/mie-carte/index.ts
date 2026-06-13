@@ -95,6 +95,9 @@ Deno.serve(async (req: Request) => {
         "azienda_google_maps",
         "azienda_sito_prenotazioni",
         "nome_salone",
+        "wa_template_cs_dona",
+        "wa_template_gp_cliente",
+        "wa_includi_mappa",
       ]);
 
     const imp: Record<string, string> = {};
