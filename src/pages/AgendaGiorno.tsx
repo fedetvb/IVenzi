@@ -187,7 +187,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-    const [parrRes, appRes, impostRes, scRes, prRes, assRes, catPosaRes] = await Promise.all([
+    const [parrRes, appRes, impostRes, scRes, prRes, assRes, catPosaRes, gpRes] = await Promise.all([
       dbSelect({ table: 'parrucchieri', filters: [{ col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'nome' }] }),
       dbSelectWithRelated({
         table: 'appuntamenti',
@@ -209,7 +209,8 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       dbSelect({ table: 'carte_sconto', columns: 'cliente_id, usa_e_getta, attiva', filters: [{ col: 'cliente_id', op: 'not_null' }, { col: 'attiva', op: 'eq', val: true }, { col: 'deleted_at', op: 'is_null' }] }),
       dbSelect({ table: 'carte_premium', columns: 'cliente_id, saldo, attiva', filters: [{ col: 'deleted_at', op: 'is_null' }, { col: 'attiva', op: 'eq', val: true }] }),
       dbSelect({ table: 'assenze_parrucchieri', columns: 'parrucchiere_id, data_inizio, data_fine, ora_inizio', filters: [{ col: 'data_inizio', op: 'lte', val: dateStr }, { col: 'data_fine', op: 'gte', val: dateStr }] }),
-      dbSelect({ table: 'trattamenti_catalogo', columns: 'id, inizio_posa, durata_posa', filters: [{ col: 'inizio_posa', op: 'not_null' }, { col: 'durata_posa', op: 'not_null' }] })
+      dbSelect({ table: 'trattamenti_catalogo', columns: 'id, inizio_posa, durata_posa', filters: [{ col: 'inizio_posa', op: 'not_null' }, { col: 'durata_posa', op: 'not_null' }] }),
+      dbSelect({ table: 'gift_pass', columns: 'destinataria_cliente_id', filters: [{ col: 'destinataria_cliente_id', op: 'not_null' }, { col: 'utilizzata', op: 'eq', val: false }] })
     ]);
 
     if (impostRes) setMessaggioAuguri(impostRes);
@@ -232,6 +233,9 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     }
     for (const r of (prRes.data || []) as { cliente_id: string; saldo: number; attiva: boolean }[]) {
       if (r.cliente_id) addCarta(r.cliente_id, (r.saldo <= 0 || !r.attiva) ? 'premium_vuota' : 'premium');
+    }
+    for (const r of (gpRes.data || []) as { destinataria_cliente_id: string }[]) {
+      if (r.destinataria_cliente_id) addCarta(r.destinataria_cliente_id, 'gift_pass');
     }
     setClientiCarte(carteMap);
 
@@ -1525,6 +1529,15 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                         <rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(100,100,100,0.18)"/>
                                       </svg>
                                     )}
+                                    {carteTipi.has('gift_pass') && (
+                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'drop-shadow(0 0 2px rgba(244,194,194,0.8))' }}>
+                                        <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#F4C2C2" stroke="#E8A0A0" strokeWidth="0.5"/>
+                                        <rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.1)"/>
+                                        <rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.6)"/>
+                                        <line x1="9" y1="1" x2="9" y2="5.5" stroke="rgba(200,100,100,0.5)" strokeWidth="0.8"/>
+                                        <path d="M7 2.5 Q9 1 11 2.5" stroke="rgba(200,100,100,0.5)" strokeWidth="0.7" fill="none"/>
+                                      </svg>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -1640,6 +1653,10 @@ export default function AgendaGiorno({ date, onBack }: Props) {
         <div className="flex items-center gap-1">
           <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="white" stroke="#d6d3d1" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(100,100,100,0.12)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(100,100,100,0.18)"/></svg>
           <span className="text-[10px] text-stone-500">Sconto</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#F4C2C2" stroke="#E8A0A0" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.1)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.6)"/><line x1="9" y1="1" x2="9" y2="5.5" stroke="rgba(200,100,100,0.5)" strokeWidth="0.8"/><path d="M7 2.5 Q9 1 11 2.5" stroke="rgba(200,100,100,0.5)" strokeWidth="0.7" fill="none"/></svg>
+          <span className="text-[10px] text-stone-500">Gift Pass</span>
         </div>
         <span className="ml-auto text-[9px] text-stone-400 italic hidden sm:block">Tieni premuto per spostare · Doppio tap per modificare (mobile)</span>
       </div>
