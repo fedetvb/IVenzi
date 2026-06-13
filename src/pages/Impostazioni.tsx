@@ -1958,18 +1958,19 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
           {/* Contenuto del messaggio (sola lettura) */}
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
             <p className="text-sm font-semibold text-stone-700">Testo del messaggio</p>
-            <p className="text-xs text-stone-400">Il testo è fisso e non modificabile. Usa <span className="font-mono bg-stone-100 px-1 rounded">[Nome Cliente]</span> che viene sostituito automaticamente.</p>
+            <p className="text-xs text-stone-400">Anteprima del testo mostrato alla cliente. Per modificarlo vai in <strong className="text-stone-500">Impostazioni → Benvenuto Nuove Clienti</strong>.</p>
             <div className="bg-stone-50 rounded-xl px-4 py-3 text-xs text-stone-600 leading-relaxed space-y-2 border border-stone-100">
               <p className="font-semibold text-stone-800">✨ Finalmente sei qui, [Nome Cliente]!</p>
-              <p>La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte.</p>
-              <p>Ecco cosa troverai nella tua <strong>Area Personale</strong>:</p>
+              <p>La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte. Non è il solito sito e non è la solita app: questo è il tuo <strong>pass d'accesso esclusivo</strong> al futuro del nostro salone.</p>
+              <p>Abbiamo digitalizzato le tue coccole. Ecco cosa troverai nella tua <strong>Area Personale</strong>:</p>
               <ul className="space-y-1 pl-2">
-                <li>📅 <strong>Niente attese al telefono</strong> — richiedi appuntamenti quando vuoi</li>
-                <li>🗓 <strong>Tutto sotto controllo</strong> — appuntamenti passati e futuri</li>
-                <li>✂️ <strong>Il tuo diario di bellezza</strong> — colori e trattamenti con data e parrucchiera</li>
-                <li>💳 <strong>Il tuo borsellino</strong> — saldo carte, abbonamenti e promozioni</li>
-                <li>💬 <strong>Filo diretto con noi</strong> — foto e messaggi per richieste speciali</li>
+                <li><strong>Niente attese al telefono</strong>: Invii la tua richiesta di prenotazione in un attimo, quando vuoi tu, e aspetti solo il nostro messaggio di conferma.</li>
+                <li><strong>Tutto sotto controllo</strong>: Vedi all'istante i tuoi appuntamenti passati e quelli futuri per pianificare i tuoi look.</li>
+                <li><strong>Il tuo diario di bellezza</strong>: Vuoi ricordare che colore o trattamento hai fatto l'ultima volta, quando e con chi? È tutto scritto qui.</li>
+                <li><strong>Il tuo borsellino</strong>: Monitori in tempo reale il saldo delle tue carte, abbonamenti e promozioni.</li>
+                <li><strong>Filo diretto con noi</strong>: Puoi inviarci foto di ispirazione o messaggi per richieste speciali prima ancora di sederti in poltrona.</li>
               </ul>
+              <p>Curiosa di vedere come abbiamo rivoluzionato il tuo modo di prenderti cura di te? Il tuo nuovo portale è pronto.</p>
             </div>
           </div>
         </>
