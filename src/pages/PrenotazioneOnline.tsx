@@ -68,7 +68,7 @@ interface SalonInfo {
   benvenutoConfig?: BenvenutoConfig | null;
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'nostri_prodotti' | 'contatti';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'nostri_prodotti' | 'contatti' | 'quiz_capelli' | 'routine_risultato';
 
 interface Seduta {
   fiche_id: string;
@@ -292,11 +292,142 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [serviziPeriodo, setServiziPeriodo] = useState<'1m' | '3m' | '1y' | 'all'>('all');
   const [serviziNomeFiltro, setServiziNomeFiltro] = useState('');
 
-  interface ProdottoCatalogo { id: string; nome: string; marca: string | null; categoria: string | null; prezzo_vendita: number | null; note: string | null; }
+  interface ProdottoCatalogo { id: string; nome: string; marca: string | null; categoria: string | null; prezzo_vendita: number | null; note: string | null; quiz_tags: string[] | null; }
   const [nostralProdotti, setNostralProdotti] = useState<ProdottoCatalogo[]>([]);
   const [loadingNostralProdotti, setLoadingNostralProdotti] = useState(false);
   const [nostralProdottiError, setNostralProdottiError] = useState('');
   const [prodottiFiltro, setProdottiFiltro] = useState('');
+
+  // Quiz capelli state
+  interface QuizDomanda { id: string; domanda: string; emoji: string; opzioni: { label: string; tag: string }[] }
+  const QUIZ_DOMANDE: QuizDomanda[] = [
+    { id: 'tipo', domanda: "Com'è la struttura dei tuoi capelli?", emoji: '💇', opzioni: [
+      { label: 'Lisci', tag: 'lisci' }, { label: 'Mossi', tag: 'mossi' },
+      { label: 'Ricci', tag: 'ricci' }, { label: 'Afro', tag: 'afro' },
+    ]},
+    { id: 'sensazione', domanda: 'Come si sentono i tuoi capelli?', emoji: '✨', opzioni: [
+      { label: 'Normali', tag: 'normali' }, { label: 'Secchi', tag: 'secchi' },
+      { label: 'Danneggiati', tag: 'danneggiati' }, { label: 'Pesanti', tag: 'pesanti' },
+    ]},
+    { id: 'crespo', domanda: 'Hai problemi di crespo?', emoji: '🌊', opzioni: [
+      { label: 'No, nessun crespo', tag: 'no_crespo' }, { label: "Sì, con l'umidità", tag: 'crespo_umidita' },
+      { label: 'Alta esigenza', tag: 'alta_esigenza' }, { label: 'Punte rovinate', tag: 'punte_rovinate' },
+    ]},
+    { id: 'cute', domanda: "Com'è la tua cute?", emoji: '🌿', opzioni: [
+      { label: 'Grassa', tag: 'cute_grassa' }, { label: 'Secca', tag: 'cute_secca' },
+      { label: 'Sensibile', tag: 'cute_sensibile' }, { label: 'Normale', tag: 'cute_normale' },
+    ]},
+    { id: 'obiettivo', domanda: 'Qual è il tuo obiettivo principale?', emoji: '🎯', opzioni: [
+      { label: 'Idratazione', tag: 'idratazione' }, { label: 'Volume', tag: 'volume' },
+      { label: 'Riparazione', tag: 'riparazione' }, { label: 'Definizione', tag: 'definizione' },
+    ]},
+    { id: 'stress', domanda: 'Sottoponi i capelli a trattamenti o calore?', emoji: '🔥', opzioni: [
+      { label: 'Colorati/Trattati', tag: 'colorati_trattati' }, { label: 'Calore frequente', tag: 'calore_frequente' },
+      { label: 'Basso stress', tag: 'basso_stress' }, { label: 'Naturali', tag: 'naturali' },
+    ]},
+    { id: 'piega', domanda: 'Come gestisci la piega?', emoji: '💨', opzioni: [
+      { label: 'Lunga durata', tag: 'durata_styling' }, { label: 'Difficili da gestire', tag: 'difficili_gestione' },
+      { label: 'Capelli opachi', tag: 'opachi' }, { label: 'Mantenimento', tag: 'mantenimento' },
+    ]},
+    { id: 'routine', domanda: 'Che tipo di routine preferisci?', emoji: '⏱️', opzioni: [
+      { label: 'Veloce (Fast)', tag: 'fast_routine' }, { label: 'Standard', tag: 'standard_routine' },
+      { label: 'Premium', tag: 'premium_routine' }, { label: 'Curativa', tag: 'curativa' },
+    ]},
+  ];
+  const [quizStep, setQuizStep] = useState(0);
+  const [quizRisposte, setQuizRisposte] = useState<string[]>([]);
+  interface RisultatoRoutine { shampoo: ProdottoCatalogo | null; maschera: ProdottoCatalogo | null; finish: ProdottoCatalogo | null }
+  const [routineRisultato, setRoutineRisultato] = useState<RisultatoRoutine>({ shampoo: null, maschera: null, finish: null });
+  const [salvandoMappa, setSalvandoMappa] = useState(false);
+  const [mappaSalvata, setMappaSalvata] = useState(false);
+  const [mappaBellezza, setMappaBellezza] = useState<RisultatoRoutine | null>(null);
+
+  const MACRO_SHAMPOO = ['shampoo', 'detergente', 'balsamo shampoo', 'shampoo & balsamo'];
+  const MACRO_MASCHERA = ['maschera', 'mask', 'trattamento', 'conditioner', 'balsamo'];
+  const MACRO_FINISH = ['finish', 'olio', 'oil', 'siero', 'serum', 'protettore', 'spray', 'termoprotettore', 'leave-in', 'crema', 'lacca'];
+
+  function getMacroGruppo(categoria: string | null): 'shampoo' | 'maschera' | 'finish' | null {
+    const c = (categoria ?? '').toLowerCase().trim();
+    if (MACRO_SHAMPOO.some(k => c.includes(k))) return 'shampoo';
+    if (MACRO_MASCHERA.some(k => c.includes(k))) return 'maschera';
+    if (MACRO_FINISH.some(k => c.includes(k))) return 'finish';
+    return null;
+  }
+
+  function calcolaRoutine(tags: string[]): RisultatoRoutine {
+    const score = (p: ProdottoCatalogo) => (p.quiz_tags ?? []).filter(t => tags.includes(t)).length;
+    const candidati = nostralProdotti.filter(p => (p.quiz_tags ?? []).length > 0);
+    const best = (gruppo: 'shampoo' | 'maschera' | 'finish') =>
+      candidati.filter(p => getMacroGruppo(p.categoria) === gruppo).sort((a, b) => score(b) - score(a))[0] ?? null;
+    return { shampoo: best('shampoo'), maschera: best('maschera'), finish: best('finish') };
+  }
+
+  async function salvaMappaBellezza(risultato: RisultatoRoutine, risposte: string[]) {
+    setSalvandoMappa(true);
+    setMappaSalvata(false);
+    try {
+      const tel = telefono.trim();
+      // Upsert: cancella eventuale record precedente per questo telefono, poi inserisce
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/mappa_bellezza?telefono=eq.${encodeURIComponent(tel)}`,
+        { method: 'DELETE', headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
+      );
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/mappa_bellezza`,
+        {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            telefono: tel,
+            shampoo_id: risultato.shampoo?.id ?? null,
+            shampoo_nome: risultato.shampoo?.nome ?? null,
+            shampoo_marca: risultato.shampoo?.marca ?? null,
+            shampoo_categoria: risultato.shampoo?.categoria ?? null,
+            shampoo_prezzo: risultato.shampoo?.prezzo_vendita ?? null,
+            maschera_id: risultato.maschera?.id ?? null,
+            maschera_nome: risultato.maschera?.nome ?? null,
+            maschera_marca: risultato.maschera?.marca ?? null,
+            maschera_categoria: risultato.maschera?.categoria ?? null,
+            maschera_prezzo: risultato.maschera?.prezzo_vendita ?? null,
+            finish_id: risultato.finish?.id ?? null,
+            finish_nome: risultato.finish?.nome ?? null,
+            finish_marca: risultato.finish?.marca ?? null,
+            finish_categoria: risultato.finish?.categoria ?? null,
+            finish_prezzo: risultato.finish?.prezzo_vendita ?? null,
+            quiz_risposte: risposte,
+          }),
+        }
+      );
+      setMappaBellezza(risultato);
+      setMappaSalvata(true);
+    } catch {
+      // ignore — non bloccante
+    } finally {
+      setSalvandoMappa(false);
+    }
+  }
+
+  async function loadMappaBellezza() {
+    const tel = telefono.trim();
+    if (!tel) return;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/mappa_bellezza?telefono=eq.${encodeURIComponent(tel)}&limit=1`,
+        { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
+      );
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const r = data[0];
+        const toP = (id: string | null, nome: string | null, marca: string | null, categoria: string | null, prezzo: number | null): ProdottoCatalogo | null =>
+          nome ? { id: id ?? '', nome, marca, categoria, prezzo_vendita: prezzo, note: null, quiz_tags: null } : null;
+        setMappaBellezza({
+          shampoo: toP(r.shampoo_id, r.shampoo_nome, r.shampoo_marca, r.shampoo_categoria, r.shampoo_prezzo),
+          maschera: toP(r.maschera_id, r.maschera_nome, r.maschera_marca, r.maschera_categoria, r.maschera_prezzo),
+          finish: toP(r.finish_id, r.finish_nome, r.finish_marca, r.finish_categoria, r.finish_prezzo),
+        });
+      }
+    } catch { /* ignore */ }
+  }
 
   const [mieiAppuntamenti, setMieiAppuntamenti] = useState<AppuntamentoCliente[]>([]);
   const [mieiRichiestePendenti, setMieiRichiestePendenti] = useState<AppuntamentoCliente[]>([]);
@@ -1165,7 +1296,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setNostralProdottiError('');
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note&attivo=eq.true&order=categoria.asc,nome.asc`,
+        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note,quiz_tags&attivo=eq.true&order=categoria.asc,nome.asc`,
         { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
       );
       if (!res.ok) throw new Error('Errore');
@@ -1978,7 +2109,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             </button>
 
             <button
-              onClick={() => { loadMieiServizi(); setStep('miei_servizi'); }}
+              onClick={() => { loadMieiServizi(); loadMappaBellezza(); setStep('miei_servizi'); }}
               className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-orange-400 hover:shadow-md transition-all text-left group"
             >
               <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-orange-100 transition-colors">
@@ -1989,6 +2120,26 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-stone-400 mt-0.5">Storico trattamenti e acquisti</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-orange-500 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
+              onClick={() => {
+                loadNovstralProdotti();
+                setQuizStep(0);
+                setQuizRisposte([]);
+                setMappaSalvata(false);
+                setStep('quiz_capelli');
+              }}
+              className="w-full flex items-center gap-5 bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 rounded-3xl p-6 hover:border-emerald-500 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-200 transition-colors">
+                <span className="text-2xl">💆</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">Quiz Capelli</p>
+                <p className="text-sm text-emerald-600 font-medium mt-0.5">Scopri la tua routine personalizzata</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
             </button>
 
             <button
@@ -2511,6 +2662,49 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   )}
                 </>
               )}
+
+              {/* La tua Mappa di Bellezza */}
+              {mappaBellezza && (mappaBellezza.shampoo || mappaBellezza.maschera || mappaBellezza.finish) && (
+                <div className="mt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base">💆</span>
+                    <p className="text-sm font-bold text-stone-800">La tua Mappa di Bellezza</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-emerald-100">
+                      <p className="text-xs font-semibold text-emerald-700">Routine personalizzata salvata</p>
+                      <p className="text-xs text-stone-400 mt-0.5">I prodotti selezionati dal tuo quiz capelli</p>
+                    </div>
+                    <div className="divide-y divide-emerald-100">
+                      {[
+                        { label: 'STEP 1 — Detergi', emoji: '🚿', p: mappaBellezza.shampoo },
+                        { label: 'STEP 2 — Nutri', emoji: '💚', p: mappaBellezza.maschera },
+                        { label: 'STEP 3 — Proteggi & Illumina', emoji: '✨', p: mappaBellezza.finish },
+                      ].filter(s => s.p).map((s, i) => (
+                        <div key={i} className="flex items-center gap-3 px-4 py-3">
+                          <span className="text-lg flex-shrink-0">{s.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">{s.label}</p>
+                            <p className="text-sm font-semibold text-stone-800 leading-tight truncate">{s.p!.nome}</p>
+                            {s.p!.marca && <p className="text-xs text-stone-400">{s.p!.marca}</p>}
+                          </div>
+                          {s.p!.prezzo_vendita != null && (
+                            <span className="text-sm font-bold text-emerald-600 flex-shrink-0">€{s.p!.prezzo_vendita.toFixed(2)}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-4 py-3 bg-white/60">
+                      <button
+                        onClick={() => { loadNovstralProdotti(); setQuizStep(0); setQuizRisposte([]); setMappaSalvata(false); setStep('quiz_capelli'); }}
+                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 underline transition-colors"
+                      >
+                        Aggiorna con un nuovo quiz
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -2845,6 +3039,181 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             </div>
           </Card>
         )}
+
+        {/* STEP: Quiz Capelli */}
+        {step === 'quiz_capelli' && (() => {
+          const domanda = QUIZ_DOMANDE[quizStep];
+          const progress = (quizStep / QUIZ_DOMANDE.length) * 100;
+          return (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { if (quizStep === 0) setStep('scelta'); else setQuizStep(q => q - 1); }}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-100 transition-colors flex-shrink-0"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Quiz Capelli</p>
+                  <p className="text-xs text-stone-400">{quizStep + 1} di {QUIZ_DOMANDE.length}</p>
+                </div>
+              </div>
+
+              <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+              </div>
+
+              <div className="text-center py-2">
+                <span className="text-5xl">{domanda.emoji}</span>
+                <h2 className="text-xl font-bold text-stone-800 mt-4 leading-snug">{domanda.domanda}</h2>
+                <p className="text-sm text-stone-400 mt-1">Seleziona l'opzione più adatta</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {domanda.opzioni.map(opzione => (
+                  <button
+                    key={opzione.tag}
+                    onClick={() => {
+                      const nuoveRisposte = [...quizRisposte, opzione.tag];
+                      if (quizStep < QUIZ_DOMANDE.length - 1) {
+                        setQuizRisposte(nuoveRisposte);
+                        setQuizStep(q => q + 1);
+                      } else {
+                        const risultato = calcolaRoutine(nuoveRisposte);
+                        setRoutineRisultato(risultato);
+                        setQuizRisposte(nuoveRisposte);
+                        setMappaSalvata(false);
+                        setStep('routine_risultato');
+                      }
+                    }}
+                    className="flex items-center justify-center bg-white border-2 border-stone-200 rounded-2xl p-4 hover:border-emerald-400 hover:bg-emerald-50 active:scale-95 transition-all text-center group"
+                  >
+                    <span className="text-sm font-semibold text-stone-700 group-hover:text-emerald-700 leading-tight">{opzione.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* STEP: Routine Risultato */}
+        {step === 'routine_risultato' && (() => {
+          const { shampoo, maschera, finish } = routineRisultato;
+          const stepsRoutine: { label: string; subLabel: string; emoji: string; prodotto: typeof shampoo }[] = [
+            { label: 'STEP 1 — Detergi', subLabel: 'Shampoo', emoji: '🚿', prodotto: shampoo },
+            { label: 'STEP 2 — Nutri', subLabel: 'Maschera', emoji: '💚', prodotto: maschera },
+            { label: 'STEP 3 — Proteggi & Illumina', subLabel: 'Finish', emoji: '✨', prodotto: finish },
+          ];
+
+          return (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setQuizStep(QUIZ_DOMANDE.length - 1); setStep('quiz_capelli'); }}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-100 transition-colors flex-shrink-0"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div>
+                  <p className="text-xl font-bold text-stone-800">La tua routine</p>
+                  <p className="text-sm text-stone-400">Selezionata su misura per te</p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl px-5 py-4 text-center">
+                <p className="text-sm font-semibold text-emerald-800">Il tuo rituale in 3 passi</p>
+                <p className="text-xs text-emerald-600 mt-1">Prodotti selezionati in base al tuo profilo capelli</p>
+              </div>
+
+              <div className="space-y-4">
+                {stepsRoutine.map((s, i) => (
+                  <div key={i} className="bg-white rounded-2xl border-2 border-stone-200 overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3 bg-stone-50 border-b border-stone-100">
+                      <span className="text-xl">{s.emoji}</span>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">{s.label}</p>
+                        <p className="text-xs text-stone-400">{s.subLabel}</p>
+                      </div>
+                    </div>
+                    <div className="px-4 py-4">
+                      {s.prodotto ? (
+                        <div className="flex items-start gap-3">
+                          <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <span className="text-xl">{s.emoji}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-stone-800 text-sm leading-tight">{s.prodotto.nome}</p>
+                            {s.prodotto.marca && <p className="text-xs text-stone-400 mt-0.5">{s.prodotto.marca}</p>}
+                            {s.prodotto.note && <p className="text-xs text-stone-500 mt-1 leading-relaxed line-clamp-2">{s.prodotto.note}</p>}
+                            {s.prodotto.prezzo_vendita != null && (
+                              <p className="text-sm font-bold text-emerald-600 mt-2">€{s.prodotto.prezzo_vendita.toFixed(2)}</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 py-1">
+                          <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <span className="text-lg">🔍</span>
+                          </div>
+                          <p className="text-sm text-stone-400 italic">Nessun prodotto disponibile per questa categoria.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Messaggio consulenza */}
+              <div className="bg-stone-900 rounded-2xl px-5 py-5 space-y-4">
+                <p className="text-sm text-stone-200 leading-relaxed">
+                  ✨ I tuoi capelli hanno parlato: questi sono i prodotti del nostro Brand che più si avvicinano alle tue esigenze.{'\n'}
+                  Il sistema ha individuato la combinazione ideale in base alle tue risposte, ma la Hair Care è una consulenza su misura. Trattandosi di formule professionali ad alta concentrazione, per darti la certezza assoluta abbiamo bisogno di guardare e toccare con mano le tue lunghezze e la tua cute. Passa a trovarci per una consulenza approfondita in salone: confermeremo insieme questa selezione e la personalizzeremo per garantirti un risultato impeccabile. Metti la tua bellezza e il benessere dei tuoi capelli in mani esperte.
+                </p>
+
+                {/* Salva Mappa di Bellezza */}
+                <div>
+                  <button
+                    onClick={() => salvaMappaBellezza(routineRisultato, quizRisposte)}
+                    disabled={salvandoMappa || mappaSalvata}
+                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                      mappaSalvata
+                        ? 'bg-emerald-600 text-white cursor-default'
+                        : 'bg-white text-stone-900 hover:bg-stone-100 disabled:opacity-60'
+                    }`}
+                  >
+                    {salvandoMappa ? (
+                      <><div className="w-4 h-4 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" /> Salvataggio...</>
+                    ) : mappaSalvata ? (
+                      <>✓ Mappa salvata!</>
+                    ) : (
+                      <>💾 Salva la mia Mappa di Bellezza</>
+                    )}
+                  </button>
+                  {!mappaSalvata && (
+                    <p className="text-xs text-stone-400 text-center mt-2">
+                      La troverai nella sezione "I miei servizi" del tuo portale personale.
+                    </p>
+                  )}
+                </div>
+
+                {/* Prenota */}
+                <button
+                  onClick={() => setStep('parrucchiere')}
+                  className="w-full py-3.5 rounded-xl font-bold text-sm bg-emerald-500 text-white hover:bg-emerald-400 transition-all"
+                >
+                  Prenota la tua consulenza o il tuo servizio
+                </button>
+              </div>
+
+              <button
+                onClick={() => { setQuizStep(0); setQuizRisposte([]); setMappaSalvata(false); setStep('quiz_capelli'); }}
+                className="w-full py-3 text-sm text-stone-400 hover:text-stone-600 underline transition-colors"
+              >
+                Rifai il quiz
+              </button>
+            </div>
+          );
+        })()}
 
         {/* STEP: I nostri prodotti */}
         {step === 'nostri_prodotti' && (
