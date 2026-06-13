@@ -68,7 +68,7 @@ interface SalonInfo {
   benvenutoConfig?: BenvenutoConfig | null;
 }
 
-type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'contatti';
+type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'nostri_prodotti' | 'contatti';
 
 interface Seduta {
   fiche_id: string;
@@ -291,6 +291,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [mieiServiziError, setMieiServiziError] = useState('');
   const [serviziPeriodo, setServiziPeriodo] = useState<'1m' | '3m' | '1y' | 'all'>('all');
   const [serviziNomeFiltro, setServiziNomeFiltro] = useState('');
+
+  interface ProdottoCatalogo { id: string; nome: string; marca: string | null; categoria: string | null; prezzo_vendita: number | null; note: string | null; }
+  const [nostralProdotti, setNostralProdotti] = useState<ProdottoCatalogo[]>([]);
+  const [loadingNostralProdotti, setLoadingNostralProdotti] = useState(false);
+  const [nostralProdottiError, setNostralProdottiError] = useState('');
+  const [prodottiFiltro, setProdottiFiltro] = useState('');
 
   const [mieiAppuntamenti, setMieiAppuntamenti] = useState<AppuntamentoCliente[]>([]);
   const [mieiRichiestePendenti, setMieiRichiestePendenti] = useState<AppuntamentoCliente[]>([]);
@@ -1154,6 +1160,24 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
   }
 
+  async function loadNovstralProdotti() {
+    setLoadingNostralProdotti(true);
+    setNostralProdottiError('');
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note&attivo=eq.true&order=categoria.asc,nome.asc`,
+        { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
+      );
+      if (!res.ok) throw new Error('Errore');
+      const data = await res.json();
+      setNostralProdotti(Array.isArray(data) ? data : []);
+    } catch {
+      setNostralProdottiError('Impossibile caricare i prodotti. Riprova.');
+    } finally {
+      setLoadingNostralProdotti(false);
+    }
+  }
+
   async function loadMieiAppuntamenti() {
     setLoadingMieiAppuntamenti(true);
     setMieiAppuntamentiError('');
@@ -1965,6 +1989,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-stone-400 mt-0.5">Storico trattamenti e acquisti</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-orange-500 transition-colors flex-shrink-0" />
+            </button>
+
+            <button
+              onClick={() => { loadNovstralProdotti(); setStep('nostri_prodotti'); }}
+              className="w-full flex items-center gap-5 bg-white border-2 border-stone-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-md transition-all text-left group"
+            >
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-100 transition-colors">
+                <TrendingUp size={26} className="text-emerald-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-stone-800 text-lg">I nostri prodotti</p>
+                <p className="text-sm text-stone-400 mt-0.5">Scopri i prodotti del salone</p>
+              </div>
+              <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
             </button>
 
             <button
@@ -2806,6 +2844,100 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <BackBtn onClick={() => setStep(chiunque ? 'ora' : (servizioAbbinato ? 'abbinato' : 'ora'))} />
             </div>
           </Card>
+        )}
+
+        {/* STEP: I nostri prodotti */}
+        {step === 'nostri_prodotti' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <button onClick={() => setStep('scelta')} className="w-9 h-9 flex items-center justify-center rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-100 transition-colors flex-shrink-0">
+                <ChevronLeft size={18} />
+              </button>
+              <div>
+                <p className="text-xl font-bold text-stone-800">I nostri prodotti</p>
+                <p className="text-sm text-stone-400">Scopri i prodotti del salone</p>
+              </div>
+            </div>
+
+            {/* Barra di ricerca */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Cerca prodotto o marca..."
+                value={prodottiFiltro}
+                onChange={e => setProdottiFiltro(e.target.value)}
+                className="w-full bg-stone-100 rounded-2xl px-4 py-3 text-sm text-stone-700 placeholder-stone-400 outline-none focus:ring-2 focus:ring-emerald-400 pr-10"
+              />
+              {prodottiFiltro && (
+                <button onClick={() => setProdottiFiltro('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {loadingNostralProdotti && (
+              <div className="flex items-center justify-center py-10">
+                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+
+            {nostralProdottiError && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
+                <p className="text-sm text-red-600 mb-3">{nostralProdottiError}</p>
+                <button onClick={loadNovstralProdotti} className="text-sm font-semibold text-red-700 underline">Riprova</button>
+              </div>
+            )}
+
+            {!loadingNostralProdotti && !nostralProdottiError && (() => {
+              const q = prodottiFiltro.toLowerCase();
+              const filtered = nostralProdotti.filter(p =>
+                !q || p.nome.toLowerCase().includes(q) || (p.marca ?? '').toLowerCase().includes(q) || (p.categoria ?? '').toLowerCase().includes(q)
+              );
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="text-center py-10">
+                    <p className="text-stone-400 text-sm">{prodottiFiltro ? 'Nessun prodotto trovato.' : 'Nessun prodotto disponibile.'}</p>
+                  </div>
+                );
+              }
+
+              // Raggruppa per categoria
+              const byCategoria: Record<string, typeof filtered> = {};
+              filtered.forEach(p => {
+                const cat = p.categoria ?? 'Altro';
+                if (!byCategoria[cat]) byCategoria[cat] = [];
+                byCategoria[cat].push(p);
+              });
+
+              return (
+                <div className="space-y-5">
+                  {Object.entries(byCategoria).map(([cat, prodotti]) => (
+                    <div key={cat}>
+                      <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 px-1">{cat}</p>
+                      <div className="space-y-2">
+                        {prodotti.map(p => (
+                          <div key={p.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-4">
+                            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                              <TrendingUp size={18} className="text-emerald-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-stone-800 text-sm leading-tight">{p.nome}</p>
+                              {p.marca && <p className="text-xs text-stone-400 mt-0.5">{p.marca}</p>}
+                              {p.note && <p className="text-xs text-stone-500 mt-1 leading-relaxed">{p.note}</p>}
+                            </div>
+                            {p.prezzo_vendita != null && (
+                              <span className="text-sm font-bold text-emerald-600 flex-shrink-0">€{p.prezzo_vendita.toFixed(2)}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
         )}
 
         {/* STEP: Contatti */}
