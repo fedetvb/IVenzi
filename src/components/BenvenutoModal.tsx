@@ -127,11 +127,11 @@ export default function BenvenutoModal({ nome, onClose }: Props) {
           {/* Corpo */}
           <div className="px-5 pt-4 pb-3 space-y-3 max-h-[58vh] overflow-y-auto">
             <p className="text-xs leading-relaxed text-stone-600">
-              La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte. Non è il solito sito e non è la solita app: questo è il tuo pass d'accesso esclusivo al futuro del nostro salone.
+              La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte. Non è il solito sito e non è la solita app: questo è il tuo <strong>pass d'accesso esclusivo</strong> al futuro del nostro salone.
             </p>
 
             <p className="text-xs leading-relaxed text-stone-600">
-              Abbiamo digitalizzato le tue coccole. Ecco cosa troverai nella tua Area Personale:
+              Abbiamo digitalizzato le tue coccole. Ecco cosa troverai nella tua <strong>Area Personale</strong>:
             </p>
 
             <div className="space-y-2">
@@ -147,7 +147,7 @@ export default function BenvenutoModal({ nome, onClose }: Props) {
                     <Icon size={13} className="text-rose-500" />
                   </div>
                   <p className="text-xs text-stone-700 leading-snug">
-                    {label}: {testo}
+                    <strong>{label}</strong>: {testo}
                   </p>
                 </div>
               ))}
