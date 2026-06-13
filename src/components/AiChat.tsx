@@ -305,6 +305,12 @@ export default function AiChat() {
   const voiceTranscriptRef = useRef('');
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldRestartRef = useRef(false);
+  // Track the last result index processed to avoid re-accumulating previous results
+  const lastResultIndexRef = useRef(0);
+  // Debounce guard: timestamp of last voice-driven setInput call
+  const lastVoiceInputTsRef = useRef(0);
+
+  const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
   const stopListening = useCallback(() => {
     shouldRestartRef.current = false;
@@ -328,6 +334,7 @@ export default function AiChat() {
     }
 
     voiceTranscriptRef.current = '';
+    lastResultIndexRef.current = 0;
     shouldRestartRef.current = true;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -336,8 +343,9 @@ export default function AiChat() {
     function startRecognition() {
       const recognition: SpeechRecognition = new SpeechRec();
       recognition.lang = 'it-IT';
-      recognition.continuous = true;
-      recognition.interimResults = true;
+      // On mobile: disable continuous + interim to prevent duplicate results from the virtual keyboard STT
+      recognition.continuous = !isMobile;
+      recognition.interimResults = !isMobile;
       recognition.maxAlternatives = 1;
 
       const scheduleSend = () => {
@@ -345,7 +353,7 @@ export default function AiChat() {
         silenceTimerRef.current = setTimeout(() => {
           shouldRestartRef.current = false;
           recognition.stop();
-        }, 2000);
+        }, isMobile ? 3000 : 2000);
       };
 
       recognition.onstart = () => {
@@ -354,17 +362,33 @@ export default function AiChat() {
       };
 
       recognition.onresult = (e: SpeechRecognitionEvent) => {
+        // Only process new results since last event (prevents re-accumulating old segments)
+        const startIdx = isMobile ? 0 : lastResultIndexRef.current;
         let finalText = '';
         let interimText = '';
-        for (let i = 0; i < e.results.length; i++) {
+        for (let i = startIdx; i < e.results.length; i++) {
           if (e.results[i].isFinal) {
             finalText += e.results[i][0].transcript;
+            lastResultIndexRef.current = i + 1;
           } else {
             interimText += e.results[i][0].transcript;
           }
         }
-        const display = (finalText + ' ' + interimText).trim();
-        voiceTranscriptRef.current = finalText.trim() || display;
+
+        const newFinal = finalText.trim();
+        const display = newFinal
+          ? (voiceTranscriptRef.current + ' ' + newFinal).trim()
+          : (voiceTranscriptRef.current + ' ' + interimText).trim();
+
+        if (newFinal) {
+          voiceTranscriptRef.current = (voiceTranscriptRef.current + ' ' + newFinal).trim();
+        }
+
+        // Debounce: skip duplicate setInput calls within 50ms (mobile keyboard STT fires twice)
+        const now = Date.now();
+        if (now - lastVoiceInputTsRef.current < 50) return;
+        lastVoiceInputTsRef.current = now;
+
         setInput(display);
         if (inputRef.current) {
           inputRef.current.style.height = 'auto';
@@ -376,7 +400,7 @@ export default function AiChat() {
       recognition.onend = () => {
         if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
 
-        // Su iOS/mobile, continuous viene ignorato → riavvia finché shouldRestart è true e non abbiamo ancora del testo final
+        // On iOS/mobile, continuous is ignored → restart until we have final text
         if (shouldRestartRef.current && !voiceTranscriptRef.current.trim()) {
           try { startRecognition(); return; } catch { /* ignora */ }
         }
@@ -387,16 +411,18 @@ export default function AiChat() {
         if (!text) return;
         setInput('');
         voiceTranscriptRef.current = '';
+        lastResultIndexRef.current = 0;
         sendTextRef.current(text);
       };
 
       recognition.onerror = (e) => {
         const err = (e as SpeechRecognitionErrorEvent).error;
-        if (err === 'no-speech') return; // pausa normale, onend riavvierà
+        if (err === 'no-speech') return;
         shouldRestartRef.current = false;
         if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
         setListening(false);
         voiceTranscriptRef.current = '';
+        lastResultIndexRef.current = 0;
       };
 
       recognitionRef.current = recognition;
@@ -404,7 +430,7 @@ export default function AiChat() {
     }
 
     startRecognition();
-  }, [voiceSupported, listening, stopListening]);
+  }, [voiceSupported, listening, stopListening, isMobile]);
 
   function resetChat() {
     setMessages([{ role: 'assistant', content: 'Ciao! Scrivi una domanda in italiano oppure scegli una categoria qui sotto.' }]);
@@ -640,7 +666,11 @@ export default function AiChat() {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                // Ignore native input events fired within 100ms of a voice update (mobile duplicate prevention)
+                if (listening && Date.now() - lastVoiceInputTsRef.current < 100) return;
+                setInput(e.target.value);
+              }}
               onKeyDown={handleKeyDown}
               onFocus={() => setShowSuggestions(false)}
               placeholder={listening ? 'Sto ascoltando...' : 'Es: quanti appuntamenti ho domani?'}
