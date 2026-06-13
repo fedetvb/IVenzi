@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Search, Save, CheckCircle, Package, ChevronDown, ChevronUp, Loader2, Star, Image } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Search, Save, CheckCircle, Package, ChevronDown, ChevronUp, Loader2, Star, Image, Upload, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 
@@ -81,6 +81,8 @@ export default function ProdottiOnline() {
   const [localTags, setLocalTags] = useState<Record<string, string[]>>({});
   const [localBestSeller, setLocalBestSeller] = useState<Record<string, boolean>>({});
   const [localFotoUrl, setLocalFotoUrl] = useState<Record<string, string>>({});
+  const [uploadingFoto, setUploadingFoto] = useState<Record<string, boolean>>({});
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [loading, setLoading] = useState(true);
   const [savingRow, setSavingRow] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
@@ -135,6 +137,41 @@ export default function ProdottiOnline() {
         : [...current, tag];
       return { ...prev, [prodottoId]: next };
     });
+  }
+
+  async function handleFotoUpload(prodottoId: string, file: File) {
+    if (!user) return;
+    const ext = file.type === 'image/png' ? 'png' : 'jpg';
+    const path = `prodotti/${user.id}/${prodottoId}.${ext}`;
+    setUploadingFoto(prev => ({ ...prev, [prodottoId]: true }));
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('foto-clienti')
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) { addToast('Errore nel caricamento della foto.', 'error'); return; }
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const publicUrl = urlData.publicUrl + '?t=' + Date.now();
+      setLocalFotoUrl(prev => ({ ...prev, [prodottoId]: publicUrl }));
+      // Auto-save foto_url immediately
+      const { error: saveError } = await supabase
+        .from('prodotti_rivendita_catalogo')
+        .update({ foto_url: publicUrl })
+        .eq('id', prodottoId);
+      if (saveError) { addToast('Foto caricata ma non salvata. Salva manualmente.', 'error'); }
+      else {
+        setProdotti(prev => prev.map(p => p.id === prodottoId ? { ...p, foto_url: publicUrl } : p));
+        addToast('Foto caricata e salvata!', 'success');
+      }
+    } finally {
+      setUploadingFoto(prev => ({ ...prev, [prodottoId]: false }));
+      if (fileInputRefs.current[prodottoId]) fileInputRefs.current[prodottoId]!.value = '';
+    }
+  }
+
+  async function removeFoto(prodottoId: string) {
+    setLocalFotoUrl(prev => ({ ...prev, [prodottoId]: '' }));
+    setProdotti(prev => prev.map(p => p.id === prodottoId ? { ...p, foto_url: null } : p));
+    await supabase.from('prodotti_rivendita_catalogo').update({ foto_url: null }).eq('id', prodottoId);
   }
 
   async function saveRow(prodottoId: string) {
@@ -292,18 +329,58 @@ export default function ProdottiOnline() {
               >
                 {/* Product header row */}
                 <div className="flex items-start gap-4 p-4 sm:p-5">
-                  {/* Image preview */}
-                  <div className="flex-shrink-0">
+                  {/* Image preview / upload */}
+                  <div className="flex-shrink-0 relative group">
                     {localFotoUrl[prodotto.id] ? (
-                      <img src={localFotoUrl[prodotto.id]} alt={prodotto.nome} className="w-14 h-14 rounded-xl object-cover border border-stone-200" />
+                      <>
+                        <img src={localFotoUrl[prodotto.id]} alt={prodotto.nome} className="w-16 h-16 rounded-xl object-cover border border-stone-200" />
+                        <button
+                          onClick={() => removeFoto(prodotto.id)}
+                          title="Rimuovi foto"
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                        >
+                          <X size={10} className="text-white" />
+                        </button>
+                        <button
+                          onClick={() => fileInputRefs.current[prodotto.id]?.click()}
+                          title="Sostituisci foto"
+                          className="absolute -bottom-1.5 -right-1.5 w-5 h-5 bg-stone-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                        >
+                          <Upload size={9} className="text-white" />
+                        </button>
+                      </>
                     ) : (
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center">
-                        <Image size={20} className="text-stone-400" />
+                      <button
+                        onClick={() => fileInputRefs.current[prodotto.id]?.click()}
+                        disabled={uploadingFoto[prodotto.id]}
+                        className="w-16 h-16 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 border-2 border-dashed border-stone-300 flex flex-col items-center justify-center gap-1 hover:border-emerald-400 hover:bg-emerald-50 transition-all"
+                        title="Carica foto prodotto"
+                      >
+                        {uploadingFoto[prodotto.id] ? (
+                          <Loader2 size={18} className="text-emerald-500 animate-spin" />
+                        ) : (
+                          <>
+                            <Upload size={14} className="text-stone-400" />
+                            <span className="text-[9px] text-stone-400 font-medium leading-none text-center">Carica<br/>foto</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <input
+                      ref={el => { fileInputRefs.current[prodotto.id] = el; }}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleFotoUpload(prodotto.id, f); }}
+                    />
+                    {uploadingFoto[prodotto.id] && localFotoUrl[prodotto.id] && (
+                      <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center">
+                        <Loader2 size={18} className="text-white animate-spin" />
                       </div>
                     )}
                   </div>
 
-                  {/* Name / category + best_seller + foto url */}
+                  {/* Name / category + best_seller */}
                   <div className="flex-1 min-w-0 space-y-2">
                     <div>
                       <p className="font-semibold text-stone-800 text-sm leading-tight truncate">{prodotto.nome}</p>
@@ -318,16 +395,6 @@ export default function ProdottiOnline() {
                           <span className="text-xs font-semibold text-stone-600">€{prodotto.prezzo_vendita.toFixed(2)}</span>
                         )}
                       </div>
-                    </div>
-                    {/* Foto URL input */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="url"
-                        placeholder="URL immagine prodotto..."
-                        value={localFotoUrl[prodotto.id] ?? ''}
-                        onChange={e => setLocalFotoUrl(prev => ({ ...prev, [prodotto.id]: e.target.value }))}
-                        className="flex-1 min-w-0 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs text-stone-700 placeholder-stone-400 outline-none focus:ring-1 focus:ring-emerald-400"
-                      />
                     </div>
                     {/* Best-seller toggle */}
                     <label className="inline-flex items-center gap-2 cursor-pointer select-none">

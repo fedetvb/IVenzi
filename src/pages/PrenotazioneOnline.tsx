@@ -341,6 +341,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [salvandoMappa, setSalvandoMappa] = useState(false);
   const [mappaSalvata, setMappaSalvata] = useState(false);
   const [mappaBellezza, setMappaBellezza] = useState<RisultatoRoutine | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const MACRO_SHAMPOO = ['shampoo', 'detergente', 'balsamo shampoo', 'shampoo & balsamo'];
   const MACRO_MASCHERA = ['maschera', 'mask', 'trattamento', 'conditioner', 'balsamo'];
@@ -1546,6 +1547,36 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   return (
     <div className="min-h-screen bg-stone-50">
+      {/* Lightbox Modal */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(6px)' }}
+          onClick={() => setLightboxUrl(null)}
+          onKeyDown={e => { if (e.key === 'Escape') setLightboxUrl(null); }}
+          tabIndex={-1}
+        >
+          <div
+            className="relative max-w-sm w-full mx-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <img
+              src={lightboxUrl}
+              alt="Anteprima prodotto"
+              className="w-full rounded-2xl shadow-2xl object-contain max-h-[80vh]"
+              style={{ animation: 'lightboxIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both' }}
+            />
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute -top-3 -right-3 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center text-stone-600 hover:text-stone-900 hover:scale-110 transition-all"
+              aria-label="Chiudi"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Benvenuto prima-volta */}
       {showBenvenuto && (
         <BenvenutoModal
@@ -3147,7 +3178,16 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                       {s.prodotto ? (
                         <div className="flex items-start gap-3">
                           {s.prodotto.foto_url ? (
-                            <img src={s.prodotto.foto_url} alt={s.prodotto.nome} className="w-14 h-14 rounded-xl object-cover flex-shrink-0 border border-stone-100" />
+                            <button
+                              onClick={() => setLightboxUrl(s.prodotto!.foto_url)}
+                              className="flex-shrink-0 rounded-xl overflow-hidden border border-stone-100 focus:outline-none"
+                              title="Tocca per ingrandire"
+                              style={{ transition: 'transform 0.2s ease' }}
+                              onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.06)')}
+                              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                            >
+                              <img src={s.prodotto.foto_url} alt={s.prodotto.nome} className="w-14 h-14 object-cover cursor-zoom-in" />
+                            </button>
                           ) : (
                             <div className="w-14 h-14 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
                               <span className="text-2xl">{s.emoji}</span>
@@ -3303,7 +3343,16 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                           {prodotti.map(p => (
                             <div key={p.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-3">
                               {p.foto_url ? (
-                                <img src={p.foto_url} alt={p.nome} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-stone-100" />
+                                <button
+                                  onClick={() => setLightboxUrl(p.foto_url)}
+                                  className="flex-shrink-0 rounded-xl overflow-hidden border border-stone-100 focus:outline-none"
+                                  title="Tocca per ingrandire"
+                                  style={{ transition: 'transform 0.2s ease' }}
+                                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.06)')}
+                                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                                >
+                                  <img src={p.foto_url} alt={p.nome} className="w-12 h-12 object-cover cursor-zoom-in" />
+                                </button>
                               ) : (
                                 <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center flex-shrink-0">
                                   <TrendingUp size={16} className="text-stone-400" />
