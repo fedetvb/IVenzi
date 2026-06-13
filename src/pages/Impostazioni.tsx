@@ -2029,11 +2029,29 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
   const [savedLogo, setSavedLogo] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
 
-  // Icona PWA portale clienti
+  // Icona PWA portale prenotazioni
   const [pwaPreview, setPwaPreview] = useState('');
   const [uploadingPwa, setUploadingPwa] = useState(false);
   const [savedPwa, setSavedPwa] = useState(false);
   const pwaRef = useRef<HTMLInputElement>(null);
+
+  // Icona PWA gestionale
+  const [pwaGestionalePreview, setPwaGestionalePreview] = useState('');
+  const [uploadingPwaGestionale, setUploadingPwaGestionale] = useState(false);
+  const [savedPwaGestionale, setSavedPwaGestionale] = useState(false);
+  const pwaGestionaleRef = useRef<HTMLInputElement>(null);
+
+  // Icona QR registrazione clienti
+  const [qrRegPreview, setQrRegPreview] = useState<string | null>(null);
+  const [uploadingQrReg, setUploadingQrReg] = useState(false);
+  const [savedQrReg, setSavedQrReg] = useState(false);
+  const qrRegRef = useRef<HTMLInputElement>(null);
+
+  // Icona QR prenotazione online
+  const [qrPrenPreview, setQrPrenPreview] = useState<string | null>(null);
+  const [uploadingQrPren, setUploadingQrPren] = useState(false);
+  const [savedQrPren, setSavedQrPren] = useState(false);
+  const qrPrenRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -2051,10 +2069,17 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
           })).then(b64 => { saveLogoCacheB64(b64); setLogoPreview(b64); }).catch(() => setLogoPreview(data.valore));
         });
     }
-    // Load PWA icon
-    supabase.from('impostazioni').select('valore')
-      .eq('chiave', 'icona_pwa_url').eq('user_id', user.id).maybeSingle()
-      .then(({ data }) => { if (data?.valore) setPwaPreview(data.valore); });
+    Promise.all([
+      supabase.from('impostazioni').select('valore').eq('chiave', 'icona_pwa_url').eq('user_id', user.id).maybeSingle(),
+      supabase.from('impostazioni').select('valore').eq('chiave', 'icona_pwa_gestionale_url').eq('user_id', user.id).maybeSingle(),
+      supabase.from('impostazioni').select('valore').eq('chiave', 'icona_qr_registrazione_url').eq('user_id', user.id).maybeSingle(),
+      supabase.from('impostazioni').select('valore').eq('chiave', 'qr_prenotazioni_logo_url').eq('user_id', user.id).maybeSingle(),
+    ]).then(([pwa, pwaG, qrReg, qrPren]) => {
+      if (pwa.data?.valore) setPwaPreview(pwa.data.valore);
+      if (pwaG.data?.valore) setPwaGestionalePreview(pwaG.data.valore);
+      if (qrReg.data?.valore) setQrRegPreview(qrReg.data.valore);
+      if (qrPren.data?.valore) setQrPrenPreview(qrPren.data.valore);
+    });
   }, [user]);
 
   async function handleLogoUpload(file: File) {
@@ -2115,6 +2140,77 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
   }
 
+  async function handlePwaGestionaleUpload(file: File) {
+    if (!user) return;
+    setUploadingPwaGestionale(true);
+    try {
+      const blob = await compressImage(file);
+      const path = `icone/${user.id}/pwa-gestionale-icon.jpg`;
+      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+        const iconUrl = urlData.publicUrl + '?v=' + Date.now();
+        setPwaGestionalePreview(iconUrl);
+        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+      }
+      setSavedPwaGestionale(true);
+      setTimeout(() => setSavedPwaGestionale(false), 2000);
+    } catch { /* ignore */ } finally { setUploadingPwaGestionale(false); }
+  }
+
+  async function removePwaGestionaleIcon() {
+    setPwaGestionalePreview('');
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+  }
+
+  async function handleQrRegUpload(file: File) {
+    if (!user) return;
+    setUploadingQrReg(true);
+    try {
+      const blob = await compressImage(file, 400);
+      const path = `icone/${user.id}/qr-registrazione-logo.jpg`;
+      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+        const iconUrl = urlData.publicUrl + '?v=' + Date.now();
+        setQrRegPreview(iconUrl);
+        await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+        localStorage.setItem(QR_LOGO_KEY, iconUrl);
+      }
+      setSavedQrReg(true);
+      setTimeout(() => setSavedQrReg(false), 2000);
+    } catch { /* ignore */ } finally { setUploadingQrReg(false); }
+  }
+
+  async function removeQrRegIcon() {
+    setQrRegPreview(null);
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+    localStorage.removeItem(QR_LOGO_KEY);
+  }
+
+  async function handleQrPrenUpload(file: File) {
+    if (!user) return;
+    setUploadingQrPren(true);
+    try {
+      const blob = await compressImage(file, 400);
+      const path = `logo/${user.id}/qr-prenotazioni-logo.jpg`;
+      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+        const iconUrl = urlData.publicUrl + '?t=' + Date.now();
+        setQrPrenPreview(iconUrl);
+        await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+      }
+      setSavedQrPren(true);
+      setTimeout(() => setSavedQrPren(false), 2000);
+    } catch { /* ignore */ } finally { setUploadingQrPren(false); }
+  }
+
+  async function removeQrPrenIcon() {
+    setQrPrenPreview(null);
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+  }
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -2123,7 +2219,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         </button>
         <div>
           <h2 className="text-xl font-bold text-stone-800">Icone e Immagini</h2>
-          <p className="text-xs text-stone-400 mt-0.5">Logo sidebar e icona PWA del portale prenotazioni</p>
+          <p className="text-xs text-stone-400 mt-0.5">Logo, icone PWA e loghi QR code</p>
         </div>
       </div>
 
@@ -2223,6 +2319,130 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
             Le clienti che hanno <strong>gia installato</strong> il portale devono disinstallarlo e reinstallarlo per vedere la nuova icona. Chi lo installa da adesso la vedra subito.
           </p>
         </div>
+      </div>
+
+      {/* Icona PWA gestionale */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-stone-800">Icona PWA — Gestionale</p>
+          <p className="text-xs text-stone-400 mt-0.5">Icona che appare quando aggiungi il gestionale alla schermata home del tuo telefono.</p>
+        </div>
+        <div className="flex items-center gap-5">
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="w-14 h-14 rounded-[14px] overflow-hidden border border-stone-200 shadow-md bg-stone-100 flex items-center justify-center flex-shrink-0">
+              {pwaGestionalePreview
+                ? <img src={pwaGestionalePreview} alt="Icona PWA gestionale" className="w-full h-full object-cover" />
+                : <Scissors size={24} className="text-stone-300" />
+              }
+            </div>
+            <span className="text-[10px] text-stone-400 font-medium">Gestionale</span>
+          </div>
+          <div className="text-xs text-stone-400 leading-relaxed">
+            {pwaGestionalePreview
+              ? 'Questa icona apparirà sulla schermata home del tuo dispositivo.'
+              : 'Nessuna icona personalizzata — viene usata quella predefinita.'}
+          </div>
+        </div>
+        {pwaGestionalePreview ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 bg-stone-50">
+              <img src={pwaGestionalePreview} alt="Icona PWA gestionale" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex flex-col gap-2">
+              {savedPwaGestionale && <span className="text-xs text-emerald-600 font-medium flex items-center gap-1"><Check size={12} /> Salvato!</span>}
+              <button onClick={() => pwaGestionaleRef.current?.click()} className="text-sm text-stone-600 hover:text-stone-900 font-medium flex items-center gap-1.5 transition-colors">
+                <ImagePlus size={15} /> Cambia icona
+              </button>
+              <button onClick={removePwaGestionaleIcon} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1.5 transition-colors">
+                <X size={15} /> Ripristina predefinita
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => pwaGestionaleRef.current?.click()}
+            disabled={uploadingPwaGestionale}
+            className="w-full flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-200 hover:border-stone-300 transition-colors text-stone-400 hover:text-stone-600"
+          >
+            {uploadingPwaGestionale ? <RefreshCw size={24} className="animate-spin" /> : <Scissors size={24} />}
+            <span className="text-sm font-medium">{uploadingPwaGestionale ? 'Caricamento...' : 'Carica icona PWA gestionale'}</span>
+            <span className="text-xs">PNG, JPG quadrato — almeno 512×512 px consigliato</span>
+          </button>
+        )}
+        <input ref={pwaGestionaleRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handlePwaGestionaleUpload(f); e.target.value = ''; }} />
+      </div>
+
+      {/* Icona QR registrazione clienti */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-stone-800">Logo QR — Registrazione Clienti</p>
+          <p className="text-xs text-stone-400 mt-0.5">Logo al centro del QR code di registrazione. Sincronizzato con la sezione "Registrazione Clienti".</p>
+        </div>
+        {qrRegPreview ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 bg-white p-1">
+              <img src={qrRegPreview} alt="Logo QR registrazione" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex flex-col gap-2">
+              {savedQrReg && <span className="text-xs text-emerald-600 font-medium flex items-center gap-1"><Check size={12} /> Salvato!</span>}
+              <button onClick={() => qrRegRef.current?.click()} className="text-sm text-stone-600 hover:text-stone-900 font-medium flex items-center gap-1.5 transition-colors">
+                <ImagePlus size={15} /> Cambia logo
+              </button>
+              <button onClick={removeQrRegIcon} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1.5 transition-colors">
+                <X size={15} /> Rimuovi
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => qrRegRef.current?.click()}
+            disabled={uploadingQrReg}
+            className="w-full flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-200 hover:border-stone-300 transition-colors text-stone-400 hover:text-stone-600"
+          >
+            {uploadingQrReg ? <RefreshCw size={24} className="animate-spin" /> : <QrCode size={24} />}
+            <span className="text-sm font-medium">{uploadingQrReg ? 'Caricamento...' : 'Carica logo QR registrazione'}</span>
+            <span className="text-xs">PNG, JPG — usa immagine quadrata con sfondo bianco</span>
+          </button>
+        )}
+        <input ref={qrRegRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleQrRegUpload(f); e.target.value = ''; }} />
+      </div>
+
+      {/* Icona QR prenotazione online */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-stone-800">Logo QR — Prenotazione Online</p>
+          <p className="text-xs text-stone-400 mt-0.5">Logo al centro del QR code del portale prenotazioni. Sincronizzato con la sezione "Prenotazioni Online".</p>
+        </div>
+        {qrPrenPreview ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 bg-white p-1">
+              <img src={qrPrenPreview} alt="Logo QR prenotazione" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex flex-col gap-2">
+              {savedQrPren && <span className="text-xs text-emerald-600 font-medium flex items-center gap-1"><Check size={12} /> Salvato!</span>}
+              <button onClick={() => qrPrenRef.current?.click()} className="text-sm text-stone-600 hover:text-stone-900 font-medium flex items-center gap-1.5 transition-colors">
+                <ImagePlus size={15} /> Cambia logo
+              </button>
+              <button onClick={removeQrPrenIcon} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1.5 transition-colors">
+                <X size={15} /> Rimuovi
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => qrPrenRef.current?.click()}
+            disabled={uploadingQrPren}
+            className="w-full flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-200 hover:border-stone-300 transition-colors text-stone-400 hover:text-stone-600"
+          >
+            {uploadingQrPren ? <RefreshCw size={24} className="animate-spin" /> : <QrCode size={24} />}
+            <span className="text-sm font-medium">{uploadingQrPren ? 'Caricamento...' : 'Carica logo QR prenotazione'}</span>
+            <span className="text-xs">PNG, JPG — usa immagine quadrata con sfondo bianco</span>
+          </button>
+        )}
+        <input ref={qrPrenRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleQrPrenUpload(f); e.target.value = ''; }} />
       </div>
     </div>
   );
@@ -3348,8 +3568,15 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     (async () => {
       const val = await getImpostazione('registrazione_url');
       if (val) setRegistrazioneUrl(val);
-      const saved = localStorage.getItem(QR_LOGO_KEY);
-      setLogoDataUrl(saved || QR_LOGO_DEFAULT);
+      // Prefer Supabase icon, fall back to localStorage, then default
+      const supabaseIcon = await getImpostazione('icona_qr_registrazione_url');
+      if (supabaseIcon) {
+        setLogoDataUrl(supabaseIcon);
+        localStorage.setItem(QR_LOGO_KEY, supabaseIcon);
+      } else {
+        const saved = localStorage.getItem(QR_LOGO_KEY);
+        setLogoDataUrl(saved || QR_LOGO_DEFAULT);
+      }
       const { data } = await supabase.from('impostazioni').select('valore').eq('chiave', 'logo_salone_url').maybeSingle();
       if (data?.valore) setRegPageLogo(data.valore);
     })();
@@ -3373,22 +3600,39 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     buildQrWithLogo(qrUrl, logoDataUrl).then(setQrComposite).catch(() => setQrComposite(qrUrl));
   }, [qrUrl, logoDataUrl]);
 
-  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const result = ev.target?.result as string;
-      setLogoDataUrl(result);
-      localStorage.setItem(QR_LOGO_KEY, result);
-    };
-    reader.readAsDataURL(file);
     e.target.value = '';
+    try {
+      const blob = await compressImage(file, 400);
+      if (user) {
+        const path = `icone/${user.id}/qr-registrazione-logo.jpg`;
+        const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+        if (!error) {
+          const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+          const iconUrl = urlData.publicUrl + '?v=' + Date.now();
+          setLogoDataUrl(iconUrl);
+          localStorage.setItem(QR_LOGO_KEY, iconUrl);
+          await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+          return;
+        }
+      }
+      // fallback: store as data URL locally if no user or upload fails
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const result = ev.target?.result as string;
+        setLogoDataUrl(result);
+        localStorage.setItem(QR_LOGO_KEY, result);
+      };
+      reader.readAsDataURL(blob);
+    } catch { /* ignore */ }
   }
 
-  function handleRemoveLogo() {
+  async function handleRemoveLogo() {
     setLogoDataUrl(QR_LOGO_DEFAULT);
     localStorage.removeItem(QR_LOGO_KEY);
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
   }
 
   async function handleRegLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
