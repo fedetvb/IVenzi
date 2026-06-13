@@ -1,0 +1,39 @@
+{
+  "appId": "com.gestionale.salone.owner",
+  "productName": "Gestionale Salone — Admin",
+  "directories": {
+    "output": "dist-electron-owner"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/main.js",
+    "electron/preload.cjs",
+    "package.json",
+    "node_modules/better-sqlite3/**/*",
+    "!node_modules/better-sqlite3/src/**",
+    "!node_modules/better-sqlite3/deps/**",
+    "!node_modules/better-sqlite3/prebuilds/**"
+  ],
+  "extraMetadata": {
+    "main": "electron/main.js"
+  },
+  "asar": false,
+  "npmRebuild": false,
+  "icon": "public/icons/icon-512x512.png",
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "language": 1040,
+    "shortcutName": "Gestionale Salone Admin",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  }
+}

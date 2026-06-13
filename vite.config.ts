@@ -43,6 +43,7 @@ function safePublicCopyPlugin(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const isElectron = !!process.env.ELECTRON;
+  const buildMode = process.env.BUILD_MODE || 'owner';
   return {
     plugins: [
       react(),
@@ -51,6 +52,9 @@ export default defineConfig(({ mode }) => {
     ],
     optimizeDeps: { exclude: ['lucide-react'] },
     base: isElectron ? './' : '/',
+    define: {
+      'import.meta.env.VITE_BUILD_MODE': JSON.stringify(buildMode),
+    },
     build: {
       outDir: 'dist',
       copyPublicDir: false,

@@ -100,6 +100,13 @@ export interface AuthAPI {
   verifyPassword: (email: string, password: string) => Promise<{ ok: boolean; userId?: string; email?: string; error?: string }>;
 }
 
+export interface LicenseAPI {
+  getHardwareId: () => Promise<{ hardwareId: string }>;
+  getCloudRequestId: () => Promise<{ cloudRequestId: string }>;
+  generateLocalOtp: (args: { hardwareId: string }) => Promise<{ otp: string }>;
+  generateCloudOtp: (args: { cloudRequestId: string }) => Promise<{ otp: string }>;
+}
+
 export interface ElectronAPI {
   getBackupConfig: () => Promise<AutoBackupConfig>;
   setBackupConfig: (cfg: AutoBackupConfig) => Promise<{ ok: boolean }>;
@@ -124,6 +131,7 @@ export interface ElectronAPI {
   onTriggerAutoFiches: (cb: (data: { dates: string[]; latestDate: string }) => void) => () => void;
   db?: DbAPI;
   auth?: AuthAPI;
+  license?: LicenseAPI;
 }
 
 declare global {

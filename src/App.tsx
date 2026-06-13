@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import LicenseWall from './components/LicenseWall';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Agenda from './pages/Agenda';
@@ -29,6 +30,7 @@ import { isPushSupported, getPushPermission, requestPushPermission, subscribePus
 import AiChat from './components/AiChat';
 import { InForseModal, loadAvvisoInForse, type ClienteInForseEntry } from './components/InForseModal';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione, registerBrowserLocalOps } from './lib/localDb';
+import { isOwnerBuild, getLicenseState } from './lib/license';
 import { syncLocalToRemote, syncRemoteToLocal, pushRowNow, browserLocalWrite, browserLocalDelete, prefetchToIndexedDb } from './lib/sync';
 import { flushPendingSync } from './lib/offlineFetch';
 
@@ -170,7 +172,19 @@ export default function App() {
 
   const [electronDbReady, setElectronDbReadyState] = useState(false);
   const [dbReadyKey, setDbReadyKey] = useState(0);
+  const [licenseActivated, setLicenseActivated] = useState<boolean | null>(null);
   const hasFicheNonConvalidateRef = { current: false };
+
+  // License check: solo per build utente. Owner build è sempre sbloccato.
+  useEffect(() => {
+    if (isOwnerBuild()) {
+      setLicenseActivated(true);
+      return;
+    }
+    getLicenseState().then(state => {
+      setLicenseActivated(state.localActivated && state.cloudActivated);
+    });
+  }, []);
 
   function getReminderKey(todayKey: string, orario: string) {
     return `promemoria_shown_${todayKey}_${orario}`;
@@ -1133,6 +1147,19 @@ export default function App() {
     });
     return cleanup;
   }, []);
+
+  // Mostra la licenza wall solo in build utente e finché non è attivata
+  if (licenseActivated === null) {
+    return (
+      <div className="min-h-screen bg-stone-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!licenseActivated) {
+    return <LicenseWall onActivated={() => setLicenseActivated(true)} />;
+  }
 
   if (loading) {
     return (

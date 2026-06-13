@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key } from 'lucide-react';
+import { isOwnerBuild, generateLocalOtp, generateCloudOtp } from '../lib/license';
 import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 import { BENVENUTO_DEFAULT, type BenvenutoConfig } from '../components/BenvenutoModal';
 import { DEFAULT_WA_GP_SALONE, DEFAULT_WA_GP_CLIENTE, DEFAULT_WA_CS_DONA } from '../lib/waUtils';
@@ -15,7 +16,7 @@ import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -70,6 +71,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'wa_carte') return <PaginaWACarte onBack={() => setSub(null)} />;
   if (sub === 'benvenuto') return <PaginaBenvenuto onBack={() => setSub(null)} />;
   if (sub === 'icone') return <PaginaIcone onBack={() => setSub(null)} />;
+  if (sub === 'infrastruttura' && isOwnerBuild()) return <PaginaInfrastruttura onBack={() => setSub(null)} />;
   if (sub === 'scarica_documenti') return (
     <StatisticheGate isActive={sub === 'scarica_documenti'} chiave="password_documenti" sezione="scarica file e documenti" sessionKey="documenti_unlocked">
       <PaginaScaricaDocumenti onBack={() => setSub(null)} />
@@ -109,7 +111,8 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     show('QR Code Registrazione Clienti', 'Stampa il QR code nuove clienti') ||
     show('Tema e Personalizzazione', 'Colori sidebar icona logo') ||
     show('Scarica File e Documenti', 'Esporta e scarica file PDF CSV backup dal gestionale') ||
-    show('Icone e Immagini', 'Logo salone icona PWA portale clienti gestionale');
+    show('Icone e Immagini', 'Logo salone icona PWA portale clienti gestionale') ||
+    (isOwnerBuild() && show('Configurazione Infrastruttura', 'Supabase URL chiave OTP generatore admin'));
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -224,6 +227,27 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
+
+        {/* Configurazione Infrastruttura — solo owner build */}
+        {isOwnerBuild() && (
+          <button
+            onClick={() => setSub('infrastruttura')}
+            style={show('Configurazione Infrastruttura', 'Supabase URL chiave OTP generatore admin pannello infrastruttura') ? {} : {display:'none'}}
+            className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
+              <Shield size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-stone-800">Configurazione Infrastruttura</p>
+              <p className="text-xs text-stone-400 mt-0.5">Pannello admin: Supabase, Netlify e generatore OTP licenze</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Admin</span>
+              <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+            </div>
+          </button>
+        )}
 
         {/* Cartelle di salvataggio */}
         <button
@@ -8491,6 +8515,245 @@ function PaginaBenvenuto({ onBack }: { onBack: () => void }) {
           {saved ? <Check size={16} /> : <Sparkles size={16} />}
           {saving ? 'Salvataggio...' : saved ? 'Salvato!' : 'Salva messaggio'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Configurazione Infrastruttura (owner build only) ─────────────────────────
+
+function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
+  const [sbUrl, setSbUrl] = useState('');
+  const [sbKey, setSbKey] = useState('');
+  const [netlifyUrl, setNetlifyUrl] = useState('');
+  const [otpHwId, setOtpHwId] = useState('');
+  const [otpCrId, setOtpCrId] = useState('');
+  const [localOtp, setLocalOtp] = useState('');
+  const [cloudOtp, setCloudOtp] = useState('');
+  const [savedCreds, setSavedCreds] = useState(false);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
+  const LS_URL = 'sb_custom_url';
+  const LS_KEY = 'sb_custom_anon_key';
+  const LS_NETLIFY = 'infra_netlify_url';
+
+  const LIVE_URL = 'https://qfpeffzdszdanebmgafb.supabase.co';
+  const LIVE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+
+  useEffect(() => {
+    setSbUrl(localStorage.getItem(LS_URL) || LIVE_URL);
+    setSbKey(localStorage.getItem(LS_KEY) || LIVE_KEY);
+    setNetlifyUrl(localStorage.getItem(LS_NETLIFY) || '');
+  }, []);
+
+  function handleSaveCreds() {
+    localStorage.setItem(LS_URL, sbUrl.trim() || LIVE_URL);
+    localStorage.setItem(LS_KEY, sbKey.trim() || LIVE_KEY);
+    if (netlifyUrl.trim()) localStorage.setItem(LS_NETLIFY, netlifyUrl.trim());
+    else localStorage.removeItem(LS_NETLIFY);
+    setSavedCreds(true);
+    setTimeout(() => setSavedCreds(false), 2000);
+  }
+
+  function handleResetCreds() {
+    setSbUrl(LIVE_URL);
+    setSbKey(LIVE_KEY);
+    localStorage.removeItem(LS_URL);
+    localStorage.removeItem(LS_KEY);
+  }
+
+  async function handleGenLocalOtp() {
+    if (!otpHwId.trim()) return;
+    const otp = await generateLocalOtp(otpHwId.trim());
+    setLocalOtp(otp);
+  }
+
+  async function handleGenCloudOtp() {
+    if (!otpCrId.trim()) return;
+    const otp = await generateCloudOtp(otpCrId.trim());
+    setCloudOtp(otp);
+  }
+
+  async function copyText(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyMsg(label);
+      setTimeout(() => setCopyMsg(null), 2000);
+    } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={onBack} className="p-2 rounded-xl hover:bg-stone-100 transition-colors text-stone-500">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Configurazione Infrastruttura</h2>
+          <p className="text-xs text-stone-400 mt-0.5">Pannello riservato alla build admin</p>
+        </div>
+        <div className="ml-auto px-3 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">Admin</div>
+      </div>
+
+      {/* Connessione cloud */}
+      <div className="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <Cloud size={16} className="text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-stone-800">Connessione Supabase</p>
+            <p className="text-xs text-stone-400">Credenziali attive per il database cloud</p>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-1.5 uppercase tracking-wide">URL Progetto</label>
+            <input
+              value={sbUrl}
+              onChange={e => setSbUrl(e.target.value)}
+              className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm text-stone-800 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-colors"
+              placeholder="https://xxxx.supabase.co"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-1.5 uppercase tracking-wide">Chiave Anonima (anon key)</label>
+            <textarea
+              value={sbKey}
+              onChange={e => setSbKey(e.target.value)}
+              rows={3}
+              className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-colors resize-none"
+              placeholder="eyJhbGci..."
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-1.5 uppercase tracking-wide">URL Netlify / Webhook</label>
+            <input
+              value={netlifyUrl}
+              onChange={e => setNetlifyUrl(e.target.value)}
+              className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm text-stone-800 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-colors"
+              placeholder="https://app.netlify.com/..."
+            />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={handleSaveCreds}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${savedCreds ? 'bg-emerald-500 text-white' : 'bg-stone-800 text-white hover:bg-stone-700'}`}
+            >
+              {savedCreds ? <><Check size={15} /> Salvato!</> : <><Check size={15} /> Salva credenziali</>}
+            </button>
+            <button
+              onClick={handleResetCreds}
+              className="px-4 py-2.5 rounded-xl text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition-colors"
+            >
+              Ripristina default
+            </button>
+          </div>
+          <p className="text-xs text-stone-400">
+            Le modifiche sono locali a questo dispositivo e si applicano al riavvio dell&apos;app.
+          </p>
+        </div>
+      </div>
+
+      {/* Generatore OTP */}
+      <div className="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+            <Key size={16} className="text-amber-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-stone-800">Generatore OTP Licenze</p>
+            <p className="text-xs text-stone-400">Calcola le chiavi di attivazione per i clienti</p>
+          </div>
+        </div>
+        <div className="p-6 space-y-6">
+          {/* Parete 1 */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-amber-700">1</span>
+              </div>
+              <p className="text-xs font-semibold text-stone-600 uppercase tracking-widest">Parete 1 — Chiave Locale</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={otpHwId}
+                onChange={e => setOtpHwId(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                placeholder="Hardware ID del cliente"
+                className="flex-1 px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-300 transition-colors"
+              />
+              <button
+                onClick={handleGenLocalOtp}
+                disabled={!otpHwId.trim()}
+                className="px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Genera
+              </button>
+            </div>
+            {localOtp && (
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-xs text-amber-600 font-medium mb-0.5">Chiave Locale</p>
+                  <code className="text-amber-800 font-mono font-bold text-xl tracking-[0.35em]">{localOtp}</code>
+                </div>
+                <button
+                  onClick={() => copyText(localOtp, 'local')}
+                  className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-medium hover:bg-amber-200 transition-colors"
+                >
+                  {copyMsg === 'local' ? 'Copiato!' : 'Copia'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-stone-100" />
+
+          {/* Parete 2 */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-sky-700">2</span>
+              </div>
+              <p className="text-xs font-semibold text-stone-600 uppercase tracking-widest">Parete 2 — Chiave Cloud</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={otpCrId}
+                onChange={e => setOtpCrId(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                placeholder="Cloud Request ID del cliente"
+                className="flex-1 px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 transition-colors"
+              />
+              <button
+                onClick={handleGenCloudOtp}
+                disabled={!otpCrId.trim()}
+                className="px-4 py-2.5 rounded-xl bg-sky-500 text-white text-sm font-semibold hover:bg-sky-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Genera
+              </button>
+            </div>
+            {cloudOtp && (
+              <div className="flex items-center justify-between bg-sky-50 border border-sky-200 rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-xs text-sky-600 font-medium mb-0.5">Chiave Cloud</p>
+                  <code className="text-sky-800 font-mono font-bold text-xl tracking-[0.35em]">{cloudOtp}</code>
+                </div>
+                <button
+                  onClick={() => copyText(cloudOtp, 'cloud')}
+                  className="px-3 py-1.5 rounded-lg bg-sky-100 text-sky-700 text-xs font-medium hover:bg-sky-200 transition-colors"
+                >
+                  {copyMsg === 'cloud' ? 'Copiato!' : 'Copia'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-stone-50 rounded-xl p-4 text-xs text-stone-500 space-y-1.5">
+            <p className="font-semibold text-stone-600">Come funziona:</p>
+            <p>1. Il cliente comunica il proprio Hardware ID (parete 1) o Cloud Request ID (parete 2) dall&apos;app bloccata.</p>
+            <p>2. Inserisci l&apos;ID nel campo sopra e premi Genera per calcolare la chiave.</p>
+            <p>3. Comunica la chiave al cliente: la inserirà nel proprio dispositivo per sbloccare l&apos;accesso.</p>
+          </div>
+        </div>
       </div>
     </div>
   );

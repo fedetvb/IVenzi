@@ -3,7 +3,8 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'fs';
 import { createRequire } from 'module';
-import { pbkdf2Sync, randomBytes } from 'crypto';
+import { pbkdf2Sync, randomBytes, createHash } from 'crypto';
+import { cpus, networkInterfaces, hostname } from 'os';
 
 const require = createRequire(import.meta.url);
 
@@ -1144,4 +1145,52 @@ ipcMain.handle('auth:verify-password', (_e, { email, password }) => {
     if (hash !== profile.hash) return { ok: false, error: 'Password non corretta.' };
     return { ok: true, userId: profile.userId, email: profile.email };
   } catch (e) { return { ok: false, error: String(e) }; }
+});
+
+// ─── IPC: Hardware ID per sistema licenze ─────────────────────────────────────
+
+function getHardwareFingerprint() {
+  try {
+    const cpu = cpus()[0]?.model ?? 'unknown-cpu';
+    const host = hostname();
+    // Cerca il primo MAC address non loopback
+    const nets = networkInterfaces();
+    let mac = '';
+    for (const iface of Object.values(nets)) {
+      const entry = iface?.find(n => !n.internal && n.mac && n.mac !== '00:00:00:00:00:00');
+      if (entry) { mac = entry.mac; break; }
+    }
+    const raw = `${cpu}|${host}|${mac}`;
+    return createHash('sha256').update(raw).digest('hex').toUpperCase().substring(0, 16);
+  } catch {
+    // Fallback: usa una stringa derivata dall'hostname
+    return createHash('sha256').update(hostname()).digest('hex').toUpperCase().substring(0, 16);
+  }
+}
+
+ipcMain.handle('license:get-hardware-id', () => {
+  return { hardwareId: getHardwareFingerprint() };
+});
+
+ipcMain.handle('license:get-cloud-request-id', () => {
+  // Cloud Request ID = variante dell'hardware ID con salt diverso
+  const base = getHardwareFingerprint();
+  const cloudId = createHash('sha256').update(base + 'CLOUD').digest('hex').toUpperCase().substring(0, 16);
+  return { cloudRequestId: cloudId };
+});
+
+// Genera OTP locale da hardware ID (stessa logica del renderer per verifica offline)
+ipcMain.handle('license:generate-local-otp', (_e, { hardwareId }) => {
+  const MASTER_SALT = 'MioBrandEsclusivoPass2026';
+  const hash = createHash('sha256').update(hardwareId + MASTER_SALT).digest('hex').toUpperCase();
+  const otp = hash.substring(0, 4) + '-' + hash.substring(4, 8);
+  return { otp };
+});
+
+// Genera OTP cloud da cloud request ID
+ipcMain.handle('license:generate-cloud-otp', (_e, { cloudRequestId }) => {
+  const CLOUD_SALT = 'CloudActivationSalt2026';
+  const hash = createHash('sha256').update(cloudRequestId + CLOUD_SALT).digest('hex').toUpperCase();
+  const otp = hash.substring(0, 4) + '-' + hash.substring(4, 8);
+  return { otp };
 });
