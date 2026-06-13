@@ -296,7 +296,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [nostralProdotti, setNostralProdotti] = useState<ProdottoCatalogo[]>([]);
   const [loadingNostralProdotti, setLoadingNostralProdotti] = useState(false);
   const [nostralProdottiError, setNostralProdottiError] = useState('');
-  const [prodottiFiltro, setProdottiFiltro] = useState('');
 
   // Quiz capelli state
   interface QuizDomanda { id: string; domanda: string; emoji: string; opzioni: { label: string; tag: string }[] }
@@ -342,31 +341,27 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [mappaSalvata, setMappaSalvata] = useState(false);
   const [mappaBellezza, setMappaBellezza] = useState<RisultatoRoutine | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [categoriaAperta, setCategoriaAperta] = useState<'shampoo' | 'maschera' | 'finish' | null>(null);
 
-  // Step 1 — Detergi
-  const MACRO_SHAMPOO = ['shampoo', 'detergente', 'balsamo shampoo', 'shampoo & balsamo'];
-  // Step 2 — Nutri (Maschera, Balsamo, Crema)
-  const MACRO_MASCHERA = ['maschera', 'mask', 'trattamento', 'conditioner', 'balsamo', 'crema'];
-  // Step 3 — Finish / Illumina (Olio, Lacca, Spray, Siero)
-  const MACRO_FINISH = ['finish', 'olio', 'oil', 'siero', 'serum', 'protettore', 'spray', 'termoprotettore', 'leave-in', 'lacca', 'colorante'];
-
-  function getMacroGruppo(categoria: string | null): 'shampoo' | 'maschera' | 'finish' | null {
-    const c = (categoria ?? '').toLowerCase().trim();
-    if (MACRO_SHAMPOO.some(k => c.includes(k))) return 'shampoo';
-    if (MACRO_MASCHERA.some(k => c.includes(k))) return 'maschera';
-    if (MACRO_FINISH.some(k => c.includes(k))) return 'finish';
-    return null;
+  // Mapping categorie reali del Magazzino → 3 step quiz
+  // Shampoo esatto → step 1; Maschera/Balsamo/Crema → step 2; tutto il resto → step 3 (catch-all)
+  function getMacroGruppo(categoria: string | null): 'shampoo' | 'maschera' | 'finish' {
+    const c = (categoria ?? '').trim();
+    if (c === 'Shampoo') return 'shampoo';
+    if (['Maschera', 'Balsamo', 'Crema'].includes(c)) return 'maschera';
+    return 'finish';
   }
 
   function calcolaRoutine(tags: string[]): RisultatoRoutine {
     const score = (p: ProdottoCatalogo) => (p.quiz_tags ?? []).filter(t => tags.includes(t)).length;
-    const candidati = nostralProdotti.filter(p => (p.quiz_tags ?? []).length > 0);
     const best = (gruppo: 'shampoo' | 'maschera' | 'finish'): ProdottoCatalogo | null => {
-      const gruppo_candidati = candidati.filter(p => getMacroGruppo(p.categoria) === gruppo);
-      const top = gruppo_candidati.sort((a, b) => score(b) - score(a))[0];
+      const conTag = nostralProdotti.filter(p => getMacroGruppo(p.categoria) === gruppo && (p.quiz_tags ?? []).length > 0);
+      const top = [...conTag].sort((a, b) => score(b) - score(a))[0];
       if (top && score(top) > 0) return top;
-      // fallback: best_seller per questo macro-gruppo
-      return nostralProdotti.find(p => getMacroGruppo(p.categoria) === gruppo && p.best_seller) ?? top ?? null;
+      // jolly fallback: best_seller del gruppo, poi qualsiasi del gruppo
+      return nostralProdotti.find(p => getMacroGruppo(p.categoria) === gruppo && p.best_seller)
+        ?? nostralProdotti.find(p => getMacroGruppo(p.categoria) === gruppo)
+        ?? null;
     };
     return { shampoo: best('shampoo'), maschera: best('maschera'), finish: best('finish') };
   }
@@ -3286,97 +3281,132 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               </div>
             </div>
 
-            {/* SEZIONE A — Catalogo */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 bg-emerald-100 rounded-md flex items-center justify-center">
-                  <TrendingUp size={13} className="text-emerald-600" />
-                </div>
-                <p className="text-sm font-bold text-stone-700 uppercase tracking-wide">Catalogo Prodotti</p>
+            {/* ── SEZIONE A: 3 PULSANTI CATALOGO PREMIUM ── */}
+            {loadingNostralProdotti ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
               </div>
-
-              <div className="relative mb-3">
-                <input
-                  type="text"
-                  placeholder="Cerca prodotto o marca..."
-                  value={prodottiFiltro}
-                  onChange={e => setProdottiFiltro(e.target.value)}
-                  className="w-full bg-stone-100 rounded-2xl px-4 py-3 text-sm text-stone-700 placeholder-stone-400 outline-none focus:ring-2 focus:ring-emerald-400 pr-10"
-                />
-                {prodottiFiltro && (
-                  <button onClick={() => setProdottiFiltro('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
-                    <X size={16} />
-                  </button>
-                )}
+            ) : nostralProdottiError ? (
+              <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
+                <p className="text-sm text-red-600 mb-3">{nostralProdottiError}</p>
+                <button onClick={loadNovstralProdotti} className="text-sm font-semibold text-red-700 underline">Riprova</button>
               </div>
-
-              {loadingNostralProdotti && (
-                <div className="flex items-center justify-center py-10">
-                  <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-
-              {nostralProdottiError && (
-                <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
-                  <p className="text-sm text-red-600 mb-3">{nostralProdottiError}</p>
-                  <button onClick={loadNovstralProdotti} className="text-sm font-semibold text-red-700 underline">Riprova</button>
-                </div>
-              )}
-
-              {!loadingNostralProdotti && !nostralProdottiError && (() => {
-                const q = prodottiFiltro.toLowerCase();
-                const filtered = nostralProdotti.filter(p =>
-                  !q || p.nome.toLowerCase().includes(q) || (p.marca ?? '').toLowerCase().includes(q) || (p.categoria ?? '').toLowerCase().includes(q)
-                );
-                if (filtered.length === 0) {
-                  return <div className="text-center py-8"><p className="text-stone-400 text-sm">{prodottiFiltro ? 'Nessun prodotto trovato.' : 'Nessun prodotto disponibile.'}</p></div>;
-                }
-                const byCategoria: Record<string, typeof filtered> = {};
-                filtered.forEach(p => {
-                  const cat = p.categoria ?? 'Altro';
-                  if (!byCategoria[cat]) byCategoria[cat] = [];
-                  byCategoria[cat].push(p);
-                });
-                return (
-                  <div className="space-y-4">
-                    {Object.entries(byCategoria).map(([cat, prodotti]) => (
-                      <div key={cat}>
-                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 px-1">{cat}</p>
-                        <div className="space-y-2">
-                          {prodotti.map(p => (
-                            <div key={p.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-3">
-                              {p.foto_url ? (
-                                <button
-                                  onClick={() => setLightboxUrl(p.foto_url)}
-                                  className="flex-shrink-0 rounded-xl overflow-hidden border border-stone-100 focus:outline-none"
-                                  title="Tocca per ingrandire"
-                                  style={{ transition: 'transform 0.2s ease' }}
-                                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.06)')}
-                                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                                >
-                                  <img src={p.foto_url} alt={p.nome} className="w-12 h-12 object-cover cursor-zoom-in" />
-                                </button>
-                              ) : (
-                                <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                                  <TrendingUp size={16} className="text-stone-400" />
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-stone-800 text-sm leading-tight">{p.nome}</p>
-                                {p.marca && <p className="text-xs text-stone-400 mt-0.5">{p.marca}</p>}
-                                {p.note && <p className="text-xs text-stone-500 mt-1 leading-relaxed">{p.note}</p>}
-                              </div>
-                            </div>
-                          ))}
+            ) : (
+              <div className="space-y-3">
+                {([
+                  {
+                    key: 'shampoo' as const,
+                    titolo: 'I Nostri Shampoo',
+                    sottotitolo: 'Come detergere la cute e i capelli al meglio, rispettando il loro equilibrio naturale.',
+                    icona: '🚿',
+                    accent: 'from-sky-50 to-blue-50',
+                    border: 'border-sky-200',
+                    badgeColor: 'bg-sky-100 text-sky-700',
+                    stepLabel: 'Step 1 — Detergi',
+                  },
+                  {
+                    key: 'maschera' as const,
+                    titolo: 'Le Nostre Maschere',
+                    sottotitolo: 'Come nutrire profondamente la chioma, riparando le lunghezze e donando morbidezza.',
+                    icona: '💚',
+                    accent: 'from-emerald-50 to-teal-50',
+                    border: 'border-emerald-200',
+                    badgeColor: 'bg-emerald-100 text-emerald-700',
+                    stepLabel: 'Step 2 — Nutri',
+                  },
+                  {
+                    key: 'finish' as const,
+                    titolo: 'I Nostri Finish',
+                    sottotitolo: 'Come esaltare la bellezza, proteggere dal calore e proteggere lo styling quotidiano.',
+                    icona: '✨',
+                    accent: 'from-amber-50 to-yellow-50',
+                    border: 'border-amber-200',
+                    badgeColor: 'bg-amber-100 text-amber-700',
+                    stepLabel: 'Step 3 — Illumina',
+                  },
+                ] as const).map(cat => {
+                  const prodottiCat = nostralProdotti.filter(p => getMacroGruppo(p.categoria) === cat.key);
+                  const aperto = categoriaAperta === cat.key;
+                  return (
+                    <div key={cat.key} className={`rounded-2xl border overflow-hidden transition-all duration-300 ${cat.border} ${aperto ? `bg-gradient-to-br ${cat.accent}` : 'bg-white'}`}>
+                      {/* Pulsante intestazione */}
+                      <button
+                        onClick={() => { setCategoriaAperta(aperto ? null : cat.key); }}
+                        className="w-full flex items-center gap-4 px-5 py-5 text-left group"
+                      >
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 bg-gradient-to-br ${cat.accent} border ${cat.border} shadow-sm group-active:scale-95 transition-transform`}>
+                          {cat.icona}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-stone-800 text-base leading-tight">{cat.titolo}</p>
+                            {prodottiCat.length > 0 && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${cat.badgeColor}`}>
+                                {prodottiCat.length}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-stone-500 mt-1 leading-relaxed pr-4">{cat.sottotitolo}</p>
+                        </div>
+                        <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center border transition-all ${aperto ? `${cat.border} bg-white` : 'border-stone-200 bg-stone-50'}`}>
+                          <ChevronDown size={14} className={`text-stone-500 transition-transform duration-300 ${aperto ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
 
-            {/* SEZIONE B — Hair Quiz */}
+                      {/* Accordion espandibile */}
+                      {aperto && (
+                        <div className="border-t border-stone-100 divide-y divide-stone-100">
+                          {prodottiCat.length === 0 ? (
+                            <div className="px-5 py-6 text-center">
+                              <p className="text-sm text-stone-400 italic">Nessun prodotto disponibile in questa categoria.</p>
+                            </div>
+                          ) : (
+                            prodottiCat.map(p => (
+                              <div key={p.id} className="flex items-center gap-4 px-5 py-4 bg-white/70 backdrop-blur-sm">
+                                {/* Thumbnail cliccabile */}
+                                {p.foto_url ? (
+                                  <button
+                                    onClick={() => setLightboxUrl(p.foto_url)}
+                                    className="flex-shrink-0 rounded-xl overflow-hidden border border-stone-200 shadow-sm focus:outline-none"
+                                    title="Tocca per ingrandire"
+                                    style={{ transition: 'transform 0.2s ease' }}
+                                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.03)')}
+                                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                                  >
+                                    <img src={p.foto_url} alt={p.nome} className="w-14 h-14 object-cover cursor-zoom-in" />
+                                  </button>
+                                ) : (
+                                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${cat.accent} border ${cat.border} text-2xl`}>
+                                    {cat.icona}
+                                  </div>
+                                )}
+                                {/* Nome prodotto cliccabile per lightbox se ha foto */}
+                                <div className="flex-1 min-w-0">
+                                  {p.foto_url ? (
+                                    <button
+                                      onClick={() => setLightboxUrl(p.foto_url)}
+                                      className="text-left focus:outline-none group/nome"
+                                    >
+                                      <p className="font-semibold text-stone-800 text-sm leading-tight group-hover/nome:text-stone-600 transition-colors">{p.nome}</p>
+                                    </button>
+                                  ) : (
+                                    <p className="font-semibold text-stone-800 text-sm leading-tight">{p.nome}</p>
+                                  )}
+                                  {p.marca && <p className="text-xs text-stone-400 mt-0.5">{p.marca}</p>}
+                                  {p.note && <p className="text-xs text-stone-500 mt-1 leading-relaxed line-clamp-2">{p.note}</p>}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── SEZIONE B: HAIR QUIZ ── */}
             <div className="border-t border-stone-100 pt-6">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-6 h-6 bg-amber-100 rounded-md flex items-center justify-center">
@@ -3395,11 +3425,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                     {[
                       { label: 'STEP 1 — Detergi', emoji: '🚿', p: mappaBellezza.shampoo },
                       { label: 'STEP 2 — Nutri', emoji: '💚', p: mappaBellezza.maschera },
-                      { label: 'STEP 3 — Proteggi', emoji: '✨', p: mappaBellezza.finish },
+                      { label: 'STEP 3 — Illumina', emoji: '✨', p: mappaBellezza.finish },
                     ].filter(s => s.p).map((s, i) => (
                       <div key={i} className="flex items-center gap-3 px-4 py-3">
                         {s.p!.foto_url ? (
-                          <img src={s.p!.foto_url} alt={s.p!.nome} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                          <button onClick={() => setLightboxUrl(s.p!.foto_url)} className="flex-shrink-0 focus:outline-none" style={{ transition: 'transform 0.2s' }} onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.03)')} onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+                            <img src={s.p!.foto_url} alt={s.p!.nome} className="w-10 h-10 rounded-lg object-cover" />
+                          </button>
                         ) : (
                           <span className="text-lg flex-shrink-0">{s.emoji}</span>
                         )}
@@ -3422,9 +3454,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 </div>
               ) : (
                 <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-2xl px-5 py-6 text-center space-y-4">
-                  <div className="w-14 h-14 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto">
-                    <span className="text-2xl">💆</span>
-                  </div>
+                  <div className="w-14 h-14 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto text-2xl">💆</div>
                   <div>
                     <p className="font-bold text-white text-base">Scopri la tua routine Hair Care</p>
                     <p className="text-sm text-stone-400 mt-1">8 domande per una routine professionale su misura</p>
