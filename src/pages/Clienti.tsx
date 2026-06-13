@@ -194,16 +194,16 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
       setSchedaAperta(found);
       onSchedaOpened?.();
     } else {
-      // Ricarica e poi apri
+      // Ricarica e poi apri — solo se ancora in_attesa
       supabase
         .from('schede_clienti_da_confermare')
         .select('*')
         .eq('id', openSchedaId)
         .maybeSingle()
         .then(({ data }) => {
-          if (data) {
+          if (data && (data as SchedaDaConfermare).stato === 'in_attesa') {
             setSchede(prev => {
-              if (prev.find(s => s.id === data.id)) return prev;
+              if (prev.find(s => s.id === (data as SchedaDaConfermare).id)) return prev;
               return [data as SchedaDaConfermare, ...prev];
             });
             setSchedaAperta(data as SchedaDaConfermare);
@@ -253,6 +253,19 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
 
   async function confermaScheda(scheda: SchedaDaConfermare) {
     setConfermando(scheda.id);
+    // Guard: rilegge lo stato aggiornato da Supabase prima di procedere
+    const { data: fresh } = await supabase
+      .from('schede_clienti_da_confermare')
+      .select('stato')
+      .eq('id', scheda.id)
+      .maybeSingle();
+    if (!fresh || (fresh as { stato: string }).stato !== 'in_attesa') {
+      // Già confermata o eliminata da un altro dispositivo
+      setConfermando(null);
+      setSchedaAperta(null);
+      loadSchede();
+      return;
+    }
     const clienteRes = await dbInsert({
       table: 'clienti',
       data: {
