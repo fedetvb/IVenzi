@@ -157,16 +157,21 @@ export default function Login() {
       setError(res.error ?? 'Impossibile creare il profilo locale.');
       return;
     }
+    // Segna che questo account deve ancora essere registrato su Supabase
+    // (viene rimosso dopo la creazione riuscita dell'account cloud)
+    localStorage.setItem(`pending_cloud_reg:${email.toLowerCase()}`, password);
+
     // Entra subito con il profilo locale
     offlineSignIn(localUserId, email);
 
-    // Quando torna online, crea l'account Supabase e migra i dati
+    // Prova subito la registrazione su Supabase se siamo online
     if (navigator.onLine) {
       supabase.auth.signUp({ email, password }).then(async ({ data }) => {
         if (data?.user) {
+          localStorage.removeItem(`pending_cloud_reg:${email.toLowerCase()}`);
           await saveLocalProfile(data.user.id, email, password);
         }
-      }).catch(() => { /* migrazione posticipata al prossimo login online */ });
+      }).catch(() => { /* la registrazione cloud verrà riprovata al prossimo avvio online */ });
     }
   }
 

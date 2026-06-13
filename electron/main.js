@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'fs';
 import { createRequire } from 'module';
 import { pbkdf2Sync, randomBytes } from 'crypto';
 
@@ -94,8 +94,40 @@ function migrateLocalDatabase(oldUserId, newUserId) {
       return false;
     }
     if (existsSync(newDir)) {
-      console.log('[Migration] Cartella destinazione gia\' esistente:', newDir);
-      return false;
+      // Race condition: openDatabase(newUserId) può aver già creato la cartella con un DB
+      // vuoto appena prima di questa migrazione. Se il DB nuovo è vuoto (nessuna riga con
+      // newUserId) lo rimuoviamo per poter rinominare la cartella vecchia.
+      let Database2;
+      try { Database2 = loadBetterSqlite3(); } catch { Database2 = null; }
+      let newDbIsEmpty = true;
+      if (Database2) {
+        const newDbPath = join(newDir, 'gestionale.db');
+        if (existsSync(newDbPath)) {
+          try {
+            const checkDb = new Database2(newDbPath);
+            // Controlla se c'e' qualche riga con newUserId in clienti (tabella sempre presente)
+            try {
+              const row = checkDb.prepare('SELECT COUNT(*) as n FROM clienti WHERE user_id = ?').get(newUserId);
+              if (row && row.n > 0) newDbIsEmpty = false;
+            } catch { /* tabella non esiste, DB è vuoto */ }
+            checkDb.close();
+          } catch { /* non leggibile, assumi vuoto */ }
+        }
+      }
+      if (!newDbIsEmpty) {
+        console.log('[Migration] Cartella destinazione già esistente con dati:', newDir);
+        return false;
+      }
+      // Rimuovi la cartella vuota per procedere con la rinomina
+      if (db) {
+        try { db.close(); } catch { /* ignora */ }
+        db = null;
+        dbReady = false;
+      }
+      try { rmSync(newDir, { recursive: true, force: true }); } catch (e) {
+        console.error('[Migration] Impossibile rimuovere cartella vuota:', e);
+        return false;
+      }
     }
 
     // Chiudi il DB se e' aperto sulla vecchia cartella
@@ -1078,6 +1110,11 @@ ipcMain.handle('auth:save-profile', (_e, { userId, email, password }) => {
       const migrated = migrateLocalDatabase(oldProfile.userId, userId);
       if (migrated) {
         console.log('[Auth] Migrazione completata:', oldProfile.userId, '→', userId);
+        // Riapri il DB sulla nuova cartella migrata in modo che le query successive
+        // usino i dati corretti senza aspettare un altro setUserProfile dal renderer.
+        const ok = openDatabase(userId);
+        dbReady = ok;
+        if (mainWindow) mainWindow.webContents.send('db:ready', ok);
         // Rimuovi il vecchio profilo dall'elenco
         const filtered = profiles.filter(p => p.userId !== oldProfile.userId);
         filtered.push({ userId, email, hash, salt, savedAt: new Date().toISOString() });

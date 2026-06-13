@@ -168,6 +168,7 @@ export default function App() {
   const [showPushBanner, setShowPushBanner] = useState(false);
 
   const [electronDbReady, setElectronDbReadyState] = useState(false);
+  const [dbReadyKey, setDbReadyKey] = useState(0);
   const hasFicheNonConvalidateRef = { current: false };
 
   function getReminderKey(todayKey: string, orario: string) {
@@ -324,6 +325,7 @@ export default function App() {
     return window.electronAPI.db.onReady((ready: boolean) => {
       setElectronDbReady(ready);
       setElectronDbReadyState(ready);
+      if (ready) setDbReadyKey(k => k + 1);
     });
   }, []);
 
@@ -358,6 +360,32 @@ export default function App() {
     window.addEventListener('online', handleOnlineForReconnect);
     return () => window.removeEventListener('online', handleOnlineForReconnect);
   }, [isOfflineSession]);
+
+  // Registrazione cloud in sospeso: se l'utente si è registrato offline, riprova la
+  // creazione dell'account Supabase non appena è disponibile la connessione.
+  useEffect(() => {
+    if (!isOfflineSession || !user?.email) return;
+
+    async function tryPendingCloudReg() {
+      if (!navigator.onLine || !user?.email) return;
+      const pendingKey = `pending_cloud_reg:${user.email.toLowerCase()}`;
+      const pendingPassword = localStorage.getItem(pendingKey);
+      if (!pendingPassword) return;
+
+      try {
+        const { data } = await supabase.auth.signUp({ email: user.email, password: pendingPassword });
+        if (data?.user) {
+          localStorage.removeItem(pendingKey);
+          // Salva il profilo con il nuovo UUID Supabase — questo trigghera la migrazione
+          await window.electronAPI?.auth?.saveProfile(data.user.id, user.email, pendingPassword);
+        }
+      } catch { /* silenzioso, riproverà al prossimo avvio */ }
+    }
+
+    if (navigator.onLine) tryPendingCloudReg();
+    window.addEventListener('online', tryPendingCloudReg);
+    return () => window.removeEventListener('online', tryPendingCloudReg);
+  }, [isOfflineSession, user?.email]);
 
   // Prefetch dati in IndexedDB — garantisce disponibilita' offline
   // Funziona anche senza SQLite. Si avvia subito dopo login e ogni 3 minuti.
@@ -1465,7 +1493,7 @@ export default function App() {
 
       <AiChat />
 
-      <Layout currentPage={page} onNavigate={p => navigateTo(p as Page)} user={user} messaggiBadge={messaggiNonLetti.length} onMessaggioBadgeClick={handleMessaggioBadgeClick}>
+      <Layout key={dbReadyKey} currentPage={page} onNavigate={p => navigateTo(p as Page)} user={user} messaggiBadge={messaggiNonLetti.length} onMessaggioBadgeClick={handleMessaggioBadgeClick}>
         {page === 'dashboard' && (
           <Dashboard onNavigate={p => navigateTo(p as Page)} />
         )}
