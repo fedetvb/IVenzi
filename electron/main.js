@@ -315,7 +315,7 @@ function runMigrations() {
     }
   } catch(e) { console.warn('[DB] migrazione rivendita_prodotti:', e.message); }
 
-  // Add marca, quantita_minima to prodotti_rivendita_catalogo if missing
+  // Add marca, quantita_minima, foto_url, foto_base64_pendente, best_seller, quiz_tags to prodotti_rivendita_catalogo if missing
   try {
     const catCols = db.prepare("PRAGMA table_info(prodotti_rivendita_catalogo)").all().map(c => c.name);
     if (!catCols.includes('marca')) {
@@ -325,6 +325,22 @@ function runMigrations() {
     if (!catCols.includes('quantita_minima')) {
       db.exec("ALTER TABLE prodotti_rivendita_catalogo ADD COLUMN quantita_minima INTEGER NOT NULL DEFAULT 0");
       console.log('[DB] Migrazione: aggiunta colonna quantita_minima a prodotti_rivendita_catalogo');
+    }
+    if (!catCols.includes('foto_url')) {
+      db.exec("ALTER TABLE prodotti_rivendita_catalogo ADD COLUMN foto_url TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_url a prodotti_rivendita_catalogo');
+    }
+    if (!catCols.includes('foto_base64_pendente')) {
+      db.exec("ALTER TABLE prodotti_rivendita_catalogo ADD COLUMN foto_base64_pendente TEXT DEFAULT ''");
+      console.log('[DB] Migrazione: aggiunta colonna foto_base64_pendente a prodotti_rivendita_catalogo');
+    }
+    if (!catCols.includes('best_seller')) {
+      db.exec("ALTER TABLE prodotti_rivendita_catalogo ADD COLUMN best_seller INTEGER NOT NULL DEFAULT 0");
+      console.log('[DB] Migrazione: aggiunta colonna best_seller a prodotti_rivendita_catalogo');
+    }
+    if (!catCols.includes('quiz_tags')) {
+      db.exec("ALTER TABLE prodotti_rivendita_catalogo ADD COLUMN quiz_tags TEXT DEFAULT '[]'");
+      console.log('[DB] Migrazione: aggiunta colonna quiz_tags a prodotti_rivendita_catalogo');
     }
   } catch(e) { console.warn('[DB] migrazione prodotti_rivendita_catalogo:', e.message); }
 
@@ -490,7 +506,10 @@ function createSchema() {
       id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', marca TEXT DEFAULT '',
       categoria TEXT DEFAULT '', prezzo_vendita REAL NOT NULL DEFAULT 0, prezzo_acquisto REAL DEFAULT 0,
       quantita_stock INTEGER NOT NULL DEFAULT 0, quantita_venduta INTEGER NOT NULL DEFAULT 0,
-      quantita_minima INTEGER NOT NULL DEFAULT 0, attivo INTEGER NOT NULL DEFAULT 1, user_id TEXT, deleted_at TEXT,
+      quantita_minima INTEGER NOT NULL DEFAULT 0, attivo INTEGER NOT NULL DEFAULT 1,
+      foto_url TEXT DEFAULT '', foto_base64_pendente TEXT DEFAULT '',
+      best_seller INTEGER NOT NULL DEFAULT 0, quiz_tags TEXT DEFAULT '[]',
+      user_id TEXT, deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );

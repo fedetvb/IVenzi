@@ -212,11 +212,17 @@ export async function pushRowNow(
   }
 }
 
-// ─── Upload foto pendenti (clienti con foto_base64_pendente) ──────────────────
+// ─── Upload foto pendenti ─────────────────────────────────────────────────────
 
 async function _uploadPendingPhotos(userId: string): Promise<void> {
   if (!window.electronAPI?.db) return;
+  await _uploadPendingClientPhotos(userId);
+  await _uploadPendingProductPhotos(userId);
+  await _uploadPendingLogoSalone(userId);
+}
 
+async function _uploadPendingClientPhotos(userId: string): Promise<void> {
+  if (!window.electronAPI?.db) return;
   try {
     const res = await window.electronAPI.db.select({
       table: 'clienti',
@@ -225,50 +231,91 @@ async function _uploadPendingPhotos(userId: string): Promise<void> {
     if (!res.ok || !res.data) return;
 
     const rows = (res.data as Record<string, unknown>[]).filter(
-      r => r.user_id === userId && r.foto_base64_pendente && typeof r.foto_base64_pendente === 'string' && r.foto_base64_pendente.length > 0
+      r => r.user_id === userId && r.foto_base64_pendente && typeof r.foto_base64_pendente === 'string' && (r.foto_base64_pendente as string).length > 0
     );
 
     for (const row of rows) {
       try {
-        const base64 = row.foto_base64_pendente as string;
-        // Comprimi prima di uploadare
-        const compressed = await compressImage(base64);
-
+        const compressed = await compressImage(row.foto_base64_pendente as string);
         const filename = `clienti/${row.id}.jpg`;
         const { error: uploadErr } = await supabase.storage
           .from('foto-clienti')
           .upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
-
-        if (uploadErr) {
-          console.warn(`[Sync] Upload foto pendente fallito per cliente ${row.id}:`, uploadErr.message);
-          continue;
-        }
+        if (uploadErr) { console.warn(`[Sync] Upload foto cliente ${row.id}:`, uploadErr.message); continue; }
 
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
         const newUrl = urlData.publicUrl;
-
-        // Aggiorna foto_url su Supabase
-        await supabase
-          .from('clienti')
-          .update({ foto_url: newUrl })
-          .eq('id', row.id as string)
-          .eq('user_id', userId);
-
-        // Aggiorna localmente: svuota il pendente e aggiorna foto_url
-        await window.electronAPI.db.update({
-          table: 'clienti',
-          id: row.id as string,
-          data: { foto_url: newUrl, foto_base64_pendente: '' },
-        });
-
-        console.log(`[Sync] Foto pendente caricata per cliente ${row.id}`);
-      } catch (e) {
-        console.warn(`[Sync] Errore upload foto pendente cliente ${row.id}:`, e);
-      }
+        await supabase.from('clienti').update({ foto_url: newUrl }).eq('id', row.id as string).eq('user_id', userId);
+        await window.electronAPI.db.update({ table: 'clienti', id: row.id as string, data: { foto_url: newUrl, foto_base64_pendente: '' } });
+        console.log(`[Sync] Foto cliente ${row.id} caricata`);
+      } catch (e) { console.warn(`[Sync] Errore upload foto cliente ${row.id}:`, e); }
     }
-  } catch (e) {
-    console.warn('[Sync] Errore lettura foto pendenti:', e);
-  }
+  } catch (e) { console.warn('[Sync] Errore lettura foto clienti pendenti:', e); }
+}
+
+async function _uploadPendingProductPhotos(userId: string): Promise<void> {
+  if (!window.electronAPI?.db) return;
+  try {
+    const res = await window.electronAPI.db.select({
+      table: 'prodotti_rivendita_catalogo',
+      filters: [{ col: 'foto_base64_pendente', op: 'not_null' }],
+    });
+    if (!res.ok || !res.data) return;
+
+    const rows = (res.data as Record<string, unknown>[]).filter(
+      r => r.user_id === userId && r.foto_base64_pendente && typeof r.foto_base64_pendente === 'string' && (r.foto_base64_pendente as string).length > 0
+    );
+
+    for (const row of rows) {
+      try {
+        const compressed = await compressImage(row.foto_base64_pendente as string);
+        const filename = `prodotti/${userId}/${row.id}.jpg`;
+        const { error: uploadErr } = await supabase.storage
+          .from('foto-clienti')
+          .upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
+        if (uploadErr) { console.warn(`[Sync] Upload foto prodotto ${row.id}:`, uploadErr.message); continue; }
+
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
+        const newUrl = urlData.publicUrl + '?t=' + Date.now();
+        await supabase.from('prodotti_rivendita_catalogo').update({ foto_url: newUrl }).eq('id', row.id as string).eq('user_id', userId);
+        await window.electronAPI.db.update({ table: 'prodotti_rivendita_catalogo', id: row.id as string, data: { foto_url: newUrl, foto_base64_pendente: '' } });
+        console.log(`[Sync] Foto prodotto ${row.id} caricata`);
+      } catch (e) { console.warn(`[Sync] Errore upload foto prodotto ${row.id}:`, e); }
+    }
+  } catch (e) { console.warn('[Sync] Errore lettura foto prodotti pendenti:', e); }
+}
+
+async function _uploadPendingLogoSalone(userId: string): Promise<void> {
+  if (!window.electronAPI?.db) return;
+  try {
+    const res = await window.electronAPI.db.select({
+      table: 'impostazioni',
+      filters: [
+        { col: 'chiave', op: 'eq', val: 'logo_salone_b64_pendente' },
+        { col: 'user_id', op: 'eq', val: userId },
+      ],
+    });
+    if (!res.ok || !res.data || (res.data as Record<string, unknown>[]).length === 0) return;
+    const record = (res.data as Record<string, unknown>[])[0];
+    const b64 = record.valore as string;
+    if (!b64 || b64.length === 0) return;
+
+    try {
+      const compressed = await compressImage(b64);
+      const path = `logo/${userId}/salone-logo.jpg`;
+      const { error: uploadErr } = await supabase.storage
+        .from('foto-clienti')
+        .upload(path, compressed, { contentType: 'image/jpeg', upsert: true });
+      if (uploadErr) { console.warn('[Sync] Upload logo salone pendente:', uploadErr.message); return; }
+
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const logoUrl = urlData.publicUrl + '?v=' + Date.now();
+      await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: logoUrl, user_id: userId }, { onConflict: 'chiave,user_id' });
+      await window.electronAPI.db.upsert({ table: 'impostazioni', data: { chiave: 'logo_salone_url', valore: logoUrl, user_id: userId }, onConflict: 'chiave,user_id', userId });
+      await window.electronAPI.db.upsert({ table: 'impostazioni', data: { chiave: 'logo_salone_b64_pendente', valore: '', user_id: userId }, onConflict: 'chiave,user_id', userId });
+      console.log('[Sync] Logo salone pendente caricato');
+    } catch (e) { console.warn('[Sync] Errore upload logo salone pendente:', e); }
+  } catch (e) { console.warn('[Sync] Errore lettura logo salone pendente:', e); }
 }
 
 // ─── Push di piu' righe dirty ─────────────────────────────────────────────────

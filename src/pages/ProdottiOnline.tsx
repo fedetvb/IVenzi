@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Save, CheckCircle, Package, ChevronDown, ChevronUp, Loader2, Star, Image, Upload, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import { isElectron, dbUpdate } from '../lib/localDb';
 
 interface Prodotto {
   id: string;
@@ -141,10 +142,25 @@ export default function ProdottiOnline() {
 
   async function handleFotoUpload(prodottoId: string, file: File) {
     if (!user) return;
-    const ext = file.type === 'image/png' ? 'png' : 'jpg';
-    const path = `prodotti/${user.id}/${prodottoId}.${ext}`;
     setUploadingFoto(prev => ({ ...prev, [prodottoId]: true }));
     try {
+      // Offline in Electron: salva base64 localmente e accoda il sync
+      if (isElectron() && !navigator.onLine) {
+        const b64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        setLocalFotoUrl(prev => ({ ...prev, [prodottoId]: b64 }));
+        await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: prodottoId, data: { foto_base64_pendente: b64 } });
+        setProdotti(prev => prev.map(p => p.id === prodottoId ? { ...p, foto_url: b64 } : p));
+        addToast('Foto salvata localmente. Verrà caricata al ritorno online.', 'success');
+        return;
+      }
+
+      const ext = file.type === 'image/png' ? 'png' : 'jpg';
+      const path = `prodotti/${user.id}/${prodottoId}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('foto-clienti')
         .upload(path, file, { upsert: true, contentType: file.type });
@@ -152,13 +168,14 @@ export default function ProdottiOnline() {
       const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
       const publicUrl = urlData.publicUrl + '?t=' + Date.now();
       setLocalFotoUrl(prev => ({ ...prev, [prodottoId]: publicUrl }));
-      // Auto-save foto_url immediately
       const { error: saveError } = await supabase
         .from('prodotti_rivendita_catalogo')
         .update({ foto_url: publicUrl })
         .eq('id', prodottoId);
       if (saveError) { addToast('Foto caricata ma non salvata. Salva manualmente.', 'error'); }
       else {
+        // Aggiorna anche SQLite locale in Electron
+        if (isElectron()) await dbUpdate({ table: 'prodotti_rivendita_catalogo', id: prodottoId, data: { foto_url: publicUrl, foto_base64_pendente: '' } });
         setProdotti(prev => prev.map(p => p.id === prodottoId ? { ...p, foto_url: publicUrl } : p));
         addToast('Foto caricata e salvata!', 'success');
       }

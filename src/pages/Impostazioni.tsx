@@ -2159,6 +2159,15 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
       });
       saveLogoCacheB64(b64);
       setLogoPreview(b64);
+
+      // Offline in Electron: salva come pendente e usa il base64 come anteprima
+      if (isElectronEnv() && !navigator.onLine) {
+        await setImpostazione('logo_salone_b64_pendente', b64, user.id);
+        setSavedLogo(true);
+        setTimeout(() => setSavedLogo(false), 2000);
+        return;
+      }
+
       const path = `logo/${user.id}/salone-logo.jpg`;
       const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
       if (!error) {
@@ -2167,6 +2176,8 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         saveTheme({ logoUrl });
         dispatchThemeChange();
         await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+        // Svuota eventuale pendente rimasto
+        if (isElectronEnv()) await setImpostazione('logo_salone_b64_pendente', '', user.id);
       }
       setSavedLogo(true);
       setTimeout(() => setSavedLogo(false), 2000);
@@ -3706,6 +3717,21 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     setRegLogoUploading(true);
     try {
       const blob = await compressImage(file);
+
+      // Offline in Electron: salva come pendente e usa base64 come anteprima
+      if (isElectronEnv() && !navigator.onLine) {
+        const b64 = await new Promise<string>((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result as string);
+          reader.onerror = rej;
+          reader.readAsDataURL(blob);
+        });
+        saveLogoCacheB64(b64);
+        await setImpostazione('logo_salone_b64_pendente', b64, user.id);
+        setRegPageLogo(b64);
+        return;
+      }
+
       const path = `logo/${user.id}/salone-logo.jpg`;
       const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
       if (!error) {
@@ -3715,6 +3741,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
           { chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id },
           { onConflict: 'chiave,user_id' }
         );
+        if (isElectronEnv()) await setImpostazione('logo_salone_b64_pendente', '', user.id);
         setRegPageLogo(logoUrl);
       }
     } finally {
