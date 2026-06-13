@@ -350,17 +350,26 @@ export default function AiChat() {
 
       const SILENCE_MS = 5000;
 
-      // Returns the transcript with the trigger word "invia" stripped from the end, or null if not found
+      // Returns transcript with "invia" stripped from the end, or null if not found
       const extractInviaCommand = (text: string): string | null => {
         const cleaned = text.replace(/\binvia\b\.?\s*$/i, '').trim();
         if (cleaned.length < text.trim().length) return cleaned;
         return null;
       };
 
+      // Always use recognitionRef.current so the timer works even after session restarts
+      const scheduleSend = () => {
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          shouldRestartRef.current = false;
+          recognitionRef.current?.stop();
+        }, SILENCE_MS);
+      };
+
       const triggerSend = (text: string) => {
         shouldRestartRef.current = false;
         if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-        recognition.stop();
+        recognitionRef.current?.stop();
         setListening(false);
         setInput('');
         voiceTranscriptRef.current = '';
@@ -368,17 +377,12 @@ export default function AiChat() {
         sendTextRef.current(text);
       };
 
-      const scheduleSend = () => {
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => {
-          shouldRestartRef.current = false;
-          recognition.stop();
-        }, SILENCE_MS);
-      };
-
       recognition.onstart = () => {
         setListening(true);
-        scheduleSend();
+        // Desktop: start timeout immediately (handles the case where user never speaks)
+        // Mobile: DON'T reset the timer here — it was already set by onresult from the
+        // previous session and should keep counting down uninterrupted across restarts.
+        if (!isMobile) scheduleSend();
       };
 
       recognition.onresult = (e: SpeechRecognitionEvent) => {
@@ -421,28 +425,20 @@ export default function AiChat() {
           inputRef.current.style.height = 'auto';
           inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 80)}px`;
         }
+        // Reset the 5s silence countdown from the moment speech was last heard
         scheduleSend();
       };
 
       recognition.onend = () => {
-        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-
-        // Keep restarting as long as the silence timer hasn't fired yet.
-        // On mobile, continuous=false so recognition stops after each phrase — we restart
-        // to keep collecting speech. Only when shouldRestart becomes false (timer fired or
-        // triggerSend called) do we fall through and send.
+        // On mobile, recognition ends after each phrase (continuous=false).
+        // Restart to keep listening — DON'T touch the silence timer so it keeps
+        // counting down from when speech was last detected.
         if (shouldRestartRef.current) {
-          try {
-            startRecognition();
-            // Reschedule the silence timer for the new recognition session
-            silenceTimerRef.current = setTimeout(() => {
-              shouldRestartRef.current = false;
-              recognitionRef.current?.stop();
-            }, SILENCE_MS);
-            return;
-          } catch { /* ignora */ }
+          try { startRecognition(); return; } catch { /* ignora */ }
         }
 
+        // Timer fired (or triggerSend/stopListening was called) → actually send
+        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
         setListening(false);
         const text = voiceTranscriptRef.current.trim();
         if (!text) return;
