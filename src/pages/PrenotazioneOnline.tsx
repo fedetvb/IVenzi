@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle, Mail, FileText, Camera, MapPin, Globe, ExternalLink } from 'lucide-react';
 import AnnuncioModal, { COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
+import BenvenutoModal from '../components/BenvenutoModal';
 import { applyWaTemplate, DEFAULT_WA_CS_DONA, DEFAULT_WA_GP_CLIENTE } from '../lib/waUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
@@ -61,6 +62,7 @@ interface SalonInfo {
     orariJson: string | null;
     orariNota: string;
   };
+  benvenutoAttivo?: boolean;
 }
 
 type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'contatti';
@@ -298,6 +300,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // Annuncio / compleanno
   const [showAnnuncio, setShowAnnuncio] = useState<null | 'annuncio' | 'compleanno'>(null);
   const [clienteDataNascita, setClienteDataNascita] = useState('');
+  const [showBenvenuto, setShowBenvenuto] = useState(false);
 
   // I miei messaggi
   const [mieiMsg, setMieiMsg] = useState<MioMessaggio[]>([]);
@@ -394,9 +397,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // Tieni stepRef sincronizzato
   useEffect(() => { stepRef.current = step; }, [step]);
 
-  // Mostra annuncio / compleanno al passaggio a 'scelta'
+  // Mostra benvenuto / annuncio / compleanno al passaggio a 'scelta'
   useEffect(() => {
     if (step !== 'scelta') return;
+
+    // Benvenuto prima-volta per nuove clienti
+    if (isNuovaScheda && info?.benvenutoAttivo !== false) {
+      const benvKey = `benvenuto_visto_${userId}_${telefono.trim()}`;
+      if (localStorage.getItem(benvKey) !== '1') {
+        setShowBenvenuto(true);
+        return;
+      }
+    }
+
     const today = new Date();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
@@ -421,7 +434,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         setShowAnnuncio('annuncio');
       }
     }
-  }, [step, clienteDataNascita]);
+  }, [step, clienteDataNascita, isNuovaScheda]);
 
   // Polling risposte in background (ogni 30s, dopo che l'utente ha inserito i dati)
   useEffect(() => {
@@ -1266,6 +1279,27 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   return (
     <div className="min-h-screen bg-stone-50">
+      {/* Benvenuto prima-volta */}
+      {showBenvenuto && (
+        <BenvenutoModal
+          nome={nome}
+          onClose={() => {
+            localStorage.setItem(`benvenuto_visto_${userId}_${telefono.trim()}`, '1');
+            // Aggiorna il flag nel DB (non bloccante)
+            const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
+            fetch(
+              `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}`,
+              {
+                method: 'PATCH',
+                headers: { ...anonHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ benvenuto_visto: true }),
+              }
+            ).catch(() => {});
+            setShowBenvenuto(false);
+          }}
+        />
+      )}
+
       {/* Annuncio / Birthday modal */}
       {showAnnuncio === 'compleanno' && (
         <AnnuncioModal

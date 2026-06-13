@@ -1556,7 +1556,10 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
-  const [tab, setTab] = useState<'annuncio' | 'compleanno'>('annuncio');
+  const [tab, setTab] = useState<'annuncio' | 'compleanno' | 'benvenuto'>('annuncio');
+  const [benvenutoAttivo, setBenvenutoAttivo] = useState(true);
+  const [benvenutoSaving, setBenvenutoSaving] = useState(false);
+  const [benvenutoSaved, setBenvenutoSaved] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -1566,12 +1569,14 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
       getImpostazione('annuncio_testo'),
       getImpostazione('annuncio_id'),
       getImpostazione('annuncio_compleanno_testo'),
-    ]).then(([a, s, t, id, ct]) => {
+      getImpostazione('benvenuto_attivo'),
+    ]).then(([a, s, t, id, ct, ba]) => {
       if (a !== null) setAttivo(a === 'true');
       if (s) setSfondo(s);
       if (t) setTesto(t);
       if (id) setAnnuncioId(id);
       if (ct) setCompleannoTesto(ct);
+      if (ba !== null) setBenvenutoAttivo(ba !== 'false');
       setLoading(false);
     });
   }, [userId]);
@@ -1611,6 +1616,15 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
     if (preset) setTesto(preset);
   }
 
+  async function handleSaveBenvenuto(val: boolean) {
+    setBenvenutoAttivo(val);
+    setBenvenutoSaving(true);
+    await setImpostazione('benvenuto_attivo', val ? 'true' : 'false', userId);
+    setBenvenutoSaving(false);
+    setBenvenutoSaved(true);
+    setTimeout(() => setBenvenutoSaved(false), 2500);
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-7 h-7 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
@@ -1643,6 +1657,12 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
           className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${tab === 'compleanno' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
         >
           🎂 Compleanno
+        </button>
+        <button
+          onClick={() => setTab('benvenuto')}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${tab === 'benvenuto' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+        >
+          ✨ Benvenuto
         </button>
       </div>
 
@@ -1819,6 +1839,69 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
           >
             {saved ? <><Check size={15} /> Salvato!</> : saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Check size={15} /> Salva testo auguri</>}
           </button>
+        </>
+      )}
+
+      {tab === 'benvenuto' && (
+        <>
+          {/* Info box */}
+          <div className="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 rounded-2xl px-5 py-4 space-y-2">
+            <p className="text-sm font-semibold text-rose-800 flex items-center gap-2">
+              ✨ Messaggio di benvenuto automatico
+            </p>
+            <p className="text-xs text-rose-700 leading-relaxed">
+              Quando una nuova cliente invia la sua scheda di registrazione, al primo accesso al portale vedrà un messaggio di benvenuto che presenta tutti i vantaggi della sua area personale. Il messaggio appare <strong>una sola volta</strong> e si chiude con il pulsante "Scopri il tuo spazio".
+            </p>
+          </div>
+
+          {/* Anteprima sfondo */}
+          <div className="rounded-2xl overflow-hidden h-16 flex items-center justify-center"
+            style={{ background: 'linear-gradient(160deg, #f8a5c2 0%, #f4c2c2 40%, #c8e6c9 100%)' }}>
+            <p className="text-white font-bold text-sm tracking-wide drop-shadow">✨ Sfondo benvenuto (cipria · automatico) ✨</p>
+          </div>
+
+          {/* Toggle attivo */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-stone-800">Messaggio di benvenuto attivo</p>
+              <p className="text-xs text-stone-400 mt-0.5">
+                {benvenutoAttivo
+                  ? 'Le nuove clienti vedranno il messaggio al primo accesso'
+                  : 'Messaggio disattivato — le nuove clienti non lo vedranno'}
+              </p>
+            </div>
+            <button
+              onClick={() => handleSaveBenvenuto(!benvenutoAttivo)}
+              disabled={benvenutoSaving}
+              className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${benvenutoAttivo ? 'bg-rose-400' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${benvenutoAttivo ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          {benvenutoSaved && (
+            <div className="flex items-center gap-2 text-sm text-emerald-600 font-medium px-1">
+              <Check size={15} /> Impostazione salvata
+            </div>
+          )}
+
+          {/* Contenuto del messaggio (sola lettura) */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+            <p className="text-sm font-semibold text-stone-700">Testo del messaggio</p>
+            <p className="text-xs text-stone-400">Il testo è fisso e non modificabile. Usa <span className="font-mono bg-stone-100 px-1 rounded">[Nome Cliente]</span> che viene sostituito automaticamente.</p>
+            <div className="bg-stone-50 rounded-xl px-4 py-3 text-xs text-stone-600 leading-relaxed space-y-2 border border-stone-100">
+              <p className="font-semibold text-stone-800">✨ Finalmente sei qui, [Nome Cliente]!</p>
+              <p>La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte.</p>
+              <p>Ecco cosa troverai nella tua <strong>Area Personale</strong>:</p>
+              <ul className="space-y-1 pl-2">
+                <li>📅 <strong>Niente attese al telefono</strong> — richiedi appuntamenti quando vuoi</li>
+                <li>🗓 <strong>Tutto sotto controllo</strong> — appuntamenti passati e futuri</li>
+                <li>✂️ <strong>Il tuo diario di bellezza</strong> — colori e trattamenti con data e parrucchiera</li>
+                <li>💳 <strong>Il tuo borsellino</strong> — saldo carte, abbonamenti e promozioni</li>
+                <li>💬 <strong>Filo diretto con noi</strong> — foto e messaggi per richieste speciali</li>
+              </ul>
+            </div>
+          </div>
         </>
       )}
     </div>

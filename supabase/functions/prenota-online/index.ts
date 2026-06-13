@@ -140,6 +140,7 @@ Deno.serve(async (req: Request) => {
       social,
       annuncio,
       contatti,
+      benvenutoAttivo: impostazioni["benvenuto_attivo"] !== "false",
     });
   }
 
