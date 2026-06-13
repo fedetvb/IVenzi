@@ -2403,7 +2403,7 @@ function StoricoTab({ appuntamenti, fichesConvalidate, clienteCreatedAt, onOpenG
                         {isOpen && (
                           <div className="border-t border-stone-100 divide-y divide-stone-50">
                             {giorni.map(dayKey => {
-                              const apps = perGiorno[dayKey];
+                              const apps = appCancellatPerGiorno[dayKey] || [];
                               const trattamenti: string[] = [];
                               for (const a of apps) {
                                 for (const t of (a.appuntamento_trattamenti || [])) trattamenti.push(t.nome_trattamento);
