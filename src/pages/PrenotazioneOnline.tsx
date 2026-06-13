@@ -359,9 +359,15 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     if (!installed && !localStorage.getItem('pwa_installata')) {
       setShowInstallBanner(true);
     }
+    // Recover prompt captured before React mounted
+    const w = window as Window & { __pwaInstallPrompt?: Event | null };
+    if (w.__pwaInstallPrompt) {
+      setInstallPrompt(w.__pwaInstallPrompt);
+    }
     const handler = (e: Event) => {
       e.preventDefault();
       setInstallPrompt(e);
+      (window as Window & { __pwaInstallPrompt?: Event | null }).__pwaInstallPrompt = e;
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
