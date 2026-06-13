@@ -43,6 +43,12 @@ interface ClienteCompleanno {
   telefono: string | null;
 }
 
+interface HistoryEntry {
+  page: Page;
+  selectedCliente: string | null;
+  selectedClienteTab?: 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi';
+}
+
 export default function App() {
   const { user, loading, isOfflineSession } = useAuth();
   const [page, setPage] = useState<Page>('dashboard');
@@ -50,6 +56,7 @@ export default function App() {
   const [selectedCliente, setSelectedCliente] = useState<string | null>(null);
   const [selectedClienteTab, setSelectedClienteTab] = useState<'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi' | undefined>(undefined);
   const [agendaSelectedDay, setAgendaSelectedDay] = useState<Date | null>(null);
+  const pageHistoryRef = useRef<HistoryEntry[]>([]);
 
   function handleSetAgendaDay(d: Date | null) {
     setAgendaSelectedDay(d);
@@ -65,9 +72,39 @@ export default function App() {
         agendaSelectedDay.getDate() === today.getDate();
       if (!isToday) setAgendaSelectedDay(null);
     }
+    // Salva lo stato corrente nella history prima di navigare
+    pageHistoryRef.current = [...pageHistoryRef.current, { page, selectedCliente }];
+    history.pushState({ appNav: true }, '');
     setPage(p);
     if (p !== 'clienti') setSelectedCliente(null);
   }
+
+  // Intercetta il tasto indietro del dispositivo/browser nella PWA
+  useEffect(() => {
+    // Aggiunge una voce iniziale alla history del browser all'avvio
+    history.pushState({ appNav: true }, '');
+
+    function handlePopState() {
+      const prev = pageHistoryRef.current;
+      if (prev.length > 0) {
+        const last = prev[prev.length - 1];
+        pageHistoryRef.current = prev.slice(0, -1);
+        setPage(last.page);
+        setSelectedCliente(last.selectedCliente);
+        setSelectedClienteTab(last.selectedClienteTab);
+        // Rimette una voce in history per intercettare il prossimo back
+        history.pushState({ appNav: true }, '');
+      } else {
+        // Nessuna history interna: torna alla dashboard
+        setPage('dashboard');
+        setSelectedCliente(null);
+        history.pushState({ appNav: true }, '');
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Banner promemoria fiches (orario configurato)
   const [showReminderBanner, setShowReminderBanner] = useState(false);
@@ -175,6 +212,8 @@ export default function App() {
   }
 
   function handleSelectCliente(id: string, tab?: 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi') {
+    pageHistoryRef.current = [...pageHistoryRef.current, { page, selectedCliente, selectedClienteTab }];
+    history.pushState({ appNav: true }, '');
     setSelectedCliente(id);
     setSelectedClienteTab(tab);
     setPage('clienti');
