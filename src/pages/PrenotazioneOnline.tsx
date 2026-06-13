@@ -556,20 +556,45 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }, []);
 
 
-  // Inject dynamic PWA manifest for the booking portal
+  // Inject dynamic PWA manifest + apple-touch-icon for the booking portal
   useEffect(() => {
     if (!userId) return;
     const manifestUrl = `${PWA_MANIFEST_URL}?uid=${encodeURIComponent(userId)}`;
-    let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'manifest';
-      document.head.appendChild(link);
+
+    // Update manifest link
+    let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!manifestLink) {
+      manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      document.head.appendChild(manifestLink);
     }
-    link.href = manifestUrl;
+    manifestLink.href = manifestUrl;
+
+    // Fetch custom icon from Supabase and inject apple-touch-icon (needed for iOS)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+    fetch(`${supabaseUrl}/rest/v1/impostazioni?chiave=eq.icona_pwa_url&user_id=eq.${encodeURIComponent(userId)}&select=valore`, {
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+    })
+      .then(r => r.json())
+      .then((rows: { valore: string }[]) => {
+        const iconUrl = rows?.[0]?.valore;
+        if (!iconUrl) return;
+        // Remove existing static apple-touch-icon tags
+        document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove());
+        // Inject custom one
+        const atLink = document.createElement('link');
+        atLink.rel = 'apple-touch-icon';
+        atLink.href = iconUrl;
+        document.head.appendChild(atLink);
+        // Also update favicon
+        const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+        if (favicon) favicon.href = iconUrl;
+      })
+      .catch(() => { /* keep defaults */ });
+
     return () => {
-      // Restore original manifest on unmount
-      if (link) link.href = '/manifest.json';
+      if (manifestLink) manifestLink.href = '/manifest.json';
     };
   }, [userId]);
 
