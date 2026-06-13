@@ -1505,11 +1505,10 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                 {carteTipi && carteTipi.size > 0 && (
                                   <div className="flex items-center gap-0.5 flex-shrink-0 mt-px">
                                     {(carteTipi.has('premium') || carteTipi.has('premium_vuota')) && (
-                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ filter: carteTipi.has('premium') ? 'drop-shadow(0 0 2px rgba(245,158,11,0.7))' : 'drop-shadow(0 0 2px rgba(239,68,68,0.7))' }}>
-                                        <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill={carteTipi.has('premium') ? 'url(#pgold)' : '#EF4444'} stroke={carteTipi.has('premium') ? '#D97706' : '#DC2626'} strokeWidth="0.5"/>
-                                        <rect x="0.5" y="3" width="17" height="2.5" fill={carteTipi.has('premium') ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.15)'}/>
-                                        <rect x="2" y="7" width="5" height="3" rx="0.8" fill={carteTipi.has('premium') ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.45)'}/>
-                                        {carteTipi.has('premium') && <defs><linearGradient id="pgold" x1="0" y1="0" x2="18" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#F59E0B"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs>}
+                                      <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ filter: carteTipi.has('premium') ? 'drop-shadow(0 0 2px rgba(0,0,0,0.5))' : 'drop-shadow(0 0 2px rgba(239,68,68,0.7))' }}>
+                                        <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill={carteTipi.has('premium') ? '#1c1917' : '#EF4444'} stroke={carteTipi.has('premium') ? '#44403c' : '#DC2626'} strokeWidth="0.5"/>
+                                        <rect x="0.5" y="3" width="17" height="2.5" fill={carteTipi.has('premium') ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)'}/>
+                                        <rect x="2" y="7" width="5" height="3" rx="0.8" fill={carteTipi.has('premium') ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.45)'}/>
                                       </svg>
                                     )}
                                     {carteTipi.has('sconto_ueg') && (
@@ -1627,7 +1626,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       <div className="hidden sm:flex flex-shrink-0 border-t border-stone-100 bg-stone-50 px-3 py-1 items-center gap-3 flex-wrap">
         <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wide">Legenda</span>
         <div className="flex items-center gap-1">
-          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="url(#lg1)" stroke="#D97706" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.18)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.55)"/><defs><linearGradient id="lg1" x1="0" y1="0" x2="18" y2="12" gradientUnits="userSpaceOnUse"><stop stopColor="#F59E0B"/><stop offset="1" stopColor="#D97706"/></linearGradient></defs></svg>
+          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#1c1917" stroke="#44403c" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(255,255,255,0.12)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.3)"/></svg>
           <span className="text-[10px] text-stone-500">Premium</span>
         </div>
         <div className="flex items-center gap-1">
