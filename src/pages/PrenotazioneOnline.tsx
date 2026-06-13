@@ -61,6 +61,8 @@ interface SalonInfo {
     note: string;
     orariJson: string | null;
     orariNota: string;
+    ferieInizio?: string;
+    ferieFine?: string;
   };
   benvenutoAttivo?: boolean;
 }
@@ -416,22 +418,86 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const todayMmDd = `${mm}-${dd}`;
     const year = today.getFullYear();
 
-    // Compleanno
+    // Annuncio periodico automatico (ferie / stagionali): ha priorità sul normale
+    const ann = info?.annuncio;
+    if (ann?.attivo && ann.testo) {
+      // --- FERIE: mostra ad ogni accesso durante il periodo ---
+      if (ann.sfondo === 'ferie') {
+        const fi = info.contatti?.ferieInizio;
+        const ff = info.contatti?.ferieFine;
+        if (fi && ff) {
+          const todayStr = `${year}-${mm}-${dd}`;
+          if (todayStr >= fi && todayStr <= ff) {
+            setShowAnnuncio('annuncio');
+            return;
+          }
+        }
+      }
+
+      // --- SAN VALENTINO: 14 febbraio, una volta per anno ---
+      if (ann.sfondo === 'san_valentino') {
+        if (mm === '02' && dd === '14') {
+          const key = `ann_valentino_${userId}_${year}`;
+          if (localStorage.getItem(key) !== '1') {
+            setShowAnnuncio('annuncio');
+            return;
+          }
+        }
+      }
+
+      // --- NATALE: 20-29 dicembre, una volta per anno ---
+      if (ann.sfondo === 'natale') {
+        if (mm === '12' && parseInt(dd) >= 20 && parseInt(dd) <= 29) {
+          const key = `ann_natale_${userId}_${year}`;
+          if (localStorage.getItem(key) !== '1') {
+            setShowAnnuncio('annuncio');
+            return;
+          }
+        }
+      }
+
+      // --- CAPODANNO: 30-31 dic (anno X) oppure 1-6 gen (anno X+1), chiave anno del 30 dic ---
+      if (ann.sfondo === 'capodanno') {
+        let capodannoYear: number | null = null;
+        if (mm === '12' && (dd === '30' || dd === '31')) capodannoYear = year;
+        if (mm === '01' && parseInt(dd) >= 1 && parseInt(dd) <= 6) capodannoYear = year - 1;
+        if (capodannoYear !== null) {
+          const key = `ann_capodanno_${userId}_${capodannoYear}`;
+          if (localStorage.getItem(key) !== '1') {
+            setShowAnnuncio('annuncio');
+            return;
+          }
+        }
+      }
+
+      // --- HALLOWEEN: 29-31 ottobre, una volta per anno ---
+      if (ann.sfondo === 'halloween') {
+        if (mm === '10' && parseInt(dd) >= 29 && parseInt(dd) <= 31) {
+          const key = `ann_halloween_${userId}_${year}`;
+          if (localStorage.getItem(key) !== '1') {
+            setShowAnnuncio('annuncio');
+            return;
+          }
+        }
+      }
+
+      // --- ALTRI (generico, estate, autunno, primavera, pasqua): una volta per ID annuncio ---
+      const nonPeriodici = ['generico', 'estate', 'autunno', 'primavera', 'pasqua'];
+      if (nonPeriodici.includes(ann.sfondo) && ann.id) {
+        const annKey = `ann_seen_${userId}_${ann.id}`;
+        if (localStorage.getItem(annKey) !== '1') {
+          setShowAnnuncio('annuncio');
+          return;
+        }
+      }
+    }
+
+    // Compleanno (dopo annunci periodici)
     if (clienteDataNascita && clienteDataNascita.length >= 5) {
       const nascitaMmDd = clienteDataNascita.substring(5); // "MM-DD"
       const birthdayKey = `birthday_ann_${userId}_${year}`;
       if (nascitaMmDd === todayMmDd && localStorage.getItem(birthdayKey) !== '1') {
         setShowAnnuncio('compleanno');
-        return;
-      }
-    }
-
-    // Annuncio normale
-    const ann = info?.annuncio;
-    if (ann?.attivo && ann.id && ann.testo) {
-      const annKey = `ann_seen_${userId}_${ann.id}`;
-      if (localStorage.getItem(annKey) !== '1') {
-        setShowAnnuncio('annuncio');
       }
     }
   }, [step, clienteDataNascita, isNuovaScheda]);
@@ -1320,7 +1386,25 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           testo={info.annuncio.testo}
           nome={nome}
           onClose={() => {
-            localStorage.setItem(`ann_seen_${userId}_${info.annuncio!.id}`, '1');
+            const sfondo = info.annuncio!.sfondo;
+            const today = new Date();
+            const year = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            if (sfondo === 'san_valentino') {
+              localStorage.setItem(`ann_valentino_${userId}_${year}`, '1');
+            } else if (sfondo === 'natale') {
+              localStorage.setItem(`ann_natale_${userId}_${year}`, '1');
+            } else if (sfondo === 'halloween') {
+              localStorage.setItem(`ann_halloween_${userId}_${year}`, '1');
+            } else if (sfondo === 'capodanno') {
+              const capodannoYear = (mm === '01' && parseInt(dd) <= 6) ? year - 1 : year;
+              localStorage.setItem(`ann_capodanno_${userId}_${capodannoYear}`, '1');
+            } else if (sfondo !== 'ferie') {
+              // generico, estate, autunno, primavera, pasqua: usa ID annuncio
+              localStorage.setItem(`ann_seen_${userId}_${info.annuncio!.id}`, '1');
+            }
+            // ferie: non salva nulla — ricompare ad ogni apertura
             setShowAnnuncio(null);
           }}
         />

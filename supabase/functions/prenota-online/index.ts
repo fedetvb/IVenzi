@@ -127,6 +127,8 @@ Deno.serve(async (req: Request) => {
       note: impostazioni["azienda_note"] ?? "",
       orariJson: impostazioni["orari_salone_json"] ?? null,
       orariNota: impostazioni["orari_salone_nota"] ?? "",
+      ferieInizio: impostazioni["ferie_inizio"] ?? "",
+      ferieFine: impostazioni["ferie_fine"] ?? "",
     };
 
     return json({

@@ -789,17 +789,23 @@ function PaginaOrariSalone({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [nota, setNota] = useState('');
+  const [ferieInizio, setFerieInizio] = useState('');
+  const [ferieFine, setFerieFine] = useState('');
 
   useEffect(() => {
     if (!user) return;
     Promise.all([
       getImpostazione('orari_salone_json'),
       getImpostazione('orari_salone_nota'),
-    ]).then(([jsonStr, notaVal]) => {
+      getImpostazione('ferie_inizio'),
+      getImpostazione('ferie_fine'),
+    ]).then(([jsonStr, notaVal, fi, ff]) => {
       if (jsonStr) {
         try { setOrari(JSON.parse(jsonStr)); } catch {}
       }
       setNota(notaVal ?? '');
+      setFerieInizio(fi ?? '');
+      setFerieFine(ff ?? '');
       setLoading(false);
     });
   }, [user]);
@@ -813,6 +819,8 @@ function PaginaOrariSalone({ onBack }: { onBack: () => void }) {
     await Promise.all([
       setImpostazione('orari_salone_json', JSON.stringify(orari), user?.id),
       setImpostazione('orari_salone_nota', nota, user?.id),
+      setImpostazione('ferie_inizio', ferieInizio, user?.id),
+      setImpostazione('ferie_fine', ferieFine, user?.id),
     ]);
     setSaving(false);
     setSaved(true);
@@ -913,6 +921,49 @@ function PaginaOrariSalone({ onBack }: { onBack: () => void }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Periodo ferie */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-stone-800">Periodo di ferie</p>
+          <p className="text-xs text-stone-400 mt-0.5">
+            Durante questo periodo l'annuncio "Ferie" verrà mostrato ad ogni accesso delle clienti al portale.
+          </p>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-stone-500">Inizio ferie</label>
+            <input
+              type="date"
+              value={ferieInizio}
+              onChange={e => setFerieInizio(e.target.value)}
+              className="text-sm border border-stone-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-stone-500">Fine ferie</label>
+            <input
+              type="date"
+              value={ferieFine}
+              onChange={e => setFerieFine(e.target.value)}
+              className="text-sm border border-stone-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-stone-700"
+            />
+          </div>
+          {ferieInizio && ferieFine && (
+            <button
+              onClick={() => { setFerieInizio(''); setFerieFine(''); }}
+              className="text-xs text-rose-500 hover:text-rose-600 font-medium mt-4"
+            >
+              Cancella date
+            </button>
+          )}
+        </div>
+        {ferieInizio && ferieFine && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+            L'annuncio di ferie comparira' dal <strong>{new Date(ferieInizio + 'T12:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}</strong> al <strong>{new Date(ferieFine + 'T12:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}</strong>.
+          </p>
+        )}
       </div>
 
       <div>
