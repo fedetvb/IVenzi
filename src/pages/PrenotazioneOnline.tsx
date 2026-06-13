@@ -1385,7 +1385,14 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       {showAnnuncio === 'annuncio' && info.annuncio && (
         <AnnuncioModal
           sfondo={info.annuncio.sfondo}
-          testo={info.annuncio.testo}
+          testo={(() => {
+            let t = info.annuncio!.testo;
+            const fi = info.contatti?.ferieInizio;
+            const ff = info.contatti?.ferieFine;
+            if (fi) t = t.replace(/\[DATA INIZIO\]/gi, new Date(fi + 'T00:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }));
+            if (ff) t = t.replace(/\[DATA FINE\]/gi, new Date(ff + 'T00:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }));
+            return t;
+          })()}
           nome={nome}
           onClose={() => {
             const sfondo = info.annuncio!.sfondo;
