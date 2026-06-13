@@ -8539,11 +8539,13 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
 
   const LIVE_URL = 'https://qfpeffzdszdanebmgafb.supabase.co';
   const LIVE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+  // URL del sito live — il webhook di build va inserito manualmente dalla dashboard Netlify
+  const LIVE_NETLIFY_SITE = 'https://saloneivenzi.netlify.app';
 
   useEffect(() => {
     setSbUrl(localStorage.getItem(LS_URL) || LIVE_URL);
     setSbKey(localStorage.getItem(LS_KEY) || LIVE_KEY);
-    setNetlifyUrl(localStorage.getItem(LS_NETLIFY) || '');
+    setNetlifyUrl(localStorage.getItem(LS_NETLIFY) || LIVE_NETLIFY_SITE);
   }, []);
 
   function handleSaveCreds() {
@@ -8558,8 +8560,10 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
   function handleResetCreds() {
     setSbUrl(LIVE_URL);
     setSbKey(LIVE_KEY);
+    setNetlifyUrl(LIVE_NETLIFY_SITE);
     localStorage.removeItem(LS_URL);
     localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(LS_NETLIFY);
   }
 
   async function handleGenLocalOtp() {
@@ -8627,13 +8631,27 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-stone-500 mb-1.5 uppercase tracking-wide">URL Netlify / Webhook</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium text-stone-500 uppercase tracking-wide">Build Webhook Netlify</label>
+              <a
+                href="https://app.netlify.com/sites/saloneivenzi/configuration/deploys#build-hooks"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 transition-colors"
+              >
+                <ExternalLink size={11} />
+                Apri dashboard
+              </a>
+            </div>
             <input
               value={netlifyUrl}
               onChange={e => setNetlifyUrl(e.target.value)}
               className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm text-stone-800 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-colors"
-              placeholder="https://app.netlify.com/..."
+              placeholder="https://api.netlify.com/build_hooks/..."
             />
+            <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
+              Il webhook di build si trova in: Netlify Dashboard → saloneivenzi → Site configuration → Build &amp; deploy → Build hooks. Copia l&apos;URL del hook e incollalo qui.
+            </p>
           </div>
           <div className="flex gap-3 pt-1">
             <button
@@ -8650,7 +8668,7 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
             </button>
           </div>
           <p className="text-xs text-stone-400">
-            Le modifiche sono locali a questo dispositivo e si applicano al riavvio dell&apos;app.
+            Le credenziali vengono salvate su questo dispositivo. Il webhook consente di avviare il deploy di Netlify direttamente dall&apos;app.
           </p>
         </div>
       </div>
