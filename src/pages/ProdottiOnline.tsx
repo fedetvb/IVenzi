@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Save, CheckCircle, Package, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Search, Save, CheckCircle, Package, ChevronDown, ChevronUp, Loader2, Star, Image } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 
@@ -11,6 +11,8 @@ interface Prodotto {
   prezzo_vendita: number | null;
   attivo: boolean;
   quiz_tags: string[];
+  foto_url: string | null;
+  best_seller: boolean;
 }
 
 interface Toast {
@@ -77,6 +79,8 @@ export default function ProdottiOnline() {
   const { user } = useAuth();
   const [prodotti, setProdotti] = useState<Prodotto[]>([]);
   const [localTags, setLocalTags] = useState<Record<string, string[]>>({});
+  const [localBestSeller, setLocalBestSeller] = useState<Record<string, boolean>>({});
+  const [localFotoUrl, setLocalFotoUrl] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [savingRow, setSavingRow] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
@@ -95,7 +99,7 @@ export default function ProdottiOnline() {
     setLoading(true);
     const { data, error } = await supabase
       .from('prodotti_rivendita_catalogo')
-      .select('id, nome, marca, categoria, prezzo_vendita, attivo, quiz_tags')
+      .select('id, nome, marca, categoria, prezzo_vendita, attivo, quiz_tags, foto_url, best_seller')
       .eq('user_id', user.id)
       .eq('attivo', true)
       .order('categoria', { ascending: true })
@@ -106,9 +110,17 @@ export default function ProdottiOnline() {
     } else {
       const rows = (data ?? []) as Prodotto[];
       setProdotti(rows);
-      const init: Record<string, string[]> = {};
-      rows.forEach(p => { init[p.id] = p.quiz_tags ?? []; });
-      setLocalTags(init);
+      const initTags: Record<string, string[]> = {};
+      const initBs: Record<string, boolean> = {};
+      const initFoto: Record<string, string> = {};
+      rows.forEach(p => {
+        initTags[p.id] = p.quiz_tags ?? [];
+        initBs[p.id] = p.best_seller ?? false;
+        initFoto[p.id] = p.foto_url ?? '';
+      });
+      setLocalTags(initTags);
+      setLocalBestSeller(initBs);
+      setLocalFotoUrl(initFoto);
     }
     setLoading(false);
   }, [user]);
@@ -128,16 +140,18 @@ export default function ProdottiOnline() {
   async function saveRow(prodottoId: string) {
     setSavingRow(prev => ({ ...prev, [prodottoId]: true }));
     const tags = localTags[prodottoId] ?? [];
+    const bs = localBestSeller[prodottoId] ?? false;
+    const foto = localFotoUrl[prodottoId]?.trim() || null;
     const { error } = await supabase
       .from('prodotti_rivendita_catalogo')
-      .update({ quiz_tags: tags })
+      .update({ quiz_tags: tags, best_seller: bs, foto_url: foto })
       .eq('id', prodottoId);
     setSavingRow(prev => ({ ...prev, [prodottoId]: false }));
     if (error) {
       addToast('Errore nel salvataggio. Riprova.', 'error');
     } else {
-      setProdotti(prev => prev.map(p => p.id === prodottoId ? { ...p, quiz_tags: tags } : p));
-      addToast('Mappatura salvata!', 'success');
+      setProdotti(prev => prev.map(p => p.id === prodottoId ? { ...p, quiz_tags: tags, best_seller: bs, foto_url: foto } : p));
+      addToast('Prodotto salvato!', 'success');
     }
   }
 
@@ -147,12 +161,14 @@ export default function ProdottiOnline() {
     let errori = 0;
     await Promise.all(filtered.map(async p => {
       const tags = localTags[p.id] ?? [];
+      const bs = localBestSeller[p.id] ?? false;
+      const foto = localFotoUrl[p.id]?.trim() || null;
       const { error } = await supabase
         .from('prodotti_rivendita_catalogo')
-        .update({ quiz_tags: tags })
+        .update({ quiz_tags: tags, best_seller: bs, foto_url: foto })
         .eq('id', p.id);
       if (error) errori++;
-      else setProdotti(prev => prev.map(r => r.id === p.id ? { ...r, quiz_tags: tags } : r));
+      else setProdotti(prev => prev.map(r => r.id === p.id ? { ...r, quiz_tags: tags, best_seller: bs, foto_url: foto } : r));
     }));
     setSavingAll(false);
     if (errori > 0) {
@@ -178,10 +194,14 @@ export default function ProdottiOnline() {
   );
 
   function hasChanges(prodottoId: string): boolean {
-    const original = prodotti.find(p => p.id === prodottoId)?.quiz_tags ?? [];
-    const current = localTags[prodottoId] ?? [];
-    if (original.length !== current.length) return true;
-    return original.some(t => !current.includes(t)) || current.some(t => !original.includes(t));
+    const orig = prodotti.find(p => p.id === prodottoId);
+    if (!orig) return false;
+    const origTags = orig.quiz_tags ?? [];
+    const curTags = localTags[prodottoId] ?? [];
+    if (origTags.length !== curTags.length || origTags.some(t => !curTags.includes(t))) return true;
+    if ((orig.best_seller ?? false) !== (localBestSeller[prodottoId] ?? false)) return true;
+    if ((orig.foto_url ?? '') !== (localFotoUrl[prodottoId] ?? '')) return true;
+    return false;
   }
 
   const totalModifiche = prodottiFiltrati.filter(p => hasChanges(p.id)).length;
@@ -271,32 +291,61 @@ export default function ProdottiOnline() {
                 }`}
               >
                 {/* Product header row */}
-                <div className="flex items-center gap-4 p-4 sm:p-5">
-                  {/* Image placeholder */}
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center flex-shrink-0">
-                    <Package size={20} className="text-stone-400" />
+                <div className="flex items-start gap-4 p-4 sm:p-5">
+                  {/* Image preview */}
+                  <div className="flex-shrink-0">
+                    {localFotoUrl[prodotto.id] ? (
+                      <img src={localFotoUrl[prodotto.id]} alt={prodotto.nome} className="w-14 h-14 rounded-xl object-cover border border-stone-200" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center">
+                        <Image size={20} className="text-stone-400" />
+                      </div>
+                    )}
                   </div>
 
-                  {/* Name / category */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-stone-800 text-sm leading-tight truncate">{prodotto.nome}</p>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {prodotto.marca && (
-                        <span className="text-xs text-stone-400">{prodotto.marca}</span>
-                      )}
-                      {prodotto.categoria && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600">
-                          {prodotto.categoria}
-                        </span>
-                      )}
-                      {prodotto.prezzo_vendita != null && (
-                        <span className="text-xs font-semibold text-stone-600">€{prodotto.prezzo_vendita.toFixed(2)}</span>
-                      )}
+                  {/* Name / category + best_seller + foto url */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div>
+                      <p className="font-semibold text-stone-800 text-sm leading-tight truncate">{prodotto.nome}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {prodotto.marca && <span className="text-xs text-stone-400">{prodotto.marca}</span>}
+                        {prodotto.categoria && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600">
+                            {prodotto.categoria}
+                          </span>
+                        )}
+                        {prodotto.prezzo_vendita != null && (
+                          <span className="text-xs font-semibold text-stone-600">€{prodotto.prezzo_vendita.toFixed(2)}</span>
+                        )}
+                      </div>
                     </div>
+                    {/* Foto URL input */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        placeholder="URL immagine prodotto..."
+                        value={localFotoUrl[prodotto.id] ?? ''}
+                        onChange={e => setLocalFotoUrl(prev => ({ ...prev, [prodotto.id]: e.target.value }))}
+                        className="flex-1 min-w-0 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs text-stone-700 placeholder-stone-400 outline-none focus:ring-1 focus:ring-emerald-400"
+                      />
+                    </div>
+                    {/* Best-seller toggle */}
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                      <div
+                        onClick={() => setLocalBestSeller(prev => ({ ...prev, [prodotto.id]: !prev[prodotto.id] }))}
+                        className={`w-8 h-4 rounded-full transition-colors flex-shrink-0 flex items-center px-0.5 ${localBestSeller[prodotto.id] ? 'bg-amber-500' : 'bg-stone-300'}`}
+                      >
+                        <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform ${localBestSeller[prodotto.id] ? 'translate-x-4' : ''}`} />
+                      </div>
+                      <span className={`text-xs font-medium ${localBestSeller[prodotto.id] ? 'text-amber-600' : 'text-stone-500'}`}>
+                        <Star size={11} className="inline mr-0.5 mb-0.5" />
+                        Best-seller (fallback quiz)
+                      </span>
+                    </label>
                   </div>
 
-                  {/* Tag count badge */}
-                  <div className="flex items-center gap-3 flex-shrink-0">
+                  {/* Tag count badge + save */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {tags.length > 0 && (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                         {tags.length} tag

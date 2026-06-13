@@ -16,7 +16,7 @@ interface Props {
   initialTab?: Tab;
 }
 
-type Tab = 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi';
+type Tab = 'info' | 'colore' | 'appuntamenti' | 'storico' | 'carte' | 'messaggi' | 'mappa_bellezza';
 
 interface MessaggioCliente {
   id: string;
@@ -479,6 +479,23 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [haPortato, setHaPortato] = useState<string[]>([]);
   const [haFicheConvalidate, setHaFicheConvalidate] = useState(false);
 
+  interface MappaBellezzaRecord {
+    id: string;
+    telefono: string;
+    shampoo_nome: string | null; shampoo_marca: string | null; shampoo_categoria: string | null;
+    shampoo_id: string | null;
+    maschera_nome: string | null; maschera_marca: string | null; maschera_categoria: string | null;
+    maschera_id: string | null;
+    finish_nome: string | null; finish_marca: string | null; finish_categoria: string | null;
+    finish_id: string | null;
+    quiz_risposte: string[];
+    updated_at: string;
+  }
+  interface ProdottoCatalogoAdmin { id: string; nome: string; marca: string | null; categoria: string | null; foto_url: string | null; }
+  const [mappaBellezza, setMappaBellezza] = useState<MappaBellezzaRecord | null>(null);
+  const [mappaBellezzaProdotti, setMappaBellezzaProdotti] = useState<{ shampoo: ProdottoCatalogoAdmin | null; maschera: ProdottoCatalogoAdmin | null; finish: ProdottoCatalogoAdmin | null }>({ shampoo: null, maschera: null, finish: null });
+  const [loadingMappa, setLoadingMappa] = useState(false);
+
   const load = useCallback(async () => {
     const [clRes, scRes, appRes, cscRes, cprRes] = await Promise.all([
       dbSelect<Cliente>({
@@ -642,6 +659,43 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   }, [clienteId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    async function loadMappaBellezzaData() {
+      if (!cliente?.telefono) return;
+      setLoadingMappa(true);
+      const { data } = await supabase
+        .from('mappa_bellezza')
+        .select('*')
+        .eq('telefono', cliente.telefono)
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        setMappaBellezza(data as MappaBellezzaRecord);
+        // load product photos for the 3 products
+        const ids = [data.shampoo_id, data.maschera_id, data.finish_id].filter(Boolean) as string[];
+        if (ids.length > 0) {
+          const { data: prods } = await supabase
+            .from('prodotti_rivendita_catalogo')
+            .select('id, nome, marca, categoria, foto_url')
+            .in('id', ids);
+          const map = Object.fromEntries((prods ?? []).map((p: ProdottoCatalogoAdmin) => [p.id, p]));
+          setMappaBellezzaProdotti({
+            shampoo: data.shampoo_id ? (map[data.shampoo_id] ?? null) : null,
+            maschera: data.maschera_id ? (map[data.maschera_id] ?? null) : null,
+            finish: data.finish_id ? (map[data.finish_id] ?? null) : null,
+          });
+        }
+      } else {
+        setMappaBellezza(null);
+        setMappaBellezzaProdotti({ shampoo: null, maschera: null, finish: null });
+      }
+      setLoadingMappa(false);
+    }
+    if (tab === 'mappa_bellezza' && cliente) {
+      loadMappaBellezzaData();
+    }
+  }, [tab, cliente]);
 
   useEffect(() => {
     async function loadReferral() {
@@ -837,6 +891,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
           { id: 'storico', label: 'Storico', icon: <TrendingUp size={14} /> },
           { id: 'carte', label: 'Carte', icon: <CreditCard size={14} />, badge: carteSconto.length + cartePremium.length },
           { id: 'messaggi', label: 'Messaggi', icon: <MessageCircle size={14} />, badge: messaggi.filter(m => !m.letto).length },
+          { id: 'mappa_bellezza', label: 'Hair Quiz', icon: <Star size={14} /> },
         ] as { id: Tab; label: string; icon: React.ReactNode; badge?: number }[]).map(t => (
           <button
             key={t.id}
@@ -1314,6 +1369,100 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
           }}
           onFotoZoom={setMsgFotoZoom}
         />
+      )}
+
+      {/* Tab: Mappa di Bellezza (Quiz) */}
+      {tab === 'mappa_bellezza' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 pb-2">
+            <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
+              <Star size={17} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="font-bold text-stone-800">Mappa di Bellezza</p>
+              <p className="text-xs text-stone-400">Dati dal Hair Quiz compilato dalla cliente</p>
+            </div>
+          </div>
+
+          {loadingMappa && (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {!loadingMappa && !mappaBellezza && (
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl px-6 py-10 text-center">
+              <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <Star size={24} className="text-stone-300" />
+              </div>
+              <p className="font-semibold text-stone-500 text-sm">Nessun quiz effettuato da questa cliente.</p>
+              <p className="text-xs text-stone-400 mt-1">La mappa apparirà qui non appena la cliente completerà il Hair Quiz nel portale.</p>
+            </div>
+          )}
+
+          {!loadingMappa && mappaBellezza && (
+            <>
+              {/* Data e risposte */}
+              <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-stone-500 uppercase tracking-wide">Ultimo quiz</p>
+                  <span className="text-xs font-semibold text-stone-600">
+                    {new Date(mappaBellezza.updated_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+                {mappaBellezza.quiz_risposte && mappaBellezza.quiz_risposte.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-stone-500 mb-2">Profilo capelli</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {mappaBellezza.quiz_risposte.map(r => (
+                        <span key={r} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                          {r.replace(/_/g, ' ')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Routine consigliata */}
+              <p className="text-xs font-bold text-stone-500 uppercase tracking-wide px-1">Routine consigliata in 3 step</p>
+              <div className="space-y-3">
+                {[
+                  { label: 'STEP 1 — Detergi', subLabel: 'Shampoo', nome: mappaBellezza.shampoo_nome, marca: mappaBellezza.shampoo_marca, categoria: mappaBellezza.shampoo_categoria, foto: mappaBellezzaProdotti.shampoo?.foto_url ?? null },
+                  { label: 'STEP 2 — Nutri', subLabel: 'Maschera', nome: mappaBellezza.maschera_nome, marca: mappaBellezza.maschera_marca, categoria: mappaBellezza.maschera_categoria, foto: mappaBellezzaProdotti.maschera?.foto_url ?? null },
+                  { label: 'STEP 3 — Proteggi', subLabel: 'Finish', nome: mappaBellezza.finish_nome, marca: mappaBellezza.finish_marca, categoria: mappaBellezza.finish_categoria, foto: mappaBellezzaProdotti.finish?.foto_url ?? null },
+                ].map((s, i) => (
+                  <div key={i} className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-100">
+                      <p className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">{s.label}</p>
+                      <span className="text-[11px] text-stone-400 ml-auto">{s.subLabel}</span>
+                    </div>
+                    <div className="px-4 py-3">
+                      {s.nome ? (
+                        <div className="flex items-center gap-3">
+                          {s.foto ? (
+                            <img src={s.foto} alt={s.nome} className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-stone-100" />
+                          ) : (
+                            <div className="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                              <TrendingUp size={16} className="text-amber-400" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-stone-800 text-sm leading-tight">{s.nome}</p>
+                            {s.marca && <p className="text-xs text-stone-400 mt-0.5">{s.marca}</p>}
+                            {s.categoria && <p className="text-xs text-stone-400">{s.categoria}</p>}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-stone-400 italic py-1">Nessun prodotto consigliato per questo step.</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* Lightbox foto messaggio */}

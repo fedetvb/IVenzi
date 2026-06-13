@@ -292,7 +292,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [serviziPeriodo, setServiziPeriodo] = useState<'1m' | '3m' | '1y' | 'all'>('all');
   const [serviziNomeFiltro, setServiziNomeFiltro] = useState('');
 
-  interface ProdottoCatalogo { id: string; nome: string; marca: string | null; categoria: string | null; prezzo_vendita: number | null; note: string | null; quiz_tags: string[] | null; }
+  interface ProdottoCatalogo { id: string; nome: string; marca: string | null; categoria: string | null; prezzo_vendita: number | null; note: string | null; quiz_tags: string[] | null; foto_url: string | null; best_seller: boolean; }
   const [nostralProdotti, setNostralProdotti] = useState<ProdottoCatalogo[]>([]);
   const [loadingNostralProdotti, setLoadingNostralProdotti] = useState(false);
   const [nostralProdottiError, setNostralProdottiError] = useState('');
@@ -357,8 +357,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   function calcolaRoutine(tags: string[]): RisultatoRoutine {
     const score = (p: ProdottoCatalogo) => (p.quiz_tags ?? []).filter(t => tags.includes(t)).length;
     const candidati = nostralProdotti.filter(p => (p.quiz_tags ?? []).length > 0);
-    const best = (gruppo: 'shampoo' | 'maschera' | 'finish') =>
-      candidati.filter(p => getMacroGruppo(p.categoria) === gruppo).sort((a, b) => score(b) - score(a))[0] ?? null;
+    const best = (gruppo: 'shampoo' | 'maschera' | 'finish'): ProdottoCatalogo | null => {
+      const gruppo_candidati = candidati.filter(p => getMacroGruppo(p.categoria) === gruppo);
+      const top = gruppo_candidati.sort((a, b) => score(b) - score(a))[0];
+      if (top && score(top) > 0) return top;
+      // fallback: best_seller per questo macro-gruppo
+      return nostralProdotti.find(p => getMacroGruppo(p.categoria) === gruppo && p.best_seller) ?? top ?? null;
+    };
     return { shampoo: best('shampoo'), maschera: best('maschera'), finish: best('finish') };
   }
 
@@ -1296,7 +1301,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setNostralProdottiError('');
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note,quiz_tags&attivo=eq.true&order=categoria.asc,nome.asc`,
+        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note,quiz_tags,foto_url,best_seller&attivo=eq.true&order=categoria.asc,nome.asc`,
         { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
       );
       if (!res.ok) throw new Error('Errore');
@@ -2665,41 +2670,44 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
               {/* La tua Mappa di Bellezza */}
               {mappaBellezza && (mappaBellezza.shampoo || mappaBellezza.maschera || mappaBellezza.finish) && (
-                <div className="mt-4">
+                <div className="mt-6 border-t border-stone-100 pt-6">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-base">💆</span>
+                    <div className="w-6 h-6 bg-amber-100 rounded-md flex items-center justify-center">
+                      <Star size={13} className="text-amber-600" />
+                    </div>
                     <p className="text-sm font-bold text-stone-800">La tua Mappa di Bellezza</p>
                   </div>
-                  <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl overflow-hidden">
-                    <div className="px-4 py-3 border-b border-emerald-100">
-                      <p className="text-xs font-semibold text-emerald-700">Routine personalizzata salvata</p>
+                  <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-stone-700">
+                      <p className="text-xs font-semibold text-amber-400">Routine personalizzata salvata</p>
                       <p className="text-xs text-stone-400 mt-0.5">I prodotti selezionati dal tuo quiz capelli</p>
                     </div>
-                    <div className="divide-y divide-emerald-100">
+                    <div className="divide-y divide-stone-700">
                       {[
                         { label: 'STEP 1 — Detergi', emoji: '🚿', p: mappaBellezza.shampoo },
                         { label: 'STEP 2 — Nutri', emoji: '💚', p: mappaBellezza.maschera },
-                        { label: 'STEP 3 — Proteggi & Illumina', emoji: '✨', p: mappaBellezza.finish },
+                        { label: 'STEP 3 — Proteggi', emoji: '✨', p: mappaBellezza.finish },
                       ].filter(s => s.p).map((s, i) => (
                         <div key={i} className="flex items-center gap-3 px-4 py-3">
-                          <span className="text-lg flex-shrink-0">{s.emoji}</span>
+                          {s.p!.foto_url ? (
+                            <img src={s.p!.foto_url} alt={s.p!.nome} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                          ) : (
+                            <span className="text-lg flex-shrink-0">{s.emoji}</span>
+                          )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">{s.label}</p>
-                            <p className="text-sm font-semibold text-stone-800 leading-tight truncate">{s.p!.nome}</p>
+                            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">{s.label}</p>
+                            <p className="text-sm font-semibold text-white leading-tight truncate">{s.p!.nome}</p>
                             {s.p!.marca && <p className="text-xs text-stone-400">{s.p!.marca}</p>}
                           </div>
-                          {s.p!.prezzo_vendita != null && (
-                            <span className="text-sm font-bold text-emerald-600 flex-shrink-0">€{s.p!.prezzo_vendita.toFixed(2)}</span>
-                          )}
                         </div>
                       ))}
                     </div>
-                    <div className="px-4 py-3 bg-white/60">
+                    <div className="px-4 py-3">
                       <button
-                        onClick={() => { loadNovstralProdotti(); setQuizStep(0); setQuizRisposte([]); setMappaSalvata(false); setStep('quiz_capelli'); }}
-                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 underline transition-colors"
+                        onClick={() => { loadNovstralProdotti(); setStep('nostri_prodotti'); }}
+                        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-amber-500 hover:bg-amber-400 transition-colors"
                       >
-                        Aggiorna con un nuovo quiz
+                        Aggiorna la mia Mappa
                       </button>
                     </div>
                   </div>
@@ -3138,15 +3146,23 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                     <div className="px-4 py-4">
                       {s.prodotto ? (
                         <div className="flex items-start gap-3">
-                          <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <span className="text-xl">{s.emoji}</span>
-                          </div>
+                          {s.prodotto.foto_url ? (
+                            <img src={s.prodotto.foto_url} alt={s.prodotto.nome} className="w-14 h-14 rounded-xl object-cover flex-shrink-0 border border-stone-100" />
+                          ) : (
+                            <div className="w-14 h-14 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                              <span className="text-2xl">{s.emoji}</span>
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-stone-800 text-sm leading-tight">{s.prodotto.nome}</p>
                             {s.prodotto.marca && <p className="text-xs text-stone-400 mt-0.5">{s.prodotto.marca}</p>}
                             {s.prodotto.note && <p className="text-xs text-stone-500 mt-1 leading-relaxed line-clamp-2">{s.prodotto.note}</p>}
-                            {s.prodotto.prezzo_vendita != null && (
-                              <p className="text-sm font-bold text-emerald-600 mt-2">€{s.prodotto.prezzo_vendita.toFixed(2)}</p>
+                            {(s.prodotto.quiz_tags ?? []).filter(t => quizRisposte.includes(t)).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {(s.prodotto.quiz_tags ?? []).filter(t => quizRisposte.includes(t)).map(t => (
+                                  <span key={t} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">{t.replace(/_/g, ' ')}</span>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -3165,51 +3181,50 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
               {/* Messaggio consulenza */}
               <div className="bg-stone-900 rounded-2xl px-5 py-5 space-y-4">
-                <p className="text-sm text-stone-200 leading-relaxed">
-                  ✨ I tuoi capelli hanno parlato: questi sono i prodotti del nostro Brand che più si avvicinano alle tue esigenze.{'\n'}
-                  Il sistema ha individuato la combinazione ideale in base alle tue risposte, ma la Hair Care è una consulenza su misura. Trattandosi di formule professionali ad alta concentrazione, per darti la certezza assoluta abbiamo bisogno di guardare e toccare con mano le tue lunghezze e la tua cute. Passa a trovarci per una consulenza approfondita in salone: confermeremo insieme questa selezione e la personalizzeremo per garantirti un risultato impeccabile. Metti la tua bellezza e il benessere dei tuoi capelli in mani esperte.
+                <p className="text-sm text-stone-300 leading-relaxed italic text-center">
+                  Metti la tua bellezza e il benessere dei tuoi capelli in mani esperte.
                 </p>
+
+                {/* Prenota */}
+                <button
+                  onClick={() => setStep('parrucchiere')}
+                  className="w-full py-3.5 rounded-xl font-bold text-sm bg-amber-500 text-white hover:bg-amber-400 transition-all"
+                >
+                  Prenota la tua consulenza o il tuo servizio
+                </button>
 
                 {/* Salva Mappa di Bellezza */}
                 <div>
                   <button
                     onClick={() => salvaMappaBellezza(routineRisultato, quizRisposte)}
                     disabled={salvandoMappa || mappaSalvata}
-                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all border ${
                       mappaSalvata
-                        ? 'bg-emerald-600 text-white cursor-default'
-                        : 'bg-white text-stone-900 hover:bg-stone-100 disabled:opacity-60'
+                        ? 'bg-emerald-600 border-emerald-600 text-white cursor-default'
+                        : 'bg-transparent border-stone-600 text-stone-300 hover:border-stone-400 hover:text-white disabled:opacity-60'
                     }`}
                   >
                     {salvandoMappa ? (
                       <><div className="w-4 h-4 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" /> Salvataggio...</>
                     ) : mappaSalvata ? (
-                      <>✓ Mappa salvata!</>
+                      <>✓ Salvato nel tuo Diario di Bellezza!</>
                     ) : (
-                      <>💾 Salva la mia Mappa di Bellezza</>
+                      <>Salva nel mio Diario di Bellezza</>
                     )}
                   </button>
-                  {!mappaSalvata && (
-                    <p className="text-xs text-stone-400 text-center mt-2">
-                      La troverai nella sezione "I miei servizi" del tuo portale personale.
+                  {mappaSalvata && (
+                    <p className="text-xs text-emerald-400 text-center mt-2">
+                      Troverai sempre questa mappa nella tua Area Personale. Mostrala alla tua Stylist durante il prossimo appuntamento in salone!
                     </p>
                   )}
                 </div>
-
-                {/* Prenota */}
-                <button
-                  onClick={() => setStep('parrucchiere')}
-                  className="w-full py-3.5 rounded-xl font-bold text-sm bg-emerald-500 text-white hover:bg-emerald-400 transition-all"
-                >
-                  Prenota la tua consulenza o il tuo servizio
-                </button>
               </div>
 
               <button
                 onClick={() => { setQuizStep(0); setQuizRisposte([]); setMappaSalvata(false); setStep('quiz_capelli'); }}
                 className="w-full py-3 text-sm text-stone-400 hover:text-stone-600 underline transition-colors"
               >
-                Rifai il quiz
+                Indietro — Rifai il quiz
               </button>
             </div>
           );
@@ -3217,95 +3232,160 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
         {/* STEP: I nostri prodotti */}
         {step === 'nostri_prodotti' && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 mb-2">
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
               <button onClick={() => setStep('scelta')} className="w-9 h-9 flex items-center justify-center rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-100 transition-colors flex-shrink-0">
                 <ChevronLeft size={18} />
               </button>
               <div>
-                <p className="text-xl font-bold text-stone-800">I nostri prodotti</p>
-                <p className="text-sm text-stone-400">Scopri i prodotti del salone</p>
+                <p className="text-xl font-bold text-stone-800">I Nostri Prodotti</p>
+                <p className="text-sm text-stone-400">Catalogo e routine personalizzata</p>
               </div>
             </div>
 
-            {/* Barra di ricerca */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Cerca prodotto o marca..."
-                value={prodottiFiltro}
-                onChange={e => setProdottiFiltro(e.target.value)}
-                className="w-full bg-stone-100 rounded-2xl px-4 py-3 text-sm text-stone-700 placeholder-stone-400 outline-none focus:ring-2 focus:ring-emerald-400 pr-10"
-              />
-              {prodottiFiltro && (
-                <button onClick={() => setProdottiFiltro('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
-                  <X size={16} />
-                </button>
+            {/* SEZIONE A — Catalogo */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 bg-emerald-100 rounded-md flex items-center justify-center">
+                  <TrendingUp size={13} className="text-emerald-600" />
+                </div>
+                <p className="text-sm font-bold text-stone-700 uppercase tracking-wide">Catalogo Prodotti</p>
+              </div>
+
+              <div className="relative mb-3">
+                <input
+                  type="text"
+                  placeholder="Cerca prodotto o marca..."
+                  value={prodottiFiltro}
+                  onChange={e => setProdottiFiltro(e.target.value)}
+                  className="w-full bg-stone-100 rounded-2xl px-4 py-3 text-sm text-stone-700 placeholder-stone-400 outline-none focus:ring-2 focus:ring-emerald-400 pr-10"
+                />
+                {prodottiFiltro && (
+                  <button onClick={() => setProdottiFiltro('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              {loadingNostralProdotti && (
+                <div className="flex items-center justify-center py-10">
+                  <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                </div>
               )}
-            </div>
 
-            {loadingNostralProdotti && (
-              <div className="flex items-center justify-center py-10">
-                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            )}
+              {nostralProdottiError && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
+                  <p className="text-sm text-red-600 mb-3">{nostralProdottiError}</p>
+                  <button onClick={loadNovstralProdotti} className="text-sm font-semibold text-red-700 underline">Riprova</button>
+                </div>
+              )}
 
-            {nostralProdottiError && (
-              <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
-                <p className="text-sm text-red-600 mb-3">{nostralProdottiError}</p>
-                <button onClick={loadNovstralProdotti} className="text-sm font-semibold text-red-700 underline">Riprova</button>
-              </div>
-            )}
-
-            {!loadingNostralProdotti && !nostralProdottiError && (() => {
-              const q = prodottiFiltro.toLowerCase();
-              const filtered = nostralProdotti.filter(p =>
-                !q || p.nome.toLowerCase().includes(q) || (p.marca ?? '').toLowerCase().includes(q) || (p.categoria ?? '').toLowerCase().includes(q)
-              );
-
-              if (filtered.length === 0) {
+              {!loadingNostralProdotti && !nostralProdottiError && (() => {
+                const q = prodottiFiltro.toLowerCase();
+                const filtered = nostralProdotti.filter(p =>
+                  !q || p.nome.toLowerCase().includes(q) || (p.marca ?? '').toLowerCase().includes(q) || (p.categoria ?? '').toLowerCase().includes(q)
+                );
+                if (filtered.length === 0) {
+                  return <div className="text-center py-8"><p className="text-stone-400 text-sm">{prodottiFiltro ? 'Nessun prodotto trovato.' : 'Nessun prodotto disponibile.'}</p></div>;
+                }
+                const byCategoria: Record<string, typeof filtered> = {};
+                filtered.forEach(p => {
+                  const cat = p.categoria ?? 'Altro';
+                  if (!byCategoria[cat]) byCategoria[cat] = [];
+                  byCategoria[cat].push(p);
+                });
                 return (
-                  <div className="text-center py-10">
-                    <p className="text-stone-400 text-sm">{prodottiFiltro ? 'Nessun prodotto trovato.' : 'Nessun prodotto disponibile.'}</p>
+                  <div className="space-y-4">
+                    {Object.entries(byCategoria).map(([cat, prodotti]) => (
+                      <div key={cat}>
+                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 px-1">{cat}</p>
+                        <div className="space-y-2">
+                          {prodotti.map(p => (
+                            <div key={p.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-3">
+                              {p.foto_url ? (
+                                <img src={p.foto_url} alt={p.nome} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-stone-100" />
+                              ) : (
+                                <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                                  <TrendingUp size={16} className="text-stone-400" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-stone-800 text-sm leading-tight">{p.nome}</p>
+                                {p.marca && <p className="text-xs text-stone-400 mt-0.5">{p.marca}</p>}
+                                {p.note && <p className="text-xs text-stone-500 mt-1 leading-relaxed">{p.note}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 );
-              }
+              })()}
+            </div>
 
-              // Raggruppa per categoria
-              const byCategoria: Record<string, typeof filtered> = {};
-              filtered.forEach(p => {
-                const cat = p.categoria ?? 'Altro';
-                if (!byCategoria[cat]) byCategoria[cat] = [];
-                byCategoria[cat].push(p);
-              });
-
-              return (
-                <div className="space-y-5">
-                  {Object.entries(byCategoria).map(([cat, prodotti]) => (
-                    <div key={cat}>
-                      <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 px-1">{cat}</p>
-                      <div className="space-y-2">
-                        {prodotti.map(p => (
-                          <div key={p.id} className="bg-white border border-stone-200 rounded-2xl p-4 flex items-start gap-4">
-                            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                              <TrendingUp size={18} className="text-emerald-500" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-stone-800 text-sm leading-tight">{p.nome}</p>
-                              {p.marca && <p className="text-xs text-stone-400 mt-0.5">{p.marca}</p>}
-                              {p.note && <p className="text-xs text-stone-500 mt-1 leading-relaxed">{p.note}</p>}
-                            </div>
-                            {p.prezzo_vendita != null && (
-                              <span className="text-sm font-bold text-emerald-600 flex-shrink-0">€{p.prezzo_vendita.toFixed(2)}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+            {/* SEZIONE B — Hair Quiz */}
+            <div className="border-t border-stone-100 pt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-6 h-6 bg-amber-100 rounded-md flex items-center justify-center">
+                  <Star size={13} className="text-amber-600" />
                 </div>
-              );
-            })()}
+                <p className="text-sm font-bold text-stone-700 uppercase tracking-wide">Hair Quiz</p>
+              </div>
+
+              {mappaBellezza && (mappaBellezza.shampoo || mappaBellezza.maschera || mappaBellezza.finish) ? (
+                <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-2xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-stone-700">
+                    <p className="text-sm font-bold text-white">Il tuo Diario di Bellezza</p>
+                    <p className="text-xs text-stone-400 mt-0.5">La tua routine personalizzata salvata</p>
+                  </div>
+                  <div className="divide-y divide-stone-700">
+                    {[
+                      { label: 'STEP 1 — Detergi', emoji: '🚿', p: mappaBellezza.shampoo },
+                      { label: 'STEP 2 — Nutri', emoji: '💚', p: mappaBellezza.maschera },
+                      { label: 'STEP 3 — Proteggi', emoji: '✨', p: mappaBellezza.finish },
+                    ].filter(s => s.p).map((s, i) => (
+                      <div key={i} className="flex items-center gap-3 px-4 py-3">
+                        {s.p!.foto_url ? (
+                          <img src={s.p!.foto_url} alt={s.p!.nome} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                        ) : (
+                          <span className="text-lg flex-shrink-0">{s.emoji}</span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">{s.label}</p>
+                          <p className="text-sm font-semibold text-white leading-tight truncate">{s.p!.nome}</p>
+                          {s.p!.marca && <p className="text-xs text-stone-400">{s.p!.marca}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-5 py-4">
+                    <button
+                      onClick={() => { loadNovstralProdotti(); setQuizStep(0); setQuizRisposte([]); setMappaSalvata(false); setStep('quiz_capelli'); }}
+                      className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-amber-500 hover:bg-amber-400 transition-colors"
+                    >
+                      Aggiorna la mia Mappa
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-2xl px-5 py-6 text-center space-y-4">
+                  <div className="w-14 h-14 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto">
+                    <span className="text-2xl">💆</span>
+                  </div>
+                  <div>
+                    <p className="font-bold text-white text-base">Scopri la tua routine Hair Care</p>
+                    <p className="text-sm text-stone-400 mt-1">8 domande per una routine professionale su misura</p>
+                  </div>
+                  <button
+                    onClick={() => { loadNovstralProdotti(); setQuizStep(0); setQuizRisposte([]); setMappaSalvata(false); setStep('quiz_capelli'); }}
+                    className="w-full py-3.5 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-400 transition-colors"
+                  >
+                    Inizia il Quiz Capelli — è gratis
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

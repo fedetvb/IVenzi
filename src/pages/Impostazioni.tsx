@@ -22,17 +22,26 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   const [sub, setSub] = useState<SubPage>(null);
   const [msgOpen, setMsgOpen] = useState(false);
   const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
+  const [hairQuizAttivo, setHairQuizAttivo] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     getImpostazione('whatsapp_avviso_disabilitato').then(v => {
       setWhatsappDisabilitato(v === 'true');
     });
+    getImpostazione('hair_quiz_attivo').then(v => {
+      setHairQuizAttivo(v === 'true');
+    });
   }, []);
 
   async function toggleWhatsapp(val: boolean) {
     setWhatsappDisabilitato(val);
     await setImpostazione('whatsapp_avviso_disabilitato', val ? 'true' : 'false', user?.id);
+  }
+
+  async function toggleHairQuiz(val: boolean) {
+    setHairQuizAttivo(val);
+    await setImpostazione('hair_quiz_attivo', val ? 'true' : 'false', user?.id);
   }
 
   if (sub === 'tema') return <PaginaTema onBack={() => setSub(null)} />;
@@ -95,6 +104,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     show('Orari Salone', 'Giorni di apertura e orari di lavoro') ||
     show('Password', 'Gestisci le password di accesso') ||
     show('Prenotazioni Online', 'Attiva disattiva pagina pubblica prenotazione') ||
+    show('Hair Quiz Clienti', 'Quiz capelli portale clienti routine personalizzata prodotti') ||
     show('Promemoria Convalida Fiches', 'Configura giorni e orario promemoria') ||
     show('QR Code Registrazione Clienti', 'Stampa il QR code nuove clienti') ||
     show('Tema e Personalizzazione', 'Colori sidebar icona logo') ||
@@ -467,6 +477,28 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
+
+        {/* Hair Quiz Clienti — toggle inline */}
+        <div
+          style={show('Hair Quiz Clienti', 'Quiz capelli portale clienti routine personalizzata prodotti') ? {} : {display:'none'}}
+          className="w-full flex items-center gap-4 px-6 py-4"
+        >
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${hairQuizAttivo ? 'bg-amber-100' : 'bg-stone-100'}`}>
+            <Star size={18} className={hairQuizAttivo ? 'text-amber-500' : 'text-stone-400'} />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Hair Quiz Clienti</p>
+            <p className="text-xs text-stone-400 mt-0.5">
+              {hairQuizAttivo ? 'Quiz capelli attivo nel portale clienti' : 'Quiz capelli non attivo nel portale clienti'}
+            </p>
+          </div>
+          <button
+            onClick={() => toggleHairQuiz(!hairQuizAttivo)}
+            className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${hairQuizAttivo ? 'bg-amber-500' : 'bg-stone-200'}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${hairQuizAttivo ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
 
         {/* Promemoria Convalida Fiches */}
         <button
@@ -1133,6 +1165,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [localPage, setLocalPage] = useState<null | 'annuncio'>(null);
   const [attiva, setAttiva] = useState(true);
   const [portaleNascosto, setPortaleNascosto] = useState(false);
+  const [hairQuizAttivoLocal, setHairQuizAttivoLocal] = useState(false);
   const [nomePwa, setNomePwa] = useState('');
   const [msgConferma, setMsgConferma] = useState('Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!');
   const [msgRifiuto, setMsgRifiuto] = useState('Ciao {nome}, purtroppo non possiamo confermare la prenotazione richiesta. Ti chiediamo di contattarci per trovare un orario alternativo.');
@@ -1165,9 +1198,11 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       getImpostazione('suono_richiesta_appuntamento'),
       getImpostazione('volume_notifiche'),
       getImpostazione('nome_pwa_prenotazione'),
-    ]).then(([a, pn, mc, mr, logo, ind, suono, vol, nomePwaVal]) => {
+      getImpostazione('hair_quiz_attivo'),
+    ]).then(([a, pn, mc, mr, logo, ind, suono, vol, nomePwaVal, hq]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (pn !== null) setPortaleNascosto(pn === 'true');
+      if (hq !== null) setHairQuizAttivoLocal(hq === 'true');
       if (mc) setMsgConferma(mc);
       if (mr) setMsgRifiuto(mr);
       if (logo) setQrLogoUrl(logo);
@@ -1261,6 +1296,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       setImpostazione('suono_richiesta_appuntamento', suonoRichiesta, user?.id),
       setImpostazione('volume_notifiche', String(volumeNotifiche), user?.id),
       setImpostazione('nome_pwa_prenotazione', nomePwa.trim(), user?.id),
+      setImpostazione('hair_quiz_attivo', hairQuizAttivoLocal ? 'true' : 'false', user?.id),
     ]);
     setSaving(false);
     setSaved(true);
@@ -1596,6 +1632,34 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
             <span>Silenzioso</span>
             <span>Alto</span>
           </div>
+        </div>
+      </div>
+
+      {/* Hair Quiz Clienti */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center">
+            <Star size={15} className="text-amber-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-stone-800">Hair Quiz Clienti</p>
+            <p className="text-xs text-stone-400">Quiz personalizzato nel portale prenotazioni</p>
+          </div>
+        </div>
+        <p className="text-xs text-stone-500 leading-relaxed">
+          Permetti alle clienti di rispondere a un breve quiz per ricevere una routine di bellezza personalizzata con i tuoi prodotti. I risultati vengono salvati nel loro profilo e visibili nella scheda cliente.
+        </p>
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-sm font-medium text-stone-700">
+            {hairQuizAttivoLocal ? 'Attivo' : 'Non attivo'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setHairQuizAttivoLocal(v => !v)}
+            className={`w-12 h-6 rounded-full transition-colors flex items-center px-1 ${hairQuizAttivoLocal ? 'bg-amber-500' : 'bg-stone-300'}`}
+          >
+            <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${hairQuizAttivoLocal ? 'translate-x-6' : ''}`} />
+          </button>
         </div>
       </div>
 
