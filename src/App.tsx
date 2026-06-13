@@ -237,15 +237,18 @@ export default function App() {
     checkStartupAlerts();
   }, []);
 
-  // Banner appuntamenti in forse — check ogni minuto all'orario configurato
+  // Banner appuntamenti in forse — check ogni 20 secondi, spara una volta per minuto configurato
   useEffect(() => {
     const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    let lastFiredMinute = '';
     const check = async () => {
       const attivo = await getImpostazione('banner_in_forse_attivo');
       if (attivo === 'false') return;
       const orario = await getImpostazione('orario_avviso_in_forse') ?? '18:00';
       const nowIt = fmt.format(new Date());
       if (nowIt !== orario) return;
+      if (lastFiredMinute === nowIt) return; // already fired this minute
+      lastFiredMinute = nowIt;
       const dopodomani = new Date(Date.now() + 2 * 86400000);
       const ddKey = dopodomani.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
       const lsKey = `avviso_in_forse_shown_${ddKey}`;
@@ -267,7 +270,7 @@ export default function App() {
       setShowInForseBanner(true);
     };
     check();
-    const id = setInterval(check, 60_000);
+    const id = setInterval(check, 20_000);
     return () => clearInterval(id);
   }, []);
 

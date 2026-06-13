@@ -101,12 +101,15 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
 
   useEffect(() => {
     const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    let lastFiredMinute = '';
     const check = async () => {
       const attivo = await getImpostazione('banner_in_forse_attivo');
       if (attivo === 'false') return;
       const orario = await getImpostazione('orario_avviso_in_forse') ?? '18:00';
       const nowIt = fmt.format(new Date());
       if (nowIt !== orario) return;
+      if (lastFiredMinute === nowIt) return;
+      lastFiredMinute = nowIt;
       const dopodomani = addDays(new Date(), 2);
       const ddKey = dopodomani.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
       const lsKey = `avviso_in_forse_shown_${ddKey}`;
@@ -118,7 +121,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
       setShowInForseBanner(true);
     };
     check();
-    const id = setInterval(check, 60_000);
+    const id = setInterval(check, 20_000);
     return () => clearInterval(id);
   }, []);
 
