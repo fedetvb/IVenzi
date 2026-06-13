@@ -23,6 +23,7 @@ import {
   Trash2,
   BookOpen,
   Download,
+  Globe,
   WifiOff,
   RefreshCw,
   Droplets,
@@ -42,7 +43,7 @@ interface PingLogRow {
   tipo: string;
 }
 
-type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
+type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida' | 'prodotti_online';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -71,6 +72,7 @@ const navItems = [
   { id: 'statistiche' as Page, label: 'Statistiche', icon: BarChart2 },
   { id: 'comunicazioni' as Page, label: 'Comunicazioni', icon: MessageSquare },
   { id: 'magazzino' as Page, label: 'Magazzino', icon: Package },
+  { id: 'prodotti_online' as Page, label: 'Prodotti Online', icon: Globe },
   { id: 'parrucchieri' as Page, label: 'Parrucchieri', icon: UserCog },
   { id: 'impostazioni' as Page, label: 'Impostazioni', icon: Settings },
   { id: 'cestino' as Page, label: 'Cestino', icon: Trash2 },

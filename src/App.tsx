@@ -17,6 +17,7 @@ import Magazzino from './pages/Magazzino';
 import Parrucchieri from './pages/Parrucchieri';
 import Cestino from './pages/Cestino';
 import Guida from './pages/Guida';
+import ProdottiOnline from './pages/ProdottiOnline';
 import StatisticheGate from './components/StatisticheGate';
 import BirthdayModal from './components/BirthdayModal';
 import Login from './pages/Login';
@@ -34,7 +35,7 @@ import { flushPendingSync } from './lib/offlineFetch';
 // Registra il push immediato una volta sola al caricamento del modulo
 registerPushRowNow(pushRowNow);
 
-type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida';
+type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida' | 'prodotti_online';
 
 interface ClienteCompleanno {
   id: string;
@@ -1504,6 +1505,7 @@ export default function App() {
         )}
         {page === 'comunicazioni' && <Comunicazioni />}
         {page === 'magazzino' && <Magazzino />}
+        {page === 'prodotti_online' && <ProdottiOnline />}
         {page === 'parrucchieri' && <Parrucchieri />}
         {page === 'impostazioni' && <Impostazioni onTestReminder={triggerReminderTest} onTestInForse={triggerInForseTest} onTestPromApp={triggerPromAppTest} onTestCompleanno={triggerCompleannoTest} />}
         {page === 'cestino' && <Cestino />}
