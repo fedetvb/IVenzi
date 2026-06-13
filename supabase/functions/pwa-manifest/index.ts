@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/manifest+json",
-      "Cache-Control": "public, max-age=300",
+      "Cache-Control": "public, max-age=60",
     },
   });
 });
