@@ -1,15 +1,32 @@
 /**
- * Sincronizzazione bidirezionale SQLite locale <-> Supabase.
+ * Sync engine unificato — Local-First, piattaforma-agnostico.
  *
- * - syncSupabaseToLocal: scarica tutto da Supabase e aggiorna il SQLite locale
- * - syncLocalToSupabase: carica le righe con _dirty=1 e le scrive su Supabase
- * - pushRowNow: push immediato di una singola riga dopo una scrittura locale
+ * Regola di conflitto: l'ultima modifica vince (Last-Write-Wins via updated_at ISO).
+ *
+ * Flusso:
+ *   1. localToRemote  — invia le righe dirty (locale più recente)
+ *   2. remoteToLocal  — scarica le righe remote più recenti del locale e le applica
+ *
+ * Piattaforme:
+ *   - Electron  → SQLite locale (via window.electronAPI.db) + flag _dirty
+ *   - Browser   → IndexedDB local_rows store + flag dirty
  */
 
 import { supabase } from './supabase';
 import { isElectron, compressImage } from './localDb';
-import { setTableCache, getTableCache } from './indexedDb';
+import {
+  setTableCache,
+  getTableCache,
+  localRowGetDirty,
+  localRowGetAll,
+  localRowMarkSynced,
+  localRowApplyRemote,
+  localRowBulkApplyRemote,
+  localRowDelete,
+  localRowUpsert,
+} from './indexedDb';
 
+// Tabelle soggette a sincronizzazione bidirezionale
 const SYNC_TABLES: string[] = [
   'clienti',
   'parrucchieri',
@@ -41,7 +58,28 @@ const SYNC_TABLES: string[] = [
   'gift_pass',
 ];
 
-// ─── Helper: scarica URL immagine e restituisce data URI base64 ───────────────
+// Colonne interne che non vengono mai inviate a Supabase
+const LOCAL_ONLY_COLS = new Set([
+  '_dirty', 'synced_at',
+  'foto_base64', 'foto_prima_base64', 'foto_dopo_base64', 'foto_base64_pendente',
+]);
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function stripLocalCols(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (!LOCAL_ONLY_COLS.has(k)) out[k] = v;
+  }
+  return out;
+}
+
+/** Confronto timestamp: true se a è più recente di b (o b è assente). */
+function isNewer(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (!a) return false;
+  if (!b) return true;
+  return a > b; // ISO strings are lexicographically comparable
+}
 
 async function fetchImageAsBase64(url: string): Promise<string> {
   try {
@@ -59,7 +97,7 @@ async function fetchImageAsBase64(url: string): Promise<string> {
   }
 }
 
-// ─── Supabase -> IndexedDB (prefetch per uso offline senza SQLite) ────────────
+// ─── Prefetch → IndexedDB (PWA / browser offline bootstrap) ──────────────────
 
 export async function prefetchToIndexedDb(userId: string): Promise<void> {
   for (const table of SYNC_TABLES) {
@@ -68,8 +106,11 @@ export async function prefetchToIndexedDb(userId: string): Promise<void> {
         .from(table)
         .select('*')
         .eq('user_id', userId);
-      if (error) { console.warn(`[Prefetch] ${table}:`, error.message); continue; }
-      await setTableCache(table, userId, data ?? []);
+      if (error || !data) { if (error) console.warn(`[Prefetch] ${table}:`, error.message); continue; }
+
+      const rows = data as Record<string, unknown>[];
+      // Usa localRowBulkApplyRemote: popola sia local_rows che table_cache
+      await localRowBulkApplyRemote(table, userId, rows);
     } catch (e) {
       console.warn(`[Prefetch] Errore ${table}:`, e);
     }
@@ -80,14 +121,13 @@ export async function getOfflineTableData(table: string, userId: string): Promis
   return (await getTableCache(table, userId)) ?? [];
 }
 
-// ─── Supabase -> SQLite (download completo) + IndexedDB ──────────────────────
+// ─── ELECTRON: Supabase → SQLite (download con confronto timestamp) ───────────
 
 export async function syncSupabaseToLocal(userId: string): Promise<void> {
   if (!isElectron() || !window.electronAPI?.db) return;
 
   for (const table of SYNC_TABLES) {
     try {
-      // Carica gli ID in attesa di cancellazione per non re-scaricarli da Supabase
       const pdRes = await window.electronAPI.db.getPendingDeletes(table);
       const pendingDeleteIds = new Set<string>(
         ((pdRes.ok && pdRes.data as unknown[]) || []).map((p: unknown) => (p as { record_id: string }).record_id)
@@ -103,69 +143,81 @@ export async function syncSupabaseToLocal(userId: string): Promise<void> {
         continue;
       }
 
-      // Filtra le righe che sono pendenti di cancellazione locale
-      const filteredData = pendingDeleteIds.size > 0
-        ? (data as Record<string, unknown>[]).filter(r => !pendingDeleteIds.has(r.id as string))
-        : (data as Record<string, unknown>[]);
+      const remoteRows = (data as Record<string, unknown>[])
+        .filter(r => !pendingDeleteIds.has(r.id as string));
 
-      // Salva sempre in IndexedDB come fallback (solo righe filtrate)
-      await setTableCache(table, userId, filteredData);
+      // Salva in IndexedDB come fallback PWA
+      await setTableCache(table, userId, remoteRows);
 
-      if (filteredData.length === 0) continue;
+      if (remoteRows.length === 0) continue;
 
-      // Scarica immagini come base64 per uso offline
-      const rows = await Promise.all(
-        filteredData.map(async (row) => {
+      // Risoluzione conflitti timestamp-based:
+      // recupera le righe dirty locali e crea una mappa id → updated_at
+      const dirtyRes = await window.electronAPI.db.getDirty(table);
+      const dirtyMap = new Map<string, string>();
+      if (dirtyRes.ok && dirtyRes.data) {
+        for (const r of dirtyRes.data as Record<string, unknown>[]) {
+          if (r.id && r.updated_at) dirtyMap.set(r.id as string, r.updated_at as string);
+        }
+      }
+
+      // Non sovrascrivere righe locali più recenti di quelle remote
+      const rowsToApply = remoteRows.filter(r => {
+        const localTs = dirtyMap.get(r.id as string);
+        if (!localTs) return true;
+        return !isNewer(localTs, r.updated_at as string);
+      });
+
+      if (rowsToApply.length === 0) continue;
+
+      // Arricchisci immagini per uso offline
+      const enriched = await Promise.all(
+        rowsToApply.map(async (row) => {
           if (table === 'clienti' && row.foto_url && typeof row.foto_url === 'string') {
-            const b64 = await fetchImageAsBase64(row.foto_url);
-            return { ...row, foto_base64: b64 };
+            return { ...row, foto_base64: await fetchImageAsBase64(row.foto_url) };
           }
           if (table === 'schede_colore') {
             const updates: Record<string, unknown> = { ...row };
-            if (row.foto_prima_url && typeof row.foto_prima_url === 'string') {
-              updates.foto_prima_base64 = await fetchImageAsBase64(row.foto_prima_url as string);
-            }
-            if (row.foto_dopo_url && typeof row.foto_dopo_url === 'string') {
-              updates.foto_dopo_base64 = await fetchImageAsBase64(row.foto_dopo_url as string);
-            }
+            if (row.foto_prima_url) updates.foto_prima_base64 = await fetchImageAsBase64(row.foto_prima_url as string);
+            if (row.foto_dopo_url) updates.foto_dopo_base64 = await fetchImageAsBase64(row.foto_dopo_url as string);
             return updates;
           }
           return row;
         })
       );
 
-      await window.electronAPI.db.syncUpsert({ table, rows });
+      await window.electronAPI.db.syncUpsert({ table, rows: enriched });
     } catch (e) {
       console.warn(`[Sync] Errore download ${table}:`, e);
     }
   }
 }
 
-// ─── SQLite -> Supabase (upload righe dirty) ──────────────────────────────────
+// ─── ELECTRON: SQLite → Supabase (upload righe dirty con timestamp-check) ─────
 
 export async function syncLocalToSupabase(userId: string): Promise<void> {
   if (!isElectron() || !window.electronAPI?.db) return;
 
-  // Prima: carica le foto che erano state salvate offline come pendenti
+  // Prima: carica le foto pendenti offline
   await _uploadPendingPhotos(userId);
 
   for (const table of SYNC_TABLES) {
+    // Upload righe dirty
     try {
       const res = await window.electronAPI.db.getDirty(table);
       if (res.ok && res.data && (res.data as unknown[]).length > 0) {
-        await _pushDirtyRows(table, res.data as Record<string, unknown>[], userId);
+        await _pushDirtyRowsElectron(table, res.data as Record<string, unknown>[], userId);
       }
     } catch (e) {
       console.warn(`[Sync] Errore upload ${table}:`, e);
     }
 
-    // Propaga le cancellazioni pendenti a Supabase
+    // Propaga cancellazioni pendenti
     try {
       const pdRes = await window.electronAPI.db.getPendingDeletes(table);
       if (!pdRes.ok || !pdRes.data || (pdRes.data as unknown[]).length === 0) continue;
       const pending = pdRes.data as { id: string; record_id: string }[];
-      const recordIds = pending.map(p => p.record_id);
-      const { error } = await supabase.from(table).delete().in('id', recordIds);
+      const { error } = await supabase.from(table).delete().in('id', pending.map(p => p.record_id));
       if (!error) {
         await window.electronAPI.db.markDeletesSynced(pending.map(p => p.id));
       } else {
@@ -177,42 +229,190 @@ export async function syncLocalToSupabase(userId: string): Promise<void> {
   }
 }
 
-// ─── Push immediato di una singola riga appena scritta ────────────────────────
+// ─── BROWSER: IndexedDB → Supabase (upload righe dirty con timestamp-check) ───
 
-/**
- * Chiamato subito dopo ogni INSERT/UPDATE/UPSERT in Electron.
- * Fire-and-forget: se fallisce, la riga resta dirty e viene ripresa dal sync periodico.
- */
+export async function syncBrowserToSupabase(userId: string): Promise<void> {
+  if (isElectron()) return;
+
+  for (const table of SYNC_TABLES) {
+    try {
+      const dirtyRows = await localRowGetDirty(table, userId);
+      if (dirtyRows.length === 0) continue;
+
+      for (const entry of dirtyRows) {
+        try {
+          if (entry.deleted) {
+            const { error } = await supabase.from(table).delete().eq('id', entry.id);
+            if (!error) await localRowMarkSynced(table, userId, entry.id);
+            else console.warn(`[Sync Browser] Delete ${table} id=${entry.id}:`, error.message);
+          } else {
+            // Controlla il timestamp remoto: se il server è più recente, non sovrascrivere
+            const { data: remote } = await supabase
+              .from(table)
+              .select('id, updated_at')
+              .eq('id', entry.id)
+              .maybeSingle();
+
+            const remoteTs = (remote as Record<string, unknown> | null)?.updated_at as string | undefined;
+            if (isNewer(remoteTs, entry.updated_at)) {
+              const { data: fullRemote } = await supabase.from(table).select('*').eq('id', entry.id).maybeSingle();
+              if (fullRemote) await localRowApplyRemote(table, userId, fullRemote as Record<string, unknown>);
+              continue;
+            }
+
+            const rowToSync = { ...stripLocalCols(entry.data), user_id: userId, updated_at: entry.updated_at };
+            const { error } = await supabase.from(table).upsert(rowToSync, { onConflict: 'id' });
+            if (!error) {
+              await localRowMarkSynced(table, userId, entry.id);
+            } else {
+              console.warn(`[Sync Browser] Upsert ${table} id=${entry.id}:`, error.message);
+            }
+          }
+        } catch (e) {
+          console.warn(`[Sync Browser] Errore riga ${table} id=${entry.id}:`, e);
+        }
+      }
+    } catch (e) {
+      console.warn(`[Sync Browser] Errore tabella ${table}:`, e);
+    }
+  }
+}
+
+// ─── BROWSER: Supabase → IndexedDB (download con timestamp-check) ─────────────
+
+export async function syncSupabaseToBrowser(userId: string): Promise<void> {
+  if (isElectron()) return;
+
+  for (const table of SYNC_TABLES) {
+    try {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error || !data) {
+        if (error) console.warn(`[Sync Browser] Errore lettura ${table}:`, error.message);
+        continue;
+      }
+
+      const remoteRows = data as Record<string, unknown>[];
+      if (remoteRows.length === 0) continue;
+
+      const localRows = await localRowGetAll(table, userId);
+      const localMap = new Map(localRows.map(r => [r.id, r]));
+
+      for (const remoteRow of remoteRows) {
+        const localEntry = localMap.get(remoteRow.id as string);
+        if (!localEntry) {
+          // Riga nuova: applica
+          await localRowApplyRemote(table, userId, remoteRow);
+        } else if (localEntry.dirty === 1) {
+          // Locale dirty: il locale sarà inviato durante syncBrowserToSupabase, non sovrascrivere
+          continue;
+        } else if (isNewer(remoteRow.updated_at as string, localEntry.updated_at)) {
+          // Remote più recente: applica
+          await localRowApplyRemote(table, userId, remoteRow);
+        }
+      }
+
+      // Aggiorna table_cache con la vista finale (righe locali non cancellate)
+      const updatedLocalRows = await localRowGetAll(table, userId);
+      await setTableCache(table, userId, updatedLocalRows.filter(r => !r.deleted).map(r => r.data));
+
+    } catch (e) {
+      console.warn(`[Sync Browser] Errore download ${table}:`, e);
+    }
+  }
+}
+
+// ─── Entry point unificati (chiamati da App.tsx) ──────────────────────────────
+
+export async function syncLocalToRemote(userId: string): Promise<void> {
+  if (isElectron()) {
+    await syncLocalToSupabase(userId);
+  } else {
+    await syncBrowserToSupabase(userId);
+  }
+}
+
+export async function syncRemoteToLocal(userId: string): Promise<void> {
+  if (isElectron()) {
+    await syncSupabaseToLocal(userId);
+  } else {
+    await syncSupabaseToBrowser(userId);
+  }
+}
+
+// ─── Push immediato di una singola riga (fire-and-forget) ────────────────────
+
 export async function pushRowNow(
   table: string,
   row: Record<string, unknown>,
   userId: string
 ): Promise<void> {
-  if (!isElectron() || !navigator.onLine) return;
+  if (!navigator.onLine) return;
   try {
-    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, foto_base64_pendente, ...rest } = row as Record<string, unknown>;
-    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64; void foto_base64_pendente;
-    const rowToSync = { ...rest, user_id: userId };
+    const rowToSync = { ...stripLocalCols(row), user_id: userId };
 
-    const { error } = await supabase
-      .from(table)
-      .upsert(rowToSync, { onConflict: 'id' });
+    // Timestamp-check: non sovrascrivere se Supabase ha una versione più recente
+    if (row.updated_at && row.id) {
+      const { data: remote } = await supabase
+        .from(table)
+        .select('id, updated_at')
+        .eq('id', row.id as string)
+        .maybeSingle();
+      const remoteTs = (remote as Record<string, unknown> | null)?.updated_at as string | undefined;
+      if (isNewer(remoteTs, row.updated_at as string)) {
+        const { data: fullRemote } = await supabase.from(table).select('*').eq('id', row.id as string).maybeSingle();
+        if (fullRemote) {
+          if (isElectron() && window.electronAPI?.db) {
+            await window.electronAPI.db.syncUpsert({ table, rows: [fullRemote] });
+          } else if (!isElectron()) {
+            await localRowApplyRemote(table, userId, fullRemote as Record<string, unknown>);
+          }
+        }
+        return;
+      }
+    }
+
+    const { error } = await supabase.from(table).upsert(rowToSync, { onConflict: 'id' });
 
     if (error) {
       console.warn(`[Sync] Push immediato ${table} fallito:`, error.message);
       return;
     }
 
-    // Marca come sincronizzata
-    if (row.id && window.electronAPI?.db) {
-      await window.electronAPI.db.markSynced(table, [row.id as string]);
+    if (row.id) {
+      if (isElectron() && window.electronAPI?.db) {
+        await window.electronAPI.db.markSynced(table, [row.id as string]);
+      } else if (!isElectron()) {
+        await localRowMarkSynced(table, userId, row.id as string);
+      }
     }
   } catch (e) {
     console.warn(`[Sync] Push immediato ${table} errore:`, e);
   }
 }
 
-// ─── Upload foto pendenti ─────────────────────────────────────────────────────
+// ─── Scrittura locale browser con dirty flag (chiamata da localDb.ts) ─────────
+
+export async function browserLocalWrite(
+  table: string,
+  userId: string,
+  rowData: Record<string, unknown>
+): Promise<void> {
+  if (isElectron()) return;
+  if (!rowData.id) return;
+  const row = { ...rowData, updated_at: rowData.updated_at ?? new Date().toISOString() };
+  await localRowUpsert(table, userId, row, 1);
+}
+
+export async function browserLocalDelete(table: string, userId: string, id: string): Promise<void> {
+  if (isElectron()) return;
+  await localRowDelete(table, userId, id);
+}
+
+// ─── Upload foto pendenti (Electron) ─────────────────────────────────────────
 
 async function _uploadPendingPhotos(userId: string): Promise<void> {
   if (!window.electronAPI?.db) return;
@@ -229,25 +429,18 @@ async function _uploadPendingClientPhotos(userId: string): Promise<void> {
       filters: [{ col: 'foto_base64_pendente', op: 'not_null' }],
     });
     if (!res.ok || !res.data) return;
-
     const rows = (res.data as Record<string, unknown>[]).filter(
       r => r.user_id === userId && r.foto_base64_pendente && typeof r.foto_base64_pendente === 'string' && (r.foto_base64_pendente as string).length > 0
     );
-
     for (const row of rows) {
       try {
         const compressed = await compressImage(row.foto_base64_pendente as string);
         const filename = `clienti/${row.id}.jpg`;
-        const { error: uploadErr } = await supabase.storage
-          .from('foto-clienti')
-          .upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
+        const { error: uploadErr } = await supabase.storage.from('foto-clienti').upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
         if (uploadErr) { console.warn(`[Sync] Upload foto cliente ${row.id}:`, uploadErr.message); continue; }
-
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
-        const newUrl = urlData.publicUrl;
-        await supabase.from('clienti').update({ foto_url: newUrl }).eq('id', row.id as string).eq('user_id', userId);
-        await window.electronAPI.db.update({ table: 'clienti', id: row.id as string, data: { foto_url: newUrl, foto_base64_pendente: '' } });
-        console.log(`[Sync] Foto cliente ${row.id} caricata`);
+        await supabase.from('clienti').update({ foto_url: urlData.publicUrl }).eq('id', row.id as string).eq('user_id', userId);
+        await window.electronAPI.db.update({ table: 'clienti', id: row.id as string, data: { foto_url: urlData.publicUrl, foto_base64_pendente: '' } });
       } catch (e) { console.warn(`[Sync] Errore upload foto cliente ${row.id}:`, e); }
     }
   } catch (e) { console.warn('[Sync] Errore lettura foto clienti pendenti:', e); }
@@ -261,25 +454,19 @@ async function _uploadPendingProductPhotos(userId: string): Promise<void> {
       filters: [{ col: 'foto_base64_pendente', op: 'not_null' }],
     });
     if (!res.ok || !res.data) return;
-
     const rows = (res.data as Record<string, unknown>[]).filter(
       r => r.user_id === userId && r.foto_base64_pendente && typeof r.foto_base64_pendente === 'string' && (r.foto_base64_pendente as string).length > 0
     );
-
     for (const row of rows) {
       try {
         const compressed = await compressImage(row.foto_base64_pendente as string);
         const filename = `prodotti/${userId}/${row.id}.jpg`;
-        const { error: uploadErr } = await supabase.storage
-          .from('foto-clienti')
-          .upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
+        const { error: uploadErr } = await supabase.storage.from('foto-clienti').upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
         if (uploadErr) { console.warn(`[Sync] Upload foto prodotto ${row.id}:`, uploadErr.message); continue; }
-
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
         const newUrl = urlData.publicUrl + '?t=' + Date.now();
         await supabase.from('prodotti_rivendita_catalogo').update({ foto_url: newUrl }).eq('id', row.id as string).eq('user_id', userId);
         await window.electronAPI.db.update({ table: 'prodotti_rivendita_catalogo', id: row.id as string, data: { foto_url: newUrl, foto_base64_pendente: '' } });
-        console.log(`[Sync] Foto prodotto ${row.id} caricata`);
       } catch (e) { console.warn(`[Sync] Errore upload foto prodotto ${row.id}:`, e); }
     }
   } catch (e) { console.warn('[Sync] Errore lettura foto prodotti pendenti:', e); }
@@ -299,49 +486,75 @@ async function _uploadPendingLogoSalone(userId: string): Promise<void> {
     const record = (res.data as Record<string, unknown>[])[0];
     const b64 = record.valore as string;
     if (!b64 || b64.length === 0) return;
-
     try {
       const compressed = await compressImage(b64);
       const path = `logo/${userId}/salone-logo.jpg`;
-      const { error: uploadErr } = await supabase.storage
-        .from('foto-clienti')
-        .upload(path, compressed, { contentType: 'image/jpeg', upsert: true });
+      const { error: uploadErr } = await supabase.storage.from('foto-clienti').upload(path, compressed, { contentType: 'image/jpeg', upsert: true });
       if (uploadErr) { console.warn('[Sync] Upload logo salone pendente:', uploadErr.message); return; }
-
       const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
       const logoUrl = urlData.publicUrl + '?v=' + Date.now();
       await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: logoUrl, user_id: userId }, { onConflict: 'chiave,user_id' });
       await window.electronAPI.db.upsert({ table: 'impostazioni', data: { chiave: 'logo_salone_url', valore: logoUrl, user_id: userId }, onConflict: 'chiave,user_id', userId });
       await window.electronAPI.db.upsert({ table: 'impostazioni', data: { chiave: 'logo_salone_b64_pendente', valore: '', user_id: userId }, onConflict: 'chiave,user_id', userId });
-      console.log('[Sync] Logo salone pendente caricato');
     } catch (e) { console.warn('[Sync] Errore upload logo salone pendente:', e); }
   } catch (e) { console.warn('[Sync] Errore lettura logo salone pendente:', e); }
 }
 
-// ─── Push di piu' righe dirty ─────────────────────────────────────────────────
+// ─── Push di più righe dirty (Electron, con timestamp-check bulk) ─────────────
 
-async function _pushDirtyRows(
+async function _pushDirtyRowsElectron(
   table: string,
   dirtyRows: Record<string, unknown>[],
   userId: string
 ): Promise<void> {
-  const rows = dirtyRows.map(row => {
-    const { _dirty, synced_at, foto_base64, foto_prima_base64, foto_dopo_base64, foto_base64_pendente, ...rest } = row;
-    void _dirty; void synced_at; void foto_base64; void foto_prima_base64; void foto_dopo_base64; void foto_base64_pendente;
-    return { ...rest, user_id: userId };
-  });
+  const rows = dirtyRows.map(row => ({ ...stripLocalCols(row), user_id: userId }));
+  const ids = rows.map(r => r.id as string).filter(Boolean);
 
-  const { error } = await supabase
-    .from(table)
-    .upsert(rows, { onConflict: 'id' });
+  // Timestamp-check bulk
+  const remoteMap = new Map<string, string>();
+  try {
+    const { data: remoteCheck } = await supabase
+      .from(table)
+      .select('id, updated_at')
+      .in('id', ids);
+    if (remoteCheck) {
+      for (const r of remoteCheck as Record<string, unknown>[]) {
+        if (r.id && r.updated_at) remoteMap.set(r.id as string, r.updated_at as string);
+      }
+    }
+  } catch { /* ignora */ }
 
-  if (error) {
-    console.warn(`[Sync] Errore push ${table}:`, error.message);
-    return;
+  const toUpsert: Record<string, unknown>[] = [];
+  const toUpdateLocal: string[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const localTs = dirtyRows[i].updated_at as string | undefined;
+    const remoteTs = remoteMap.get(rows[i].id as string);
+    if (isNewer(remoteTs, localTs)) {
+      toUpdateLocal.push(rows[i].id as string);
+    } else {
+      toUpsert.push(rows[i]);
+    }
   }
 
-  const ids = rows.map(r => r.id as string).filter(Boolean);
-  if (ids.length > 0 && window.electronAPI?.db) {
-    await window.electronAPI.db.markSynced(table, ids);
+  if (toUpsert.length > 0) {
+    const { error } = await supabase.from(table).upsert(toUpsert, { onConflict: 'id' });
+    if (error) {
+      console.warn(`[Sync] Errore push ${table}:`, error.message);
+    } else {
+      const syncedIds = toUpsert.map(r => r.id as string).filter(Boolean);
+      if (syncedIds.length > 0 && window.electronAPI?.db) {
+        await window.electronAPI.db.markSynced(table, syncedIds);
+      }
+    }
+  }
+
+  if (toUpdateLocal.length > 0 && window.electronAPI?.db) {
+    try {
+      const { data: freshRows } = await supabase.from(table).select('*').in('id', toUpdateLocal);
+      if (freshRows && freshRows.length > 0) {
+        await window.electronAPI.db.syncUpsert({ table, rows: freshRows });
+      }
+    } catch { /* best-effort */ }
   }
 }

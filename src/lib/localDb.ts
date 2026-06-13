@@ -4,11 +4,27 @@
  * - In Electron: usa SQLite locale via IPC. Ogni scrittura viene inviata
  *   immediatamente a Supabase in background (fire-and-forget). Se offline,
  *   resta dirty e viene ripresa dal sync periodico.
- * - In browser: usa Supabase direttamente (comportamento invariato).
+ * - In browser: scrive prima in IndexedDB (local_rows, dirty=1) poi su Supabase.
+ *   Se offline, resta dirty e viene inviata da syncBrowserToSupabase al ritorno online.
  */
 
 import { supabase } from './supabase';
 import { getTableCache, setTableCache, deleteTableCache, addPendingMutation } from './indexedDb';
+
+// Import lazy per evitare dipendenza circolare (sync.ts importa localDb.ts)
+let _browserLocalWrite: ((table: string, userId: string, row: Record<string, unknown>) => Promise<void>) | null = null;
+let _browserLocalDelete: ((table: string, userId: string, id: string) => Promise<void>) | null = null;
+
+export function registerBrowserLocalOps(
+  write: typeof _browserLocalWrite,
+  del: typeof _browserLocalDelete
+) {
+  _browserLocalWrite = write;
+  _browserLocalDelete = del;
+}
+
+/** Timestamp ISO corrente — injettato su ogni scrittura browser per garantire updated_at. */
+function nowIso(): string { return new Date().toISOString(); }
 
 // ─── Helpers per aggiornamento cache offline ──────────────────────────────────
 
@@ -249,19 +265,28 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
-  // LOCAL-FIRST: inserisce subito in IndexedDB, poi invia a Supabase in background.
-  // Se offline, la mutazione viene accodata da offlineFetch e inviata al ritorno online.
+  // LOCAL-FIRST browser: scrive prima in IndexedDB (dirty=1), poi tenta Supabase.
   const localId = (args.data.id as string | undefined) || crypto.randomUUID();
-  const localRow = { id: localId, created_at: new Date().toISOString(), ...args.data };
-  if (_currentUserId) await cacheInsert(args.table, _currentUserId, localRow);
+  const ts = nowIso();
+  const localRow = { id: localId, created_at: ts, updated_at: ts, ...args.data };
+  // Scrivi nel local_rows store con dirty=1 per alimentare il sync timestamp-based
+  if (_currentUserId && _browserLocalWrite) {
+    await _browserLocalWrite(args.table, _currentUserId, localRow);
+  } else if (_currentUserId) {
+    await cacheInsert(args.table, _currentUserId, localRow);
+  }
 
   try {
-    const { data, error } = await supabase.from(args.table).insert({ ...args.data, id: localId }).select();
+    const { data, error } = await supabase.from(args.table).insert({ ...localRow }).select();
     if (error) {
       console.error(`[dbInsert] ${args.table}:`, error.message, args.data);
       return { data: localRow as T, error: null };
     }
     const row = Array.isArray(data) ? data[0] : data;
+    // Marca come sincronizzata nel local_rows store
+    if (row && _currentUserId && _browserLocalWrite) {
+      await _browserLocalWrite(args.table, _currentUserId, { ...localRow, ...(row as Record<string, unknown>) });
+    }
     return { data: (row ?? localRow) as T, error: null };
   } catch {
     return { data: localRow as T, error: null };
@@ -282,19 +307,28 @@ export async function dbUpdate<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
-  // LOCAL-FIRST: aggiorna subito IndexedDB, poi invia a Supabase in background.
-  if (_currentUserId) await cacheUpdate(args.table, _currentUserId, args.id, args.data);
+  // LOCAL-FIRST browser: aggiorna IndexedDB (dirty=1) poi tenta Supabase.
+  const ts = nowIso();
+  const patchWithTs = { ...args.data, updated_at: args.data.updated_at ?? ts };
+  if (_currentUserId && _browserLocalWrite) {
+    // Recupera la riga esistente dalla cache per costruire il record completo
+    const cached = (await getTableCache(args.table, _currentUserId)) as Record<string, unknown>[] ?? [];
+    const existing = cached.find(r => r.id === args.id) ?? { id: args.id };
+    await _browserLocalWrite(args.table, _currentUserId, { ...existing, ...patchWithTs });
+  } else if (_currentUserId) {
+    await cacheUpdate(args.table, _currentUserId, args.id, patchWithTs);
+  }
 
   try {
-    const { data, error } = await supabase.from(args.table).update(args.data).eq('id', args.id).select();
+    const { data, error } = await supabase.from(args.table).update(patchWithTs).eq('id', args.id).select();
     if (error) {
       console.error(`[dbUpdate] ${args.table} id=${args.id}:`, error.message, args.data);
-      return { data: { id: args.id, ...args.data } as T, error: null };
+      return { data: { id: args.id, ...patchWithTs } as T, error: null };
     }
     const row = Array.isArray(data) ? data[0] : data;
-    return { data: (row ?? { id: args.id, ...args.data }) as T, error: null };
+    return { data: (row ?? { id: args.id, ...patchWithTs }) as T, error: null };
   } catch {
-    return { data: { id: args.id, ...args.data } as T, error: null };
+    return { data: { id: args.id, ...patchWithTs } as T, error: null };
   }
 }
 
@@ -321,22 +355,23 @@ export async function dbDelete(args: {
     }
     return { data: null, error: null };
   }
-  // LOCAL-FIRST: rimuove subito da IndexedDB, poi invia a Supabase in background.
+  // LOCAL-FIRST browser: soft-delete in local_rows (dirty=1, deleted=1) poi tenta Supabase.
   if (_currentUserId) {
     const idFilter = args.filters.find(f => f.col === 'id' && (f.op === 'eq' || f.op === '='));
-    if (idFilter) {
+    if (idFilter && _browserLocalDelete) {
+      await _browserLocalDelete(args.table, _currentUserId, idFilter.val as string);
+    } else if (idFilter) {
       await cacheRemoveById(args.table, _currentUserId, idFilter.val as string);
     } else {
-      // Filtro generico (es. fiche_id): rimuove le righe corrispondenti dalla cache
       try {
         const cached = await getTableCache(args.table, _currentUserId);
         if (cached !== null) {
-          const rows = cached as Record<string, unknown>[];
           const toRemove = applyFiltersToCache<Record<string, unknown>>(cached, { filters: args.filters });
-          const removeIds = new Set(toRemove.map(r => r.id));
-          await setTableCache(args.table, _currentUserId, rows.filter(r => !removeIds.has(r.id)));
+          for (const r of toRemove) {
+            if (_browserLocalDelete) await _browserLocalDelete(args.table, _currentUserId, r.id as string);
+          }
         }
-      } catch { /* cache update failure is non-critical */ }
+      } catch { /* non-critical */ }
     }
   }
   try {
@@ -368,12 +403,15 @@ export async function dbUpsert<T = Record<string, unknown>>(args: {
     if (res.data) triggerPush(args.table, res.data as Record<string, unknown>);
     return { data: row, error: null };
   }
-  // LOCAL-FIRST: aggiorna/inserisce subito in IndexedDB, poi invia a Supabase.
+  // LOCAL-FIRST browser: scrive in local_rows (dirty=1) poi tenta Supabase.
   const localId = (args.data.id as string | undefined) || crypto.randomUUID();
-  const localRow = { id: localId, ...args.data };
-  if (_currentUserId) {
+  const ts = nowIso();
+  const localRow = { id: localId, updated_at: ts, ...args.data };
+  if (_currentUserId && _browserLocalWrite) {
+    await _browserLocalWrite(args.table, _currentUserId, localRow);
+  } else if (_currentUserId) {
     if (args.data.id) {
-      await cacheUpdate(args.table, _currentUserId, args.data.id as string, args.data);
+      await cacheUpdate(args.table, _currentUserId, args.data.id as string, localRow);
     } else {
       await cacheInsert(args.table, _currentUserId, localRow);
     }
@@ -381,7 +419,7 @@ export async function dbUpsert<T = Record<string, unknown>>(args: {
   try {
     const { data, error } = await supabase
       .from(args.table)
-      .upsert({ ...args.data, id: localId }, args.onConflict ? { onConflict: args.onConflict } : undefined)
+      .upsert({ ...localRow }, args.onConflict ? { onConflict: args.onConflict } : undefined)
       .select();
     if (error) return { data: localRow as T, error: null };
     const row = Array.isArray(data) ? data[0] : data;
@@ -413,26 +451,32 @@ export async function dbUpsertMany<T = Record<string, unknown>>(args: {
     }
     return { data: results, error: null };
   }
-  // LOCAL-FIRST: aggiorna/inserisce ogni riga in IndexedDB, poi invia a Supabase.
-  if (_currentUserId) {
-    for (const row of args.rows) {
-      const localId = (row.id as string | undefined) || crypto.randomUUID();
-      if (row.id) {
-        await cacheUpdate(args.table, _currentUserId, row.id as string, row);
-      } else {
-        await cacheInsert(args.table, _currentUserId, { id: localId, ...row });
-      }
+  // LOCAL-FIRST browser: scrive ogni riga in local_rows (dirty=1) poi invia a Supabase.
+  const ts = nowIso();
+  const localRows = args.rows.map(row => ({
+    id: (row.id as string | undefined) ?? crypto.randomUUID(),
+    updated_at: ts,
+    ...row,
+  }));
+  if (_currentUserId && _browserLocalWrite) {
+    for (const row of localRows) {
+      await _browserLocalWrite(args.table, _currentUserId, row);
+    }
+  } else if (_currentUserId) {
+    for (const row of localRows) {
+      if (row.id) await cacheUpdate(args.table, _currentUserId, row.id as string, row);
+      else await cacheInsert(args.table, _currentUserId, row);
     }
   }
   try {
     const { data, error } = await supabase
       .from(args.table)
-      .upsert(args.rows, args.onConflict ? { onConflict: args.onConflict } : undefined)
+      .upsert(localRows, args.onConflict ? { onConflict: args.onConflict } : undefined)
       .select();
-    if (error) return { data: args.rows as T[], error: null };
-    return { data: (data as T[]) ?? args.rows as T[], error: null };
+    if (error) return { data: localRows as T[], error: null };
+    return { data: (data as T[]) ?? localRows as T[], error: null };
   } catch {
-    return { data: args.rows as T[], error: null };
+    return { data: localRows as T[], error: null };
   }
 }
 

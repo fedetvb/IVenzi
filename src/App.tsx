@@ -28,12 +28,13 @@ import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, B
 import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
 import AiChat from './components/AiChat';
 import { InForseModal, loadAvvisoInForse, type ClienteInForseEntry } from './components/InForseModal';
-import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione } from './lib/localDb';
-import { syncSupabaseToLocal, syncLocalToSupabase, pushRowNow, prefetchToIndexedDb } from './lib/sync';
+import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione, registerBrowserLocalOps } from './lib/localDb';
+import { syncLocalToRemote, syncRemoteToLocal, pushRowNow, browserLocalWrite, browserLocalDelete, prefetchToIndexedDb } from './lib/sync';
 import { flushPendingSync } from './lib/offlineFetch';
 
-// Registra il push immediato una volta sola al caricamento del modulo
+// Registra il push immediato e le operazioni locali browser una volta sola
 registerPushRowNow(pushRowNow);
+registerBrowserLocalOps(browserLocalWrite, browserLocalDelete);
 
 type Page = 'dashboard' | 'agenda' | 'clienti' | 'servizi' | 'fiches' | 'finanze' | 'gestione_finanziaria' | 'statistiche' | 'comunicazioni' | 'impostazioni' | 'carte' | 'rivendita' | 'magazzino' | 'parrucchieri' | 'cestino' | 'guida' | 'prodotti_online';
 
@@ -424,29 +425,30 @@ export default function App() {
     };
   }, [user]);
 
-  // Sync SQLite <-> Supabase all'avvio (solo se SQLite disponibile e DB pronto)
+  // Sync bidirezionale unificato: locale → Supabase, poi Supabase → locale.
+  // Attivo su entrambe le piattaforme: Electron (SQLite) e browser (IndexedDB).
+  // In Electron aspetta che il DB sia pronto; nel browser inizia subito dopo il login.
   useEffect(() => {
-    if (!user || !electronDbReady || !isElectron()) return;
+    if (!user) return;
+    if (isElectron() && !electronDbReady) return;
     const userId = user.id;
     let cancelled = false;
 
     async function doSync() {
       if (!navigator.onLine || cancelled) return;
       try {
-        // Prima carica le modifiche locali su Supabase, poi scarica
-        // (così Supabase ha già i dati aggiornati quando si tira giù)
-        await syncLocalToSupabase(userId);
+        // 1. Carica prima le modifiche locali (locale vince su remote più vecchio)
+        await syncLocalToRemote(userId);
         if (cancelled) return;
-        await syncSupabaseToLocal(userId);
+        // 2. Scarica le modifiche remote più recenti del locale
+        await syncRemoteToLocal(userId);
       } catch (e) {
         console.warn('[Sync] Errore sync:', e);
       }
     }
 
     doSync();
-    // Retry ogni 5 minuti per recuperare eventuali dirty rimaste
     const interval = setInterval(() => { doSync(); }, 5 * 60 * 1000);
-    // Sync immediato al ritorno online (copre il caso app avviata offline)
     const handleOnline = () => { doSync(); };
     window.addEventListener('online', handleOnline);
 
