@@ -376,8 +376,11 @@ export default function App() {
         const { data } = await supabase.auth.signUp({ email: user.email, password: pendingPassword });
         if (data?.user) {
           localStorage.removeItem(pendingKey);
-          // Salva il profilo con il nuovo UUID Supabase — questo trigghera la migrazione
+          // Salva il profilo con il nuovo UUID Supabase — triggera la migrazione SQLite
           await window.electronAPI?.auth?.saveProfile(data.user.id, user.email, pendingPassword);
+          // Dopo la migrazione, forza il login Supabase per ottenere la sessione reale.
+          // onAuthStateChange aggiornerà automaticamente user.id e il sync ripartirà.
+          await supabase.auth.signInWithPassword({ email: user.email, password: pendingPassword });
         }
       } catch { /* silenzioso, riproverà al prossimo avvio */ }
     }

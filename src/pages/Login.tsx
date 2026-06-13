@@ -100,6 +100,25 @@ export default function Login() {
       if (networkError) {
         await handleOfflineLogin();
       }
+      // Caso speciale: l'utente si era registrato offline e non ha ancora un account Supabase.
+      // Se c'è una registrazione cloud pendente, creiamo l'account ora e poi logghiamo.
+      if (!networkError && window.electronAPI?.auth) {
+        const pendingKey = `pending_cloud_reg:${email.toLowerCase()}`;
+        const pendingPwd = localStorage.getItem(pendingKey);
+        if (pendingPwd && pendingPwd === password) {
+          setError('');
+          try {
+            const { data: signUpData } = await supabase.auth.signUp({ email, password });
+            if (signUpData?.user) {
+              localStorage.removeItem(pendingKey);
+              await saveLocalProfile(signUpData.user.id, email, password);
+              // signInWithPassword per ottenere la sessione attiva
+              const { data: loginData } = await supabase.auth.signInWithPassword({ email, password });
+              if (loginData?.user) await saveLocalProfile(loginData.user.id, email, password);
+            }
+          } catch { /* ignora, l'utente vedrà l'errore originale */ }
+        }
+      }
     } else if (mode === 'register') {
       // Se siamo in Electron e offline, registrazione locale con SQLite
       if (window.electronAPI?.auth && !navigator.onLine) {
