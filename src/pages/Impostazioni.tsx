@@ -268,7 +268,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
             <MessageCircle size={18} className="text-stone-500 group-hover:text-sky-600 transition-colors" />
           </div>
           <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Messaggi clienti</p>
+            <p className="text-sm font-semibold text-stone-800">Messaggi clienti del gestionale</p>
             <p className="text-xs text-stone-400 mt-0.5">Password eliminazione messaggi e cancellazione globale dello schedario</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
