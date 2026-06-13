@@ -1819,44 +1819,52 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
 
           {/* Info ultimo annuncio pubblicato */}
           {annuncioId && (
-            <div className="bg-violet-50 border border-violet-200 rounded-2xl px-5 py-4 flex items-start gap-3">
-              <Megaphone size={15} className="text-violet-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-violet-700 leading-relaxed">
-                Ultimo annuncio pubblicato il{' '}
-                <span className="font-semibold">
-                  {new Date(parseInt(annuncioId)).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </span>
-                . Le clienti che lo hanno già chiuso non lo rivedrannno — usa "Pubblica annuncio" per generarne uno nuovo visibile a tutte.
-              </p>
+            <div className="bg-amber-50 border border-amber-300 rounded-2xl px-5 py-4 flex items-start gap-3">
+              <AlertTriangle size={15} className="text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-amber-800 leading-relaxed space-y-1">
+                <p>
+                  Ultimo <strong>Pubblica annuncio</strong> il{' '}
+                  <span className="font-semibold">
+                    {new Date(parseInt(annuncioId)).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>.
+                </p>
+                <p>Le clienti che lo hanno già chiuso <strong>non lo rivedranno</strong> finché non premi di nuovo <strong>"Pubblica annuncio"</strong>, che genera un nuovo ID e lo mostra a tutte — anche a chi lo aveva già chiuso.</p>
+                <p className="text-amber-600">"Salva bozza" salva il testo ma <strong>non</strong> reimposta la visibilità.</p>
+              </div>
             </div>
           )}
 
           {/* Azioni */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={`flex-1 py-3.5 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
-                saved ? 'bg-emerald-500 text-white' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-              } disabled:opacity-50`}
-            >
-              {saved ? <><Check size={15} /> Salvato!</> : saving ? <div className="w-4 h-4 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" /> : 'Salva bozza'}
-            </button>
-            <button
-              onClick={handlePubblica}
-              disabled={publishing || !testo.trim()}
-              className={`flex-1 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm ${
-                published ? 'bg-emerald-500 text-white' : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white'
-              } disabled:opacity-50`}
-            >
-              {published ? (
-                <><Check size={15} /> Pubblicato!</>
-              ) : publishing ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <><Megaphone size={15} /> Pubblica annuncio</>
-              )}
-            </button>
+          <div className="space-y-2">
+            <div className="flex gap-3">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className={`flex-1 py-3.5 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                  saved ? 'bg-emerald-500 text-white' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                } disabled:opacity-50`}
+              >
+                {saved ? <><Check size={15} /> Salvato!</> : saving ? <div className="w-4 h-4 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" /> : 'Salva bozza'}
+              </button>
+              <button
+                onClick={handlePubblica}
+                disabled={publishing || !testo.trim()}
+                className={`flex-1 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm ${
+                  published ? 'bg-emerald-500 text-white' : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white'
+                } disabled:opacity-50`}
+              >
+                {published ? (
+                  <><Check size={15} /> Pubblicato!</>
+                ) : publishing ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <><Megaphone size={15} /> Pubblica annuncio</>
+                )}
+              </button>
+            </div>
+            <p className="text-center text-xs text-stone-400">
+              "Salva bozza" = solo testo · "Pubblica annuncio" = nuovo annuncio visibile a tutte
+            </p>
           </div>
         </>
       )}
