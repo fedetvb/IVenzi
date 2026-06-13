@@ -348,12 +348,32 @@ export default function AiChat() {
       recognition.interimResults = !isMobile;
       recognition.maxAlternatives = 1;
 
+      const SILENCE_MS = 5000;
+
+      // Returns the transcript with the trigger word "invia" stripped from the end, or null if not found
+      const extractInviaCommand = (text: string): string | null => {
+        const cleaned = text.replace(/\binvia\b\.?\s*$/i, '').trim();
+        if (cleaned.length < text.trim().length) return cleaned;
+        return null;
+      };
+
+      const triggerSend = (text: string) => {
+        shouldRestartRef.current = false;
+        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+        recognition.stop();
+        setListening(false);
+        setInput('');
+        voiceTranscriptRef.current = '';
+        lastResultIndexRef.current = 0;
+        sendTextRef.current(text);
+      };
+
       const scheduleSend = () => {
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = setTimeout(() => {
           shouldRestartRef.current = false;
           recognition.stop();
-        }, isMobile ? 3000 : 2000);
+        }, SILENCE_MS);
       };
 
       recognition.onstart = () => {
@@ -382,6 +402,13 @@ export default function AiChat() {
 
         if (newFinal) {
           voiceTranscriptRef.current = (voiceTranscriptRef.current + ' ' + newFinal).trim();
+
+          // Trigger word: send immediately without waiting for silence
+          const withoutInvia = extractInviaCommand(voiceTranscriptRef.current);
+          if (withoutInvia !== null && withoutInvia.length > 0) {
+            triggerSend(withoutInvia);
+            return;
+          }
         }
 
         // Debounce: skip duplicate setInput calls within 50ms (mobile keyboard STT fires twice)
@@ -673,7 +700,7 @@ export default function AiChat() {
               }}
               onKeyDown={handleKeyDown}
               onFocus={() => setShowSuggestions(false)}
-              placeholder={listening ? 'Sto ascoltando...' : 'Es: quanti appuntamenti ho domani?'}
+              placeholder={listening ? 'Parla... di\' "invia" o attendi 5 secondi' : 'Es: quanti appuntamenti ho domani?'}
               rows={1}
               disabled={loading}
               className="flex-1 bg-transparent text-sm text-stone-800 placeholder:text-stone-400 resize-none outline-none min-h-[24px] max-h-[80px] leading-6 disabled:opacity-50"
@@ -706,7 +733,7 @@ export default function AiChat() {
             </button>
           </div>
           <p className="text-center text-[10px] text-stone-300 mt-1">
-            {voiceSupported ? 'Invio con Invio • A capo con Shift+Invio • Microfono per parlare' : 'Invio con Invio • A capo con Shift+Invio'}
+            {voiceSupported ? 'Invio con Invio • Microfono: di\' "invia" o 5 sec. di silenzio' : 'Invio con Invio • A capo con Shift+Invio'}
           </p>
         </div>
 
