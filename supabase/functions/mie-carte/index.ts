@@ -124,30 +124,23 @@ Deno.serve(async (req: Request) => {
     // Ricariche e utilizzi per ogni carta premium
     const cartePremium = await Promise.all(
       (cartePremiumRaw ?? []).map(async (cp: { id: string; codice: string; saldo: number; attiva: boolean; created_at: string }) => {
-        const [ricaricheRes, utilizziRes, risparmioRes] = await Promise.all([
+        const [ricaricheRes, utilizziRes] = await Promise.all([
           sb.from("ricariche_carta_premium")
-            .select("id, importo, note, created_at")
+            .select("id, importo, importo_pagato, note, tipo_ricarica, created_at")
             .eq("carta_premium_id", cp.id)
             .order("created_at", { ascending: true }),
           sb.from("utilizzi_carta_premium")
             .select("id, importo_detratto, note, created_at")
             .eq("carta_premium_id", cp.id)
             .order("created_at", { ascending: true }),
-          // Risparmio: somma (totale_listino - importo_convalidato) dalle fiches convalidate del cliente
-          sb.from("fiches")
-            .select("totale_listino, importo_convalidato")
-            .eq("cliente_id", cliente.id)
-            .eq("user_id", userId)
-            .eq("convalidata", true)
-            .is("deleted_at", null),
         ]);
 
-        const risparmioTotale = (risparmioRes.data ?? []).reduce(
-          (acc: number, f: { totale_listino: number | null; importo_convalidato: number | null }) => {
-            const listino = f.totale_listino ?? 0;
-            const pagato = f.importo_convalidato ?? 0;
-            const delta = listino - pagato;
-            return acc + (delta > 0 ? delta : 0);
+        // Risparmio = somma (importo caricato - importo pagato) per ogni ricarica
+        const risparmioTotale = (ricaricheRes.data ?? []).reduce(
+          (acc: number, r: { importo: number | null; importo_pagato: number | null }) => {
+            const caricato = r.importo ?? 0;
+            const pagato = r.importo_pagato ?? 0;
+            return acc + Math.max(0, caricato - pagato);
           },
           0
         );

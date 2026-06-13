@@ -382,6 +382,7 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
       await dbInsert({ table: 'ricariche_carta_premium', data: {
         carta_premium_id: cartaId,
         importo: form.importo_iniziale,
+        importo_pagato: prezzoCliente,
         note: 'Carica iniziale',
         tipo_ricarica: 'standard',
         user_id: user?.id,
@@ -584,7 +585,7 @@ function RicaricaModal({ carta, onClose, onSaved }: {
     const oggi = localDateStr();
     const clienteNome = carta.clienti ? `${carta.clienti.nome} ${carta.clienti.cognome}`.trim() : '';
     await dbInsert({ table: 'ricariche_carta_premium', data: {
-      carta_premium_id: carta.id, importo, note, tipo_ricarica: tipo, user_id: user?.id,
+      carta_premium_id: carta.id, importo, importo_pagato: tipo === 'standard' ? prezzoCliente : 0, note, tipo_ricarica: tipo, user_id: user?.id,
     }});
     await dbUpdate({ table: 'carte_premium', id: carta.id, data: { saldo: carta.saldo + importo, attiva: true } });
     if (tipo === 'standard') {
