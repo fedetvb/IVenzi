@@ -327,20 +327,28 @@ async function creaAppuntamento(args: Record<string, unknown>, userId?: string):
   };
 
   // Cerca cliente
-  const termini = nome_cliente.trim().split(' ');
-  let query = supabase.from('clienti').select('id, nome, cognome').is('deleted_at', null);
-  if (termini.length >= 2) {
-    query = query.or(`nome.ilike.%${termini[0]}%,cognome.ilike.%${termini[termini.length - 1]}%`);
-  } else {
-    query = query.or(`nome.ilike.%${nome_cliente}%,cognome.ilike.%${nome_cliente}%`);
-  }
-  const { data: clienti, error: cErr } = await query.limit(5);
+  const termini = nome_cliente.trim().split(/\s+/).filter(Boolean);
+  const { data: clientiRaw, error: cErr } = await supabase
+    .from('clienti')
+    .select('id, nome, cognome')
+    .is('deleted_at', null)
+    .or(termini.map(t => `nome.ilike.%${t}%,cognome.ilike.%${t}%`).join(','))
+    .limit(20);
   if (cErr) return JSON.stringify({ errore: cErr.message });
+
+  // Se nome completo (2+ termini) mantieni solo chi matcha TUTTI i termini su nome+cognome combinati
+  const clienti = termini.length >= 2
+    ? (clientiRaw || []).filter((c: Record<string, string>) => {
+        const full = `${c.nome} ${c.cognome}`.toLowerCase();
+        return termini.every(t => full.includes(t.toLowerCase()));
+      })
+    : (clientiRaw || []);
+
   if (!clienti || clienti.length === 0)
     return JSON.stringify({ errore: `Cliente "${nome_cliente}" non trovato. Verifica il nome o crealo prima dall'app.` });
   if (clienti.length > 1)
     return JSON.stringify({
-      errore: `Trovati piu clienti con nome simile: ${clienti.map((c: Record<string, string>) => `${c.nome} ${c.cognome}`).join(', ')}. Specifica meglio.`,
+      errore: `Trovati piu clienti con nome simile: ${clienti.map((c: Record<string, string>) => `${c.nome} ${c.cognome}`).join(', ')}. Specifica meglio il nome completo.`,
     });
 
   const cliente = clienti[0] as { id: string; nome: string; cognome: string };
