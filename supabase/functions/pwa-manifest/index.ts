@@ -22,21 +22,36 @@ Deno.serve(async (req: Request) => {
 
   let appName = "Prenota Online";
   let shortName = "Prenota";
+  let customIconUrl: string | null = null;
 
   if (userId) {
-    const { data } = await sb
-      .from("impostazioni")
-      .select("valore")
-      .eq("chiave", "nome_pwa_prenotazione")
-      .eq("user_id", userId)
-      .maybeSingle();
+    const [nameRow, iconRow] = await Promise.all([
+      sb.from("impostazioni").select("valore")
+        .eq("chiave", "nome_pwa_prenotazione").eq("user_id", userId).maybeSingle(),
+      sb.from("impostazioni").select("valore")
+        .eq("chiave", "icona_pwa_url").eq("user_id", userId).maybeSingle(),
+    ]);
 
-    if (data?.valore) {
-      appName = data.valore;
-      // short_name: tronca a 12 caratteri per leggibilita' sotto l'icona
-      shortName = data.valore.length > 12 ? data.valore.slice(0, 12) : data.valore;
+    if (nameRow.data?.valore) {
+      appName = nameRow.data.valore;
+      shortName = appName.length > 12 ? appName.slice(0, 12) : appName;
+    }
+    if (iconRow.data?.valore) {
+      customIconUrl = iconRow.data.valore;
     }
   }
+
+  const defaultIcons = [
+    { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+    { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+  ];
+
+  const icons = customIconUrl
+    ? [
+        { src: customIconUrl, sizes: "512x512", type: "image/png", purpose: "any" },
+        { src: customIconUrl, sizes: "192x192", type: "image/png", purpose: "maskable" },
+      ]
+    : defaultIcons;
 
   const manifest = {
     name: appName,
@@ -49,10 +64,7 @@ Deno.serve(async (req: Request) => {
     background_color: "#ffffff",
     theme_color: "#0f172a",
     orientation: "any",
-    icons: [
-      { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-      { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
-    ],
+    icons,
     categories: ["lifestyle", "health"],
     lang: "it",
     dir: "ltr",

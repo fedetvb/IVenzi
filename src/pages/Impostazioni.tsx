@@ -15,7 +15,7 @@ import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -60,6 +60,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'orari_salone') return <PaginaOrariSalone onBack={() => setSub(null)} />;
   if (sub === 'wa_carte') return <PaginaWACarte onBack={() => setSub(null)} />;
   if (sub === 'benvenuto') return <PaginaBenvenuto onBack={() => setSub(null)} />;
+  if (sub === 'icone') return <PaginaIcone onBack={() => setSub(null)} />;
   if (sub === 'scarica_documenti') return (
     <StatisticheGate isActive={sub === 'scarica_documenti'} chiave="password_documenti" sezione="scarica file e documenti" sessionKey="documenti_unlocked">
       <PaginaScaricaDocumenti onBack={() => setSub(null)} />
@@ -97,7 +98,8 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     show('Promemoria Convalida Fiches', 'Configura giorni e orario promemoria') ||
     show('QR Code Registrazione Clienti', 'Stampa il QR code nuove clienti') ||
     show('Tema e Personalizzazione', 'Colori sidebar icona logo') ||
-    show('Scarica File e Documenti', 'Esporta e scarica file PDF CSV backup dal gestionale');
+    show('Scarica File e Documenti', 'Esporta e scarica file PDF CSV backup dal gestionale') ||
+    show('Icone e Immagini', 'Logo salone icona PWA portale clienti gestionale');
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -526,6 +528,22 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Tema e Personalizzazione</p>
             <p className="text-xs text-stone-400 mt-0.5">Colori sidebar, icona e logo del salone (per questo dispositivo)</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Icone e Immagini */}
+        <button
+          onClick={() => setSub('icone')}
+          style={show('Icone e Immagini', 'Logo salone icona PWA portale clienti gestionale') ? {} : {display:'none'}}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-sky-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <ImagePlus size={18} className="text-stone-500 group-hover:text-sky-600 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Icone e Immagini</p>
+            <p className="text-xs text-stone-400 mt-0.5">Logo sidebar e icona PWA del portale prenotazioni clienti</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -1999,6 +2017,216 @@ const ICON_COMPONENTS: Record<string, React.ElementType> = {
   Wind,
   Sparkles,
 };
+
+// ─── PaginaIcone ──────────────────────────────────────────────────────────────
+
+function PaginaIcone({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+
+  // Logo salone (sidebar) — mirrors PaginaTema
+  const [logoPreview, setLogoPreview] = useState<string>(() => getLogoCacheB64());
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [savedLogo, setSavedLogo] = useState(false);
+  const logoRef = useRef<HTMLInputElement>(null);
+
+  // Icona PWA portale clienti
+  const [pwaPreview, setPwaPreview] = useState('');
+  const [uploadingPwa, setUploadingPwa] = useState(false);
+  const [savedPwa, setSavedPwa] = useState(false);
+  const pwaRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    // Sync logo from Supabase if not cached locally
+    if (!getLogoCacheB64()) {
+      supabase.from('impostazioni').select('valore')
+        .eq('chiave', 'logo_salone_url').eq('user_id', user.id).maybeSingle()
+        .then(({ data }) => {
+          if (!data?.valore) return;
+          fetch(data.valore).then(r => r.blob()).then(blob => new Promise<string>((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result as string);
+            reader.onerror = rej;
+            reader.readAsDataURL(blob);
+          })).then(b64 => { saveLogoCacheB64(b64); setLogoPreview(b64); }).catch(() => setLogoPreview(data.valore));
+        });
+    }
+    // Load PWA icon
+    supabase.from('impostazioni').select('valore')
+      .eq('chiave', 'icona_pwa_url').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => { if (data?.valore) setPwaPreview(data.valore); });
+  }, [user]);
+
+  async function handleLogoUpload(file: File) {
+    if (!user) return;
+    setUploadingLogo(true);
+    try {
+      const blob = await compressImage(file);
+      const b64 = await new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(blob);
+      });
+      saveLogoCacheB64(b64);
+      setLogoPreview(b64);
+      const path = `logo/${user.id}/salone-logo.jpg`;
+      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+        const logoUrl = urlData.publicUrl + '?v=' + Date.now();
+        saveTheme({ logoUrl });
+        dispatchThemeChange();
+        await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+      }
+      setSavedLogo(true);
+      setTimeout(() => setSavedLogo(false), 2000);
+    } catch { /* ignore */ } finally { setUploadingLogo(false); }
+  }
+
+  async function removeLogo() {
+    saveLogoCacheB64('');
+    setLogoPreview('');
+    saveTheme({ logoUrl: '' });
+    dispatchThemeChange();
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+  }
+
+  async function handlePwaUpload(file: File) {
+    if (!user) return;
+    setUploadingPwa(true);
+    try {
+      const blob = await compressImage(file);
+      const path = `icone/${user.id}/pwa-icon.jpg`;
+      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+        const iconUrl = urlData.publicUrl + '?v=' + Date.now();
+        setPwaPreview(iconUrl);
+        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+      }
+      setSavedPwa(true);
+      setTimeout(() => setSavedPwa(false), 2000);
+    } catch { /* ignore */ } finally { setUploadingPwa(false); }
+  }
+
+  async function removePwaIcon() {
+    setPwaPreview('');
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-lg hover:bg-stone-100 text-stone-500 hover:text-stone-800 transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Icone e Immagini</h2>
+          <p className="text-xs text-stone-400 mt-0.5">Logo sidebar e icona PWA del portale prenotazioni</p>
+        </div>
+      </div>
+
+      {/* Logo salone */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-stone-800">Logo salone</p>
+          <p className="text-xs text-stone-400 mt-0.5">Appare nella sidebar del gestionale. Sincronizzato su tutti i dispositivi.</p>
+        </div>
+        {logoPreview ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 bg-stone-50">
+              <img src={logoPreview} alt="Logo salone" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex flex-col gap-2">
+              {savedLogo && <span className="text-xs text-emerald-600 font-medium flex items-center gap-1"><Check size={12} /> Salvato!</span>}
+              <button onClick={() => logoRef.current?.click()} className="text-sm text-stone-600 hover:text-stone-900 font-medium flex items-center gap-1.5 transition-colors">
+                <ImagePlus size={15} /> Cambia logo
+              </button>
+              <button onClick={removeLogo} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1.5 transition-colors">
+                <X size={15} /> Rimuovi
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => logoRef.current?.click()}
+            disabled={uploadingLogo}
+            className="w-full flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-200 hover:border-stone-300 transition-colors text-stone-400 hover:text-stone-600"
+          >
+            {uploadingLogo ? <RefreshCw size={24} className="animate-spin" /> : <ImagePlus size={24} />}
+            <span className="text-sm font-medium">{uploadingLogo ? 'Caricamento...' : 'Carica logo'}</span>
+            <span className="text-xs">PNG, JPG — max 5 MB</span>
+          </button>
+        )}
+        <input ref={logoRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ''; }} />
+      </div>
+
+      {/* Icona PWA portale clienti */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-stone-800">Icona PWA — Portale Prenotazioni</p>
+          <p className="text-xs text-stone-400 mt-0.5">Icona che le clienti vedono quando aggiungono il portale appuntamenti alla schermata home del telefono.</p>
+        </div>
+
+        {/* Phone mockup preview */}
+        <div className="flex items-center gap-5">
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="w-14 h-14 rounded-[14px] overflow-hidden border border-stone-200 shadow-md bg-stone-100 flex items-center justify-center flex-shrink-0">
+              {pwaPreview
+                ? <img src={pwaPreview} alt="Icona PWA" className="w-full h-full object-cover" />
+                : <Smartphone size={24} className="text-stone-300" />
+              }
+            </div>
+            <span className="text-[10px] text-stone-400 font-medium">Prenota</span>
+          </div>
+          <div className="text-xs text-stone-400 leading-relaxed">
+            {pwaPreview
+              ? 'Questa icona apparira sulla schermata home delle clienti.'
+              : 'Nessuna icona personalizzata — viene usata quella predefinita del gestionale.'}
+          </div>
+        </div>
+
+        {pwaPreview ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 bg-stone-50">
+              <img src={pwaPreview} alt="Icona PWA" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex flex-col gap-2">
+              {savedPwa && <span className="text-xs text-emerald-600 font-medium flex items-center gap-1"><Check size={12} /> Salvato!</span>}
+              <button onClick={() => pwaRef.current?.click()} className="text-sm text-stone-600 hover:text-stone-900 font-medium flex items-center gap-1.5 transition-colors">
+                <ImagePlus size={15} /> Cambia icona
+              </button>
+              <button onClick={removePwaIcon} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1.5 transition-colors">
+                <X size={15} /> Ripristina predefinita
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => pwaRef.current?.click()}
+            disabled={uploadingPwa}
+            className="w-full flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-200 hover:border-stone-300 transition-colors text-stone-400 hover:text-stone-600"
+          >
+            {uploadingPwa ? <RefreshCw size={24} className="animate-spin" /> : <Smartphone size={24} />}
+            <span className="text-sm font-medium">{uploadingPwa ? 'Caricamento...' : 'Carica icona PWA'}</span>
+            <span className="text-xs">PNG, JPG quadrato — almeno 512×512 px consigliato</span>
+          </button>
+        )}
+        <input ref={pwaRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handlePwaUpload(f); e.target.value = ''; }} />
+
+        <div className="bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 flex items-start gap-2">
+          <Smartphone size={14} className="text-sky-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-sky-700 leading-relaxed">
+            Le clienti che hanno <strong>gia installato</strong> il portale devono disinstallarlo e reinstallarlo per vedere la nuova icona. Chi lo installa da adesso la vedra subito.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PaginaTema({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
