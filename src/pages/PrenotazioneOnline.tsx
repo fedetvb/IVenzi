@@ -343,9 +343,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [mappaBellezza, setMappaBellezza] = useState<RisultatoRoutine | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  // Step 1 — Detergi
   const MACRO_SHAMPOO = ['shampoo', 'detergente', 'balsamo shampoo', 'shampoo & balsamo'];
-  const MACRO_MASCHERA = ['maschera', 'mask', 'trattamento', 'conditioner', 'balsamo'];
-  const MACRO_FINISH = ['finish', 'olio', 'oil', 'siero', 'serum', 'protettore', 'spray', 'termoprotettore', 'leave-in', 'crema', 'lacca'];
+  // Step 2 — Nutri (Maschera, Balsamo, Crema)
+  const MACRO_MASCHERA = ['maschera', 'mask', 'trattamento', 'conditioner', 'balsamo', 'crema'];
+  // Step 3 — Finish / Illumina (Olio, Lacca, Spray, Siero)
+  const MACRO_FINISH = ['finish', 'olio', 'oil', 'siero', 'serum', 'protettore', 'spray', 'termoprotettore', 'leave-in', 'lacca', 'colorante'];
 
   function getMacroGruppo(categoria: string | null): 'shampoo' | 'maschera' | 'finish' | null {
     const c = (categoria ?? '').toLowerCase().trim();
@@ -1302,7 +1305,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setNostralProdottiError('');
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note,quiz_tags,foto_url,best_seller&attivo=eq.true&order=categoria.asc,nome.asc`,
+        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note,quiz_tags,foto_url,best_seller&attivo=eq.true&user_id=eq.${encodeURIComponent(userId)}&order=categoria.asc,nome.asc`,
         { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
       );
       if (!res.ok) throw new Error('Errore');
