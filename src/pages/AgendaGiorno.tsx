@@ -1513,9 +1513,9 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                                     )}
                                     {carteTipi.has('sconto_ueg') && (
                                       <svg width="18" height="12" viewBox="0 0 18 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#1c1917" stroke="#44403c" strokeWidth="0.5"/>
-                                        <rect x="0.5" y="3" width="17" height="2.5" fill="rgba(255,255,255,0.1)"/>
-                                        <rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.2)"/>
+                                        <rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#0ABAB5" stroke="#089490" strokeWidth="0.5"/>
+                                        <rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.15)"/>
+                                        <rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.45)"/>
                                       </svg>
                                     )}
                                     {carteTipi.has('sconto_normale') && (
@@ -1634,7 +1634,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
           <span className="text-[10px] text-stone-500">Da ricaricare</span>
         </div>
         <div className="flex items-center gap-1">
-          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#1c1917" stroke="#44403c" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(255,255,255,0.1)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.2)"/></svg>
+          <svg width="16" height="10" viewBox="0 0 18 12" fill="none"><rect x="0.5" y="0.5" width="17" height="11" rx="1.5" fill="#0ABAB5" stroke="#089490" strokeWidth="0.5"/><rect x="0.5" y="3" width="17" height="2.5" fill="rgba(0,0,0,0.15)"/><rect x="2" y="7" width="5" height="3" rx="0.8" fill="rgba(255,255,255,0.45)"/></svg>
           <span className="text-[10px] text-stone-500">Usa e Getta</span>
         </div>
         <div className="flex items-center gap-1">
