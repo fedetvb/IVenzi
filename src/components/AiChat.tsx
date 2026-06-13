@@ -427,12 +427,22 @@ export default function AiChat() {
       recognition.onend = () => {
         if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
 
-        // On iOS/mobile, continuous is ignored → restart until we have final text
-        if (shouldRestartRef.current && !voiceTranscriptRef.current.trim()) {
-          try { startRecognition(); return; } catch { /* ignora */ }
+        // Keep restarting as long as the silence timer hasn't fired yet.
+        // On mobile, continuous=false so recognition stops after each phrase — we restart
+        // to keep collecting speech. Only when shouldRestart becomes false (timer fired or
+        // triggerSend called) do we fall through and send.
+        if (shouldRestartRef.current) {
+          try {
+            startRecognition();
+            // Reschedule the silence timer for the new recognition session
+            silenceTimerRef.current = setTimeout(() => {
+              shouldRestartRef.current = false;
+              recognitionRef.current?.stop();
+            }, SILENCE_MS);
+            return;
+          } catch { /* ignora */ }
         }
 
-        shouldRestartRef.current = false;
         setListening(false);
         const text = voiceTranscriptRef.current.trim();
         if (!text) return;
