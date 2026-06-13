@@ -42,11 +42,11 @@ const PETALS = [
 ];
 
 const VANTAGGI = [
-  { icon: Calendar,       testo: 'Richiedi appuntamenti in qualsiasi momento, senza aspettare' },
-  { icon: Clock,          testo: 'Consulta tutti i tuoi appuntamenti passati e futuri' },
-  { icon: Scissors,       testo: 'Rivivi ogni servizio: data, parrucchiera e trattamento' },
-  { icon: CreditCard,     testo: 'Monitora in tempo reale saldo carte e promozioni' },
-  { icon: MessageCircle,  testo: 'Inviaci foto e messaggi per richieste speciali' },
+  { icon: Calendar,       label: 'Niente attese al telefono',  testo: 'Invii la tua richiesta di prenotazione in un attimo, quando vuoi tu, e aspetti solo il nostro messaggio di conferma.' },
+  { icon: Clock,          label: 'Tutto sotto controllo',      testo: 'Vedi all\'istante i tuoi appuntamenti passati e quelli futuri per pianificare i tuoi look.' },
+  { icon: Scissors,       label: 'Il tuo diario di bellezza',  testo: 'Vuoi ricordare che colore o trattamento hai fatto l\'ultima volta, quando e con chi? È tutto scritto qui.' },
+  { icon: CreditCard,     label: 'Il tuo borsellino',          testo: 'Monitori in tempo reale il saldo delle tue carte, abbonamenti e promozioni.' },
+  { icon: MessageCircle,  label: 'Filo diretto con noi',       testo: 'Puoi inviarci foto di ispirazione o messaggi per richieste speciali prima ancora di sederti in poltrona.' },
 ];
 
 interface Props {
@@ -120,25 +120,22 @@ export default function BenvenutoModal({ nome, onClose }: Props) {
               className="text-xl font-extrabold leading-tight"
               style={{ color: '#6d1a36', textShadow: '0 1px 2px rgba(255,255,255,0.5)' }}
             >
-              Finalmente sei qui,<br />{nome}!
+              ✨ Finalmente sei qui, {nome}!
             </h2>
-            <p className="text-xs font-medium mt-1.5" style={{ color: '#9c3155' }}>
-              La tua scheda e' confermata ✨
-            </p>
           </div>
 
           {/* Corpo */}
-          <div className="px-5 pt-4 pb-3 space-y-3 max-h-[55vh] overflow-y-auto">
-            <p className="text-xs leading-relaxed text-stone-600 text-center">
-              Non e' il solito sito e non e' la solita app: questo e' il tuo <strong>pass d'accesso esclusivo</strong> al futuro del nostro salone. Abbiamo digitalizzato le tue coccole.
+          <div className="px-5 pt-4 pb-3 space-y-3 max-h-[58vh] overflow-y-auto">
+            <p className="text-xs leading-relaxed text-stone-600">
+              La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte. Non è il solito sito e non è la solita app: questo è il tuo <strong>pass d'accesso esclusivo</strong> al futuro del nostro salone.
             </p>
 
-            <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider text-center mt-1">
-              Cosa trovi nella tua Area Personale
+            <p className="text-xs leading-relaxed text-stone-600">
+              Abbiamo digitalizzato le tue coccole. Ecco cosa troverai nella tua <strong>Area Personale</strong>:
             </p>
 
             <div className="space-y-2">
-              {VANTAGGI.map(({ icon: Icon, testo }, i) => (
+              {VANTAGGI.map(({ icon: Icon, label, testo }, i) => (
                 <div
                   key={i}
                   className="flex items-start gap-3 bg-white/70 rounded-2xl px-3 py-2.5 backdrop-blur-sm"
@@ -149,13 +146,16 @@ export default function BenvenutoModal({ nome, onClose }: Props) {
                   >
                     <Icon size={13} className="text-rose-500" />
                   </div>
-                  <p className="text-xs text-stone-700 leading-snug">{testo}</p>
+                  <p className="text-xs text-stone-700 leading-snug">
+                    <span className="font-semibold text-stone-800">{label}:</span> {testo}
+                  </p>
                 </div>
               ))}
             </div>
 
             <p className="text-xs text-center text-stone-500 leading-relaxed pt-1 pb-1">
-              Curiosa di vedere come abbiamo rivoluzionato<br />il tuo modo di prenderti cura di te?
+              Curiosa di vedere come abbiamo rivoluzionato il tuo modo di prenderti cura di te?<br />
+              <strong className="text-stone-600">Il tuo nuovo portale è pronto.</strong>
             </p>
           </div>
 
