@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search } from 'lucide-react';
 import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
+import { BENVENUTO_DEFAULT, type BenvenutoConfig } from '../components/BenvenutoModal';
 import { DEFAULT_WA_GP_SALONE, DEFAULT_WA_GP_CLIENTE, DEFAULT_WA_CS_DONA } from '../lib/waUtils';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
@@ -14,7 +15,7 @@ import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -58,6 +59,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'canali_social') return <PaginaCanaleSocial onBack={() => setSub(null)} />;
   if (sub === 'orari_salone') return <PaginaOrariSalone onBack={() => setSub(null)} />;
   if (sub === 'wa_carte') return <PaginaWACarte onBack={() => setSub(null)} />;
+  if (sub === 'benvenuto') return <PaginaBenvenuto onBack={() => setSub(null)} />;
   if (sub === 'scarica_documenti') return (
     <StatisticheGate isActive={sub === 'scarica_documenti'} chiave="password_documenti" sezione="scarica file e documenti" sessionKey="documenti_unlocked">
       <PaginaScaricaDocumenti onBack={() => setSub(null)} />
@@ -77,7 +79,8 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     'Template Messaggi Comunicazioni', 'Messaggi predefiniti per comunicazioni',
     'Messaggi WA Carte da Donare', 'Gift Pass Carta Sconto donazione mappa posizione',
   );
-  const anyVisible = show('Account e Credenziali', 'Modifica email e password') ||
+  const anyVisible = show('Benvenuto Nuove Clienti', 'Modifica il testo del messaggio di benvenuto per le nuove clienti') ||
+    show('Account e Credenziali', 'Modifica email e password') ||
     show('Avvisi e Banner', 'Orari e attivazione di tutti gli avvisi') ||
     show('Backup e Ripristino', 'Esporta tutti i dati') ||
     show('Canali Social', 'Instagram Facebook TikTok YouTube') ||
@@ -142,6 +145,22 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold text-stone-800">Account e Credenziali</p>
             <p className="text-xs text-stone-400 mt-0.5">Modifica email e password di accesso al gestionale</p>
+          </div>
+          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+        </button>
+
+        {/* Benvenuto Nuove Clienti */}
+        <button
+          onClick={() => setSub('benvenuto')}
+          style={show('Benvenuto Nuove Clienti', 'Modifica il testo del messaggio di benvenuto per le nuove clienti') ? {} : {display:'none'}}
+          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-rose-100 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Sparkles size={18} className="text-stone-500 group-hover:text-rose-500 transition-colors" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-stone-800">Benvenuto Nuove Clienti</p>
+            <p className="text-xs text-stone-400 mt-0.5">Modifica il testo del messaggio di benvenuto per le nuove clienti</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -7757,6 +7776,150 @@ function PaginaWACarte({ onBack }: { onBack: () => void }) {
           : <Check size={16} />}
         {feedback || 'Salva tutte le modifiche'}
       </button>
+    </div>
+  );
+}
+
+// ─── Benvenuto Nuove Clienti ──────────────────────────────────────────────────
+
+function PaginaBenvenuto({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [cfg, setCfg] = useState<BenvenutoConfig>(BENVENUTO_DEFAULT);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    getImpostazione('benvenuto_config_json').then(val => {
+      if (val) {
+        try { setCfg(JSON.parse(val)); } catch {}
+      }
+      setLoading(false);
+    });
+  }, [user]);
+
+  function updateVantaggio(i: number, field: 'label' | 'testo', value: string) {
+    setCfg(prev => {
+      const v = [...prev.vantaggi];
+      v[i] = { ...v[i], [field]: value };
+      return { ...prev, vantaggi: v };
+    });
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    await setImpostazione('benvenuto_config_json', JSON.stringify(cfg), user?.id);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Benvenuto Nuove Clienti</h2>
+          <p className="text-sm text-stone-400 mt-0.5">Personalizza il messaggio mostrato alla prima visita</p>
+        </div>
+      </div>
+
+      <div className="bg-rose-50 border border-rose-200 rounded-2xl px-5 py-3.5 flex items-start gap-3">
+        <Sparkles size={15} className="text-rose-500 mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-rose-700 leading-relaxed">
+          Il titolo <strong>"✨ Finalmente sei qui, [Nome]!"</strong> è fisso. Nei testi intro puoi usare <code className="bg-rose-100 px-1 rounded text-rose-800">&lt;strong&gt;parola&lt;/strong&gt;</code> per il grassetto.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+        <p className="text-sm font-semibold text-stone-800">Primo paragrafo</p>
+        <textarea
+          value={cfg.intro1}
+          onChange={e => setCfg(p => ({ ...p, intro1: e.target.value }))}
+          rows={3}
+          className="w-full text-sm border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 text-stone-700 placeholder-stone-300 resize-none transition-colors"
+        />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+        <p className="text-sm font-semibold text-stone-800">Secondo paragrafo</p>
+        <textarea
+          value={cfg.intro2}
+          onChange={e => setCfg(p => ({ ...p, intro2: e.target.value }))}
+          rows={2}
+          className="w-full text-sm border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 text-stone-700 placeholder-stone-300 resize-none transition-colors"
+        />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <p className="text-sm font-semibold text-stone-800">Le 5 voci dei vantaggi</p>
+        {cfg.vantaggi.slice(0, 5).map((v, i) => (
+          <div key={i} className="space-y-2 pb-4 border-b border-stone-100 last:border-0 last:pb-0">
+            <p className="text-xs font-medium text-stone-500 uppercase tracking-wide">Voce {i + 1}</p>
+            <input
+              type="text"
+              value={v.label}
+              onChange={e => updateVantaggio(i, 'label', e.target.value)}
+              placeholder="Titolo in grassetto"
+              className="w-full text-sm border border-stone-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 text-stone-700 placeholder-stone-300 transition-colors"
+            />
+            <textarea
+              value={v.testo}
+              onChange={e => updateVantaggio(i, 'testo', e.target.value)}
+              rows={2}
+              placeholder="Descrizione"
+              className="w-full text-sm border border-stone-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 text-stone-700 placeholder-stone-300 resize-none transition-colors"
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+        <p className="text-sm font-semibold text-stone-800">Frase di chiusura</p>
+        <textarea
+          value={cfg.chiusura}
+          onChange={e => setCfg(p => ({ ...p, chiusura: e.target.value }))}
+          rows={2}
+          className="w-full text-sm border border-stone-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 text-stone-700 placeholder-stone-300 resize-none transition-colors"
+        />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-3">
+        <p className="text-sm font-semibold text-stone-800">Testo del pulsante</p>
+        <input
+          type="text"
+          value={cfg.cta}
+          onChange={e => setCfg(p => ({ ...p, cta: e.target.value }))}
+          className="w-full text-sm border border-stone-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 text-stone-700 placeholder-stone-300 transition-colors"
+        />
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => setCfg(BENVENUTO_DEFAULT)}
+          className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-stone-200 text-stone-500 hover:bg-stone-50 text-sm font-medium transition-colors"
+        >
+          <RotateCcw size={14} />
+          Ripristina originale
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-semibold text-sm shadow-sm transition-all"
+        >
+          {saved ? <Check size={16} /> : <Sparkles size={16} />}
+          {saving ? 'Salvataggio...' : saved ? 'Salvato!' : 'Salva messaggio'}
+        </button>
+      </div>
     </div>
   );
 }

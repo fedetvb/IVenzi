@@ -41,21 +41,39 @@ const PETALS = [
   { left: '90%', delay: '0.6s', dur: '5s',  size: 8 },
 ];
 
-const VANTAGGI = [
-  { icon: Calendar,       label: 'Niente attese al telefono',  testo: 'Invii la tua richiesta di prenotazione in un attimo, quando vuoi tu, e aspetti solo il nostro messaggio di conferma.' },
-  { icon: Clock,          label: 'Tutto sotto controllo',      testo: 'Vedi all\'istante i tuoi appuntamenti passati e quelli futuri per pianificare i tuoi look.' },
-  { icon: Scissors,       label: 'Il tuo diario di bellezza',  testo: 'Vuoi ricordare che colore o trattamento hai fatto l\'ultima volta, quando e con chi? È tutto scritto qui.' },
-  { icon: CreditCard,     label: 'Il tuo borsellino',          testo: 'Monitori in tempo reale il saldo delle tue carte, abbonamenti e promozioni.' },
-  { icon: MessageCircle,  label: 'Filo diretto con noi',       testo: 'Puoi inviarci foto di ispirazione o messaggi per richieste speciali prima ancora di sederti in poltrona.' },
-];
+const ICONS = [Calendar, Clock, Scissors, CreditCard, MessageCircle];
+
+export interface BenvenutoConfig {
+  intro1: string;
+  intro2: string;
+  chiusura: string;
+  cta: string;
+  vantaggi: { label: string; testo: string }[];
+}
+
+export const BENVENUTO_DEFAULT: BenvenutoConfig = {
+  intro1: "La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte. Non è il solito sito e non è la solita app: questo è il tuo <strong>pass d'accesso esclusivo</strong> al futuro del nostro salone.",
+  intro2: "Abbiamo digitalizzato le tue coccole. Ecco cosa troverai nella tua <strong>Area Personale</strong>:",
+  chiusura: "Curiosa di vedere come abbiamo rivoluzionato il tuo modo di prenderti cura di te? Il tuo nuovo portale è pronto.",
+  cta: "Scopri il tuo spazio",
+  vantaggi: [
+    { label: 'Niente attese al telefono',  testo: 'Invii la tua richiesta di prenotazione in un attimo, quando vuoi tu, e aspetti solo il nostro messaggio di conferma.' },
+    { label: 'Tutto sotto controllo',      testo: "Vedi all'istante i tuoi appuntamenti passati e quelli futuri per pianificare i tuoi look." },
+    { label: 'Il tuo diario di bellezza',  testo: "Vuoi ricordare che colore o trattamento hai fatto l'ultima volta, quando e con chi? È tutto scritto qui." },
+    { label: 'Il tuo borsellino',          testo: 'Monitori in tempo reale il saldo delle tue carte, abbonamenti e promozioni.' },
+    { label: 'Filo diretto con noi',       testo: 'Puoi inviarci foto di ispirazione o messaggi per richieste speciali prima ancora di sederti in poltrona.' },
+  ],
+};
 
 interface Props {
   nome: string;
+  config?: BenvenutoConfig;
   onClose: () => void;
 }
 
-export default function BenvenutoModal({ nome, onClose }: Props) {
+export default function BenvenutoModal({ nome, config, onClose }: Props) {
   const [visible, setVisible] = useState(false);
+  const cfg = config ?? BENVENUTO_DEFAULT;
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -64,6 +82,11 @@ export default function BenvenutoModal({ nome, onClose }: Props) {
   function handleClose() {
     setVisible(false);
     setTimeout(onClose, 350);
+  }
+
+  // Replace [Nome] placeholder in text fields
+  function applyNome(text: string) {
+    return text.replace(/\[Nome\]/gi, nome).replace(/\[Nome Cliente\]/gi, nome);
   }
 
   return (
@@ -126,35 +149,40 @@ export default function BenvenutoModal({ nome, onClose }: Props) {
 
           {/* Corpo */}
           <div className="px-5 pt-4 pb-3 space-y-3 max-h-[58vh] overflow-y-auto">
-            <p className="text-xs leading-relaxed text-stone-600">
-              La tua scheda è confermata e le porte del tuo nuovo angolo di bellezza digitale si sono appena aperte. Non è il solito sito e non è la solita app: questo è il tuo <strong>pass d'accesso esclusivo</strong> al futuro del nostro salone.
-            </p>
+            <p
+              className="text-xs leading-relaxed text-stone-600"
+              dangerouslySetInnerHTML={{ __html: applyNome(cfg.intro1) }}
+            />
 
-            <p className="text-xs leading-relaxed text-stone-600">
-              Abbiamo digitalizzato le tue coccole. Ecco cosa troverai nella tua <strong>Area Personale</strong>:
-            </p>
+            <p
+              className="text-xs leading-relaxed text-stone-600"
+              dangerouslySetInnerHTML={{ __html: applyNome(cfg.intro2) }}
+            />
 
             <div className="space-y-2">
-              {VANTAGGI.map(({ icon: Icon, label, testo }, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-3 bg-white/70 rounded-2xl px-3 py-2.5 backdrop-blur-sm"
-                >
+              {cfg.vantaggi.slice(0, 5).map(({ label, testo }, i) => {
+                const Icon = ICONS[i] ?? Sparkles;
+                return (
                   <div
-                    className="flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center mt-0.5"
-                    style={{ background: 'linear-gradient(135deg, #f4c2c2, #fce4ec)' }}
+                    key={i}
+                    className="flex items-start gap-3 bg-white/70 rounded-2xl px-3 py-2.5 backdrop-blur-sm"
                   >
-                    <Icon size={13} className="text-rose-500" />
+                    <div
+                      className="flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center mt-0.5"
+                      style={{ background: 'linear-gradient(135deg, #f4c2c2, #fce4ec)' }}
+                    >
+                      <Icon size={13} className="text-rose-500" />
+                    </div>
+                    <p className="text-xs text-stone-700 leading-snug">
+                      <strong>{applyNome(label)}</strong>: {applyNome(testo)}
+                    </p>
                   </div>
-                  <p className="text-xs text-stone-700 leading-snug">
-                    <strong>{label}</strong>: {testo}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <p className="text-xs text-center text-stone-500 leading-relaxed pt-1 pb-1">
-              Curiosa di vedere come abbiamo rivoluzionato il tuo modo di prenderti cura di te? Il tuo nuovo portale è pronto.
+              {applyNome(cfg.chiusura)}
             </p>
           </div>
 
@@ -167,7 +195,7 @@ export default function BenvenutoModal({ nome, onClose }: Props) {
                 background: 'linear-gradient(135deg, #f06292, #e91e63, #ad1457)',
               }}
             >
-              Scopri il tuo spazio
+              {cfg.cta}
             </button>
           </div>
 

@@ -143,6 +143,7 @@ Deno.serve(async (req: Request) => {
       annuncio,
       contatti,
       benvenutoAttivo: impostazioni["benvenuto_attivo"] !== "false",
+      benvenutoConfig: impostazioni["benvenuto_config_json"] ? JSON.parse(impostazioni["benvenuto_config_json"]) : null,
     });
   }
 

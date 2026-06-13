@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, Users, Phone, Download, Share, MessageCircle, CalendarPlus, Image, Trash2, Star, Inbox, ChevronDown, ChevronUp, ZoomIn, Reply, Bell, BellOff, CreditCard, Gift, TrendingUp, ArrowUpCircle, ArrowDownCircle, Mail, FileText, Camera, MapPin, Globe, ExternalLink } from 'lucide-react';
 import AnnuncioModal, { COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
-import BenvenutoModal from '../components/BenvenutoModal';
+import BenvenutoModal, { type BenvenutoConfig } from '../components/BenvenutoModal';
 import { applyWaTemplate, DEFAULT_WA_CS_DONA, DEFAULT_WA_GP_CLIENTE } from '../lib/waUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
@@ -65,6 +65,7 @@ interface SalonInfo {
     ferieFine?: string;
   };
   benvenutoAttivo?: boolean;
+  benvenutoConfig?: BenvenutoConfig | null;
 }
 
 type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'contatti';
@@ -1349,6 +1350,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       {showBenvenuto && (
         <BenvenutoModal
           nome={nome}
+          config={info?.benvenutoConfig ?? undefined}
           onClose={() => {
             localStorage.setItem(`benvenuto_visto_${userId}_${telefono.trim()}`, '1');
             // Aggiorna il flag nel DB (non bloccante)
