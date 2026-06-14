@@ -242,6 +242,24 @@ export default function ProdottiOnline() {
     return !!expandedGroups[key];
   }
 
+  // Macro-group accordion state (separate from per-product tag groups)
+  const [macroAperto, setMacroAperto] = useState<Record<string, boolean>>({
+    shampoo: true,
+    maschera: false,
+    finish: false,
+  });
+
+  function toggleMacro(key: string) {
+    setMacroAperto(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function getMacroGruppo(categoria: string | null): 'shampoo' | 'maschera' | 'finish' {
+    const c = (categoria ?? '').trim();
+    if (c === 'Shampoo') return 'shampoo';
+    if (['Maschera', 'Balsamo', 'Crema'].includes(c)) return 'maschera';
+    return 'finish';
+  }
+
   const q = search.toLowerCase();
   const prodottiFiltrati = prodotti.filter(p =>
     !q || p.nome.toLowerCase().includes(q) || (p.categoria ?? '').toLowerCase().includes(q) || (p.marca ?? '').toLowerCase().includes(q)
@@ -259,6 +277,48 @@ export default function ProdottiOnline() {
   }
 
   const totalModifiche = prodottiFiltrati.filter(p => hasChanges(p.id)).length;
+
+  const MACRO_SEZIONI: {
+    key: 'shampoo' | 'maschera' | 'finish';
+    titolo: string;
+    sottotitolo: string;
+    stepLabel: string;
+    accentBg: string;
+    accentBorder: string;
+    accentBadge: string;
+    dotColor: string;
+  }[] = [
+    {
+      key: 'shampoo',
+      titolo: 'I Nostri Shampoo',
+      sottotitolo: 'Categoria: Shampoo',
+      stepLabel: 'Step 1 — Detergi',
+      accentBg: 'bg-sky-50',
+      accentBorder: 'border-sky-200',
+      accentBadge: 'bg-sky-100 text-sky-700',
+      dotColor: 'bg-sky-400',
+    },
+    {
+      key: 'maschera',
+      titolo: 'Le Nostre Maschere & Creme',
+      sottotitolo: 'Categorie: Maschera · Balsamo · Crema',
+      stepLabel: 'Step 2 — Nutri',
+      accentBg: 'bg-emerald-50',
+      accentBorder: 'border-emerald-200',
+      accentBadge: 'bg-emerald-100 text-emerald-700',
+      dotColor: 'bg-emerald-400',
+    },
+    {
+      key: 'finish',
+      titolo: 'I Nostri Finish',
+      sottotitolo: 'Categorie: Olio · Lacca · Cera · Spray · Siero · Altro…',
+      stepLabel: 'Step 3 — Proteggi & Illumina',
+      accentBg: 'bg-amber-50',
+      accentBorder: 'border-amber-200',
+      accentBadge: 'bg-amber-100 text-amber-700',
+      dotColor: 'bg-amber-400',
+    },
+  ];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-full bg-stone-50">
@@ -332,195 +392,238 @@ export default function ProdottiOnline() {
         </div>
       ) : (
         <div className="space-y-4">
-          {prodottiFiltrati.map(prodotto => {
-            const tags = localTags[prodotto.id] ?? [];
-            const changed = hasChanges(prodotto.id);
-            const saving = savingRow[prodotto.id] ?? false;
+          {MACRO_SEZIONI.map(sezione => {
+            const prodottiSezione = prodottiFiltrati.filter(p => getMacroGruppo(p.categoria) === sezione.key);
+            const aperto = macroAperto[sezione.key] ?? false;
+            const modificheSezione = prodottiSezione.filter(p => hasChanges(p.id)).length;
 
             return (
-              <div
-                key={prodotto.id}
-                className={`bg-white rounded-2xl border transition-all shadow-sm ${
-                  changed ? 'border-amber-300 ring-1 ring-amber-200' : 'border-stone-200'
-                }`}
-              >
-                {/* Product header row */}
-                <div className="flex items-start gap-4 p-4 sm:p-5">
-                  {/* Image preview / upload */}
-                  <div className="flex-shrink-0 relative group">
-                    {localFotoUrl[prodotto.id] ? (
-                      <>
-                        <img src={localFotoUrl[prodotto.id]} alt={prodotto.nome} className="w-16 h-16 rounded-xl object-cover border border-stone-200" />
-                        <button
-                          onClick={() => removeFoto(prodotto.id)}
-                          title="Rimuovi foto"
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                        >
-                          <X size={10} className="text-white" />
-                        </button>
-                        <button
-                          onClick={() => fileInputRefs.current[prodotto.id]?.click()}
-                          title="Sostituisci foto"
-                          className="absolute -bottom-1.5 -right-1.5 w-5 h-5 bg-stone-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                        >
-                          <Upload size={9} className="text-white" />
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => fileInputRefs.current[prodotto.id]?.click()}
-                        disabled={uploadingFoto[prodotto.id]}
-                        className="w-16 h-16 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 border-2 border-dashed border-stone-300 flex flex-col items-center justify-center gap-1 hover:border-emerald-400 hover:bg-emerald-50 transition-all"
-                        title="Carica foto prodotto"
-                      >
-                        {uploadingFoto[prodotto.id] ? (
-                          <Loader2 size={18} className="text-emerald-500 animate-spin" />
-                        ) : (
-                          <>
-                            <Upload size={14} className="text-stone-400" />
-                            <span className="text-[9px] text-stone-400 font-medium leading-none text-center">Carica<br/>foto</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                    <input
-                      ref={el => { fileInputRefs.current[prodotto.id] = el; }}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleFotoUpload(prodotto.id, f); }}
-                    />
-                    {uploadingFoto[prodotto.id] && localFotoUrl[prodotto.id] && (
-                      <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center">
-                        <Loader2 size={18} className="text-white animate-spin" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Name / category + best_seller */}
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div>
-                      <p className="font-semibold text-stone-800 text-sm leading-tight truncate">{prodotto.nome}</p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {prodotto.marca && <span className="text-xs text-stone-400">{prodotto.marca}</span>}
-                        {prodotto.categoria && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600">
-                            {prodotto.categoria}
+              <div key={sezione.key} className={`rounded-2xl border shadow-sm overflow-hidden ${sezione.accentBorder} bg-white`}>
+                {/* Accordion header */}
+                <button
+                  onClick={() => toggleMacro(sezione.key)}
+                  className={`w-full flex items-center justify-between px-5 py-4 transition-colors hover:opacity-90 ${sezione.accentBg}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${sezione.dotColor}`} />
+                    <div className="text-left min-w-0">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="font-bold text-stone-800 text-base leading-tight">{sezione.titolo}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${sezione.accentBadge}`}>
+                          {sezione.stepLabel}
+                        </span>
+                        {modificheSezione > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700">
+                            {modificheSezione} non {modificheSezione === 1 ? 'salvato' : 'salvati'}
                           </span>
                         )}
-                        {prodotto.prezzo_vendita != null && (
-                          <span className="text-xs font-semibold text-stone-600">€{prodotto.prezzo_vendita.toFixed(2)}</span>
-                        )}
                       </div>
+                      <p className="text-xs text-stone-500 mt-0.5">{sezione.sottotitolo}</p>
                     </div>
-                    {/* Best-seller toggle */}
-                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                      <div
-                        onClick={() => setLocalBestSeller(prev => ({ ...prev, [prodotto.id]: !prev[prodotto.id] }))}
-                        className={`w-8 h-4 rounded-full transition-colors flex-shrink-0 flex items-center px-0.5 ${localBestSeller[prodotto.id] ? 'bg-amber-500' : 'bg-stone-300'}`}
-                      >
-                        <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform ${localBestSeller[prodotto.id] ? 'translate-x-4' : ''}`} />
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                    <span className="text-sm font-semibold text-stone-500">{prodottiSezione.length}</span>
+                    {aperto
+                      ? <ChevronUp size={18} className="text-stone-400" />
+                      : <ChevronDown size={18} className="text-stone-400" />
+                    }
+                  </div>
+                </button>
+
+                {/* Product rows */}
+                {aperto && (
+                  <div className="divide-y divide-stone-100">
+                    {prodottiSezione.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 gap-2 text-stone-400">
+                        <Package size={22} />
+                        <p className="text-sm">{search ? 'Nessun prodotto trovato.' : 'Nessun prodotto in questa sezione.'}</p>
                       </div>
-                      <span className={`text-xs font-medium ${localBestSeller[prodotto.id] ? 'text-amber-600' : 'text-stone-500'}`}>
-                        <Star size={11} className="inline mr-0.5 mb-0.5" />
-                        Best-seller (fallback quiz)
-                      </span>
-                    </label>
-                  </div>
+                    ) : prodottiSezione.map(prodotto => {
+                      const tags = localTags[prodotto.id] ?? [];
+                      const changed = hasChanges(prodotto.id);
+                      const saving = savingRow[prodotto.id] ?? false;
 
-                  {/* Tag count badge + save */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {tags.length > 0 && (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {tags.length} tag
-                      </span>
-                    )}
-                    <button
-                      onClick={() => saveRow(prodotto.id)}
-                      disabled={saving || !changed}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-stone-900 text-white hover:bg-stone-700"
-                    >
-                      {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                      Salva
-                    </button>
-                  </div>
-                </div>
-
-                {/* Quiz groups */}
-                <div className="border-t border-stone-100 px-4 sm:px-5 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {QUIZ_GRUPPI.map(gruppo => {
-                    const selectedInGroup = gruppo.tags.filter(t => tags.includes(t));
-                    const expanded = isGroupExpanded(prodotto.id, gruppo.label);
-
-                    return (
-                      <div key={gruppo.label} className="border border-stone-100 rounded-xl overflow-hidden bg-stone-50">
-                        <button
-                          onClick={() => toggleGroup(prodotto.id, gruppo.label)}
-                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-stone-100 transition-colors"
+                      return (
+                        <div
+                          key={prodotto.id}
+                          className={`transition-all ${changed ? 'bg-amber-50/40' : ''}`}
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm">{gruppo.emoji}</span>
-                            <span className="text-xs font-semibold text-stone-700 truncate">{gruppo.label}</span>
-                            {selectedInGroup.length > 0 && (
-                              <span className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full bg-emerald-500 text-white">
-                                {selectedInGroup.length}
-                              </span>
-                            )}
-                          </div>
-                          {expanded ? <ChevronUp size={13} className="text-stone-400 flex-shrink-0" /> : <ChevronDown size={13} className="text-stone-400 flex-shrink-0" />}
-                        </button>
-
-                        {expanded && (
-                          <div className="px-3 pb-2.5 pt-1 flex flex-col gap-1.5">
-                            {gruppo.tags.map(tag => {
-                              const checked = tags.includes(tag);
-                              return (
-                                <label
-                                  key={tag}
-                                  className={`flex items-center gap-2 cursor-pointer rounded-lg px-2 py-1.5 transition-colors select-none ${
-                                    checked ? 'bg-emerald-50' : 'hover:bg-stone-100'
-                                  }`}
+                          {/* Product header row */}
+                          <div className="flex items-start gap-4 p-4 sm:p-5">
+                            {/* Image preview / upload */}
+                            <div className="flex-shrink-0 relative group">
+                              {localFotoUrl[prodotto.id] ? (
+                                <>
+                                  <img src={localFotoUrl[prodotto.id]} alt={prodotto.nome} className="w-16 h-16 rounded-xl object-cover border border-stone-200" />
+                                  <button
+                                    onClick={() => removeFoto(prodotto.id)}
+                                    title="Rimuovi foto"
+                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                                  >
+                                    <X size={10} className="text-white" />
+                                  </button>
+                                  <button
+                                    onClick={() => fileInputRefs.current[prodotto.id]?.click()}
+                                    title="Sostituisci foto"
+                                    className="absolute -bottom-1.5 -right-1.5 w-5 h-5 bg-stone-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                                  >
+                                    <Upload size={9} className="text-white" />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => fileInputRefs.current[prodotto.id]?.click()}
+                                  disabled={uploadingFoto[prodotto.id]}
+                                  className="w-16 h-16 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 border-2 border-dashed border-stone-300 flex flex-col items-center justify-center gap-1 hover:border-emerald-400 hover:bg-emerald-50 transition-all"
+                                  title="Carica foto prodotto"
                                 >
-                                  <div
-                                    className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border transition-all ${
-                                      checked
-                                        ? 'bg-emerald-500 border-emerald-500'
-                                        : 'border-stone-300 bg-white'
-                                    }`}
-                                    onClick={() => toggleTag(prodotto.id, tag)}
+                                  {uploadingFoto[prodotto.id] ? (
+                                    <Loader2 size={18} className="text-emerald-500 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Upload size={14} className="text-stone-400" />
+                                      <span className="text-[9px] text-stone-400 font-medium leading-none text-center">Carica<br/>foto</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                              <input
+                                ref={el => { fileInputRefs.current[prodotto.id] = el; }}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="hidden"
+                                onChange={e => { const f = e.target.files?.[0]; if (f) handleFotoUpload(prodotto.id, f); }}
+                              />
+                              {uploadingFoto[prodotto.id] && localFotoUrl[prodotto.id] && (
+                                <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center">
+                                  <Loader2 size={18} className="text-white animate-spin" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Name / category + best_seller */}
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div>
+                                <p className="font-semibold text-stone-800 text-sm leading-tight truncate">{prodotto.nome}</p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  {prodotto.marca && <span className="text-xs text-stone-400">{prodotto.marca}</span>}
+                                  {prodotto.categoria && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600">
+                                      {prodotto.categoria}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Best-seller toggle */}
+                              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                                <div
+                                  onClick={() => setLocalBestSeller(prev => ({ ...prev, [prodotto.id]: !prev[prodotto.id] }))}
+                                  className={`w-8 h-4 rounded-full transition-colors flex-shrink-0 flex items-center px-0.5 ${localBestSeller[prodotto.id] ? 'bg-amber-500' : 'bg-stone-300'}`}
+                                >
+                                  <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform ${localBestSeller[prodotto.id] ? 'translate-x-4' : ''}`} />
+                                </div>
+                                <span className={`text-xs font-medium ${localBestSeller[prodotto.id] ? 'text-amber-600' : 'text-stone-500'}`}>
+                                  <Star size={11} className="inline mr-0.5 mb-0.5" />
+                                  Best-seller (Jolly quiz)
+                                </span>
+                              </label>
+                            </div>
+
+                            {/* Tag count badge + save */}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {tags.length > 0 && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {tags.length} tag
+                                </span>
+                              )}
+                              <button
+                                onClick={() => saveRow(prodotto.id)}
+                                disabled={saving || !changed}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-stone-900 text-white hover:bg-stone-700"
+                              >
+                                {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                Salva
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quiz groups */}
+                          <div className="border-t border-stone-100 px-4 sm:px-5 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {QUIZ_GRUPPI.map(gruppo => {
+                              const selectedInGroup = gruppo.tags.filter(t => tags.includes(t));
+                              const expanded = isGroupExpanded(prodotto.id, gruppo.label);
+
+                              return (
+                                <div key={gruppo.label} className="border border-stone-100 rounded-xl overflow-hidden bg-stone-50">
+                                  <button
+                                    onClick={() => toggleGroup(prodotto.id, gruppo.label)}
+                                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-stone-100 transition-colors"
                                   >
-                                    {checked && (
-                                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                        <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                    )}
-                                  </div>
-                                  <span
-                                    className={`text-xs ${checked ? 'font-semibold text-emerald-700' : 'text-stone-600'}`}
-                                    onClick={() => toggleTag(prodotto.id, tag)}
-                                  >
-                                    {TAG_LABELS[tag] ?? tag}
-                                  </span>
-                                </label>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-sm">{gruppo.emoji}</span>
+                                      <span className="text-xs font-semibold text-stone-700 truncate">{gruppo.label}</span>
+                                      {selectedInGroup.length > 0 && (
+                                        <span className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full bg-emerald-500 text-white">
+                                          {selectedInGroup.length}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {expanded ? <ChevronUp size={13} className="text-stone-400 flex-shrink-0" /> : <ChevronDown size={13} className="text-stone-400 flex-shrink-0" />}
+                                  </button>
+
+                                  {expanded && (
+                                    <div className="px-3 pb-2.5 pt-1 flex flex-col gap-1.5">
+                                      {gruppo.tags.map(tag => {
+                                        const checked = tags.includes(tag);
+                                        return (
+                                          <label
+                                            key={tag}
+                                            className={`flex items-center gap-2 cursor-pointer rounded-lg px-2 py-1.5 transition-colors select-none ${
+                                              checked ? 'bg-emerald-50' : 'hover:bg-stone-100'
+                                            }`}
+                                          >
+                                            <div
+                                              className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border transition-all ${
+                                                checked ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 bg-white'
+                                              }`}
+                                              onClick={() => toggleTag(prodotto.id, tag)}
+                                            >
+                                              {checked && (
+                                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                            <span
+                                              className={`text-xs ${checked ? 'font-semibold text-emerald-700' : 'text-stone-600'}`}
+                                              onClick={() => toggleTag(prodotto.id, tag)}
+                                            >
+                                              {TAG_LABELS[tag] ?? tag}
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {!expanded && selectedInGroup.length > 0 && (
+                                    <div className="px-3 pb-2.5 flex flex-wrap gap-1">
+                                      {selectedInGroup.map(t => (
+                                        <span key={t} className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-emerald-100 text-emerald-700">
+                                          {TAG_LABELS[t] ?? t}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
-                        )}
-
-                        {/* Collapsed summary of selected tags */}
-                        {!expanded && selectedInGroup.length > 0 && (
-                          <div className="px-3 pb-2.5 flex flex-wrap gap-1">
-                            {selectedInGroup.map(t => (
-                              <span key={t} className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-emerald-100 text-emerald-700">
-                                {TAG_LABELS[t] ?? t}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -530,7 +633,7 @@ export default function ProdottiOnline() {
       {/* Bottom summary bar */}
       {prodottiFiltrati.length > 0 && (
         <div className="mt-6 flex items-center justify-between text-xs text-stone-400">
-          <span>{prodottiFiltrati.length} prodotti</span>
+          <span>{prodottiFiltrati.length} prodotti in {MACRO_SEZIONI.filter(s => prodottiFiltrati.some(p => getMacroGruppo(p.categoria) === s.key)).length} sezioni</span>
           <span>{prodottiFiltrati.reduce((acc, p) => acc + (localTags[p.id]?.length ?? 0), 0)} tag totali assegnati</span>
         </div>
       )}
