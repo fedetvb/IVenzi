@@ -2187,8 +2187,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <span className="text-2xl">💆</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-stone-800 text-lg">Quiz Capelli</p>
-                <p className="text-sm text-emerald-600 font-medium mt-0.5">Scopri la tua routine personalizzata</p>
+                <p className="font-bold text-stone-800 text-lg leading-tight">Il Codice della tua Bellezza</p>
+                <p className="text-sm text-emerald-600 font-medium mt-1 leading-snug">Rivela la formula ideale per la tua chioma ed evoca il tuo rituale su misura.</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
             </button>
