@@ -300,37 +300,53 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // Quiz capelli state
   interface QuizDomanda { id: string; domanda: string; emoji: string; opzioni: { label: string; tag: string }[] }
   const QUIZ_DOMANDE: QuizDomanda[] = [
-    { id: 'tipo', domanda: "Com'è la struttura dei tuoi capelli?", emoji: '💇', opzioni: [
-      { label: 'Lisci', tag: 'lisci' }, { label: 'Mossi', tag: 'mossi' },
-      { label: 'Ricci', tag: 'ricci' }, { label: 'Afro', tag: 'afro' },
+    { id: 'tipo', domanda: 'Come descriveresti la struttura dei tuoi capelli al naturale?', emoji: '💇', opzioni: [
+      { label: 'Perfettamente lisci e tendenti ad appiattirsi', tag: 'lisci' },
+      { label: 'Mossi, ma tendono a perdere la forma facilmente', tag: 'mossi' },
+      { label: 'Ricci, da quelli morbidi a quelli più stretti', tag: 'ricci' },
+      { label: 'Molto ricci, texturizzati o afro', tag: 'afro' },
     ]},
-    { id: 'sensazione', domanda: 'Come si sentono i tuoi capelli?', emoji: '✨', opzioni: [
-      { label: 'Normali', tag: 'normali' }, { label: 'Secchi', tag: 'secchi' },
-      { label: 'Danneggiati', tag: 'danneggiati' }, { label: 'Pesanti', tag: 'pesanti' },
+    { id: 'sensazione', domanda: 'Se passi le dita tra le lunghezze, che sensazione provi?', emoji: '✨', opzioni: [
+      { label: 'Sono morbidi e scivolano via lisci', tag: 'normali' },
+      { label: 'Li sento un po\' ruvidi e secchi sulle punte', tag: 'secchi' },
+      { label: 'Si annodano facilmente e sembrano fragili', tag: 'danneggiati' },
+      { label: 'Li sento pesanti e si sporcano molto in fretta', tag: 'pesanti' },
     ]},
-    { id: 'crespo', domanda: 'Hai problemi di crespo?', emoji: '🌊', opzioni: [
-      { label: 'No, nessun crespo', tag: 'no_crespo' }, { label: "Sì, con l'umidità", tag: 'crespo_umidita' },
-      { label: 'Alta esigenza', tag: 'alta_esigenza' }, { label: 'Punte rovinate', tag: 'punte_rovinate' },
+    { id: 'crespo', domanda: 'Parliamo di "effetto crespo": qual è il tuo livello di sfida quotidiano?', emoji: '🌊', opzioni: [
+      { label: 'Praticamente inesistente, restano sempre disciplinati', tag: 'no_crespo' },
+      { label: "Compare solo quando c'è molta umidità nell'aria", tag: 'crespo_umidita' },
+      { label: 'È una costante: sono spesso gonfi e difficili da domare', tag: 'alta_esigenza' },
+      { label: 'Sono crespi solo sulle punte perché molto sfruttati', tag: 'punte_rovinate' },
     ]},
-    { id: 'cute', domanda: "Com'è la tua cute?", emoji: '🌿', opzioni: [
-      { label: 'Grassa', tag: 'cute_grassa' }, { label: 'Secca', tag: 'cute_secca' },
-      { label: 'Sensibile', tag: 'cute_sensibile' }, { label: 'Normale', tag: 'cute_normale' },
+    { id: 'cute', domanda: 'Concentriamoci sulla cute: come si comporta nei giorni successivi allo shampoo?', emoji: '🌿', opzioni: [
+      { label: 'Produce sebo velocemente e devo lavarli spesso', tag: 'cute_grassa' },
+      { label: 'La sento secca, tesa e a volte avverto un leggero prurito', tag: 'cute_secca' },
+      { label: 'È molto sensibile e si arrossa facilmente', tag: 'cute_sensibile' },
+      { label: 'È equilibrata, non mi dà particolari problemi', tag: 'cute_normale' },
     ]},
-    { id: 'obiettivo', domanda: 'Qual è il tuo obiettivo principale?', emoji: '🎯', opzioni: [
-      { label: 'Idratazione', tag: 'idratazione' }, { label: 'Volume', tag: 'volume' },
-      { label: 'Riparazione', tag: 'riparazione' }, { label: 'Definizione', tag: 'definizione' },
+    { id: 'obiettivo', domanda: 'Qual è l\'obiettivo principale che vorresti raggiungere con i nuovi prodotti?', emoji: '🎯', opzioni: [
+      { label: 'Vorrei un\'idratazione profonda e tanta morbidezza', tag: 'idratazione' },
+      { label: 'Cerco volume, leggerezza e sostegno alle radici', tag: 'volume' },
+      { label: 'Desidero riparare i danni e rinforzare la fibra', tag: 'riparazione' },
+      { label: 'Voglio definire lo styling (ricci elastici o liscio perfetto)', tag: 'definizione' },
     ]},
-    { id: 'stress', domanda: 'Sottoponi i capelli a trattamenti o calore?', emoji: '🔥', opzioni: [
-      { label: 'Colorati/Trattati', tag: 'colorati_trattati' }, { label: 'Calore frequente', tag: 'calore_frequente' },
-      { label: 'Basso stress', tag: 'basso_stress' }, { label: 'Naturali', tag: 'naturali' },
+    { id: 'stress', domanda: 'Sottoponi spesso i tuoi capelli a trattamenti tecnici o calore?', emoji: '🔥', opzioni: [
+      { label: 'Sì, faccio regolarmente tinte, schiariture o permanenti', tag: 'colorati_trattati' },
+      { label: 'Uso piastra o ferro arricciacapelli quasi a ogni lavaggio', tag: 'calore_frequente' },
+      { label: 'Uso solo il phon a temperature medie e prodotti protettivi', tag: 'basso_stress' },
+      { label: 'No, preferisco l\'asciugatura naturale o molto delicata', tag: 'naturali' },
     ]},
-    { id: 'piega', domanda: 'Come gestisci la piega?', emoji: '💨', opzioni: [
-      { label: 'Lunga durata', tag: 'durata_styling' }, { label: 'Difficili da gestire', tag: 'difficili_gestione' },
-      { label: 'Capelli opachi', tag: 'opachi' }, { label: 'Mantenimento', tag: 'mantenimento' },
+    { id: 'piega', domanda: 'Quando fai la piega a casa, qual è la tua difficoltà maggiore?', emoji: '💨', opzioni: [
+      { label: 'La piega non dura e i capelli perdono subito forma', tag: 'durata_styling' },
+      { label: 'Ci metto tantissimo tempo perché sono difficili da districare', tag: 'difficili_gestione' },
+      { label: 'Mancano totalmente di lucentezza, restano opachi', tag: 'opachi' },
+      { label: 'Non ho grosse difficoltà, cerco solo di mantenerli sani', tag: 'mantenimento' },
     ]},
-    { id: 'routine', domanda: 'Che tipo di routine preferisci?', emoji: '⏱️', opzioni: [
-      { label: 'Veloce (Fast)', tag: 'fast_routine' }, { label: 'Standard', tag: 'standard_routine' },
-      { label: 'Premium', tag: 'premium_routine' }, { label: 'Curativa', tag: 'curativa' },
+    { id: 'routine', domanda: 'Quanto tempo riesci a dedicare alla tua Hair Care Routine?', emoji: '⏱️', opzioni: [
+      { label: 'Pochi minuti: cerco una soluzione veloce (shampoo + conditioner)', tag: 'fast_routine' },
+      { label: 'Il giusto: amo applicare una maschera e lasciarla in posa', tag: 'standard_routine' },
+      { label: 'È il mio rituale: uso termoprotettori, sieri e prodotti leave-in', tag: 'premium_routine' },
+      { label: 'Ho bisogno di prodotti mirati per risolvere un problema specifico', tag: 'problema_specifico' },
     ]},
   ];
   const [quizStep, setQuizStep] = useState(0);
@@ -342,6 +358,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [mappaBellezza, setMappaBellezza] = useState<RisultatoRoutine | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [categoriaAperta, setCategoriaAperta] = useState<'shampoo' | 'maschera' | 'finish' | null>(null);
+  const [quizAnalizzando, setQuizAnalizzando] = useState(false);
 
   // Mapping categorie reali del Magazzino → 3 step quiz
   // Shampoo esatto → step 1; Maschera/Balsamo/Crema → step 2; tutto il resto → step 3 (catch-all)
@@ -3078,7 +3095,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         )}
 
         {/* STEP: Quiz Capelli */}
-        {step === 'quiz_capelli' && (() => {
+        {step === 'quiz_capelli' && quizAnalizzando && (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8 py-16 text-center px-4">
+            <div className="relative">
+              <div className="w-20 h-20 rounded-full border-4 border-stone-100 border-t-emerald-500 animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center text-3xl">✨</div>
+            </div>
+            <p className="text-base font-medium text-stone-700 leading-relaxed max-w-xs">
+              ✨ Stiamo analizzando le tue risposte e combinando i principi attivi dei nostri prodotti... Il tuo rituale di bellezza personalizzato è quasi pronto!
+            </p>
+          </div>
+        )}
+
+        {step === 'quiz_capelli' && !quizAnalizzando && (() => {
           const domanda = QUIZ_DOMANDE[quizStep];
           const progress = (quizStep / QUIZ_DOMANDE.length) * 100;
           return (
@@ -3116,11 +3145,15 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                         setQuizRisposte(nuoveRisposte);
                         setQuizStep(q => q + 1);
                       } else {
-                        const risultato = calcolaRoutine(nuoveRisposte);
-                        setRoutineRisultato(risultato);
                         setQuizRisposte(nuoveRisposte);
                         setMappaSalvata(false);
-                        setStep('routine_risultato');
+                        setQuizAnalizzando(true);
+                        setTimeout(() => {
+                          const risultato = calcolaRoutine(nuoveRisposte);
+                          setRoutineRisultato(risultato);
+                          setQuizAnalizzando(false);
+                          setStep('routine_risultato');
+                        }, 2500);
                       }
                     }}
                     className="flex items-center justify-center bg-white border-2 border-stone-200 rounded-2xl p-4 hover:border-emerald-400 hover:bg-emerald-50 active:scale-95 transition-all text-center group"
@@ -3217,10 +3250,11 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 ))}
               </div>
 
-              {/* Messaggio consulenza */}
+              {/* Brand copy finale */}
               <div className="bg-stone-900 rounded-2xl px-5 py-5 space-y-4">
-                <p className="text-sm text-stone-300 leading-relaxed italic text-center">
-                  Metti la tua bellezza e il benessere dei tuoi capelli in mani esperte.
+                <p className="text-sm text-stone-300 leading-relaxed text-center">
+                  ✨ I tuoi capelli hanno parlato: questi sono i prodotti del nostro Brand che più si avvicinano alle tue esigenze.
+                  Il sistema ha individuato la combinazione ideale in base alle tue risposte, ma la Hair Care è una consulenza su misura. Trattandosi di formule professionali ad alta concentrazione, per darti la certezza assoluta abbiamo bisogno di guardare e toccare con mano le tue lunghezze e la tua cute. Passa a trovarci per una consulenza approfondita in salone: confermeremo insieme questa selezione e la personalizzeremo per garantirti un risultato impeccabile. Metti la tua bellezza in mani sicure.
                 </p>
 
                 {/* Prenota */}
