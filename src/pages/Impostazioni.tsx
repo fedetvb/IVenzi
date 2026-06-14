@@ -8532,6 +8532,7 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
   const [cloudOtp, setCloudOtp] = useState('');
   const [savedCreds, setSavedCreds] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [guidaAperta, setGuidaAperta] = useState(false);
 
   const LS_URL = 'sb_custom_url';
   const LS_KEY = 'sb_custom_anon_key';
@@ -8773,6 +8774,149 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       </div>
+
+      {/* Pulsante Guida */}
+      <button
+        onClick={() => setGuidaAperta(true)}
+        className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 hover:from-amber-100 hover:to-yellow-100 transition-all group shadow-sm"
+      >
+        <span className="text-xl">📖</span>
+        <span className="font-bold text-amber-800 text-sm tracking-wide group-hover:text-amber-900 transition-colors">
+          Guida alla Configurazione e Sincronizzazione
+        </span>
+        <div className="ml-auto mr-1 px-2.5 py-0.5 bg-amber-200 text-amber-800 text-[11px] font-bold rounded-full">
+          APRI
+        </div>
+      </button>
+
+      {/* Modal Guida */}
+      {guidaAperta && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={e => { if (e.target === e.currentTarget) setGuidaAperta(false); }}
+        >
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 bg-gradient-to-r from-stone-900 to-stone-800 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-xl flex-shrink-0">🛠️</div>
+                <div>
+                  <p className="font-bold text-white text-base leading-tight">Guida all'Infrastruttura</p>
+                  <p className="text-xs text-stone-400 mt-0.5">Configurazione passo passo</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setGuidaAperta(false)}
+                className="w-8 h-8 rounded-xl bg-stone-700 hover:bg-stone-600 flex items-center justify-center transition-colors"
+              >
+                <X size={14} className="text-white" />
+              </button>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="overflow-y-auto flex-1 px-6 py-6 space-y-6">
+
+              {/* Titolo */}
+              <div className="text-center pb-2 border-b border-stone-100">
+                <p className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-1">Admin Reference</p>
+                <h3 className="text-lg font-bold text-stone-800">🛠️ GUIDA PASSO PASSO ALL'INFRASTRUTTURA</h3>
+              </div>
+
+              {/* Sezione 1 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-emerald-700">1</span>
+                  </div>
+                  <h4 className="font-bold text-stone-800 text-sm uppercase tracking-wide">Configurazione Database (Supabase)</h4>
+                </div>
+                <div className="ml-10 space-y-2.5 text-sm text-stone-600 leading-relaxed">
+                  {[
+                    'Vai su supabase.com, registrati e crea un nuovo progetto per il salone.',
+                    'Attendi il caricamento iniziale e vai in Project Settings (icona ingranaggio) → API.',
+                    "Copia il valore di 'Project URL' e incollalo nel primo campo del gestionale.",
+                    "Copia il valore di 'anon public' (API Key) e incollalo nel secondo campo del gestionale.",
+                    "Clicca su 'Salva credenziali' per rendere il computer immediatamente attivo sul nuovo database.",
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[10px] font-bold text-emerald-600">{i + 1}</span>
+                      </div>
+                      <p>{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-stone-100" />
+
+              {/* Sezione 2 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-sky-700">2</span>
+                  </div>
+                  <h4 className="font-bold text-stone-800 text-sm uppercase tracking-wide">Trasferimento Hosting (da Netlify a Vercel o fornitori simili)</h4>
+                </div>
+                <div className="ml-10 space-y-2.5 text-sm text-stone-600 leading-relaxed">
+                  {[
+                    "Accedi a vercel.com cliccando su 'Continue with GitHub' per collegare i tuoi codici.",
+                    "Clicca su 'Add New' → 'Project' e premi 'Import' accanto al codice del tuo portale prenotazioni.",
+                    "Espandi la sezione 'Environment Variables' e inserisci le chiavi del tuo database:",
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <div className="w-5 h-5 rounded-full bg-sky-50 border border-sky-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[10px] font-bold text-sky-600">{i + 1}</span>
+                      </div>
+                      <p>{step}</p>
+                    </div>
+                  ))}
+                  {/* Variabili env */}
+                  <div className="ml-7 bg-stone-900 rounded-xl px-4 py-3 space-y-2 font-mono text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-amber-400 font-semibold">Nome:</span>
+                      <code className="text-emerald-300">VITE_SUPABASE_URL</code>
+                      <span className="text-stone-400">|</span>
+                      <span className="text-amber-400 font-semibold">Valore:</span>
+                      <code className="text-stone-300">(Incolla l'URL di Supabase)</code>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-amber-400 font-semibold">Nome:</span>
+                      <code className="text-emerald-300">VITE_SUPABASE_ANON_KEY</code>
+                      <span className="text-stone-400">|</span>
+                      <span className="text-amber-400 font-semibold">Valore:</span>
+                      <code className="text-stone-300">(Incolla la chiave anon di Supabase)</code>
+                    </div>
+                  </div>
+                  {[
+                    "Clicca su 'Deploy' per mettere il portale online.",
+                    "Vai in Settings → Git → Deploy Hooks, crea un hook chiamato 'sync' e copia l'URL generato.",
+                    "Incolla l'URL del nuovo portale e l'URL del Deploy Hook nelle rispettive caselle di questa pagina e premi Salva.",
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <div className="w-5 h-5 rounded-full bg-sky-50 border border-sky-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[10px] font-bold text-sky-600">{i + 4}</span>
+                      </div>
+                      <p>{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="flex-shrink-0 px-6 py-4 border-t border-stone-100 bg-stone-50">
+              <button
+                onClick={() => setGuidaAperta(false)}
+                className="w-full py-3 rounded-xl bg-stone-900 text-white text-sm font-semibold hover:bg-stone-800 transition-colors"
+              >
+                Chiudi Guida
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
