@@ -340,6 +340,16 @@ Deno.serve(async (req: Request) => {
       }
 
       const admin = createClient(su, serviceKey);
+
+      // Fetch salon owner user_id (required by RLS INSERT policy)
+      const { data: ownerData } = await admin
+        .from("impostazioni")
+        .select("user_id")
+        .not("user_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      const salonUserId: string | null = ownerData?.user_id ?? null;
+
       let foto_url = "";
 
       if (foto_base64 && foto_mime) {
@@ -376,6 +386,7 @@ Deno.serve(async (req: Request) => {
           note: String(note ?? "").trim(),
           foto_url,
           stato: "in_attesa",
+          ...(salonUserId ? { user_id: salonUserId } : {}),
         });
 
       if (insertErr) throw new Error(insertErr.message);
