@@ -429,3 +429,29 @@ export async function localRowClearTable(table: string, userId: string): Promise
     });
   } catch { /* Non-critical */ }
 }
+
+/** Marca tutte le righe non-deleted di un utente come dirty=1 per forzare un re-sync completo al server remoto. */
+export async function markAllRowsDirty(userId: string): Promise<number> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('local_rows', 'readwrite');
+      const store = tx.objectStore('local_rows');
+      let count = 0;
+      const req = store.openCursor();
+      req.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+        if (!cursor) { resolve(count); return; }
+        const entry = cursor.value as LocalRow;
+        if (entry.userId === userId && entry.dirty === 0 && entry.deleted === 0) {
+          cursor.update({ ...entry, dirty: 1 });
+          count++;
+        }
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return 0;
+  }
+}

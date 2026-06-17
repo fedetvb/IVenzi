@@ -32,6 +32,7 @@ import { InForseModal, loadAvvisoInForse, type ClienteInForseEntry } from './com
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione, registerBrowserLocalOps } from './lib/localDb';
 import { isOwnerBuild, getLicenseState } from './lib/license';
 import { syncLocalToRemote, syncRemoteToLocal, pushRowNow, browserLocalWrite, browserLocalDelete, prefetchToIndexedDb } from './lib/sync';
+import { markAllRowsDirty, getTableCache } from './lib/indexedDb';
 import { flushPendingSync } from './lib/offlineFetch';
 
 // Registra il push immediato e le operazioni locali browser una volta sola
@@ -442,15 +443,43 @@ export default function App() {
   // Sync bidirezionale unificato: locale → Supabase, poi Supabase → locale.
   // Attivo su entrambe le piattaforme: Electron (SQLite) e browser (IndexedDB).
   // In Electron aspetta che il DB sia pronto; nel browser inizia subito dopo il login.
+  const syncBootstrapped = useRef(false);
   useEffect(() => {
     if (!user) return;
     if (isElectron() && !electronDbReady) return;
     const userId = user.id;
     let cancelled = false;
+    syncBootstrapped.current = false;
 
     async function doSync() {
       if (!navigator.onLine || cancelled) return;
       try {
+        // Rileva cambio progetto Supabase: forza upload completo se URL cambiata
+        if (!isElectron()) {
+          const LAST_URL_KEY = 'gestionale_last_supabase_url';
+          const currentUrl = localStorage.getItem('sb_custom_url') || 'https://qfpeffzdszdanebmgafb.supabase.co';
+          const lastUrl = localStorage.getItem(LAST_URL_KEY);
+          if (lastUrl && lastUrl !== currentUrl) {
+            await markAllRowsDirty(userId);
+          }
+          localStorage.setItem(LAST_URL_KEY, currentUrl);
+
+          // Bootstrap check: se il remoto è vuoto ma l'IndexedDB ha dati, forza upload completo.
+          // Gestisce il caso di migrazione a nuovo progetto Supabase senza lastUrl impostata.
+          if (!syncBootstrapped.current) {
+            syncBootstrapped.current = true;
+            try {
+              const { count: remoteCount } = await supabase
+                .from('parrucchieri')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', userId);
+              const localParr = await getTableCache('parrucchieri', userId);
+              if ((remoteCount ?? 0) === 0 && (localParr ?? []).length > 0) {
+                await markAllRowsDirty(userId);
+              }
+            } catch { /* non bloccante */ }
+          }
+        }
         // 1. Carica prima le modifiche locali (locale vince su remote più vecchio)
         await syncLocalToRemote(userId);
         if (cancelled) return;
