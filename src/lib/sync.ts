@@ -51,12 +51,23 @@ const SYNC_TABLES: string[] = [
   'template_messaggi_comunicazioni',
   'assenze_parrucchieri',
   'magazzino_prodotti',
+  'magazzino_categorie',
   'magazzino_schede_salvate',
   'spese',
   'giorni_parrucchieri',
   'voci_extra_catalogo',
   'gift_pass',
+  'mappa_bellezza',
 ];
+
+// Colonna di conflitto per tabelle con UNIQUE constraint diversa da `id`
+const TABLE_CONFLICT_COLS: Record<string, string> = {
+  impostazioni: 'user_id,chiave',
+  carte_premium: 'codice',
+  carte_sconto: 'codice',
+  fiches: 'id',
+  giorni_parrucchieri: 'data_specifica,parrucchiere_id',
+};
 
 // Colonne interne che non vengono mai inviate a Supabase
 const LOCAL_ONLY_COLS = new Set([
@@ -261,7 +272,8 @@ export async function syncBrowserToSupabase(userId: string): Promise<void> {
             }
 
             const rowToSync = { ...stripLocalCols(entry.data), user_id: userId, updated_at: entry.updated_at };
-            const { error } = await supabase.from(table).upsert(rowToSync, { onConflict: 'id' });
+            const conflictCol = TABLE_CONFLICT_COLS[table] ?? 'id';
+            const { error } = await supabase.from(table).upsert(rowToSync, { onConflict: conflictCol });
             if (!error) {
               await localRowMarkSynced(table, userId, entry.id);
             } else {
@@ -538,7 +550,8 @@ async function _pushDirtyRowsElectron(
   }
 
   if (toUpsert.length > 0) {
-    const { error } = await supabase.from(table).upsert(toUpsert, { onConflict: 'id' });
+    const conflictCol = TABLE_CONFLICT_COLS[table] ?? 'id';
+    const { error } = await supabase.from(table).upsert(toUpsert, { onConflict: conflictCol });
     if (error) {
       console.warn(`[Sync] Errore push ${table}:`, error.message);
     } else {

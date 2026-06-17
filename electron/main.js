@@ -576,6 +576,12 @@ function createSchema() {
       data_fine TEXT NOT NULL, note TEXT DEFAULT '', user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS magazzino_categorie (
+      id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', colore TEXT DEFAULT '#6B7280',
+      ordine INTEGER DEFAULT 0, user_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
+    );
     CREATE TABLE IF NOT EXISTS magazzino_prodotti (
       id TEXT PRIMARY KEY, nome TEXT NOT NULL DEFAULT '', categoria TEXT DEFAULT '',
       quantita_attuale REAL NOT NULL DEFAULT 0, quantita_minima REAL DEFAULT 0,
@@ -788,9 +794,9 @@ const ALL_TABLES = [
   'clienti','parrucchieri','trattamenti_catalogo','appuntamenti','appuntamento_trattamenti',
   'schede_colore','fiches','fiche_voci','incassi_giornalieri','carte_sconto','utilizzi_carta_sconto',
   'carte_premium','ricariche_carta_premium','utilizzi_carta_premium','prodotti_rivendita_catalogo',
-  'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi',
-  'assenze_parrucchieri','magazzino_prodotti','magazzino_movimenti','magazzino_schede_salvate',
-  'spese','schede_clienti_da_confermare','giorni_parrucchieri','voci_extra_catalogo',
+  'rivendita_prodotti','trattamenti_eseguiti','impostazioni','template_messaggi_carta_sconto',
+  'template_messaggi_comunicazioni','assenze_parrucchieri','magazzino_prodotti','magazzino_categorie',
+  'magazzino_schede_salvate','spese','giorni_parrucchieri','voci_extra_catalogo','gift_pass','mappa_bellezza',
 ];
 
 function exportLocalData() {
