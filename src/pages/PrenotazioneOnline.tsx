@@ -994,7 +994,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               ...schedaPayload,
             }),
           });
-          if (!schedaRes.ok) throw new Error('Errore durante l\'invio della scheda.');
+          if (!schedaRes.ok && schedaRes.status !== 409) throw new Error('Errore durante l\'invio della scheda.');
         } else {
           const existingId = existing[0].id;
           const updateRes = await fetch(
