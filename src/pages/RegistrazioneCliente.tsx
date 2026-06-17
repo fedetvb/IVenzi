@@ -25,7 +25,7 @@ export default function RegistrazioneCliente() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const supabaseUrl = 'https://cfsourwsjhhriytkdnuw.supabase.co';
+    const supabaseUrl = 'https://qfpeffzdszdanebmgafb.supabase.co';
     fetch(`${supabaseUrl}/functions/v1/registrazione-cliente?logo=1`)
       .then(r => r.json())
       .then((d: { url?: string }) => { if (d?.url) setLogoUrl(d.url); })

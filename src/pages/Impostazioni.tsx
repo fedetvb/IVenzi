@@ -2880,7 +2880,7 @@ async function exportDataForAutoBackup(todayStr: string): Promise<string | null>
       backup[table] = data ?? [];
     }
     return JSON.stringify(
-      { version: 1, created_at: `${todayStr}T00:00:00.000Z`, tables: BACKUP_TABLES, data: backup },
+      { version: 1, supabase_project: 'qfpeffzdszdanebmgafb', created_at: `${todayStr}T00:00:00.000Z`, tables: BACKUP_TABLES, data: backup },
       null, 2
     );
   } catch {
@@ -3185,7 +3185,7 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
       const { data } = await supabase.from(table).select('*');
       backup[table] = data ?? [];
     }
-    return { version: 1, created_at: new Date().toISOString(), tables: BACKUP_TABLES, data: backup };
+    return { version: 1, supabase_project: 'qfpeffzdszdanebmgafb', created_at: new Date().toISOString(), tables: BACKUP_TABLES, data: backup };
   }
 
   async function handleExport() {
@@ -3251,6 +3251,13 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
       const text = await file.text();
       const parsed = JSON.parse(text);
       if (!parsed?.data || !parsed?.tables) throw new Error('File non valido');
+
+      // Blocca backup di progetti Supabase diversi da quello corrente
+      const PROGETTO_ATTUALE = 'qfpeffzdszdanebmgafb';
+      if (parsed.supabase_project && parsed.supabase_project !== PROGETTO_ATTUALE) {
+        setFeedback({ tipo: 'err', msg: `Backup rifiutato: appartiene al progetto "${parsed.supabase_project}" e non al database attivo. Carica solo backup generati da questo gestionale.` });
+        return;
+      }
 
       const preview: Record<string, number> = {};
       for (const table of parsed.tables) {

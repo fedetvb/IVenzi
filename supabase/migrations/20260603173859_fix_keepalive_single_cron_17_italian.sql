@@ -15,7 +15,7 @@ SELECT cron.schedule(
   '0 15 * * *',
   $$
     SELECT net.http_get(
-      url := 'https://cfsourwsjhhriytkdnuw.supabase.co/functions/v1/keep-alive'
+      url := 'https://qfpeffzdszdanebmgafb.supabase.co/functions/v1/keep-alive'
     );
   $$
 );

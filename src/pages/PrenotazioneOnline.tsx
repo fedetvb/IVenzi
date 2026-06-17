@@ -4,7 +4,7 @@ import AnnuncioModal, { COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioM
 import BenvenutoModal, { type BenvenutoConfig } from '../components/BenvenutoModal';
 import { applyWaTemplate, DEFAULT_WA_CS_DONA, DEFAULT_WA_GP_CLIENTE } from '../lib/waUtils';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://qfpeffzdszdanebmgafb.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 const EDGE_URL = `${SUPABASE_URL}/functions/v1/prenota-online`;
 const PWA_MANIFEST_URL = `${SUPABASE_URL}/functions/v1/pwa-manifest`;
@@ -1244,7 +1244,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      const SCRIVICI_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/scrivici`;
+      const SCRIVICI_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://qfpeffzdszdanebmgafb.supabase.co'}/functions/v1/scrivici`;
       const body: Record<string, string> = {
         user_id: userId,
         nome: nome.trim(),

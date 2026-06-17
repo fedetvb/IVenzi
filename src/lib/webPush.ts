@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://cfsourwsjhhriytkdnuw.supabase.co'}/functions/v1/web-push`;
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://qfpeffzdszdanebmgafb.supabase.co'}/functions/v1/web-push`;
 
 export async function getVapidPublicKey(): Promise<string | null> {
   try {
