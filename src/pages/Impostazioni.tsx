@@ -8,6 +8,8 @@ import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons
 import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeChange, SIDEBAR_PRESETS, ACCENT_PRESETS, ICON_PRESETS, THEME_DEFAULTS } from '../lib/theme';
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import { markAllRowsDirty } from '../lib/indexedDb';
+import { syncLocalToRemote } from '../lib/sync';
 import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione, compressImage } from '../lib/localDb';
 import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
@@ -3119,12 +3121,15 @@ export function startAutoFichesWatcher() {
 // ─── Pagina Backup e Ripristino ───────────────────────────────────────────────
 
 function PaginaBackup({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err' | 'warn'; msg: string } | null>(null);
   const [confirmRestore, setConfirmRestore] = useState<File | null>(null);
   const [restorePreview, setRestorePreview] = useState<Record<string, number> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   const isElectronApp = !!window.electronAPI;
 
@@ -3330,6 +3335,46 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
           {feedback.tipo === 'warn' && <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />}
           {feedback.tipo === 'err' && <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />}
           <p>{feedback.msg}</p>
+        </div>
+      )}
+
+      {/* Sincronizzazione forzata al cloud */}
+      {!isElectronApp && user && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+              <UploadCloud size={17} className="text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-stone-800">Sincronizza dati al cloud</h3>
+              <p className="text-xs text-stone-400 mt-0.5">Carica parrucchieri, servizi, clienti e carte sul server. Usa dopo aver cambiato progetto Supabase.</p>
+            </div>
+          </div>
+          <div className="px-6 py-4">
+            {syncFeedback && (
+              <p className={`text-xs mb-3 font-medium ${syncFeedback.startsWith('Errore') ? 'text-red-600' : 'text-emerald-600'}`}>{syncFeedback}</p>
+            )}
+            <button
+              onClick={async () => {
+                setSyncing(true);
+                setSyncFeedback(null);
+                try {
+                  const count = await markAllRowsDirty(user.id);
+                  await syncLocalToRemote(user.id);
+                  setSyncFeedback(`Completato: ${count} righe caricate sul cloud.`);
+                } catch {
+                  setSyncFeedback('Errore durante la sincronizzazione. Riprova.');
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+            >
+              {syncing ? <RefreshCw size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+              {syncing ? 'Sincronizzazione in corso...' : 'Sincronizza ora'}
+            </button>
+          </div>
         </div>
       )}
 
