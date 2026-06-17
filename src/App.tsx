@@ -424,11 +424,17 @@ export default function App() {
     }
 
     async function init() {
-      // Invalida la cache delle tabelle carte per forzare reload
-      // completo dopo le migrazioni RLS (le vecchie cache potevano essere vuote)
+      // Invalida la cache delle tabelle colpite dalle migrazioni RLS del 17/06
+      // (le vecchie cache potevano essere vuote a causa di dati con user_id = NULL)
       const { deleteTableCache } = await import('./lib/indexedDb');
-      const CARTE_TABLES = ['carte_sconto', 'carte_premium', 'ricariche_carta_premium', 'utilizzi_carta_sconto', 'utilizzi_carta_premium'];
-      await Promise.all(CARTE_TABLES.map(t => deleteTableCache(t, userId)));
+      const STALE_TABLES = [
+        'carte_sconto', 'carte_premium', 'ricariche_carta_premium',
+        'utilizzi_carta_sconto', 'utilizzi_carta_premium',
+        'magazzino_prodotti', 'magazzino_categorie', 'magazzino_schede_salvate',
+        'rivendita_prodotti', 'impostazioni_tasse', 'assenze_parrucchieri',
+        'voci_extra_catalogo', 'spese',
+      ];
+      await Promise.all(STALE_TABLES.map(t => deleteTableCache(t, userId)));
       if (!cancelled && navigator.onLine) doPrefetch();
     }
 
