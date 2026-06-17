@@ -40,11 +40,13 @@ const isPrenotazione =
   params.get('prenota') === '1' ||
   hashParams.get('prenota') === '1';
 
+const SALON_OWNER_ID = '1c7bb67b-523f-4f7a-aab2-166022a91be2';
+
 const prenotaUserId =
   params.get('uid') ??
   hashParams.get('uid') ??
   window.location.hash.match(/[?&]uid=([^&]+)/)?.[1] ??
-  '';
+  SALON_OWNER_ID;
 
 if (!isRegistrazione && !isPrenotazione) {
   startAutoBackupWatcher();
