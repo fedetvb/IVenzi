@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { User, Phone, Mail, Calendar, FileText, Check, Scissors, AlertCircle } from 'lucide-react';
+
+const SUPABASE_URL = 'https://qfpeffzdszdanebmgafb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+const EF_URL = `${SUPABASE_URL}/functions/v1/registrazione-cliente`;
 
 interface Form {
   nome: string;
@@ -25,8 +28,7 @@ export default function RegistrazioneCliente() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const supabaseUrl = 'https://qfpeffzdszdanebmgafb.supabase.co';
-    fetch(`${supabaseUrl}/functions/v1/registrazione-cliente?logo=1`)
+    fetch(`${EF_URL}?logo=1`)
       .then(r => r.json())
       .then((d: { url?: string }) => { if (d?.url) setLogoUrl(d.url); })
       .catch(() => {});
@@ -46,21 +48,26 @@ export default function RegistrazioneCliente() {
     setErrore('');
     setStato('loading');
 
-    const { error } = await supabase.from('schede_clienti_da_confermare').insert({
-      nome: form.nome.trim(),
-      cognome: form.cognome.trim(),
-      telefono: form.telefono.trim(),
-      email: form.email.trim(),
-      data_nascita: form.data_nascita || null,
-      note: form.note.trim(),
-      stato: 'in_attesa',
-    });
-
-    if (error) {
-      setStato('error');
-      setErrore('Si è verificato un errore. Riprova.');
-    } else {
+    try {
+      const payload = {
+        nome: form.nome.trim(),
+        cognome: form.cognome.trim(),
+        telefono: form.telefono.trim() || null,
+        email: form.email.trim() || null,
+        data_nascita: form.data_nascita || null,
+        note: form.note.trim() || null,
+      };
+      const r = await fetch(EF_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify(payload),
+      });
+      const res = await r.json();
+      if (!r.ok || res.error) throw new Error(res.error || `HTTP ${r.status}`);
       setStato('success');
+    } catch (err: unknown) {
+      setStato('error');
+      setErrore(err instanceof Error ? err.message : 'Si è verificato un errore. Riprova.');
     }
   }
 
