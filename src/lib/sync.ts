@@ -77,6 +77,11 @@ const LOCAL_ONLY_COLS = new Set([
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** True se l'errore Supabase indica una colonna inesistente nel DB reale. */
+function isMissingColumnError(msg: string): boolean {
+  return msg.includes('does not exist') || msg.includes('schema cache') || msg.includes('Could not find');
+}
+
 function stripLocalCols(row: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
@@ -118,6 +123,15 @@ export async function prefetchToIndexedDb(userId: string): Promise<void> {
         supabase.from(table).select('*').eq('user_id', userId),
         supabase.from(table).select('*').is('user_id', null),
       ]);
+
+      // Se la colonna user_id non esiste nel DB reale, fetch senza filtro come fallback
+      if (ownRes.error && isMissingColumnError(ownRes.error.message)) {
+        const { data: allData, error: allErr } = await supabase.from(table).select('*');
+        if (allErr) { console.warn(`[Prefetch] ${table}:`, allErr.message); continue; }
+        await localRowBulkApplyRemote(table, userId, (allData ?? []) as Record<string, unknown>[]);
+        continue;
+      }
+
       if (ownRes.error) { console.warn(`[Prefetch] ${table}:`, ownRes.error.message); continue; }
 
       const seen = new Set<string>();
@@ -256,6 +270,10 @@ export async function syncLocalToSupabase(userId: string): Promise<void> {
 export async function syncBrowserToSupabase(userId: string): Promise<void> {
   if (isElectron()) return;
 
+  // Tiene traccia delle tabelle dove user_id/updated_at non esiste, per non riprovare ogni riga
+  const tablesMissingUserIdCol = new Set<string>();
+  const tablesMissingUpdatedAtCol = new Set<string>();
+
   for (const table of SYNC_TABLES) {
     try {
       const dirtyRows = await localRowGetDirty(table, userId);
@@ -269,24 +287,42 @@ export async function syncBrowserToSupabase(userId: string): Promise<void> {
             else console.warn(`[Sync Browser] Delete ${table} id=${entry.id}:`, error.message);
           } else {
             // Controlla il timestamp remoto: se il server è più recente, non sovrascrivere
-            const { data: remote } = await supabase
-              .from(table)
-              .select('id, updated_at')
-              .eq('id', entry.id)
-              .maybeSingle();
+            if (!tablesMissingUpdatedAtCol.has(table)) {
+              const { data: remote, error: tsErr } = await supabase
+                .from(table)
+                .select('id, updated_at')
+                .eq('id', entry.id)
+                .maybeSingle();
 
-            const remoteTs = (remote as Record<string, unknown> | null)?.updated_at as string | undefined;
-            if (isNewer(remoteTs, entry.updated_at)) {
-              const { data: fullRemote } = await supabase.from(table).select('*').eq('id', entry.id).maybeSingle();
-              if (fullRemote) await localRowApplyRemote(table, userId, fullRemote as Record<string, unknown>);
-              continue;
+              if (tsErr && isMissingColumnError(tsErr.message)) {
+                tablesMissingUpdatedAtCol.add(table);
+              } else if (!tsErr) {
+                const remoteTs = (remote as Record<string, unknown> | null)?.updated_at as string | undefined;
+                if (isNewer(remoteTs, entry.updated_at)) {
+                  const { data: fullRemote } = await supabase.from(table).select('*').eq('id', entry.id).maybeSingle();
+                  if (fullRemote) await localRowApplyRemote(table, userId, fullRemote as Record<string, unknown>);
+                  continue;
+                }
+              }
             }
 
-            const rowToSync = { ...stripLocalCols(entry.data), user_id: userId, updated_at: entry.updated_at };
+            const stripped = stripLocalCols(entry.data);
+            const hasUserIdCol = !tablesMissingUserIdCol.has(table);
+            const rowToSync = hasUserIdCol
+              ? { ...stripped, user_id: userId, updated_at: entry.updated_at }
+              : { ...stripped, updated_at: entry.updated_at };
+
             const conflictCol = TABLE_CONFLICT_COLS[table] ?? 'id';
             const { error } = await supabase.from(table).upsert(rowToSync, { onConflict: conflictCol });
             if (!error) {
               await localRowMarkSynced(table, userId, entry.id);
+            } else if (isMissingColumnError(error.message)) {
+              // Riprova senza user_id se la colonna non esiste
+              tablesMissingUserIdCol.add(table);
+              const rowNoUserId = { ...stripped, updated_at: entry.updated_at };
+              const { error: e2 } = await supabase.from(table).upsert(rowNoUserId, { onConflict: conflictCol });
+              if (!e2) await localRowMarkSynced(table, userId, entry.id);
+              else console.warn(`[Sync Browser] Upsert fallback ${table} id=${entry.id}:`, e2.message);
             } else {
               console.warn(`[Sync Browser] Upsert ${table} id=${entry.id}:`, error.message);
             }
@@ -313,19 +349,23 @@ export async function syncSupabaseToBrowser(userId: string): Promise<void> {
         supabase.from(table).select('*').is('user_id', null),
       ]);
 
-      if (ownRes.error) {
-        console.warn(`[Sync Browser] Errore lettura ${table}:`, ownRes.error.message);
-        continue;
-      }
+      let remoteRows: Record<string, unknown>[] = [];
 
-      const seen = new Set<string>();
-      const remoteRows: Record<string, unknown>[] = [];
-      for (const r of (ownRes.data ?? []) as Record<string, unknown>[]) {
-        if (r.id) { seen.add(r.id as string); remoteRows.push(r); }
-      }
-      if (!nullRes.error && nullRes.data) {
-        for (const r of nullRes.data as Record<string, unknown>[]) {
-          if (r.id && !seen.has(r.id as string)) remoteRows.push(r);
+      // Se la colonna user_id non esiste nel DB reale, fetch senza filtro
+      if (ownRes.error && isMissingColumnError(ownRes.error.message)) {
+        const { data: allData, error: allErr } = await supabase.from(table).select('*');
+        if (allErr) { console.warn(`[Sync Browser] Errore lettura ${table}:`, allErr.message); continue; }
+        remoteRows = (allData ?? []) as Record<string, unknown>[];
+      } else {
+        if (ownRes.error) { console.warn(`[Sync Browser] Errore lettura ${table}:`, ownRes.error.message); continue; }
+        const seen = new Set<string>();
+        for (const r of (ownRes.data ?? []) as Record<string, unknown>[]) {
+          if (r.id) { seen.add(r.id as string); remoteRows.push(r); }
+        }
+        if (!nullRes.error && nullRes.data) {
+          for (const r of nullRes.data as Record<string, unknown>[]) {
+            if (r.id && !seen.has(r.id as string)) remoteRows.push(r);
+          }
         }
       }
 
@@ -381,34 +421,43 @@ export async function pushRowNow(
 ): Promise<void> {
   if (!navigator.onLine) return;
   try {
-    const rowToSync = { ...stripLocalCols(row), user_id: userId };
+    const stripped = stripLocalCols(row);
 
     // Timestamp-check: non sovrascrivere se Supabase ha una versione più recente
     if (row.updated_at && row.id) {
-      const { data: remote } = await supabase
+      const { data: remote, error: tsErr } = await supabase
         .from(table)
         .select('id, updated_at')
         .eq('id', row.id as string)
         .maybeSingle();
-      const remoteTs = (remote as Record<string, unknown> | null)?.updated_at as string | undefined;
-      if (isNewer(remoteTs, row.updated_at as string)) {
-        const { data: fullRemote } = await supabase.from(table).select('*').eq('id', row.id as string).maybeSingle();
-        if (fullRemote) {
-          if (isElectron() && window.electronAPI?.db) {
-            await window.electronAPI.db.syncUpsert({ table, rows: [fullRemote] });
-          } else if (!isElectron()) {
-            await localRowApplyRemote(table, userId, fullRemote as Record<string, unknown>);
+      if (!tsErr) {
+        const remoteTs = (remote as Record<string, unknown> | null)?.updated_at as string | undefined;
+        if (isNewer(remoteTs, row.updated_at as string)) {
+          const { data: fullRemote } = await supabase.from(table).select('*').eq('id', row.id as string).maybeSingle();
+          if (fullRemote) {
+            if (isElectron() && window.electronAPI?.db) {
+              await window.electronAPI.db.syncUpsert({ table, rows: [fullRemote] });
+            } else if (!isElectron()) {
+              await localRowApplyRemote(table, userId, fullRemote as Record<string, unknown>);
+            }
           }
+          return;
         }
-        return;
       }
     }
 
+    const rowToSync = { ...stripped, user_id: userId };
     const { error } = await supabase.from(table).upsert(rowToSync, { onConflict: 'id' });
 
     if (error) {
-      console.warn(`[Sync] Push immediato ${table} fallito:`, error.message);
-      return;
+      if (isMissingColumnError(error.message)) {
+        // Riprova senza user_id se la colonna non esiste nel DB reale
+        const { error: e2 } = await supabase.from(table).upsert(stripped, { onConflict: 'id' });
+        if (e2) { console.warn(`[Sync] Push immediato fallback ${table}:`, e2.message); return; }
+      } else {
+        console.warn(`[Sync] Push immediato ${table} fallito:`, error.message);
+        return;
+      }
     }
 
     if (row.id) {
