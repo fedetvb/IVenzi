@@ -774,10 +774,36 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   useEffect(() => {
     async function loadInfo() {
       setLoadingInfo(true);
-      const res = await fetch(`${EDGE_URL}/info?user_id=${userId}`);
-      const data = await res.json();
-      setInfo(data);
-      setLoadingInfo(false);
+      try {
+        const res = await fetch(`${EDGE_URL}/info?user_id=${userId}`);
+        const data = await res.json();
+        if (res.ok && data && typeof data === 'object' && !data.error && !data.code) {
+          setInfo(data);
+        } else {
+          // Fallback: prenotazioniAttive true di default, salone vuoto ma funzionante
+          setInfo({
+            prenotazioniAttive: true,
+            portaleNascosto: false,
+            nomeSalone: '',
+            logoUrl: null,
+            parrucchieri: [],
+            servizi: [],
+            serviziAbbinati: [],
+          });
+        }
+      } catch {
+        setInfo({
+          prenotazioniAttive: true,
+          portaleNascosto: false,
+          nomeSalone: '',
+          logoUrl: null,
+          parrucchieri: [],
+          servizi: [],
+          serviziAbbinati: [],
+        });
+      } finally {
+        setLoadingInfo(false);
+      }
     }
     loadInfo();
   }, [userId]);
