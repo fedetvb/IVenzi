@@ -251,12 +251,6 @@ export async function dbSelect<T = Record<string, unknown>>(args: {
   }
 }
 
-// ─── Helper: rileva errore di colonna mancante dal DB reale ──────────────────
-
-function isMissingColumnError(msg: string): boolean {
-  return msg.includes('does not exist') || msg.includes('schema cache') || msg.includes('Could not find');
-}
-
 // ─── INSERT ───────────────────────────────────────────────────────────────────
 
 export async function dbInsert<T = Record<string, unknown>>(args: {
@@ -285,15 +279,6 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
   try {
     const { data, error } = await supabase.from(args.table).insert({ ...localRow }).select();
     if (error) {
-      if (isMissingColumnError(error.message)) {
-        // Riprova senza user_id/updated_at se la colonna non esiste nel DB reale
-        const { user_id: _uid, updated_at: _uat, ...rowWithoutMeta } = localRow as Record<string, unknown> & { user_id?: unknown; updated_at?: unknown };
-        const { data: d2, error: e2 } = await supabase.from(args.table).insert({ ...rowWithoutMeta }).select();
-        if (!e2) {
-          const row2 = Array.isArray(d2) ? d2[0] : d2;
-          return { data: (row2 ?? localRow) as T, error: null };
-        }
-      }
       console.error(`[dbInsert] ${args.table}:`, error.message, args.data);
       return { data: localRow as T, error: null };
     }
@@ -436,20 +421,7 @@ export async function dbUpsert<T = Record<string, unknown>>(args: {
       .from(args.table)
       .upsert({ ...localRow }, args.onConflict ? { onConflict: args.onConflict } : undefined)
       .select();
-    if (error) {
-      if (isMissingColumnError(error.message)) {
-        const { user_id: _uid, updated_at: _uat, ...rowWithoutMeta } = localRow as Record<string, unknown> & { user_id?: unknown; updated_at?: unknown };
-        const { data: d2, error: e2 } = await supabase
-          .from(args.table)
-          .upsert({ ...rowWithoutMeta }, args.onConflict ? { onConflict: args.onConflict } : undefined)
-          .select();
-        if (!e2) {
-          const row2 = Array.isArray(d2) ? d2[0] : d2;
-          return { data: (row2 ?? localRow) as T, error: null };
-        }
-      }
-      return { data: localRow as T, error: null };
-    }
+    if (error) return { data: localRow as T, error: null };
     const row = Array.isArray(data) ? data[0] : data;
     return { data: (row ?? localRow) as T, error: null };
   } catch {
