@@ -145,6 +145,7 @@ function NuovaCartaScontoModal({ clienti, onClose, onSaved }: {
       tipo_sconto: form.tipo_sconto,
       valore_sconto: form.tipo_sconto === 'listino' ? 0 : form.valore_sconto,
       usa_e_getta: form.usa_e_getta,
+      attiva: true,
       cliente_id: form.cliente_id || null,
       telefono_override: form.telefono_override.trim(),
       nominativa: isNominativa,
@@ -374,6 +375,7 @@ function NuovaCartaPremiumModal({ clienti, onClose, onSaved }: {
       codice: form.codice,
       cliente_id: form.cliente_id,
       saldo: form.importo_iniziale,
+      attiva: true,
       note: form.note,
       user_id: user?.id,
     }});
@@ -881,7 +883,7 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
   useEffect(() => { load(); }, [load]);
 
   async function toggleAttiva(carta: CartaSconto) {
-    await dbUpdate({ table: 'carte_sconto', id: carta.id, data: { attiva: !carta.attiva } });
+    await dbUpdate({ table: 'carte_sconto', id: carta.id, data: { attiva: carta.attiva === false } });
     load();
   }
 
@@ -911,7 +913,7 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
     const matchSearch = !search || c.codice.toLowerCase().includes(search.toLowerCase()) ||
       c.descrizione.toLowerCase().includes(search.toLowerCase()) ||
       (c.clienti && `${c.clienti.nome} ${c.clienti.cognome}`.toLowerCase().includes(search.toLowerCase()));
-    const matchStato = filtroStato === 'tutte' || (filtroStato === 'attive' ? c.attiva : !c.attiva);
+    const matchStato = filtroStato === 'tutte' || (filtroStato === 'attive' ? c.attiva !== false : c.attiva === false);
     return matchSearch && matchStato;
   });
 
@@ -948,8 +950,8 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Totale carte', value: carte.length, color: 'text-stone-700' },
-          { label: 'Attive', value: carte.filter(c => c.attiva).length, color: 'text-emerald-600' },
-          { label: 'Disattive', value: carte.filter(c => !c.attiva).length, color: 'text-red-500' },
+          { label: 'Attive', value: carte.filter(c => c.attiva !== false).length, color: 'text-emerald-600' },
+          { label: 'Disattive', value: carte.filter(c => c.attiva === false).length, color: 'text-red-500' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-stone-200 p-4 text-center">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -972,17 +974,17 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
             const accentActive = isUsaGetta ? 'bg-rose-50 border-rose-200' : 'bg-teal-50 border-teal-200';
             const accentInactive = 'border-stone-100 opacity-60';
             const iconBg = isUsaGetta
-              ? (carta.attiva ? 'bg-rose-100' : 'bg-stone-100')
-              : (carta.attiva ? 'bg-teal-100' : 'bg-stone-100');
+              ? (carta.attiva !== false ? 'bg-rose-100' : 'bg-stone-100')
+              : (carta.attiva !== false ? 'bg-teal-100' : 'bg-stone-100');
             const iconColor = isUsaGetta
-              ? (carta.attiva ? 'text-rose-600' : 'text-stone-400')
-              : (carta.attiva ? 'text-teal-600' : 'text-stone-400');
+              ? (carta.attiva !== false ? 'text-rose-600' : 'text-stone-400')
+              : (carta.attiva !== false ? 'text-teal-600' : 'text-stone-400');
             const scontoColor = isUsaGetta
-              ? (carta.attiva ? 'text-rose-600' : 'text-stone-400')
-              : (carta.attiva ? 'text-teal-600' : 'text-stone-400');
+              ? (carta.attiva !== false ? 'text-rose-600' : 'text-stone-400')
+              : (carta.attiva !== false ? 'text-teal-600' : 'text-stone-400');
 
             return (
-              <div key={carta.id} className={`rounded-2xl border p-4 transition-all ${carta.attiva ? accentActive : accentInactive}`}>
+              <div key={carta.id} className={`rounded-2xl border p-4 transition-all ${carta.attiva !== false ? accentActive : accentInactive}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
@@ -998,7 +1000,7 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
                           {carta.codice}
                           {copied === carta.codice ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} className="text-stone-300" />}
                         </button>
-                        {!carta.attiva && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Disattiva</span>}
+                        {carta.attiva === false && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Disattiva</span>}
                         {isUsaGetta
                           ? <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">Usa e getta</span>
                           : <span className="text-[10px] bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-semibold">Riutilizzabile</span>
@@ -1025,7 +1027,7 @@ function CarteSconto({ clienti }: { clienti: Cliente[] }) {
                     <button onClick={() => openStorico(carta)} className="p-2 rounded-lg hover:bg-white/70 transition-colors text-stone-400 hover:text-stone-600" title="Storico utilizzi">
                       <History size={15} />
                     </button>
-                    <button onClick={() => toggleAttiva(carta)} className={`p-2 rounded-lg transition-colors ${carta.attiva ? 'hover:bg-red-50 text-stone-400 hover:text-red-500' : 'hover:bg-emerald-50 text-stone-400 hover:text-emerald-500'}`} title={carta.attiva ? 'Disattiva' : 'Attiva'}>
+                    <button onClick={() => toggleAttiva(carta)} className={`p-2 rounded-lg transition-colors ${carta.attiva !== false ? 'hover:bg-red-50 text-stone-400 hover:text-red-500' : 'hover:bg-emerald-50 text-stone-400 hover:text-emerald-500'}`} title={carta.attiva !== false ? 'Disattiva' : 'Attiva'}>
                       <AlertCircle size={15} />
                     </button>
                     <button onClick={() => deleteCarta(carta.id)} className="p-2 rounded-lg hover:bg-red-50 text-stone-400 hover:text-red-500 transition-colors">
@@ -1122,7 +1124,7 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
   useEffect(() => { load(); }, [load]);
 
   async function toggleAttiva(carta: CartaPremium) {
-    await dbUpdate({ table: 'carte_premium', id: carta.id, data: { attiva: !carta.attiva } });
+    await dbUpdate({ table: 'carte_premium', id: carta.id, data: { attiva: carta.attiva === false } });
     load();
   }
 
@@ -1183,9 +1185,9 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Carte attive', value: carte.filter(c => c.attiva).length, display: String(carte.filter(c => c.attiva).length), color: 'text-emerald-600' },
+          { label: 'Carte attive', value: carte.filter(c => c.attiva !== false).length, display: String(carte.filter(c => c.attiva !== false).length), color: 'text-emerald-600' },
           { label: 'Saldo totale', value: saldoTotale, display: `€${fmt(saldoTotale)}`, color: 'text-stone-700' },
-          { label: 'Carte esaurite', value: carte.filter(c => c.saldo <= 0 && c.attiva).length, display: String(carte.filter(c => c.saldo <= 0 && c.attiva).length), color: 'text-amber-600' },
+          { label: 'Carte esaurite', value: carte.filter(c => c.saldo <= 0 && c.attiva !== false).length, display: String(carte.filter(c => c.saldo <= 0 && c.attiva !== false).length), color: 'text-amber-600' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-stone-200 p-4 text-center">
             <p className={`text-2xl font-bold ${s.color}`}>{s.display}</p>
@@ -1206,13 +1208,13 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
           {filtered.map(carta => {
             const saldoBasso = carta.saldo < 20 && carta.saldo > 0;
             const saldoEsaurito = carta.saldo <= 0;
-            const esauritaDisattiva = !carta.attiva && saldoEsaurito;
+            const esauritaDisattiva = carta.attiva === false && saldoEsaurito;
             return (
-              <div key={carta.id} className={`bg-white rounded-2xl border p-4 transition-all ${esauritaDisattiva ? 'border-red-200 opacity-70' : !carta.attiva ? 'border-stone-100 opacity-60' : saldoEsaurito ? 'border-red-200' : saldoBasso ? 'border-amber-200' : 'border-stone-200'}`}>
+              <div key={carta.id} className={`bg-white rounded-2xl border p-4 transition-all ${esauritaDisattiva ? 'border-red-200 opacity-70' : carta.attiva === false ? 'border-stone-100 opacity-60' : saldoEsaurito ? 'border-red-200' : saldoBasso ? 'border-amber-200' : 'border-stone-200'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${esauritaDisattiva ? 'bg-red-100' : !carta.attiva ? 'bg-stone-100' : saldoEsaurito ? 'bg-red-100' : 'bg-emerald-100'}`}>
-                      <Star size={18} className={esauritaDisattiva ? 'text-red-500' : !carta.attiva ? 'text-stone-400' : saldoEsaurito ? 'text-red-500' : 'text-emerald-600'} />
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${esauritaDisattiva ? 'bg-red-100' : carta.attiva === false ? 'bg-stone-100' : saldoEsaurito ? 'bg-red-100' : 'bg-emerald-100'}`}>
+                      <Star size={18} className={esauritaDisattiva ? 'text-red-500' : carta.attiva === false ? 'text-stone-400' : saldoEsaurito ? 'text-red-500' : 'text-emerald-600'} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1220,7 +1222,7 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
                           {carta.codice}
                           {copied === carta.codice ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} className="text-stone-300" />}
                         </button>
-                        {!carta.attiva && !saldoEsaurito && <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-semibold">Disattiva</span>}
+                        {carta.attiva === false && !saldoEsaurito && <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-semibold">Disattiva</span>}
                         {saldoEsaurito && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Saldo esaurito</span>}
                         {saldoBasso && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">Saldo basso</span>}
                       </div>
@@ -1241,7 +1243,7 @@ function CartePremium({ clienti }: { clienti: Cliente[] }) {
                     <button onClick={() => openStorico(carta)} className="p-2 rounded-lg hover:bg-stone-100 transition-colors text-stone-400 hover:text-stone-600" title="Storico">
                       <History size={15} />
                     </button>
-                    <button onClick={() => toggleAttiva(carta)} className={`p-2 rounded-lg transition-colors ${carta.attiva ? 'hover:bg-red-50 text-stone-400 hover:text-red-500' : 'hover:bg-emerald-50 text-stone-400 hover:text-emerald-500'}`}>
+                    <button onClick={() => toggleAttiva(carta)} className={`p-2 rounded-lg transition-colors ${carta.attiva !== false ? 'hover:bg-red-50 text-stone-400 hover:text-red-500' : 'hover:bg-emerald-50 text-stone-400 hover:text-emerald-500'}`}>
                       <AlertCircle size={15} />
                     </button>
                     <button onClick={() => deleteCarta(carta.id)} className="p-2 rounded-lg hover:bg-red-50 text-stone-400 hover:text-red-500 transition-colors">
