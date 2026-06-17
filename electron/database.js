@@ -829,6 +829,17 @@ export function markSynced(table, ids) {
   db.prepare(`UPDATE ${table} SET _dirty = 0, synced_at = ? WHERE id IN (${placeholders})`).run(now(), ...ids);
 }
 
+// Marca TUTTE le righe di una tabella come dirty=1 per forzare re-upload al cloud
+export function markAllDirty(table) {
+  if (!db) return 0;
+  try {
+    const info = db.prepare(`UPDATE ${table} SET _dirty = 1`).run();
+    return info.changes;
+  } catch {
+    return 0;
+  }
+}
+
 // Importa un backup JSON nel database locale (usato per ripristino offline)
 export function importBackup(backupData) {
   if (!db) return { success: false, error: 'Database non disponibile' };

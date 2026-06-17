@@ -558,3 +558,30 @@ async function _pushDirtyRowsElectron(
     } catch { /* best-effort */ }
   }
 }
+
+/**
+ * Force-upload completo: marca dirty tutte le righe locali (Electron o browser),
+ * poi esegue la sync verso Supabase. Usato dal pulsante "Sincronizza ora".
+ * Restituisce il totale di righe marcate dirty.
+ */
+export async function syncForceAll(userId: string): Promise<number> {
+  let total = 0;
+
+  if (isElectron() && window.electronAPI?.db) {
+    // Electron: marca dirty tutte le tabelle in SQLite
+    for (const table of SYNC_TABLES) {
+      try {
+        const res = await window.electronAPI.db.markAllDirty(table);
+        if (res?.ok) total += res.changes ?? 0;
+      } catch { /* non bloccante */ }
+    }
+    await syncLocalToSupabase(userId);
+  } else {
+    // Browser: marca dirty tutte le righe in IndexedDB
+    const { markAllRowsDirty } = await import('./indexedDb');
+    total = await markAllRowsDirty(userId);
+    await syncBrowserToSupabase(userId);
+  }
+
+  return total;
+}

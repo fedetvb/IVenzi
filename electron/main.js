@@ -777,6 +777,13 @@ function markSynced(table, ids) {
   db.prepare(`UPDATE ${table} SET _dirty = 0, synced_at = ? WHERE id IN (${ph})`).run(nowIso(), ...ids);
 }
 
+function markAllDirty(table) {
+  if (!db) return 0;
+  try {
+    return db.prepare(`UPDATE ${table} SET _dirty = 1`).run().changes;
+  } catch { return 0; }
+}
+
 const ALL_TABLES = [
   'clienti','parrucchieri','trattamenti_catalogo','appuntamenti','appuntamento_trattamenti',
   'schede_colore','fiches','fiche_voci','incassi_giornalieri','carte_sconto','utilizzi_carta_sconto',
@@ -1061,6 +1068,10 @@ ipcMain.handle('db:get-dirty', (_e, { table }) => {
 });
 ipcMain.handle('db:mark-synced', (_e, { table, ids }) => {
   try { markSynced(table, ids); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e) }; }
+});
+ipcMain.handle('db:mark-all-dirty', (_e, { table }) => {
+  try { return { ok: true, changes: markAllDirty(table) }; }
   catch (e) { return { ok: false, error: String(e) }; }
 });
 ipcMain.handle('db:get-pending-deletes', (_e, { table }) => {

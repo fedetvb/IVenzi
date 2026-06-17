@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncUpsert: (args) => ipcRenderer.invoke('db:sync-upsert', args),
     getDirty: (table) => ipcRenderer.invoke('db:get-dirty', { table }),
     markSynced: (table, ids) => ipcRenderer.invoke('db:mark-synced', { table, ids }),
+    markAllDirty: (table) => ipcRenderer.invoke('db:mark-all-dirty', { table }),
     getPendingDeletes: (table) => ipcRenderer.invoke('db:get-pending-deletes', { table }),
     markDeletesSynced: (ids) => ipcRenderer.invoke('db:mark-deletes-synced', { ids }),
     export: () => ipcRenderer.invoke('db:export'),

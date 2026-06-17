@@ -9,7 +9,7 @@ import { getTheme, saveTheme, getLogoCacheB64, saveLogoCacheB64, dispatchThemeCh
 import { supabase, localDateStr } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { markAllRowsDirty } from '../lib/indexedDb';
-import { syncLocalToRemote } from '../lib/sync';
+import { syncLocalToRemote, syncForceAll } from '../lib/sync';
 import { restoreBackup, exportBackup, isElectron as isElectronEnv, dbSelect, dbInsert, dbUpdate, dbDelete, getImpostazione, setImpostazione, compressImage } from '../lib/localDb';
 import { saveFile, browserDownload } from '../lib/fileSaver';
 import { fetchFichesForDate, generateFichesPdf, generateFichesXls } from '../lib/fichesPdfGenerator';
@@ -3359,11 +3359,11 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
                 setSyncing(true);
                 setSyncFeedback(null);
                 try {
-                  const count = await markAllRowsDirty(user.id);
-                  await syncLocalToRemote(user.id);
-                  setSyncFeedback(`Completato: ${count} righe caricate sul cloud.`);
-                } catch {
-                  setSyncFeedback('Errore durante la sincronizzazione. Riprova.');
+                  const count = await syncForceAll(user.id);
+                  setSyncFeedback(`Completato: ${count} righe inviate al cloud.`);
+                } catch (e: unknown) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  setSyncFeedback(`Errore: ${msg}`);
                 } finally {
                   setSyncing(false);
                 }
