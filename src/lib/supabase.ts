@@ -7,11 +7,9 @@ const LS_KEY_KEY = 'sb_custom_anon_key';
 
 const supabaseUrl =
   localStorage.getItem(LS_URL_KEY) ||
-  import.meta.env.VITE_SUPABASE_URL ||
   'https://qfpeffzdszdanebmgafb.supabase.co';
 const supabaseAnonKey =
   localStorage.getItem(LS_KEY_KEY) ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
