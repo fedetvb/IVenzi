@@ -113,14 +113,25 @@ async function fetchImageAsBase64(url: string): Promise<string> {
 export async function prefetchToIndexedDb(userId: string): Promise<void> {
   for (const table of SYNC_TABLES) {
     try {
-      const { data, error } = await supabase
-        .from(table)
-        .select('*')
-        .eq('user_id', userId);
-      if (error || !data) { if (error) console.warn(`[Prefetch] ${table}:`, error.message); continue; }
+      // Recupera righe proprie + righe storiche con user_id NULL (dati pre-migrazione)
+      const [ownRes, nullRes] = await Promise.all([
+        supabase.from(table).select('*').eq('user_id', userId),
+        supabase.from(table).select('*').is('user_id', null),
+      ]);
+      if (ownRes.error) { console.warn(`[Prefetch] ${table}:`, ownRes.error.message); continue; }
 
-      const rows = data as Record<string, unknown>[];
-      // Usa localRowBulkApplyRemote: popola sia local_rows che table_cache
+      const seen = new Set<string>();
+      const rows: Record<string, unknown>[] = [];
+      for (const r of (ownRes.data ?? []) as Record<string, unknown>[]) {
+        if (r.id) { seen.add(r.id as string); rows.push(r); }
+      }
+      // Includi righe NULL solo se non gia' coperte da una riga propria con lo stesso id
+      if (!nullRes.error && nullRes.data) {
+        for (const r of nullRes.data as Record<string, unknown>[]) {
+          if (r.id && !seen.has(r.id as string)) rows.push(r);
+        }
+      }
+
       await localRowBulkApplyRemote(table, userId, rows);
     } catch (e) {
       console.warn(`[Prefetch] Errore ${table}:`, e);
@@ -297,17 +308,27 @@ export async function syncSupabaseToBrowser(userId: string): Promise<void> {
 
   for (const table of SYNC_TABLES) {
     try {
-      const { data, error } = await supabase
-        .from(table)
-        .select('*')
-        .eq('user_id', userId);
+      const [ownRes, nullRes] = await Promise.all([
+        supabase.from(table).select('*').eq('user_id', userId),
+        supabase.from(table).select('*').is('user_id', null),
+      ]);
 
-      if (error || !data) {
-        if (error) console.warn(`[Sync Browser] Errore lettura ${table}:`, error.message);
+      if (ownRes.error) {
+        console.warn(`[Sync Browser] Errore lettura ${table}:`, ownRes.error.message);
         continue;
       }
 
-      const remoteRows = data as Record<string, unknown>[];
+      const seen = new Set<string>();
+      const remoteRows: Record<string, unknown>[] = [];
+      for (const r of (ownRes.data ?? []) as Record<string, unknown>[]) {
+        if (r.id) { seen.add(r.id as string); remoteRows.push(r); }
+      }
+      if (!nullRes.error && nullRes.data) {
+        for (const r of nullRes.data as Record<string, unknown>[]) {
+          if (r.id && !seen.has(r.id as string)) remoteRows.push(r);
+        }
+      }
+
       if (remoteRows.length === 0) continue;
 
       const localRows = await localRowGetAll(table, userId);
@@ -316,18 +337,14 @@ export async function syncSupabaseToBrowser(userId: string): Promise<void> {
       for (const remoteRow of remoteRows) {
         const localEntry = localMap.get(remoteRow.id as string);
         if (!localEntry) {
-          // Riga nuova: applica
           await localRowApplyRemote(table, userId, remoteRow);
         } else if (localEntry.dirty === 1) {
-          // Locale dirty: il locale sarà inviato durante syncBrowserToSupabase, non sovrascrivere
           continue;
         } else if (isNewer(remoteRow.updated_at as string, localEntry.updated_at)) {
-          // Remote più recente: applica
           await localRowApplyRemote(table, userId, remoteRow);
         }
       }
 
-      // Aggiorna table_cache con la vista finale (righe locali non cancellate)
       const updatedLocalRows = await localRowGetAll(table, userId);
       await setTableCache(table, userId, updatedLocalRows.filter(r => !r.deleted).map(r => r.data));
 

@@ -379,9 +379,10 @@ export async function localRowApplyRemote(
 export async function localRowBulkApplyRemote(
   table: string,
   userId: string,
-  remoteRows: Record<string, unknown>[]
+  remoteRows: Record<string, unknown>[],
+  overwriteWithEmpty = false
 ): Promise<void> {
-  if (remoteRows.length === 0) return;
+  if (remoteRows.length === 0 && !overwriteWithEmpty) return;
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {

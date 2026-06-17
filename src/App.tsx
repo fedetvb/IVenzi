@@ -423,7 +423,16 @@ export default function App() {
       }
     }
 
-    if (navigator.onLine) doPrefetch();
+    async function init() {
+      // Invalida la cache delle tabelle carte per forzare reload
+      // completo dopo le migrazioni RLS (le vecchie cache potevano essere vuote)
+      const { deleteTableCache } = await import('./lib/indexedDb');
+      const CARTE_TABLES = ['carte_sconto', 'carte_premium', 'ricariche_carta_premium', 'utilizzi_carta_sconto', 'utilizzi_carta_premium'];
+      await Promise.all(CARTE_TABLES.map(t => deleteTableCache(t, userId)));
+      if (!cancelled && navigator.onLine) doPrefetch();
+    }
+
+    init();
 
     const interval = setInterval(doPrefetch, 3 * 60 * 1000);
 
