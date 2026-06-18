@@ -2145,18 +2145,19 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     // Sync logo from Supabase if not cached locally
     if (!getLogoCacheB64()) {
       supabase.from('impostazioni').select('valore')
         .eq('chiave', 'logo_salone_url').eq('user_id', user.id).maybeSingle()
         .then(({ data }) => {
-          if (!data?.valore) return;
+          if (cancelled || !data?.valore) return;
           fetch(data.valore).then(r => r.blob()).then(blob => new Promise<string>((res, rej) => {
             const reader = new FileReader();
             reader.onload = () => res(reader.result as string);
             reader.onerror = rej;
             reader.readAsDataURL(blob);
-          })).then(b64 => { saveLogoCacheB64(b64); setLogoPreview(b64); }).catch(() => setLogoPreview(data.valore));
+          })).then(b64 => { if (!cancelled) { saveLogoCacheB64(b64); setLogoPreview(b64); } }).catch(() => { if (!cancelled) setLogoPreview(data.valore); });
         });
     }
     Promise.all([
@@ -2165,11 +2166,14 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
       supabase.from('impostazioni').select('valore').eq('chiave', 'icona_qr_registrazione_url').eq('user_id', user.id).maybeSingle(),
       supabase.from('impostazioni').select('valore').eq('chiave', 'qr_prenotazioni_logo_url').eq('user_id', user.id).maybeSingle(),
     ]).then(([pwa, pwaG, qrReg, qrPren]) => {
-      if (pwa.data?.valore) setPwaPreview(pwa.data.valore);
-      if (pwaG.data?.valore) setPwaGestionalePreview(pwaG.data.valore);
-      if (qrReg.data?.valore) setQrRegPreview(qrReg.data.valore);
-      if (qrPren.data?.valore) setQrPrenPreview(qrPren.data.valore);
+      if (cancelled) return;
+      // Usa aggiornamento funzionale: non sovrascrivere se già valorizzato da un upload recente
+      if (pwa.data?.valore) setPwaPreview(v => v || pwa.data!.valore);
+      if (pwaG.data?.valore) setPwaGestionalePreview(v => v || pwaG.data!.valore);
+      if (qrReg.data?.valore) setQrRegPreview(v => v || qrReg.data!.valore);
+      if (qrPren.data?.valore) setQrPrenPreview(v => v || qrPren.data!.valore);
     });
+    return () => { cancelled = true; };
   }, [user]);
 
   async function handleLogoUpload(file: File) {
@@ -2201,7 +2205,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const logoUrl = urlData.publicUrl + '?v=' + Date.now();
         saveTheme({ logoUrl });
         dispatchThemeChange();
-        await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+        await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
         // Svuota eventuale pendente rimasto
         if (isElectronEnv()) await setImpostazione('logo_salone_b64_pendente', '', user.id);
       }
@@ -2215,7 +2219,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     setLogoPreview('');
     saveTheme({ logoUrl: '' });
     dispatchThemeChange();
-    if (user) await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'logo_salone_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
   }
 
   async function handlePwaUpload(file: File) {
@@ -2229,7 +2233,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?v=' + Date.now();
         setPwaPreview(iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
       }
       setSavedPwa(true);
       setTimeout(() => setSavedPwa(false), 2000);
@@ -2238,7 +2242,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   async function removePwaIcon() {
     setPwaPreview('');
-    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
   }
 
   async function handlePwaGestionaleUpload(file: File) {
@@ -2252,7 +2256,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?v=' + Date.now();
         setPwaGestionalePreview(iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
       }
       setSavedPwaGestionale(true);
       setTimeout(() => setSavedPwaGestionale(false), 2000);
@@ -2261,7 +2265,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   async function removePwaGestionaleIcon() {
     setPwaGestionalePreview('');
-    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
   }
 
   async function handleQrRegUpload(file: File) {
@@ -2275,7 +2279,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?v=' + Date.now();
         setQrRegPreview(iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+        await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
         localStorage.setItem(QR_LOGO_KEY, iconUrl);
       }
       setSavedQrReg(true);
@@ -2285,7 +2289,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   async function removeQrRegIcon() {
     setQrRegPreview(null);
-    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
     localStorage.removeItem(QR_LOGO_KEY);
   }
 
@@ -2300,7 +2304,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?t=' + Date.now();
         setQrPrenPreview(iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
+        await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
       }
       setSavedQrPren(true);
       setTimeout(() => setSavedQrPren(false), 2000);
@@ -2309,7 +2313,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   async function removeQrPrenIcon() {
     setQrPrenPreview(null);
-    if (user) await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: '', user_id: user.id }, { onConflict: 'chiave,user_id' });
+    if (user) await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
   }
 
   return (
@@ -2621,7 +2625,7 @@ function PaginaTema({ onBack }: { onBack: () => void }) {
         apply({ logoUrl });
         // Persist URL in impostazioni for cross-device sync (with version param to bust cache)
         await supabase.from('impostazioni').upsert(
-          { chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id },
+          { chiave: 'logo_salone_url', valore: logoUrl, user_id: user.id, updated_at: new Date().toISOString() },
           { onConflict: 'chiave,user_id' }
         );
       }
