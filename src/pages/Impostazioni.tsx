@@ -2207,7 +2207,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
       }
       setSavedLogo(true);
       setTimeout(() => setSavedLogo(false), 2000);
-    } catch { /* ignore */ } finally { setUploadingLogo(false); }
+    } catch (e) { console.error('[upload logo]', e); } finally { setUploadingLogo(false); }
   }
 
   async function removeLogo() {
@@ -2233,7 +2233,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
       }
       setSavedPwa(true);
       setTimeout(() => setSavedPwa(false), 2000);
-    } catch { /* ignore */ } finally { setUploadingPwa(false); }
+    } catch (e) { console.error('[upload pwa]', e); } finally { setUploadingPwa(false); }
   }
 
   async function removePwaIcon() {
@@ -2256,7 +2256,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
       }
       setSavedPwaGestionale(true);
       setTimeout(() => setSavedPwaGestionale(false), 2000);
-    } catch { /* ignore */ } finally { setUploadingPwaGestionale(false); }
+    } catch (e) { console.error('[upload pwa gestionale]', e); } finally { setUploadingPwaGestionale(false); }
   }
 
   async function removePwaGestionaleIcon() {
@@ -2280,7 +2280,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
       }
       setSavedQrReg(true);
       setTimeout(() => setSavedQrReg(false), 2000);
-    } catch { /* ignore */ } finally { setUploadingQrReg(false); }
+    } catch (e) { console.error('[upload qr-reg]', e); } finally { setUploadingQrReg(false); }
   }
 
   async function removeQrRegIcon() {
@@ -2304,7 +2304,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
       }
       setSavedQrPren(true);
       setTimeout(() => setSavedQrPren(false), 2000);
-    } catch { /* ignore */ } finally { setUploadingQrPren(false); }
+    } catch (e) { console.error('[upload qr-pren]', e); } finally { setUploadingQrPren(false); }
   }
 
   async function removeQrPrenIcon() {
