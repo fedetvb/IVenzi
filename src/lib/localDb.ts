@@ -279,8 +279,9 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
   try {
     const { data, error } = await supabase.from(args.table).insert({ ...localRow }).select();
     if (error) {
-      console.error(`[dbInsert] ${args.table}:`, error.message, args.data);
-      return { data: localRow as T, error: null };
+      console.error(`[dbInsert] ${args.table}:`, error.message, error.details, error.hint, args.data);
+      // Return the local row so the UI stays responsive, but expose the error
+      return { data: localRow as T, error: error.message };
     }
     const row = Array.isArray(data) ? data[0] : data;
     // Marca come sincronizzata nel local_rows store
@@ -288,8 +289,9 @@ export async function dbInsert<T = Record<string, unknown>>(args: {
       await _browserLocalWrite(args.table, _currentUserId, { ...localRow, ...(row as Record<string, unknown>) });
     }
     return { data: (row ?? localRow) as T, error: null };
-  } catch {
-    return { data: localRow as T, error: null };
+  } catch (e) {
+    console.error(`[dbInsert] ${args.table} catch:`, e);
+    return { data: localRow as T, error: String(e) };
   }
 }
 

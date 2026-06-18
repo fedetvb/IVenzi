@@ -1415,6 +1415,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
 
   const [prodotti, setProdotti] = useState<ProdottoRivenditaCatalogo[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -1462,7 +1463,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       compratoreFinalId = (newComp as { id: string } | null)?.id ?? null;
     }
 
-    const { data } = await dbInsert({ table: 'gift_pass', data: {
+    const { data, error: gpError } = await dbInsert({ table: 'gift_pass', data: {
       codice: form.codice,
       tipo: form.tipo,
       valore_euro: form.tipo === 'valore' ? form.valore_euro : null,
@@ -1481,6 +1482,12 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       attiva: true,
       user_id: user?.id,
     }});
+
+    if (gpError) {
+      setSaveError(`Errore Supabase: ${gpError}`);
+      setSaving(false);
+      return;
+    }
 
     // Crea fiche automatica per il compratore
     if (compratoreFinalId && data) {
@@ -1797,6 +1804,9 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
         </div>
 
         <div className="flex gap-3 px-6 pb-6">
+          {saveError && (
+            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-2 w-full">{saveError}</p>
+          )}
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Annulla</button>
           <button onClick={save} disabled={saving || !canSave}
             className="flex-1 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
@@ -2295,7 +2305,11 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
         <NuovaGiftPassModal
           clienti={clienti}
           onClose={() => setShowModal(false)}
-          onSaved={(gp, compratore_nome) => { setShowModal(false); load(); if (gp.destinataria_nome && gp.destinataria_telefono) setWaModal({ gp, compratore_nome }); }}
+          onSaved={(gp, compratore_nome) => {
+            setShowModal(false);
+            setCards(prev => [gp as GiftPass, ...prev]);
+            if (gp.destinataria_nome && gp.destinataria_telefono) setWaModal({ gp, compratore_nome });
+          }}
         />
       )}
       {waModal && (
