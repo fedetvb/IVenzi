@@ -357,6 +357,46 @@ Deno.serve(async (req: Request) => {
         salonUserId = ownerData?.user_id ?? null;
       }
 
+      // Normalize phone: remove non-digits, take last 9
+      const normPhone = (t: string) => t.replace(/\D/g, "").slice(-9);
+      const telNorm = normPhone(String(telefono ?? "").trim());
+
+      // Guard 1: client already confirmed in rubrica
+      if (salonUserId && telNorm) {
+        const { data: inRubrica } = await admin
+          .from("clienti")
+          .select("id")
+          .eq("user_id", salonUserId)
+          .is("deleted_at", null)
+          .filter("telefono", "ilike", `%${telNorm}`)
+          .limit(1)
+          .maybeSingle();
+        if (inRubrica) {
+          return new Response(JSON.stringify({ error: "Sei già registrata nel nostro salone. Contatta direttamente lo staff." }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      // Guard 2: pending scheda already exists for same phone
+      if (salonUserId && telNorm) {
+        const { data: pendingList } = await admin
+          .from("schede_clienti_da_confermare")
+          .select("id, telefono")
+          .eq("user_id", salonUserId)
+          .eq("stato", "in_attesa");
+        const hasPending = (pendingList ?? []).some((r: { telefono: string | null }) =>
+          normPhone(r.telefono ?? "") === telNorm
+        );
+        if (hasPending) {
+          return new Response(JSON.stringify({ error: "Hai già una richiesta in attesa di conferma. Lo staff ti contatterà presto!" }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       let foto_url = "";
 
       if (foto_base64 && foto_mime) {
@@ -396,7 +436,15 @@ Deno.serve(async (req: Request) => {
           ...(salonUserId ? { user_id: salonUserId } : {}),
         });
 
-      if (insertErr) throw new Error(insertErr.message);
+      if (insertErr) {
+        if (insertErr.code === "23505") {
+          return new Response(JSON.stringify({ error: "Hai già una richiesta in attesa di conferma. Lo staff ti contatterà presto!" }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw new Error(insertErr.message);
+      }
 
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,

@@ -65,21 +65,67 @@ export default function RegistrazioneCliente() {
     }
 
     try {
+      const tel = form.telefono.trim();
+
+      // Guard 1: client already confirmed in rubrica
+      if (tel) {
+        try {
+          const { data: esiste } = await supabase.rpc('cliente_esiste_in_rubrica', {
+            p_user_id: salonUserId,
+            p_telefono: tel,
+          });
+          if (esiste) {
+            setErrore('Sei già registrata nel nostro salone. Contatta direttamente lo staff.');
+            setStato('error');
+            return;
+          }
+        } catch { /* RPC not yet in schema cache — proceed */ }
+      }
+
+      // Guard 2: pending scheda already exists for same phone
+      if (tel) {
+        const telNorm = tel.replace(/\D/g, '').slice(-9);
+        const { data: pending } = await supabase
+          .from('schede_clienti_da_confermare')
+          .select('id, telefono')
+          .eq('user_id', salonUserId)
+          .eq('stato', 'in_attesa');
+        const hasPending = (pending ?? []).some((r: { telefono: string | null }) => {
+          const norm = (r.telefono ?? '').replace(/\D/g, '').slice(-9);
+          return norm.length > 0 && norm === telNorm;
+        });
+        if (hasPending) {
+          setErrore('Hai già una richiesta in attesa di conferma. Lo staff ti contatterà presto!');
+          setStato('error');
+          return;
+        }
+      }
+
       const capitalize = (s: string) => { const t = s.trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
       const { error } = await supabase
         .from('schede_clienti_da_confermare')
         .insert({
           nome: capitalize(form.nome),
           cognome: capitalize(form.cognome),
-          telefono: form.telefono.trim() || null,
+          telefono: tel || null,
           email: form.email.trim() || null,
           data_nascita: form.data_nascita || null,
           note: form.note.trim() || null,
           stato: 'in_attesa',
           user_id: salonUserId,
         });
-      if (error) throw new Error(error.message);
-      setStato('success');
+
+      if (error) {
+        // 23505 = unique constraint violation (duplicate pending scheda)
+        if (error.code === '23505') {
+          setErrore('Hai già una richiesta in attesa di conferma. Lo staff ti contatterà presto!');
+          setStato('error');
+        } else {
+          throw new Error(error.message);
+        }
+      } else {
+        setStato('success');
+      }
     } catch (err: unknown) {
       setStato('error');
       setErrore(err instanceof Error ? err.message : 'Si è verificato un errore. Riprova.');
