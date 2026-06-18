@@ -1074,9 +1074,11 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         .filter(v => v.nome_voce.match(/^Gift Pass #([A-Z0-9]+)/))
         .map(v => v.nome_voce.match(/^Gift Pass #([A-Z0-9]+)/)![1]);
       if (gpCodici.length > 0) {
+        setVoci(merged);
         dbSelect({ table: 'gift_pass', filters: [{ col: 'codice', op: 'in', val: gpCodici }], columns: 'codice,tipo' }).then(({ data }) => {
           const prodottiSet = new Set((data ?? []).filter((g: any) => g.tipo === 'prodotto').map((g: any) => g.codice));
-          setVoci(merged.map(v => {
+          setVoci(prev => prev.map(v => {
+            if (v.note === '__gift_prodotto__') return v;
             const m = v.nome_voce.match(/^Gift Pass #([A-Z0-9]+)/);
             if (m && prodottiSet.has(m[1])) return { ...v, prezzo: 0, note: '__gift_prodotto__' };
             return v;
