@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { User, Phone, Mail, Calendar, FileText, Check, Scissors, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
-const SUPABASE_URL = 'https://qfpeffzdszdanebmgafb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
-const EF_URL = `${SUPABASE_URL}/functions/v1/registrazione-cliente`;
+// Fallback for single-salon deployments where uid is not in the URL
+const SALON_OWNER_ID = '1c7bb67b-523f-4f7a-aab2-166022a91be2';
+
+const urlParams = new URLSearchParams(window.location.search);
+const UID_FROM_URL = urlParams.get('uid');
 
 interface Form {
   nome: string;
@@ -26,11 +29,21 @@ export default function RegistrazioneCliente() {
   const [stato, setStato] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errore, setErrore] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [salonUserId, setSalonUserId] = useState<string>(UID_FROM_URL ?? SALON_OWNER_ID);
 
   useEffect(() => {
-    fetch(`${EF_URL}?logo=1`)
-      .then(r => r.json())
-      .then((d: { url?: string }) => { if (d?.url) setLogoUrl(d.url); })
+    // Anon can read logo_salone_url rows — we also extract user_id from the result
+    supabase
+      .from('impostazioni')
+      .select('valore, user_id')
+      .eq('chiave', 'logo_salone_url')
+      .not('user_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.valore) setLogoUrl(data.valore);
+        if (data?.user_id && !UID_FROM_URL) setSalonUserId(data.user_id as string);
+      })
       .catch(() => {});
   }, []);
 
@@ -49,21 +62,20 @@ export default function RegistrazioneCliente() {
     setStato('loading');
 
     try {
-      const payload = {
-        nome: form.nome.trim(),
-        cognome: form.cognome.trim(),
-        telefono: form.telefono.trim() || null,
-        email: form.email.trim() || null,
-        data_nascita: form.data_nascita || null,
-        note: form.note.trim() || null,
-      };
-      const r = await fetch(EF_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-        body: JSON.stringify(payload),
-      });
-      const res = await r.json();
-      if (!r.ok || res.error) throw new Error(res.error || `HTTP ${r.status}`);
+      const capitalize = (s: string) => { const t = s.trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
+      const { error } = await supabase
+        .from('schede_clienti_da_confermare')
+        .insert({
+          nome: capitalize(form.nome),
+          cognome: capitalize(form.cognome),
+          telefono: form.telefono.trim() || null,
+          email: form.email.trim() || null,
+          data_nascita: form.data_nascita || null,
+          note: form.note.trim() || null,
+          stato: 'in_attesa',
+          user_id: salonUserId,
+        });
+      if (error) throw new Error(error.message);
       setStato('success');
     } catch (err: unknown) {
       setStato('error');
