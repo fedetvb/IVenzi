@@ -1476,7 +1476,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       scadenza_uso_giorni: form.scadenza_uso_giorni,
       destinataria_nome: nominativa ? '' : nomeFinale,
       destinataria_telefono: nominativa ? '' : telefonoFinale,
-      destinataria_cliente_id: nominativa ? null : clienteId,
+      destinataria_cliente_id: nominativa ? compratoreFinalId : clienteId,
       cliente_id: compratoreFinalId,
       nominativa: nominativa && form.tipo === 'prodotto',
       note: form.note.trim(),
