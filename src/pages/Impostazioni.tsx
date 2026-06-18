@@ -2239,14 +2239,14 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     try {
       const blob = await compressImage(file);
       const path = `icone/${user.id}/pwa-icon.jpg`;
-      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-      if (!error) {
-        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
-        const iconUrl = urlData.publicUrl + '?v=' + Date.now();
-        setPwaPreview(iconUrl);
-        saveIconCache(LS_PWA_URL, iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
-      }
+      const { error: storageError } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (storageError) throw storageError;
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const iconUrl = urlData.publicUrl + '?v=' + Date.now();
+      setPwaPreview(iconUrl);
+      saveIconCache(LS_PWA_URL, iconUrl);
+      const { error: dbError } = await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
+      if (dbError) throw dbError;
       setSavedPwa(true);
       setTimeout(() => setSavedPwa(false), 2000);
     } catch (e) { console.error('[upload pwa]', e); } finally { setUploadingPwa(false); }
@@ -2264,14 +2264,14 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     try {
       const blob = await compressImage(file);
       const path = `icone/${user.id}/pwa-gestionale-icon.jpg`;
-      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-      if (!error) {
-        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
-        const iconUrl = urlData.publicUrl + '?v=' + Date.now();
-        setPwaGestionalePreview(iconUrl);
-        saveIconCache(LS_PWA_G_URL, iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
-      }
+      const { error: storageError } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (storageError) throw storageError;
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const iconUrl = urlData.publicUrl + '?v=' + Date.now();
+      setPwaGestionalePreview(iconUrl);
+      saveIconCache(LS_PWA_G_URL, iconUrl);
+      const { error: dbError } = await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
+      if (dbError) throw dbError;
       setSavedPwaGestionale(true);
       setTimeout(() => setSavedPwaGestionale(false), 2000);
     } catch (e) { console.error('[upload pwa gestionale]', e); } finally { setUploadingPwaGestionale(false); }
@@ -2289,15 +2289,15 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     try {
       const blob = await compressImage(file, 400);
       const path = `icone/${user.id}/qr-registrazione-logo.jpg`;
-      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-      if (!error) {
-        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
-        const iconUrl = urlData.publicUrl + '?v=' + Date.now();
-        setQrRegPreview(iconUrl);
-        saveIconCache(LS_QR_REG_URL, iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
-        localStorage.setItem(QR_LOGO_KEY, iconUrl);
-      }
+      const { error: storageError } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (storageError) throw storageError;
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const iconUrl = urlData.publicUrl + '?v=' + Date.now();
+      setQrRegPreview(iconUrl);
+      saveIconCache(LS_QR_REG_URL, iconUrl);
+      const { error: dbError } = await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
+      if (dbError) throw dbError;
+      localStorage.setItem(QR_LOGO_KEY, iconUrl);
       setSavedQrReg(true);
       setTimeout(() => setSavedQrReg(false), 2000);
     } catch (e) { console.error('[upload qr-reg]', e); } finally { setUploadingQrReg(false); }
@@ -2316,14 +2316,14 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     try {
       const blob = await compressImage(file, 400);
       const path = `logo/${user.id}/qr-prenotazioni-logo.jpg`;
-      const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-      if (!error) {
-        const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
-        const iconUrl = urlData.publicUrl + '?t=' + Date.now();
-        setQrPrenPreview(iconUrl);
-        saveIconCache(LS_QR_PREN_URL, iconUrl);
-        await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
-      }
+      const { error: storageError } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (storageError) throw storageError;
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const iconUrl = urlData.publicUrl + '?t=' + Date.now();
+      setQrPrenPreview(iconUrl);
+      saveIconCache(LS_QR_PREN_URL, iconUrl);
+      const { error: dbError } = await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
+      if (dbError) throw dbError;
       setSavedQrPren(true);
       setTimeout(() => setSavedQrPren(false), 2000);
     } catch (e) { console.error('[upload qr-pren]', e); } finally { setUploadingQrPren(false); }
