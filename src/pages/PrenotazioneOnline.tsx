@@ -1319,6 +1319,17 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
     localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
 
+    // Verifica se la cliente esiste già in rubrica (confermata) — blocca la creazione di
+    // schede_da_confermare per evitare duplicati su clienti già registrati.
+    let clienteGiaEsiste = knownExisting;
+    try {
+      const { data: esiste } = await supabase.rpc('cliente_esiste_in_rubrica', {
+        p_user_id: userId,
+        p_telefono: tel,
+      });
+      if (esiste) clienteGiaEsiste = true;
+    } catch { /* non bloccante */ }
+
     // Verifica se la cliente ha fiches convalidate — determina quali servizi può prenotare.
     // Usa RPC con SECURITY DEFINER: non richiede edge function, funziona con anon key.
     try {
@@ -1329,17 +1340,20 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       setIsNuovaScheda(!haFiches);
     } catch { /* non bloccante — default true (restrittivo) */ }
 
-    // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
-    try {
-      await insertSchedaSafe({
-        user_id: userId,
-        nome: nome.trim(),
-        cognome: cognome.trim(),
-        telefono: tel,
-        stato: 'in_attesa',
-        ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
-      });
-    } catch { /* non bloccante */ }
+    // Crea scheda da confermare solo se la cliente NON è già registrata in rubrica.
+    // Se esiste già, non serve alcuna conferma — evita schede duplicate.
+    if (!clienteGiaEsiste) {
+      try {
+        await insertSchedaSafe({
+          user_id: userId,
+          nome: nome.trim(),
+          cognome: cognome.trim(),
+          telefono: tel,
+          stato: 'in_attesa',
+          ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
+        });
+      } catch { /* non bloccante */ }
+    }
 
     if (cartaScontoCode.trim()) {
       try {
