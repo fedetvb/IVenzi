@@ -92,7 +92,7 @@ export default function NuovaCartaFicheModal({ onClose, onSaved, clienteId, clie
 
   const prodottoSel = prodotti.find(p => p.id === prodottoId);
   const importoGift = tipoGift === 'prodotto'
-    ? (prodottoSel?.prezzo_vendita ?? 0)
+    ? 0
     : (useValoreCustom ? (parseFloat(valoreCustom) || 0) : valoreEuro);
 
   const canSavePremium = !!clienteId && importoPremium > 0;
