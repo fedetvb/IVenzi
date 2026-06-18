@@ -608,6 +608,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // Tieni stepRef sincronizzato
   useEffect(() => { stepRef.current = step; }, [step]);
 
+  // Scroll to top on every step change
+  useEffect(() => { window.scrollTo(0, 0); }, [step]);
+
   // Mostra benvenuto / annuncio / compleanno al passaggio a 'scelta'
   useEffect(() => {
     if (step !== 'scelta') return;
