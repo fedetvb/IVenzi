@@ -1432,9 +1432,6 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
   const canSave = (
     (form.tipo === 'valore' && form.valore_euro > 0) ||
     (form.tipo === 'prodotto' && !!form.prodotto_id)
-  ) && (
-    (!compratoreRegistra && compratoreId !== '') ||
-    (compratoreRegistra && compratoreNome.trim() !== '')
   );
 
   async function save() {
