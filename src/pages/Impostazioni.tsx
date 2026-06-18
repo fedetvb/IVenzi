@@ -2179,10 +2179,10 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     ]).then(([pwa, pwaG, qrReg, qrPren]) => {
       if (cancelled) return;
       // Usa aggiornamento funzionale: non sovrascrivere se già valorizzato da un upload recente
-      if (pwa.data?.valore) { setPwaPreview(v => v || pwa.data!.valore); saveIconCache(LS_PWA_URL, pwa.data!.valore); }
-      if (pwaG.data?.valore) { setPwaGestionalePreview(v => v || pwaG.data!.valore); saveIconCache(LS_PWA_G_URL, pwaG.data!.valore); }
-      if (qrReg.data?.valore) { setQrRegPreview(v => v || qrReg.data!.valore); saveIconCache(LS_QR_REG_URL, qrReg.data!.valore); }
-      if (qrPren.data?.valore) { setQrPrenPreview(v => v || qrPren.data!.valore); saveIconCache(LS_QR_PREN_URL, qrPren.data!.valore); }
+      if (pwa.data?.valore) { setPwaPreview(pwa.data.valore); saveIconCache(LS_PWA_URL, pwa.data.valore); }
+      if (pwaG.data?.valore) { setPwaGestionalePreview(pwaG.data.valore); saveIconCache(LS_PWA_G_URL, pwaG.data.valore); }
+      if (qrReg.data?.valore) { setQrRegPreview(qrReg.data.valore); saveIconCache(LS_QR_REG_URL, qrReg.data.valore); }
+      if (qrPren.data?.valore) { setQrPrenPreview(qrPren.data.valore); saveIconCache(LS_QR_PREN_URL, qrPren.data.valore); }
     });
     return () => { cancelled = true; };
   }, [user]);
