@@ -164,7 +164,7 @@ interface GiftPass {
   id: string;
   codice: string;
   tipo: 'valore' | 'prodotto';
-  valore_euro: number | null;
+  valore: number | null;
   prodotto_nome: string | null;
   prodotti_rivendita_catalogo: { categoria: string } | null;
   occasione: string;
@@ -1092,22 +1092,22 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const carteUsaEGetta = (cuRaw ?? []).map((c: Record<string, unknown>) => ({ ...c, tipo: 'usa_e_getta' as const }));
 
       // Gift Pass donatore
-      const gpSelect = 'id,codice,tipo,valore_euro,prodotto_nome,prodotti_rivendita_catalogo(categoria),occasione,attivata_at,scadenza_uso,scadenza_uso_giorni,scadenza_ritiro_giorni,created_at,destinataria_nome,destinataria_telefono,utilizzata,donata';
-      const { data: gpById } = await supabase.from('gift_pass').select(gpSelect).eq('cliente_id', cliente.id).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true).is('attivata_at', null);
+      const gpSelect = 'id,codice,tipo,valore,prodotto_nome,prodotti_rivendita_catalogo(categoria),occasione,attivata_at,scadenza_uso,scadenza_uso_giorni,scadenza_ritiro_giorni,created_at,destinataria_nome,destinataria_telefono,utilizzata,donata';
+      const { data: gpById } = await supabase.from('gift_pass').select(gpSelect).eq('cliente_id', cliente.id).eq('user_id', userId).eq('utilizzata', false).eq('attivo', true).is('attivata_at', null);
       const { data: fichesGP } = await supabase.from('fiches').select('id').eq('cliente_id', cliente.id).eq('user_id', userId).eq('tipo_fiche', 'gift_pass').is('deleted_at', null);
       const ficheGPIds = (fichesGP ?? []).map((f: { id: string }) => f.id);
       let gpByFiche: Record<string, unknown>[] = [];
       if (ficheGPIds.length > 0) {
-        const { data } = await supabase.from('gift_pass').select(gpSelect).in('fiche_acquisto_id', ficheGPIds).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true).is('attivata_at', null);
+        const { data } = await supabase.from('gift_pass').select(gpSelect).in('fiche_acquisto_id', ficheGPIds).eq('user_id', userId).eq('utilizzata', false).eq('attivo', true).is('attivata_at', null);
         gpByFiche = (data ?? []) as Record<string, unknown>[];
       }
       const seenDon = new Set<string>((gpById ?? []).map((g: { id: string }) => g.id));
       const giftPassDonatore = [...((gpById ?? []) as Record<string, unknown>[]), ...gpByFiche.filter(g => !seenDon.has(g.id as string))].map(g => ({ ...g, tipo_carta: 'gift_pass_donatore' as const }));
 
       // Gift Pass ricevente
-      const gpSelRic = 'id,codice,tipo,valore_euro,prodotto_nome,prodotti_rivendita_catalogo(categoria),occasione,attivata_at,scadenza_uso,destinataria_nome,destinataria_telefono,utilizzata';
-      const { data: gpRicById } = await supabase.from('gift_pass').select(gpSelRic).eq('destinataria_cliente_id', cliente.id).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true);
-      const { data: gpRicByPhoneRaw } = await supabase.from('gift_pass').select(gpSelRic).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true).is('destinataria_cliente_id', null);
+      const gpSelRic = 'id,codice,tipo,valore,prodotto_nome,prodotti_rivendita_catalogo(categoria),occasione,attivata_at,scadenza_uso,destinataria_nome,destinataria_telefono,utilizzata';
+      const { data: gpRicById } = await supabase.from('gift_pass').select(gpSelRic).eq('destinataria_cliente_id', cliente.id).eq('user_id', userId).eq('utilizzata', false).eq('attivo', true);
+      const { data: gpRicByPhoneRaw } = await supabase.from('gift_pass').select(gpSelRic).eq('user_id', userId).eq('utilizzata', false).eq('attivo', true).is('destinataria_cliente_id', null);
       const gpRicByPhone = ((gpRicByPhoneRaw ?? []) as Record<string, unknown>[]).filter(g => { const n = normPhone(String(g.destinataria_telefono ?? '')); return n && telNorm && n === telNorm; });
       const seenRic = new Set<string>((gpRicById ?? []).map((g: { id: string }) => g.id));
       const now = new Date();
@@ -4666,7 +4666,7 @@ function GiftPassCard({
   const isDonatore = gp.tipo_carta === 'gift_pass_donatore';
   const valore = gp.tipo === 'prodotto'
     ? `${gp.prodotti_rivendita_catalogo?.categoria ? gp.prodotti_rivendita_catalogo.categoria + ' · ' : ''}${gp.prodotto_nome ?? 'Prodotto omaggio'}`
-    : `€${gp.valore_euro ?? 0}`;
+    : `€${gp.valore ?? 0}`;
 
   const scadenzaLabel = (() => {
     const fmt = (d: Date) => d.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -4693,7 +4693,7 @@ function GiftPassCard({
       codice: gp.codice,
       telefono,
       sito,
-      valore: String(gp.valore_euro ?? 0),
+      valore: String(gp.valore ?? 0),
       sconto: '',
       destinataria: '',
       donante: compratore_nome || '',

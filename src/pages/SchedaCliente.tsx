@@ -64,7 +64,7 @@ interface CartaPremiumCliente {
 }
 interface GiftPassCliente {
   id: string; codice: string; tipo: 'valore' | 'prodotto';
-  valore_euro: number | null; prodotto_nome: string | null;
+  valore: number | null; prodotto_nome: string | null;
   occasione: string; attivata_at: string | null; utilizzata: boolean;
   destinataria_nome: string; destinataria_cliente_id: string | null;
 }
@@ -552,7 +552,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
     // Carica gift pass acquistate da questa cliente (lei è la donatrice)
     const { data: gpData } = await dbSelect<GiftPassCliente>({
       table: 'gift_pass',
-      columns: 'id, codice, tipo, valore_euro, prodotto_nome, occasione, attivata_at, utilizzata, destinataria_nome, destinataria_cliente_id',
+      columns: 'id, codice, tipo, valore, prodotto_nome, occasione, attivata_at, utilizzata, destinataria_nome, destinataria_cliente_id',
       filters: [
         { col: 'cliente_id', op: 'eq', val: clienteId },
         { col: 'utilizzata', op: 'eq', val: false },
@@ -1215,7 +1215,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
           </div>
           <div className="space-y-2">
             {giftPassList.map(gp => {
-              const valore = gp.tipo === 'prodotto' ? (gp.prodotto_nome ?? 'Prodotto') : `€${gp.valore_euro ?? 0}`;
+              const valore = gp.tipo === 'prodotto' ? (gp.prodotto_nome ?? 'Prodotto') : `€${gp.valore ?? 0}`;
               const stato = gp.attivata_at ? 'Attivata' : 'Da donare';
               const statoColor = gp.attivata_at ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
               return (

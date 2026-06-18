@@ -1339,7 +1339,7 @@ interface GiftPass {
   id: string;
   codice: string;
   tipo: 'valore' | 'prodotto';
-  valore_euro: number | null;
+  valore: number | null;
   prodotto_id: string | null;
   prodotto_nome: string | null;
   occasione: 'invito' | 'compleanno' | 'regalo';
@@ -1353,8 +1353,10 @@ interface GiftPass {
   attivata_at: string | null;
   scadenza_uso: string | null;
   fiche_id: string | null;
+  fiche_acquisto_id: string | null;
   utilizzata: boolean;
   attivo: boolean;
+  donata: boolean;
   note: string;
   created_at: string;
 }
@@ -1389,7 +1391,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
   const [form, setForm] = useState({
     codice: genCodiceGift(),
     tipo: 'valore' as 'valore' | 'prodotto',
-    valore_euro: 50,
+    valore: 50,
     prodotto_id: '',
     occasione: 'invito' as 'invito' | 'compleanno' | 'regalo',
     scadenza_ritiro_giorni: 30,
@@ -1431,7 +1433,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
   const telefonoFinale = registraNuova ? nuovaTelefono.trim() : (clienteSel?.telefono ?? '');
 
   const canSave = (
-    (form.tipo === 'valore' && form.valore_euro > 0) ||
+    (form.tipo === 'valore' && form.valore > 0) ||
     (form.tipo === 'prodotto' && !!form.prodotto_id)
   );
 
@@ -1466,7 +1468,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
     const { data, error: gpError } = await dbInsert({ table: 'gift_pass', data: {
       codice: form.codice,
       tipo: form.tipo,
-      valore_euro: form.tipo === 'valore' ? form.valore_euro : null,
+      valore: form.tipo === 'valore' ? form.valore : null,
       prodotto_id: form.tipo === 'prodotto' ? form.prodotto_id : null,
       prodotto_nome: form.tipo === 'prodotto' ? (prodottoSel ? `${prodottoSel.nome}${prodottoSel.marca ? ` (${prodottoSel.marca})` : ''}` : null) : null,
       occasione: form.occasione,
@@ -1493,7 +1495,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
     if (compratoreFinalId && data) {
       const giftPassId = (data as { id: string }).id;
       const importoFiche = form.tipo === 'valore'
-        ? (form.valore_euro ?? 0)
+        ? (form.valore ?? 0)
         : (prodottoSel?.prezzo_vendita ?? 0);
       const today = localDateStr();
       const { data: ficheData } = await dbInsert({ table: 'fiches', data: {
@@ -1571,14 +1573,14 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
               <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Valore (€)</label>
               <div className="flex flex-wrap gap-2 mb-2">
                 {[20, 30, 50, 80, 100].map(v => (
-                  <button key={v} onClick={() => setForm(f => ({ ...f, valore_euro: v }))}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${form.valore_euro === v ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+                  <button key={v} onClick={() => setForm(f => ({ ...f, valore: v }))}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${form.valore === v ? 'bg-violet-500 text-white border-violet-500' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
                     €{v}
                   </button>
                 ))}
               </div>
-              <input type="number" min={1} step={5} value={form.valore_euro}
-                onChange={e => setForm(f => ({ ...f, valore_euro: Number(e.target.value) }))}
+              <input type="number" min={1} step={5} value={form.valore}
+                onChange={e => setForm(f => ({ ...f, valore: Number(e.target.value) }))}
                 onFocus={e => e.target.select()}
                 className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-400" />
               <p className="text-xs text-stone-400 mt-1">La carta con valore in € non scade mai.</p>
@@ -1867,7 +1869,7 @@ function GiftPassWaModal({ gp, nomeSalone, compratore_nome, onClose }: { gp: Gif
       codice: gp.codice,
       telefono,
       sito,
-      valore: String(gp.valore_euro ?? 0),
+      valore: String(gp.valore ?? 0),
       destinataria: dest,
       donante: donanteStr,
       sconto: '',
@@ -2201,7 +2203,7 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                         </button>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATO_COLOR[stato]}`}>{STATO_LABEL[stato]}</span>
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${gp.tipo === 'prodotto' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {gp.tipo === 'prodotto' ? 'Prodotto' : `€${gp.valore_euro}`}
+                          {gp.tipo === 'prodotto' ? 'Prodotto' : `€${gp.valore}`}
                         </span>
                         <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-medium capitalize">{gp.occasione}</span>
                         {gp.nominativa && (

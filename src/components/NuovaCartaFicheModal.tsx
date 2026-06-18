@@ -141,7 +141,7 @@ export default function NuovaCartaFicheModal({ onClose, onSaved, clienteId, clie
     const { data } = await dbInsert({ table: 'gift_pass', data: {
       codice: codiceGift,
       tipo: tipoGift,
-      valore_euro: tipoGift === 'valore' ? importoGift : null,
+      valore: tipoGift === 'valore' ? importoGift : null,
       prodotto_id: tipoGift === 'prodotto' ? prodottoId : null,
       prodotto_nome: tipoGift === 'prodotto' && prodottoSel
         ? `${prodottoSel.nome}${prodottoSel.marca ? ` (${prodottoSel.marca})` : ''}`

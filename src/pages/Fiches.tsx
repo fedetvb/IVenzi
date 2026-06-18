@@ -882,7 +882,7 @@ interface CartaPremiumSimple {
 }
 interface GiftPassSimple {
   id: string; codice: string; tipo: 'valore' | 'prodotto';
-  valore_euro: number | null; prodotto_id: string | null; prodotto_nome: string | null;
+  valore: number | null; prodotto_id: string | null; prodotto_nome: string | null;
   occasione: string; attivata_at: string | null; scadenza_uso: string | null;
   fiche_id: string | null; destinataria_cliente_id: string | null;
   cliente_id?: string | null;
@@ -2234,7 +2234,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                     className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-violet-400">
                     <option value="">— Nessun Gift Pass —</option>
                     {giftPasses.map(gp => {
-                      const valore = gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore_euro}`;
+                      const valore = gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore}`;
                       const ruoloLabel = gp._ruolo === 'donatore' ? '[Da donare] ' : '';
                       return (
                         <option key={gp.id} value={gp.id}>
@@ -2361,7 +2361,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                                 <div className="flex-1 min-w-0">
                                   <p className="font-mono font-semibold text-stone-800 text-sm tracking-widest">{gp.codice}</p>
                                   <p className="text-xs text-stone-500 mt-0.5">
-                                    {gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore_euro}`}
+                                    {gp.tipo === 'prodotto' ? `Prodotto: ${gp.prodotto_nome ?? '?'}` : `Valore €${gp.valore}`}
                                     <span className="text-stone-400"> · {gp.occasione}</span>
                                     {gp.destinataria_nome ? <span className="text-stone-400"> · per {(gp as any).destinataria_nome}</span> : ''}
                                   </p>
