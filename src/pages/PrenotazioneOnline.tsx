@@ -3,6 +3,7 @@ import { Calendar, Clock, ChevronRight, ChevronLeft, Check, X, Scissors, User, U
 import AnnuncioModal, { COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 import BenvenutoModal, { type BenvenutoConfig } from '../components/BenvenutoModal';
 import { applyWaTemplate, DEFAULT_WA_CS_DONA, DEFAULT_WA_GP_CLIENTE } from '../lib/waUtils';
+import { supabase } from '../lib/supabase';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://qfpeffzdszdanebmgafb.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
@@ -210,7 +211,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [info, setInfo] = useState<SalonInfo | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(true);
   const [step, setStep] = useState<Step>('dati');
-  const [isNuovaScheda, setIsNuovaScheda] = useState(false);
+  const [isNuovaScheda, setIsNuovaScheda] = useState(true);
 
   // Cliente dati
   const [nome, setNome] = useState('');
@@ -1088,30 +1089,24 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
     localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
 
+    // Verifica se la cliente ha fiches convalidate — determina quali servizi può prenotare.
+    // Usa RPC con SECURITY DEFINER: non richiede edge function, funziona con anon key.
+    try {
+      const { data: haFiches } = await supabase.rpc('cliente_ha_fiches', {
+        p_user_id: userId,
+        p_telefono: tel,
+      });
+      setIsNuovaScheda(!haFiches);
+    } catch { /* non bloccante — default true (restrittivo) */ }
+
     // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
     try {
-      // Use aggiorna-profilo (service role) to check if the client exists — anon REST call blocked by RLS
-      let isClienteConfermata = knownExisting;
-      if (!knownExisting) {
-        try {
-          const profRes = await fetch(
-            `${AGGIORNA_PROFILO_URL}?user_id=${userId}&telefono=${encodeURIComponent(tel)}`
-          );
-          const profData = await profRes.json();
-          isClienteConfermata = !!(profData.cliente);
-          if (profData.cliente?.data_nascita) {
-            setClienteDataNascita(profData.cliente.data_nascita);
-          }
-        } catch { /* non bloccante */ }
-      }
-
       const checkRes = await fetch(
         `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&stato=eq.in_attesa&select=id`,
         { headers: anonHeaders }
       );
       const existing = await checkRes.json();
       if (!Array.isArray(existing) || existing.length === 0) {
-        if (!isClienteConfermata) setIsNuovaScheda(true);
         await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
           method: 'POST',
           headers: { ...anonHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
