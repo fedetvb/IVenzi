@@ -1193,16 +1193,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       };
 
       if (!clienteId) {
-        // Cliente not in DB: create/update scheda da confermare
+        // Cliente not in DB: upsert scheda da confermare (unique on user_id+telefono WHERE stato=in_attesa)
         const tel = (telefono || profiloTelefono).trim();
-        const { data: existing } = await supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', tel).eq('stato', 'in_attesa').maybeSingle();
-        if (existing) {
-          const { error } = await supabase.from('schede_clienti_da_confermare').update(schedaPayload).eq('id', existing.id);
-          if (error) throw new Error('Errore durante l\'aggiornamento della scheda.');
-        } else {
-          const { error } = await supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, telefono: tel, stato: 'in_attesa', ...schedaPayload });
-          if (error && !error.message.includes('duplicate')) throw new Error('Errore durante l\'invio della scheda.');
-        }
+        const { error } = await supabase.from('schede_clienti_da_confermare').upsert(
+          { user_id: userId, telefono: tel, stato: 'in_attesa', ...schedaPayload },
+          { onConflict: 'user_id,telefono', ignoreDuplicates: false }
+        );
+        if (error) throw new Error('Errore durante l\'invio della scheda.');
         setProfiloSchedaInviata(true);
         setProfiloFotoBase64('');
         setTimeout(() => setProfiloSchedaInviata(false), 5000);
@@ -1326,17 +1323,17 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
     // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
     try {
-      const { data: existing } = await supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', tel).eq('stato', 'in_attesa').maybeSingle();
-      if (!existing) {
-        await supabase.from('schede_clienti_da_confermare').insert({
+      await supabase.from('schede_clienti_da_confermare').upsert(
+        {
           user_id: userId,
           nome: nome.trim(),
           cognome: cognome.trim(),
           telefono: tel,
           stato: 'in_attesa',
           ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
-        });
-      }
+        },
+        { onConflict: 'user_id,telefono', ignoreDuplicates: true }
+      );
     } catch { /* non bloccante */ }
 
     if (cartaScontoCode.trim()) {
@@ -1350,12 +1347,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           if (cliente) {
             await supabase.from('carte_sconto').update({ cliente_id: cliente.id, regalata: false, regalata_da_cliente_id: carta.regalata_da_cliente_id ?? null }).eq('id', carta.id);
           } else {
-            const { data: ex } = await supabase.from('schede_clienti_da_confermare').select('id').eq('telefono', tel.trim()).eq('stato', 'in_attesa').maybeSingle();
-            if (ex) {
-              await supabase.from('schede_clienti_da_confermare').update({ codice_carta_sconto: codiceUpper, presentata_da_nome: carta.ex_proprietaria_nome ?? null }).eq('id', ex.id);
-            } else {
-              await supabase.from('schede_clienti_da_confermare').insert({ nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), codice_carta_sconto: codiceUpper, presentata_da_nome: carta.ex_proprietaria_nome ?? null, stato: 'in_attesa' });
-            }
+            await supabase.from('schede_clienti_da_confermare').upsert(
+              { user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), codice_carta_sconto: codiceUpper, presentata_da_nome: carta.ex_proprietaria_nome ?? null, stato: 'in_attesa' },
+              { onConflict: 'user_id,telefono', ignoreDuplicates: false }
+            );
           }
         }
       } catch { /* non bloccante */ }
@@ -1386,15 +1381,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             : null;
           await supabase.from('gift_pass').update({ attivata_at: now2, updated_at: now2, ...(scadenzaUsoAt ? { scadenza_uso: scadenzaUsoAt } : {}), ...(cliente ? { destinataria_cliente_id: cliente.id } : {}) }).eq('id', gp.id);
           if (!cliente) {
-            const { data: exScheda } = await supabase.from('schede_clienti_da_confermare').select('id,codice_gift_pass').eq('user_id', userId).eq('telefono', tel.trim()).eq('stato', 'in_attesa').maybeSingle();
-            if (exScheda) {
-              const upd: Record<string, unknown> = {};
-              if (!exScheda.codice_gift_pass) upd.codice_gift_pass = codiceUpper;
-              if (presentataDaNome) upd.presentata_da_nome = presentataDaNome;
-              if (Object.keys(upd).length > 0) await supabase.from('schede_clienti_da_confermare').update(upd).eq('id', exScheda.id);
-            } else {
-              await supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), stato: 'in_attesa', codice_gift_pass: codiceUpper, ...(presentataDaNome ? { presentata_da_nome: presentataDaNome } : {}) });
-            }
+            await supabase.from('schede_clienti_da_confermare').upsert(
+              { user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), stato: 'in_attesa', codice_gift_pass: codiceUpper, ...(presentataDaNome ? { presentata_da_nome: presentataDaNome } : {}) },
+              { onConflict: 'user_id,telefono', ignoreDuplicates: false }
+            );
           }
         }
       } catch { /* non bloccante */ }
@@ -1545,10 +1535,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       // Crea scheda da confermare se la cliente non è già registrata
       if (!cliente_id) {
-        const { data: esistente } = await supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', telefono.trim()).eq('stato', 'in_attesa').maybeSingle();
-        if (!esistente) {
-          await supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim(), stato: 'in_attesa' });
-        }
+        await supabase.from('schede_clienti_da_confermare').upsert(
+          { user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim(), stato: 'in_attesa' },
+          { onConflict: 'user_id,telefono', ignoreDuplicates: true }
+        );
       }
 
       const { error: insertErr } = await supabase.from('messaggi_clienti').insert({
@@ -1909,9 +1899,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       // Crea scheda da confermare se non è in rubrica (non bloccante)
       if (!clienteRow) {
-        supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', telefono.trim()).eq('stato', 'in_attesa').maybeSingle().then(({ data: ex }) => {
-          if (!ex) supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim(), stato: 'in_attesa' }).then(() => {});
-        });
+        supabase.from('schede_clienti_da_confermare').upsert(
+          { user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim(), stato: 'in_attesa' },
+          { onConflict: 'user_id,telefono', ignoreDuplicates: true }
+        ).then(() => {});
       }
 
       setStep('successo');
