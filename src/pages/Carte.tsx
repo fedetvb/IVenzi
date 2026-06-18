@@ -2661,7 +2661,7 @@ export default function Carte() {
   const [clienti, setClienti] = useState<Cliente[]>([]);
 
   useEffect(() => {
-    dbSelect({ table: 'clienti', orderBy: [{ col: 'nome', asc: true }], columns: 'id, nome, cognome, telefono' }).then(({ data }) => {
+    dbSelect({ table: 'clienti', orderBy: [{ col: 'nome', asc: true }], columns: 'id, nome, cognome, telefono', filters: [{ col: 'deleted_at', op: 'is_null' }] }).then(({ data }) => {
       setClienti((data || []) as Cliente[]);
     });
   }, []);
