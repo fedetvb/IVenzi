@@ -29,7 +29,7 @@ export default function RegistrazioneCliente() {
   const [salonUserId, setSalonUserId] = useState<string | null>(UID_FROM_URL);
 
   useEffect(() => {
-    // Load logo and resolve salon user_id (needed for insert)
+    // Logo: anon policy allows reading logo_salone_url from impostazioni
     supabase
       .from('impostazioni')
       .select('valore, user_id')
@@ -42,13 +42,6 @@ export default function RegistrazioneCliente() {
         if (data?.user_id && !UID_FROM_URL) setSalonUserId(data.user_id as string);
       })
       .catch(() => {});
-
-    // If still no user_id, fetch via RPC
-    if (!UID_FROM_URL) {
-      supabase.rpc('get_salon_user_id').then(({ data }) => {
-        if (data) setSalonUserId(data as string);
-      }).catch(() => {});
-    }
   }, []);
 
   function setField(k: keyof Form, v: string) {

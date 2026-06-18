@@ -3723,7 +3723,8 @@ async function buildQrWithLogo(qrImgUrl: string, logo: string | null): Promise<s
 
 function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  const [registrazioneUrl, setRegistrazioneUrl] = useState('https://saloneivenzi.netlify.app/?registrazione=1');
+  const defaultRegUrl = user ? `${window.location.origin}/?registrazione=1&uid=${user.id}` : 'https://saloneivenzi.netlify.app/?registrazione=1';
+  const [registrazioneUrl, setRegistrazioneUrl] = useState(defaultRegUrl);
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
   const [savingUrl, setSavingUrl] = useState(false);
@@ -3740,7 +3741,23 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     (async () => {
       const val = await getImpostazione('registrazione_url');
-      if (val) setRegistrazioneUrl(val);
+      if (val) {
+        // Ensure the URL contains the current user's uid for correct attribution
+        if (user?.id && !val.includes('uid=')) {
+          const separator = val.includes('?') ? '&' : '?';
+          const urlWithUid = `${val}${separator}uid=${user.id}`;
+          setRegistrazioneUrl(urlWithUid);
+          // Silently upgrade the stored URL
+          setImpostazione('registrazione_url', urlWithUid, user.id).catch(() => {});
+        } else {
+          setRegistrazioneUrl(val);
+        }
+      } else if (user?.id) {
+        // First time: save the URL with uid
+        const url = `${window.location.origin}/?registrazione=1&uid=${user.id}`;
+        setRegistrazioneUrl(url);
+        setImpostazione('registrazione_url', url, user.id).catch(() => {});
+      }
       // Prefer Supabase icon, fall back to localStorage, then default
       const supabaseIcon = await getImpostazione('icona_qr_registrazione_url');
       if (supabaseIcon) {
@@ -3756,8 +3773,13 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
   }, []);
 
   async function handleSaveUrl() {
-    const trimmed = urlDraft.trim();
+    let trimmed = urlDraft.trim();
     if (!trimmed) return;
+    // Ensure uid is always embedded in the registration URL
+    if (user?.id && !trimmed.includes('uid=')) {
+      const separator = trimmed.includes('?') ? '&' : '?';
+      trimmed = `${trimmed}${separator}uid=${user.id}`;
+    }
     setSavingUrl(true);
     const { data: { user: u } } = await supabase.auth.getUser();
     await setImpostazione('registrazione_url', trimmed, u?.id);
