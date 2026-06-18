@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react';
 import { User, Phone, Mail, Calendar, FileText, Check, Scissors, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-// Fallback for single-salon deployments where uid is not in the URL
-const SALON_OWNER_ID = '1c7bb67b-523f-4f7a-aab2-166022a91be2';
-
 const urlParams = new URLSearchParams(window.location.search);
 const UID_FROM_URL = urlParams.get('uid');
 
@@ -29,10 +26,10 @@ export default function RegistrazioneCliente() {
   const [stato, setStato] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errore, setErrore] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [salonUserId, setSalonUserId] = useState<string>(UID_FROM_URL ?? SALON_OWNER_ID);
+  const [salonUserId, setSalonUserId] = useState<string | null>(UID_FROM_URL);
 
   useEffect(() => {
-    // Anon can read logo_salone_url rows — we also extract user_id from the result
+    // Load logo and resolve salon user_id (needed for insert)
     supabase
       .from('impostazioni')
       .select('valore, user_id')
@@ -45,6 +42,13 @@ export default function RegistrazioneCliente() {
         if (data?.user_id && !UID_FROM_URL) setSalonUserId(data.user_id as string);
       })
       .catch(() => {});
+
+    // If still no user_id, fetch via RPC
+    if (!UID_FROM_URL) {
+      supabase.rpc('get_salon_user_id').then(({ data }) => {
+        if (data) setSalonUserId(data as string);
+      }).catch(() => {});
+    }
   }, []);
 
   function setField(k: keyof Form, v: string) {
@@ -60,6 +64,12 @@ export default function RegistrazioneCliente() {
     }
     setErrore('');
     setStato('loading');
+
+    if (!salonUserId) {
+      setErrore('Configurazione salone non trovata. Riprova tra qualche secondo.');
+      setStato('error');
+      return;
+    }
 
     try {
       const capitalize = (s: string) => { const t = s.trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
