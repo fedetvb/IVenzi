@@ -52,6 +52,10 @@ interface FicheVoce {
 
 type TipoPagamento = 'cc_bancomat' | 'contanti_verde' | 'contanti_nero' | null;
 
+function prezzoEffettivo(v: FicheVoce): number {
+  return v.note === '__gift_prodotto__' ? 0 : v.prezzo;
+}
+
 interface FicheData {
   id: string;
   appuntamento_id: string;
@@ -390,7 +394,7 @@ function FichesTab() {
     setShowBulkGate(false);
     const now = new Date().toISOString();
     for (const g of daConvalidare) {
-      const totale = g.voci.reduce((s, v) => s + v.prezzo, 0);
+      const totale = g.voci.reduce((s, v) => s + prezzoEffettivo(v), 0);
       const clienteNome = `${g.clienteNome} ${g.clienteCognome}`.trim();
       const tipoPag = bulkTipoPagamento;
       for (const ficheId of g.ficheIds) {
@@ -944,7 +948,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   // Listino prezzi (per carte di tipo 'listino')
   const [listinoPrezziMap, setListinoPrezziMap] = useState<Map<string, number>>(new Map());
 
-  const totaleBase = voci.reduce((s, v) => s + v.prezzo, 0);
+  const totaleBase = voci.reduce((s, v) => s + prezzoEffettivo(v), 0);
 
   const cartaSconto = carteSconto.find(c => c.id === cartaScontoId);
 
@@ -953,9 +957,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     ? voci.reduce((s, v) => {
         if (v.tipo === 'servizio') {
           const lpx = listinoPrezziMap.get(v.nome_voce);
-          return s + (lpx !== undefined ? lpx : v.prezzo);
+          return s + (lpx !== undefined ? lpx : prezzoEffettivo(v));
         }
-        return s + v.prezzo;
+        return s + prezzoEffettivo(v);
       }, 0)
     : null;
 
@@ -1340,7 +1344,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     setShowConvalidaConfirm(false);
     // Ricalcola il totale direttamente dalle voci correnti per evitare race condition
     const totaleCalcolato = Math.max(0,
-      voci.reduce((s, v) => s + v.prezzo, 0) - scontoAmt - creditoPremium
+      voci.reduce((s, v) => s + prezzoEffettivo(v), 0) - scontoAmt - creditoPremium
     );
     const ficheId = await persistFiche({
       convalidata: true,
@@ -2680,7 +2684,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                 parrucchiere_id: null,
                 nome_parrucchiere: '',
                 prezzo: result.importo,
-                note: '',
+                note: result.tipoGift === 'prodotto' ? '__gift_prodotto__' : '',
                 ordine: prev.length,
               }]);
               if (result.tipo === 'gift_pass' && result.recordId) {
@@ -2849,16 +2853,18 @@ interface VoceRowProps {
 }
 
 function VoceRow({ voce, parrucchieri, onChange, onRemove, listinoPrezzoOverride }: VoceRowProps) {
+  const isGiftProdotto = voce.note === '__gift_prodotto__';
+  const displayPrezzo = isGiftProdotto ? 0 : voce.prezzo;
   const [editing, setEditing] = useState(false);
   const [nomeStr, setNomeStr] = useState(voce.nome_voce);
-  const [prezzoStr, setPrezzoStr] = useState(voce.prezzo.toFixed(2));
+  const [prezzoStr, setPrezzoStr] = useState(displayPrezzo.toFixed(2));
   const [parrId, setParrId] = useState(voce.parrucchiere_id ?? '');
   const [editingPrezzo, setEditingPrezzo] = useState(false);
-  const [inlinePrezzoStr, setInlinePrezzoStr] = useState(voce.prezzo.toFixed(2));
+  const [inlinePrezzoStr, setInlinePrezzoStr] = useState(displayPrezzo.toFixed(2));
 
   function openEdit() {
     setNomeStr(voce.nome_voce);
-    setPrezzoStr(voce.prezzo.toFixed(2));
+    setPrezzoStr(displayPrezzo.toFixed(2));
     setParrId(voce.parrucchiere_id ?? '');
     setEditing(true);
   }
@@ -2978,7 +2984,7 @@ function VoceRow({ voce, parrucchieri, onChange, onRemove, listinoPrezzoOverride
                 setEditingPrezzo(false);
               }
               if (e.key === 'Escape') {
-                setInlinePrezzoStr(voce.prezzo.toFixed(2));
+                setInlinePrezzoStr(displayPrezzo.toFixed(2));
                 setEditingPrezzo(false);
               }
             }}
@@ -2987,20 +2993,20 @@ function VoceRow({ voce, parrucchieri, onChange, onRemove, listinoPrezzoOverride
         ) : listinoPrezzoOverride !== undefined ? (
           <span className="flex items-center gap-1.5">
             <span className="text-sm font-bold text-orange-600">€{listinoPrezzoOverride.toFixed(2)}</span>
-            {voce.prezzo !== listinoPrezzoOverride && (
-              <span className="text-xs text-stone-400 line-through">€{voce.prezzo.toFixed(2)}</span>
+            {displayPrezzo !== listinoPrezzoOverride && (
+              <span className="text-xs text-stone-400 line-through">€{displayPrezzo.toFixed(2)}</span>
             )}
           </span>
         ) : (
           <span
             onClick={() => {
-              setInlinePrezzoStr(voce.prezzo.toFixed(2));
+              setInlinePrezzoStr(displayPrezzo.toFixed(2));
               setEditingPrezzo(true);
             }}
             title="Clicca per modificare il prezzo"
             className="text-sm font-semibold text-stone-700 cursor-pointer hover:text-amber-600 hover:underline decoration-dotted underline-offset-2 transition-colors"
           >
-            €{voce.prezzo.toFixed(2)}
+            €{displayPrezzo.toFixed(2)}
           </span>
         )}
         <button
@@ -3219,7 +3225,7 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
         prezzo: t.prezzo, tipo: 'servizio' as const,
       }));
     });
-    const totale = voci.reduce((s, v) => s + v.prezzo, 0);
+    const totale = voci.reduce((s, v) => s + prezzoEffettivo(v), 0);
     const orari = g.appuntamenti.map(a => new Date(a.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })).join(', ');
     const parrNomi = Array.from(new Set(voci.filter(v => v.nome_parrucchiere).map(v => v.nome_parrucchiere))).join(', ');
     return { g, voci, totale, orari, parrNomi };

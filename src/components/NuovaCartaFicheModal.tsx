@@ -25,6 +25,7 @@ export interface CartaFicheResult {
   codice: string;
   importo: number;
   recordId: string;
+  tipoGift?: 'valore' | 'prodotto';
 }
 
 interface Props {
@@ -162,7 +163,7 @@ export default function NuovaCartaFicheModal({ onClose, onSaved, clienteId, clie
     }});
     const giftPassId = (data as any)?.id ?? '';
     setSaving(false);
-    onSaved({ tipo: 'gift_pass', codice: codiceGift, importo: importoGift, recordId: giftPassId });
+    onSaved({ tipo: 'gift_pass', codice: codiceGift, importo: importoGift, recordId: giftPassId, tipoGift });
   }
 
   return (
