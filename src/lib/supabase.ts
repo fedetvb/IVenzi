@@ -1,31 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const REAL_PROJECT_ID = 'qfpeffzdszdanebmgafb';
-const REAL_URL = `https://${REAL_PROJECT_ID}.supabase.co`;
-const REAL_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+// Legge ESCLUSIVAMENTE dal file .env del progetto (iniettato da Vite al build-time).
+// Non esistono override, localStorage, sandbox o deviazioni di alcun tipo.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-// GUARDIANO: eventuali override in localStorage vengono accettati solo se puntano al progetto reale.
-const LS_URL_KEY = 'sb_custom_url';
-const LS_KEY_KEY = 'sb_custom_anon_key';
-
-function guardUrl(stored: string | null): string {
-  if (!stored || !stored.includes(REAL_PROJECT_ID)) {
-    if (stored) console.error('GUARDIANO: URL Supabase non autorizzato ignorato:', stored);
-    return REAL_URL;
-  }
-  return stored;
+if (!supabaseUrl || !supabaseUrl.includes('qfpeffzdszdanebmgafb')) {
+  throw new Error(`ERRORE CRITICO: VITE_SUPABASE_URL non punta al progetto reale. Valore letto: ${supabaseUrl}`);
 }
-
-function guardKey(stored: string | null): string {
-  if (!stored || !stored.includes(REAL_PROJECT_ID)) {
-    if (stored) console.error('GUARDIANO: Anon key non autorizzata ignorata.');
-    return REAL_ANON_KEY;
-  }
-  return stored;
-}
-
-const supabaseUrl = guardUrl(localStorage.getItem(LS_URL_KEY));
-const supabaseAnonKey = guardKey(localStorage.getItem(LS_KEY_KEY));
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
