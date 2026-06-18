@@ -2097,6 +2097,17 @@ function PaginaAnnuncio({ onBack, userId }: { onBack: () => void; userId?: strin
 
 // ─── Tema e Personalizzazione ─────────────────────────────────────────────────
 
+const LS_PWA_URL = 'icona_pwa_url';
+const LS_PWA_G_URL = 'icona_pwa_gestionale_url';
+const LS_QR_REG_URL = 'icona_qr_registrazione_url';
+const LS_QR_PREN_URL = 'qr_prenotazioni_logo_url';
+
+function getIconCache(key: string): string { return localStorage.getItem(key) ?? ''; }
+function saveIconCache(key: string, url: string): void {
+  if (url) localStorage.setItem(key, url);
+  else localStorage.removeItem(key);
+}
+
 const ICON_COMPONENTS: Record<string, React.ElementType> = {
   Scissors,
   Comb: CombIcon,
@@ -2120,25 +2131,25 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
   const logoRef = useRef<HTMLInputElement>(null);
 
   // Icona PWA portale prenotazioni
-  const [pwaPreview, setPwaPreview] = useState('');
+  const [pwaPreview, setPwaPreview] = useState(() => getIconCache(LS_PWA_URL));
   const [uploadingPwa, setUploadingPwa] = useState(false);
   const [savedPwa, setSavedPwa] = useState(false);
   const pwaRef = useRef<HTMLInputElement>(null);
 
   // Icona PWA gestionale
-  const [pwaGestionalePreview, setPwaGestionalePreview] = useState('');
+  const [pwaGestionalePreview, setPwaGestionalePreview] = useState(() => getIconCache(LS_PWA_G_URL));
   const [uploadingPwaGestionale, setUploadingPwaGestionale] = useState(false);
   const [savedPwaGestionale, setSavedPwaGestionale] = useState(false);
   const pwaGestionaleRef = useRef<HTMLInputElement>(null);
 
   // Icona QR registrazione clienti
-  const [qrRegPreview, setQrRegPreview] = useState<string | null>(null);
+  const [qrRegPreview, setQrRegPreview] = useState<string | null>(() => getIconCache(LS_QR_REG_URL) || null);
   const [uploadingQrReg, setUploadingQrReg] = useState(false);
   const [savedQrReg, setSavedQrReg] = useState(false);
   const qrRegRef = useRef<HTMLInputElement>(null);
 
   // Icona QR prenotazione online
-  const [qrPrenPreview, setQrPrenPreview] = useState<string | null>(null);
+  const [qrPrenPreview, setQrPrenPreview] = useState<string | null>(() => getIconCache(LS_QR_PREN_URL) || null);
   const [uploadingQrPren, setUploadingQrPren] = useState(false);
   const [savedQrPren, setSavedQrPren] = useState(false);
   const qrPrenRef = useRef<HTMLInputElement>(null);
@@ -2168,10 +2179,10 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
     ]).then(([pwa, pwaG, qrReg, qrPren]) => {
       if (cancelled) return;
       // Usa aggiornamento funzionale: non sovrascrivere se già valorizzato da un upload recente
-      if (pwa.data?.valore) setPwaPreview(v => v || pwa.data!.valore);
-      if (pwaG.data?.valore) setPwaGestionalePreview(v => v || pwaG.data!.valore);
-      if (qrReg.data?.valore) setQrRegPreview(v => v || qrReg.data!.valore);
-      if (qrPren.data?.valore) setQrPrenPreview(v => v || qrPren.data!.valore);
+      if (pwa.data?.valore) { setPwaPreview(v => v || pwa.data!.valore); saveIconCache(LS_PWA_URL, pwa.data!.valore); }
+      if (pwaG.data?.valore) { setPwaGestionalePreview(v => v || pwaG.data!.valore); saveIconCache(LS_PWA_G_URL, pwaG.data!.valore); }
+      if (qrReg.data?.valore) { setQrRegPreview(v => v || qrReg.data!.valore); saveIconCache(LS_QR_REG_URL, qrReg.data!.valore); }
+      if (qrPren.data?.valore) { setQrPrenPreview(v => v || qrPren.data!.valore); saveIconCache(LS_QR_PREN_URL, qrPren.data!.valore); }
     });
     return () => { cancelled = true; };
   }, [user]);
@@ -2233,6 +2244,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?v=' + Date.now();
         setPwaPreview(iconUrl);
+        saveIconCache(LS_PWA_URL, iconUrl);
         await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
       }
       setSavedPwa(true);
@@ -2242,6 +2254,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   async function removePwaIcon() {
     setPwaPreview('');
+    saveIconCache(LS_PWA_URL, '');
     if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
   }
 
@@ -2256,6 +2269,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?v=' + Date.now();
         setPwaGestionalePreview(iconUrl);
+        saveIconCache(LS_PWA_G_URL, iconUrl);
         await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
       }
       setSavedPwaGestionale(true);
@@ -2265,6 +2279,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   async function removePwaGestionaleIcon() {
     setPwaGestionalePreview('');
+    saveIconCache(LS_PWA_G_URL, '');
     if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_pwa_gestionale_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
   }
 
@@ -2279,6 +2294,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?v=' + Date.now();
         setQrRegPreview(iconUrl);
+        saveIconCache(LS_QR_REG_URL, iconUrl);
         await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
         localStorage.setItem(QR_LOGO_KEY, iconUrl);
       }
@@ -2289,6 +2305,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
 
   async function removeQrRegIcon() {
     setQrRegPreview(null);
+    saveIconCache(LS_QR_REG_URL, '');
     if (user) await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: '', user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
     localStorage.removeItem(QR_LOGO_KEY);
   }
@@ -2304,6 +2321,7 @@ function PaginaIcone({ onBack }: { onBack: () => void }) {
         const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
         const iconUrl = urlData.publicUrl + '?t=' + Date.now();
         setQrPrenPreview(iconUrl);
+        saveIconCache(LS_QR_PREN_URL, iconUrl);
         await supabase.from('impostazioni').upsert({ chiave: 'qr_prenotazioni_logo_url', valore: iconUrl, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: 'chiave,user_id' });
       }
       setSavedQrPren(true);
