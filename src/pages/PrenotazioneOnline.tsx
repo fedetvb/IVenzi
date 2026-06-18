@@ -807,6 +807,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       document.head.appendChild(manifestLink);
     }
 
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const pwaManifestUrl = `${supabaseUrl}/functions/v1/pwa-manifest?uid=${userId}`;
+    if (manifestLink) manifestLink.href = pwaManifestUrl;
+
     supabase.from('impostazioni')
       .select('valore')
       .eq('chiave', 'icona_pwa_url')
@@ -814,7 +818,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       .maybeSingle()
       .then(({ data }) => {
         const iconUrl = data?.valore;
-        if (manifestLink) manifestLink.href = '/manifest.json';
         if (!iconUrl) return;
         document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove());
         const atLink = document.createElement('link');
@@ -824,10 +827,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
         if (favicon) favicon.href = iconUrl;
       })
-      .catch(() => { if (manifestLink) manifestLink.href = '/manifest.json'; });
+      .catch(() => {});
 
     return () => { if (manifestLink) manifestLink.href = '/manifest.json'; };
-  }, [userId]);
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function loadInfo() {
