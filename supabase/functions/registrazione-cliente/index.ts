@@ -341,14 +341,21 @@ Deno.serve(async (req: Request) => {
 
       const admin = createClient(su, serviceKey);
 
-      // Fetch salon owner user_id (required by RLS INSERT policy)
-      const { data: ownerData } = await admin
-        .from("impostazioni")
-        .select("user_id")
-        .not("user_id", "is", null)
-        .limit(1)
-        .maybeSingle();
-      const salonUserId: string | null = ownerData?.user_id ?? null;
+      // Get salon owner user_id directly from auth.users (most reliable — avoids stale impostazioni data)
+      let salonUserId: string | null = null;
+      try {
+        const { data: { users } } = await admin.auth.admin.listUsers({ perPage: 1 });
+        salonUserId = users?.[0]?.id ?? null;
+      } catch {
+        // fallback: try impostazioni
+        const { data: ownerData } = await admin
+          .from("impostazioni")
+          .select("user_id")
+          .not("user_id", "is", null)
+          .limit(1)
+          .maybeSingle();
+        salonUserId = ownerData?.user_id ?? null;
+      }
 
       let foto_url = "";
 
