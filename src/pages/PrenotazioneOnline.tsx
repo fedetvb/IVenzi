@@ -557,8 +557,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const installed = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     setDeviceType(ios ? 'ios' : android ? 'android' : 'other');
     setIsSamsungBrowser(samsung);
-    // Show banner if not installed AND not permanently dismissed via "Ho installato"
-    if (!installed && !localStorage.getItem('pwa_installata')) {
+    if (installed || localStorage.getItem('pwa_installata')) {
+      setShowInstallBanner(false);
+    } else {
       setShowInstallBanner(true);
     }
     // Recover prompt captured before React mounted
@@ -570,9 +571,17 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       e.preventDefault();
       setInstallPrompt(e);
       (window as Window & { __pwaInstallPrompt?: Event | null }).__pwaInstallPrompt = e;
+      if (!localStorage.getItem('pwa_installata')) setShowInstallBanner(true);
+    };
+    const onInstalled = () => {
+      markAsInstalled();
     };
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
   }, []);
 
   function dismissInstallBanner() {
@@ -596,11 +605,11 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         markAsInstalled();
       } else {
         setInstallPrompt(null);
-        // Show manual instructions as fallback
-        setShowAndroidModal(true);
+        (window as Window & { __pwaInstallPrompt?: Event | null }).__pwaInstallPrompt = null;
       }
+    } else if (deviceType === 'ios') {
+      setShowIosModal(true);
     } else {
-      // Browser doesn't support beforeinstallprompt (Samsung Internet, Firefox, etc.)
       setShowAndroidModal(true);
     }
   }
