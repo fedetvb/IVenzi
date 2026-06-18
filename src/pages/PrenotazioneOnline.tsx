@@ -38,12 +38,20 @@ async function insertSchedaSafe(payload: Record<string, unknown>): Promise<void>
 
   if (userId && telNorm) {
     // Guard 1: client already confirmed in rubrica → never create a new request
+    // Tries cliente_esiste_in_rubrica first; falls back to cliente_ha_fiches if not deployed.
     try {
       const { data: esiste } = await supabase.rpc('cliente_esiste_in_rubrica', {
         p_user_id: userId,
         p_telefono: tel,
       });
       if (esiste) return;
+    } catch { /* RPC not deployed yet — fall back */ }
+    try {
+      const { data: haFiches } = await supabase.rpc('cliente_ha_fiches', {
+        p_user_id: userId,
+        p_telefono: tel,
+      });
+      if (haFiches) return;
     } catch { /* non bloccante */ }
 
     // Guard 2: scheda already in_attesa for this phone → block duplicate
@@ -1367,6 +1375,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         p_telefono: tel,
       });
       setIsNuovaScheda(!haFiches);
+      if (haFiches) clienteGiaEsiste = true;
     } catch { /* non bloccante — default true (restrittivo) */ }
 
     // Crea scheda da confermare solo se la cliente NON è già registrata in rubrica.
