@@ -1354,7 +1354,7 @@ interface GiftPass {
   scadenza_uso: string | null;
   fiche_id: string | null;
   utilizzata: boolean;
-  attiva: boolean;
+  attivo: boolean;
   note: string;
   created_at: string;
 }
@@ -1479,7 +1479,7 @@ function NuovaGiftPassModal({ clienti, onClose, onSaved }: {
       nominativa: nominativa && form.tipo === 'prodotto',
       note: form.note.trim(),
       utilizzata: false,
-      attiva: true,
+      attivo: true,
       user_id: user?.id,
     }});
 
