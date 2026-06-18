@@ -1069,7 +1069,22 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           }
         }
       }
-      setVoci(merged);
+      // Corregge voci Gift Pass PRODOTTO: prezzo → 0, note → __gift_prodotto__
+      const gpCodici = merged
+        .filter(v => v.nome_voce.match(/^Gift Pass #([A-Z0-9]+)/))
+        .map(v => v.nome_voce.match(/^Gift Pass #([A-Z0-9]+)/)![1]);
+      if (gpCodici.length > 0) {
+        dbSelect({ table: 'gift_pass', filters: [{ col: 'codice', op: 'in', val: gpCodici }], columns: 'codice,tipo' }).then(({ data }) => {
+          const prodottiSet = new Set((data ?? []).filter((g: any) => g.tipo === 'prodotto').map((g: any) => g.codice));
+          setVoci(merged.map(v => {
+            const m = v.nome_voce.match(/^Gift Pass #([A-Z0-9]+)/);
+            if (m && prodottiSet.has(m[1])) return { ...v, prezzo: 0, note: '__gift_prodotto__' };
+            return v;
+          }));
+        });
+      } else {
+        setVoci(merged);
+      }
     } else {
       const initVoci: FicheVoce[] = [];
       let ordine = 0;
