@@ -1,16 +1,31 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Allow runtime override of Supabase credentials via localStorage.
-// This lets users switch Supabase projects without a rebuild.
+const REAL_PROJECT_ID = 'qfpeffzdszdanebmgafb';
+const REAL_URL = `https://${REAL_PROJECT_ID}.supabase.co`;
+const REAL_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+
+// GUARDIANO: eventuali override in localStorage vengono accettati solo se puntano al progetto reale.
 const LS_URL_KEY = 'sb_custom_url';
 const LS_KEY_KEY = 'sb_custom_anon_key';
 
-const supabaseUrl =
-  localStorage.getItem(LS_URL_KEY) ||
-  'https://qfpeffzdszdanebmgafb.supabase.co';
-const supabaseAnonKey =
-  localStorage.getItem(LS_KEY_KEY) ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+function guardUrl(stored: string | null): string {
+  if (!stored || !stored.includes(REAL_PROJECT_ID)) {
+    if (stored) console.error('GUARDIANO: URL Supabase non autorizzato ignorato:', stored);
+    return REAL_URL;
+  }
+  return stored;
+}
+
+function guardKey(stored: string | null): string {
+  if (!stored || !stored.includes(REAL_PROJECT_ID)) {
+    if (stored) console.error('GUARDIANO: Anon key non autorizzata ignorata.');
+    return REAL_ANON_KEY;
+  }
+  return stored;
+}
+
+const supabaseUrl = guardUrl(localStorage.getItem(LS_URL_KEY));
+const supabaseAnonKey = guardKey(localStorage.getItem(LS_KEY_KEY));
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

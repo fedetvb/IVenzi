@@ -6,7 +6,7 @@ import { applyWaTemplate, DEFAULT_WA_CS_DONA, DEFAULT_WA_GP_CLIENTE } from '../l
 import { supabase } from '../lib/supabase';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://qfpeffzdszdanebmgafb.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
 const EDGE_URL = `${SUPABASE_URL}/functions/v1/prenota-online`;
 const PWA_MANIFEST_URL = `${SUPABASE_URL}/functions/v1/pwa-manifest`;
 const MIEI_MSG_URL = `${SUPABASE_URL}/functions/v1/miei-messaggi`;
@@ -725,8 +725,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   useEffect(() => {
     if (!userId) return;
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+    const supabaseUrl = SUPABASE_URL;
+    const supabaseKey = SUPABASE_ANON_KEY;
 
     let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (!manifestLink) {
@@ -1265,7 +1265,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      const SCRIVICI_URL = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://qfpeffzdszdanebmgafb.supabase.co'}/functions/v1/scrivici`;
+      const SCRIVICI_URL = `${SUPABASE_URL}/functions/v1/scrivici`;
       const body: Record<string, string> = {
         user_id: userId,
         nome: nome.trim(),
