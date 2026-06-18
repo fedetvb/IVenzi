@@ -115,6 +115,12 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       copyPublicDir: false,
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          prenota: path.resolve(__dirname, 'prenota.html'),
+        },
+      },
     },
   };
 });

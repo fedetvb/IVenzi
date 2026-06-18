@@ -3,6 +3,16 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/prenota"
+  to = "/prenota.html"
+  status = 200
+
+[[redirects]]
+  from = "/prenota/*"
+  to = "/prenota.html"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -1209,7 +1209,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const qrLogoInputRef = useRef<HTMLInputElement>(null);
 
   const bookingUrl = user
-    ? `${window.location.origin}${window.location.pathname}?prenota=1&uid=${user.id}`
+    ? `${window.location.origin}/prenota?uid=${user.id}`
     : '';
 
   useEffect(() => {

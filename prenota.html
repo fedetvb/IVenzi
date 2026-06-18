@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Prenota Online" />
+    <script>
+      // Inject dynamic PWA manifest before Chrome evaluates installability
+      (function() {
+        var params = new URLSearchParams(window.location.search);
+        var uid = params.get('uid');
+        var supabaseUrl = 'https://qfpeffzdszdanebmgafb.supabase.co';
+        var manifestUrl = supabaseUrl + '/functions/v1/pwa-manifest' + (uid ? '?uid=' + encodeURIComponent(uid) : '');
+        var link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestUrl;
+        document.head.appendChild(link);
+        // Capture beforeinstallprompt before React mounts
+        window.__pwaInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', function(e) {
+          e.preventDefault();
+          window.__pwaInstallPrompt = e;
+        });
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <title>Prenota Online</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

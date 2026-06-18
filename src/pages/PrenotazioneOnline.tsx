@@ -805,21 +805,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }, []);
 
 
-  // Inject dynamic PWA manifest + apple-touch-icon for the booking portal
+  // Update apple-touch-icon when salon has a custom icon
   useEffect(() => {
     if (!userId) return;
-
-    let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (!manifestLink) {
-      manifestLink = document.createElement('link');
-      manifestLink.rel = 'manifest';
-      document.head.appendChild(manifestLink);
-    }
-
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-    const pwaManifestUrl = `${supabaseUrl}/functions/v1/pwa-manifest?uid=${userId}`;
-    if (manifestLink) manifestLink.href = pwaManifestUrl;
-
     supabase.from('impostazioni')
       .select('valore')
       .eq('chiave', 'icona_pwa_url')
@@ -837,8 +825,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         if (favicon) favicon.href = iconUrl;
       })
       .catch(() => {});
-
-    return () => { if (manifestLink) manifestLink.href = '/manifest.json'; };
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
