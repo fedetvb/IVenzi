@@ -27,10 +27,39 @@ function normPhone(t: string): string {
   return s.slice(-9);
 }
 
-// Inserts a scheda da confermare, silently ignoring duplicate-key (23505).
-// PostgREST partial-index upsert (onConflict with WHERE clause) is unsupported;
-// insert + ignore is the safe equivalent.
+// Inserts a scheda da confermare only if:
+//   1. the client does NOT already exist in 'clienti' (rubrica)
+//   2. there is NO existing row with stato='in_attesa' for the same phone number
+// Silently ignores duplicate-key errors (23505) as a last-resort guard.
 async function insertSchedaSafe(payload: Record<string, unknown>): Promise<void> {
+  const userId = payload.user_id as string | undefined;
+  const tel = (payload.telefono as string | undefined)?.trim() ?? '';
+  const telNorm = normPhone(tel);
+
+  if (userId && telNorm) {
+    // Guard 1: client already confirmed in rubrica → never create a new request
+    try {
+      const { data: esiste } = await supabase.rpc('cliente_esiste_in_rubrica', {
+        p_user_id: userId,
+        p_telefono: tel,
+      });
+      if (esiste) return;
+    } catch { /* non bloccante */ }
+
+    // Guard 2: scheda already in_attesa for this phone → block duplicate
+    try {
+      const { data: pending } = await supabase
+        .from('schede_clienti_da_confermare')
+        .select('id, telefono')
+        .eq('user_id', userId)
+        .eq('stato', 'in_attesa');
+      const hasPending = (pending ?? []).some(
+        (r: { telefono: string }) => normPhone(r.telefono ?? '') === telNorm
+      );
+      if (hasPending) return;
+    } catch { /* non bloccante */ }
+  }
+
   const { error } = await supabase.from('schede_clienti_da_confermare').insert(payload);
   if (error && error.code !== '23505') {
     console.warn('insertSchedaSafe:', error.message);
