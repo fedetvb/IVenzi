@@ -5,13 +5,27 @@ import BenvenutoModal, { type BenvenutoConfig } from '../components/BenvenutoMod
 import { applyWaTemplate, DEFAULT_WA_CS_DONA, DEFAULT_WA_GP_CLIENTE } from '../lib/waUtils';
 import { supabase } from '../lib/supabase';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://qfpeffzdszdanebmgafb.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
-const EDGE_URL = `${SUPABASE_URL}/functions/v1/prenota-online`;
-const PWA_MANIFEST_URL = `${SUPABASE_URL}/functions/v1/pwa-manifest`;
-const MIEI_MSG_URL = `${SUPABASE_URL}/functions/v1/miei-messaggi`;
-const MIE_CARTE_URL = `${SUPABASE_URL}/functions/v1/mie-carte`;
-const AGGIORNA_PROFILO_URL = `${SUPABASE_URL}/functions/v1/aggiorna-profilo`;
+// Timezone helpers (Italian local time)
+function toItalianMinutes(date: Date): number {
+  const parts = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(date);
+  return parseInt(parts.find(p => p.type === 'hour')!.value) * 60 + parseInt(parts.find(p => p.type === 'minute')!.value);
+}
+function toItalianDateStr(date: Date): string {
+  const parts = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const y = parts.find(p => p.type === 'year')!.value;
+  const mo = parts.find(p => p.type === 'month')!.value;
+  const d2 = parts.find(p => p.type === 'day')!.value;
+  return `${y}-${mo}-${d2}`;
+}
+function italianDayBounds(data: string) {
+  return { dayStart: `${data}T00:00:00+02:00`, dayEnd: `${data}T23:59:59+01:00` };
+}
+function normPhone(t: string): string {
+  let s = (t ?? '').replace(/\D/g, '');
+  if (s.startsWith('0039')) s = s.slice(4);
+  else if (s.startsWith('39') && s.length > 10) s = s.slice(2);
+  return s.slice(-9);
+}
 
 interface Parrucchiere {
   id: string;
@@ -389,59 +403,41 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setMappaSalvata(false);
     try {
       const tel = telefono.trim();
-      // Upsert: cancella eventuale record precedente per questo telefono, poi inserisce
-      await fetch(
-        `${SUPABASE_URL}/rest/v1/mappa_bellezza?telefono=eq.${encodeURIComponent(tel)}`,
-        { method: 'DELETE', headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
-      );
-      await fetch(
-        `${SUPABASE_URL}/rest/v1/mappa_bellezza`,
-        {
-          method: 'POST',
-          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            telefono: tel,
-            shampoo_id: risultato.shampoo?.id ?? null,
-            shampoo_nome: risultato.shampoo?.nome ?? null,
-            shampoo_marca: risultato.shampoo?.marca ?? null,
-            shampoo_categoria: risultato.shampoo?.categoria ?? null,
-            shampoo_prezzo: risultato.shampoo?.prezzo_vendita ?? null,
-            maschera_id: risultato.maschera?.id ?? null,
-            maschera_nome: risultato.maschera?.nome ?? null,
-            maschera_marca: risultato.maschera?.marca ?? null,
-            maschera_categoria: risultato.maschera?.categoria ?? null,
-            maschera_prezzo: risultato.maschera?.prezzo_vendita ?? null,
-            finish_id: risultato.finish?.id ?? null,
-            finish_nome: risultato.finish?.nome ?? null,
-            finish_marca: risultato.finish?.marca ?? null,
-            finish_categoria: risultato.finish?.categoria ?? null,
-            finish_prezzo: risultato.finish?.prezzo_vendita ?? null,
-            quiz_risposte: risposte,
-          }),
-        }
-      );
+      await supabase.from('mappa_bellezza').delete().eq('telefono', tel);
+      await supabase.from('mappa_bellezza').insert({
+        telefono: tel,
+        shampoo_id: risultato.shampoo?.id ?? null,
+        shampoo_nome: risultato.shampoo?.nome ?? null,
+        shampoo_marca: risultato.shampoo?.marca ?? null,
+        shampoo_categoria: risultato.shampoo?.categoria ?? null,
+        shampoo_prezzo: risultato.shampoo?.prezzo_vendita ?? null,
+        maschera_id: risultato.maschera?.id ?? null,
+        maschera_nome: risultato.maschera?.nome ?? null,
+        maschera_marca: risultato.maschera?.marca ?? null,
+        maschera_categoria: risultato.maschera?.categoria ?? null,
+        maschera_prezzo: risultato.maschera?.prezzo_vendita ?? null,
+        finish_id: risultato.finish?.id ?? null,
+        finish_nome: risultato.finish?.nome ?? null,
+        finish_marca: risultato.finish?.marca ?? null,
+        finish_categoria: risultato.finish?.categoria ?? null,
+        finish_prezzo: risultato.finish?.prezzo_vendita ?? null,
+        quiz_risposte: risposte,
+      });
       setMappaBellezza(risultato);
       setMappaSalvata(true);
-    } catch {
-      // ignore — non bloccante
-    } finally {
-      setSalvandoMappa(false);
-    }
+    } catch { /* ignore — non bloccante */ }
+    finally { setSalvandoMappa(false); }
   }
 
   async function loadMappaBellezza() {
     const tel = telefono.trim();
     if (!tel) return;
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/mappa_bellezza?telefono=eq.${encodeURIComponent(tel)}&limit=1`,
-        { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
-      );
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
+      const { data } = await supabase.from('mappa_bellezza').select('*').eq('telefono', tel).limit(1);
+      if (data && data.length > 0) {
         const r = data[0];
         const toP = (id: string | null, nome: string | null, marca: string | null, categoria: string | null, prezzo: number | null): ProdottoCatalogo | null =>
-          nome ? { id: id ?? '', nome, marca, categoria, prezzo_vendita: prezzo, note: null, quiz_tags: null } : null;
+          nome ? { id: id ?? '', nome, marca, categoria, prezzo_vendita: prezzo, note: null, quiz_tags: null, best_seller: false } : null;
         setMappaBellezza({
           shampoo: toP(r.shampoo_id, r.shampoo_nome, r.shampoo_marca, r.shampoo_categoria, r.shampoo_prezzo),
           maschera: toP(r.maschera_id, r.maschera_nome, r.maschera_marca, r.maschera_categoria, r.maschera_prezzo),
@@ -697,11 +693,40 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const poll = async () => {
       if (!active || stepRef.current !== 'miei_servizi') return;
       try {
-        const res = await fetch(`${EDGE_URL}/miei-servizi?user_id=${userId}&telefono=${encodeURIComponent(tel)}`);
-        const data = await res.json();
-        if (active && stepRef.current === 'miei_servizi' && !data.error) {
-          setMieiServizi(data.sedute ?? []);
+        const telN = normPhone(tel);
+        const { data: clientiAll } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
+        const cliente = ((clientiAll ?? []) as { id: string; telefono: string }[]).find(c => normPhone(c.telefono ?? '') === telN);
+        if (!cliente) return;
+        const { data: fichesD } = await supabase.from('fiches').select('id,data_riferimento,appuntamento_id').eq('user_id', userId).eq('cliente_id', cliente.id).eq('convalidata', true).is('deleted_at', null);
+        const { data: apptR } = await supabase.from('appuntamenti').select('id,data_ora').eq('user_id', userId).eq('cliente_id', cliente.id).is('deleted_at', null);
+        const appIds2 = (apptR ?? []).map((a: { id: string }) => a.id);
+        const appDataMap2 = new Map<string, string>((apptR ?? []).map((a: { id: string; data_ora: string }) => [a.id, a.data_ora]));
+        const { data: fichesA } = appIds2.length > 0
+          ? await supabase.from('fiches').select('id,data_riferimento,appuntamento_id').eq('user_id', userId).in('appuntamento_id', appIds2).eq('convalidata', true).is('deleted_at', null)
+          : { data: [] };
+        type FR = { id: string; data_riferimento: string | null; appuntamento_id: string | null };
+        const fm = new Map<string, string>();
+        for (const f of ([...(fichesD ?? []), ...(fichesA ?? [])] as FR[])) {
+          if (fm.has(f.id)) continue;
+          const d = f.data_riferimento ?? (f.appuntamento_id ? appDataMap2.get(f.appuntamento_id) : undefined) ?? null;
+          if (d) fm.set(f.id, d);
         }
+        if (fm.size === 0) { if (active && stepRef.current === 'miei_servizi') setMieiServizi([]); return; }
+        const fids = Array.from(fm.keys());
+        const [{ data: vR }, { data: pR }] = await Promise.all([
+          supabase.from('fiche_voci').select('fiche_id,tipo,nome_voce,parrucchieri(nome)').in('fiche_id', fids),
+          supabase.from('rivendita_prodotti').select('fiche_id,nome_prodotto,quantita,parrucchieri(nome)').in('fiche_id', fids),
+        ]);
+        type VR = { fiche_id: string; tipo: string; nome_voce: string; parrucchieri: { nome: string } | null };
+        type PR = { fiche_id: string; nome_prodotto: string; quantita: number; parrucchieri: { nome: string } | null };
+        const vbf = new Map<string, VR[]>(); for (const v of (vR ?? []) as VR[]) { if (!vbf.has(v.fiche_id)) vbf.set(v.fiche_id, []); vbf.get(v.fiche_id)!.push(v); }
+        const pbf = new Map<string, PR[]>(); for (const p of (pR ?? []) as PR[]) { if (!p.fiche_id) continue; if (!pbf.has(p.fiche_id)) pbf.set(p.fiche_id, []); pbf.get(p.fiche_id)!.push(p); }
+        const sedute = Array.from(fm.entries()).map(([fid, d]) => ({
+          fiche_id: fid, data: d,
+          voci: (vbf.get(fid) ?? []).map(v => ({ tipo: v.tipo, nome: v.nome_voce, parrucchiere: v.parrucchieri?.nome ?? null })),
+          prodotti: (pbf.get(fid) ?? []).map(p => ({ nome: p.nome_prodotto, quantita: p.quantita ?? 1, parrucchiere: p.parrucchieri?.nome ?? null })),
+        })).filter(s => s.voci.length > 0 || s.prodotti.length > 0).sort((a, b) => b.data.localeCompare(a.data));
+        if (active && stepRef.current === 'miei_servizi') setMieiServizi(sedute);
       } catch { /* ignora errori di rete */ }
     };
     const id2 = setInterval(poll, 30000);
@@ -725,9 +750,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   useEffect(() => {
     if (!userId) return;
 
-    const supabaseUrl = SUPABASE_URL;
-    const supabaseKey = SUPABASE_ANON_KEY;
-
     let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (!manifestLink) {
       manifestLink = document.createElement('link');
@@ -735,73 +757,115 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       document.head.appendChild(manifestLink);
     }
 
-    // Fetch custom icon first, then inject manifest with cache-buster tied to icon version
-    fetch(`${supabaseUrl}/rest/v1/impostazioni?chiave=eq.icona_pwa_url&user_id=eq.${encodeURIComponent(userId)}&select=valore`, {
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-    })
-      .then(r => r.json())
-      .then((rows: { valore: string }[]) => {
-        const iconUrl = rows?.[0]?.valore;
-
-        // Extract version param from icon URL to use as manifest cache-buster
-        let iconVersion = '';
-        if (iconUrl) {
-          try { iconVersion = new URL(iconUrl).searchParams.get('v') ?? ''; } catch { /* ignore */ }
-        }
-        const manifestUrl = `${PWA_MANIFEST_URL}?uid=${encodeURIComponent(userId)}${iconVersion ? `&iv=${iconVersion}` : ''}`;
-        if (manifestLink) manifestLink.href = manifestUrl;
-
+    supabase.from('impostazioni')
+      .select('valore')
+      .eq('chiave', 'icona_pwa_url')
+      .eq('user_id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const iconUrl = data?.valore;
+        if (manifestLink) manifestLink.href = '/manifest.json';
         if (!iconUrl) return;
-        // iOS: replace static apple-touch-icon with custom one
         document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove());
         const atLink = document.createElement('link');
         atLink.rel = 'apple-touch-icon';
         atLink.href = iconUrl;
         document.head.appendChild(atLink);
-        // Favicon
         const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
         if (favicon) favicon.href = iconUrl;
       })
-      .catch(() => {
-        // Fallback: set manifest without cache-buster
-        if (manifestLink) manifestLink.href = `${PWA_MANIFEST_URL}?uid=${encodeURIComponent(userId)}`;
-      });
+      .catch(() => { if (manifestLink) manifestLink.href = '/manifest.json'; });
 
-    return () => {
-      if (manifestLink) manifestLink.href = '/manifest.json';
-    };
+    return () => { if (manifestLink) manifestLink.href = '/manifest.json'; };
   }, [userId]);
 
   useEffect(() => {
     async function loadInfo() {
       setLoadingInfo(true);
       try {
-        const res = await fetch(`${EDGE_URL}/info?user_id=${userId}`);
-        const data = await res.json();
-        if (res.ok && data && typeof data === 'object' && !data.error && !data.code) {
-          setInfo(data);
-        } else {
-          // Fallback: prenotazioniAttive true di default, salone vuoto ma funzionante
-          setInfo({
-            prenotazioniAttive: true,
-            portaleNascosto: false,
-            nomeSalone: '',
-            logoUrl: null,
-            parrucchieri: [],
-            servizi: [],
-            serviziAbbinati: [],
-          });
+        const SOCIAL_KEYS = ['social_instagram','social_facebook','social_tiktok','social_youtube','social_whatsapp','social_x','social_threads','social_google_business','social_tripadvisor','social_altro'];
+        const ALL_KEYS = [
+          'nome_salone','logo_salone_url','prenotazioni_online_attive','portale_nascosto',
+          'annuncio_attivo','annuncio_sfondo','annuncio_testo','annuncio_id','annuncio_compleanno_testo',
+          'azienda_telefono','azienda_email','azienda_pec','azienda_indirizzo','azienda_google_maps',
+          'azienda_sito_prenotazioni','azienda_note','orari_salone_json','orari_salone_nota',
+          'ferie_inizio','ferie_fine','benvenuto_attivo','benvenuto_config_json',
+          'icona_pwa_url',
+          ...SOCIAL_KEYS,
+        ];
+
+        const [impRes, parrRes, servRes] = await Promise.all([
+          supabase.from('impostazioni').select('chiave,valore').eq('user_id', userId).in('chiave', ALL_KEYS),
+          supabase.from('parrucchieri').select('id,nome,colore').eq('user_id', userId).eq('attivo', true).order('nome'),
+          supabase.from('trattamenti_catalogo')
+            .select('id,nome,durata_minuti,prezzo,colore,servizio_abbinato_online_id')
+            .eq('user_id', userId)
+            .eq('prenotazione_online_abilitata', true)
+            .eq('attivo', true),
+        ]);
+
+        const imp: Record<string, string> = {};
+        for (const r of impRes.data ?? []) imp[r.chiave] = r.valore;
+
+        const prenotazioniAttive = imp['prenotazioni_online_attive'] !== 'false';
+        const portaleNascosto = imp['portale_nascosto'] === 'true';
+
+        const serviziAbilitati = (servRes.data ?? []) as Servizio[];
+        const abbinatiIds = [...new Set(
+          serviziAbilitati.filter(s => s.servizio_abbinato_online_id).map(s => s.servizio_abbinato_online_id)
+        )] as string[];
+
+        let serviziAbbinatiRaw: ServizioAbbinato[] = [];
+        if (abbinatiIds.length > 0) {
+          const { data: abbRes } = await supabase.from('trattamenti_catalogo')
+            .select('id,nome,durata_minuti,prezzo,colore')
+            .in('id', abbinatiIds);
+          serviziAbbinatiRaw = (abbRes ?? []) as ServizioAbbinato[];
         }
-      } catch {
+
+        const abbinatiNotAlready = serviziAbbinatiRaw.filter(a => !serviziAbilitati.some(s => s.id === a.id));
+        const serviziConAbbinati: Servizio[] = [
+          ...serviziAbilitati,
+          ...abbinatiNotAlready.map(a => ({ ...a, servizio_abbinato_online_id: null })),
+        ];
+
+        const social: Record<string, string> = {};
+        for (const k of SOCIAL_KEYS) { if (imp[k]) social[k] = imp[k]; }
+
         setInfo({
-          prenotazioniAttive: true,
-          portaleNascosto: false,
-          nomeSalone: '',
-          logoUrl: null,
-          parrucchieri: [],
-          servizi: [],
-          serviziAbbinati: [],
+          prenotazioniAttive,
+          portaleNascosto,
+          nomeSalone: imp['nome_salone'] ?? '',
+          logoUrl: imp['logo_salone_url'] ?? null,
+          parrucchieri: (parrRes.data ?? []) as Parrucchiere[],
+          servizi: serviziConAbbinati,
+          serviziAbbinati: serviziAbbinatiRaw,
+          social,
+          annuncio: {
+            attivo: imp['annuncio_attivo'] === 'true',
+            sfondo: imp['annuncio_sfondo'] ?? 'generico',
+            testo: imp['annuncio_testo'] ?? '',
+            id: imp['annuncio_id'] ?? '',
+            compleannoTesto: imp['annuncio_compleanno_testo'] ?? '',
+          },
+          contatti: {
+            telefono: imp['azienda_telefono'] ?? '',
+            email: imp['azienda_email'] ?? '',
+            pec: imp['azienda_pec'] ?? '',
+            indirizzo: imp['azienda_indirizzo'] ?? '',
+            googleMaps: imp['azienda_google_maps'] ?? '',
+            sitoWeb: imp['azienda_sito_prenotazioni'] ?? '',
+            note: imp['azienda_note'] ?? '',
+            orariJson: imp['orari_salone_json'] ?? null,
+            orariNota: imp['orari_salone_nota'] ?? '',
+            ferieInizio: imp['ferie_inizio'] ?? '',
+            ferieFine: imp['ferie_fine'] ?? '',
+          },
+          benvenutoAttivo: imp['benvenuto_attivo'] !== 'false',
+          benvenutoConfig: imp['benvenuto_config_json'] ? JSON.parse(imp['benvenuto_config_json']) : null,
         });
+      } catch {
+        setInfo({ prenotazioniAttive: true, portaleNascosto: false, nomeSalone: '', logoUrl: null, parrucchieri: [], servizi: [], serviziAbbinati: [] });
       } finally {
         setLoadingInfo(false);
       }
@@ -813,14 +877,38 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setLoadingSlot(true);
     setSlotDisponibili([]);
     try {
-      const res = await fetch(`${EDGE_URL}/disponibilita?user_id=${userId}&parrucchiere_id=${parrId}&data=${data}&durata_minuti=${durata}`);
-      const d = await res.json();
-      setSlotDisponibili(d.slot_disponibili ?? []);
-    } catch {
-      setSlotDisponibili([]);
-    } finally {
-      setLoadingSlot(false);
-    }
+      const { dayStart, dayEnd } = italianDayBounds(data);
+      const [appRes, assenzeRes, richiesteRes] = await Promise.all([
+        supabase.from('appuntamenti').select('data_ora,durata_minuti').eq('parrucchiere_id', parrId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
+        supabase.from('assenze_parrucchieri').select('ora_inizio,data_inizio,data_fine').eq('parrucchiere_id', parrId).lte('data_inizio', data).gte('data_fine', data),
+        supabase.from('richieste_appuntamento').select('data_ora,data_ora2,parrucchiere2_id').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
+      ]);
+      const busy: { start: number; end: number }[] = [];
+      for (const a of appRes.data ?? []) {
+        const t = new Date(a.data_ora);
+        if (toItalianDateStr(t) !== data) continue;
+        const s = toItalianMinutes(t);
+        busy.push({ start: s, end: s + (a.durata_minuti ?? 30) });
+      }
+      for (const r of (richiesteRes.data ?? []) as { data_ora: string; data_ora2: string | null; parrucchiere2_id: string | null }[]) {
+        const t = new Date(r.data_ora);
+        if (toItalianDateStr(t) === data) { const s = toItalianMinutes(t); busy.push({ start: s, end: s + 90 }); }
+        if (r.parrucchiere2_id === parrId && r.data_ora2) {
+          const t2 = new Date(r.data_ora2);
+          if (toItalianDateStr(t2) === data) { const s = toItalianMinutes(t2); busy.push({ start: s, end: s + 90 }); }
+        }
+      }
+      const fullDayAbsent = (assenzeRes.data ?? []).some((a: { ora_inizio: string | null }) => !a.ora_inizio);
+      if (fullDayAbsent) { setSlotDisponibili([]); return; }
+      const slots: string[] = [];
+      for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
+        if (!busy.some(b => m < b.end && m + durata > b.start)) {
+          slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+        }
+      }
+      setSlotDisponibili(slots);
+    } catch { setSlotDisponibili([]); }
+    finally { setLoadingSlot(false); }
   }, [userId]);
 
   async function loadSlotsChiunque(data: string, durata: number) {
@@ -828,16 +916,68 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setSlotDisponibili([]);
     setParrucchieriPerSlot({});
     try {
-      const res = await fetch(`${EDGE_URL}/disponibilita-chiunque?user_id=${userId}&data=${data}&durata_minuti=${durata}`);
-      const d = await res.json();
-      setSlotDisponibili(d.slot_disponibili ?? []);
-      setParrucchieriPerSlot(d.parrucchieri_per_slot ?? {});
-    } catch {
-      setSlotDisponibili([]);
-      setParrucchieriPerSlot({});
-    } finally {
-      setLoadingSlot(false);
-    }
+      const { dayStart, dayEnd } = italianDayBounds(data);
+      const [parrRes, appRes, assenzeRes, richiesteRes] = await Promise.all([
+        supabase.from('parrucchieri').select('id,nome,colore').eq('user_id', userId).eq('attivo', true).order('nome'),
+        supabase.from('appuntamenti').select('parrucchiere_id,data_ora,durata_minuti').eq('user_id', userId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
+        supabase.from('assenze_parrucchieri').select('parrucchiere_id,ora_inizio,data_inizio,data_fine').eq('user_id', userId).lte('data_inizio', data).gte('data_fine', data),
+        supabase.from('richieste_appuntamento').select('parrucchiere_id,data_ora,parrucchiere2_id,data_ora2,chiunque,parrucchieri_candidati').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
+      ]);
+      const allParr = (parrRes.data ?? []) as Parrucchiere[];
+      const busyByParr: Record<string, { start: number; end: number }[]> = {};
+      for (const a of (appRes.data ?? []) as { parrucchiere_id: string | null; data_ora: string; durata_minuti: number | null }[]) {
+        if (!a.parrucchiere_id) continue;
+        const t = new Date(a.data_ora);
+        if (toItalianDateStr(t) !== data) continue;
+        const s = toItalianMinutes(t);
+        if (!busyByParr[a.parrucchiere_id]) busyByParr[a.parrucchiere_id] = [];
+        busyByParr[a.parrucchiere_id].push({ start: s, end: s + (a.durata_minuti ?? 30) });
+      }
+      for (const r of (richiesteRes.data ?? []) as { parrucchiere_id: string | null; data_ora: string; parrucchiere2_id: string | null; data_ora2: string | null; chiunque: boolean; parrucchieri_candidati: string[] | null }[]) {
+        if (r.chiunque && Array.isArray(r.parrucchieri_candidati)) {
+          const t = new Date(r.data_ora);
+          if (toItalianDateStr(t) === data) {
+            const s = toItalianMinutes(t);
+            for (const pid of r.parrucchieri_candidati) {
+              if (!busyByParr[pid]) busyByParr[pid] = [];
+              busyByParr[pid].push({ start: s, end: s + 90 });
+            }
+          }
+        } else {
+          if (r.parrucchiere_id) {
+            const t = new Date(r.data_ora);
+            if (toItalianDateStr(t) === data) { const s = toItalianMinutes(t); if (!busyByParr[r.parrucchiere_id]) busyByParr[r.parrucchiere_id] = []; busyByParr[r.parrucchiere_id].push({ start: s, end: s + 90 }); }
+          }
+          if (r.parrucchiere2_id && r.data_ora2) {
+            const t = new Date(r.data_ora2);
+            if (toItalianDateStr(t) === data) { const s = toItalianMinutes(t); if (!busyByParr[r.parrucchiere2_id]) busyByParr[r.parrucchiere2_id] = []; busyByParr[r.parrucchiere2_id].push({ start: s, end: s + 90 }); }
+          }
+        }
+      }
+      const fullDayAbsent = new Set<string>();
+      const partialAbsences: Record<string, number> = {};
+      for (const a of (assenzeRes.data ?? []) as { parrucchiere_id: string; ora_inizio: string | null }[]) {
+        if (!a.ora_inizio) fullDayAbsent.add(a.parrucchiere_id);
+        else { const [ah, am] = a.ora_inizio.substring(0, 5).split(':').map(Number); partialAbsences[a.parrucchiere_id] = ah * 60 + am; }
+      }
+      const availableParr = allParr.filter(p => !fullDayAbsent.has(p.id));
+      const parrucchieriPerSlot: Record<string, string[]> = {};
+      const slotDisponibili: string[] = [];
+      for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
+        const freeParr = availableParr.filter(p => {
+          if (partialAbsences[p.id] !== undefined && m >= partialAbsences[p.id]) return false;
+          return !(busyByParr[p.id] ?? []).some(b => m < b.end && m + durata > b.start);
+        });
+        if (freeParr.length > 0) {
+          const slotKey = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+          slotDisponibili.push(slotKey);
+          parrucchieriPerSlot[slotKey] = freeParr.map(p => p.id);
+        }
+      }
+      setSlotDisponibili(slotDisponibili);
+      setParrucchieriPerSlot(parrucchieriPerSlot);
+    } catch { setSlotDisponibili([]); setParrucchieriPerSlot({}); }
+    finally { setLoadingSlot(false); }
   }
 
   async function loadParrLiberiPerAbbinato(
@@ -851,17 +991,34 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setParrLiberi([]);
     setParrPrimarioOccupato(false);
     try {
-      // Abbinato starts exactly when first service ends
       const [h, m] = firstServiceStartOra.split(':').map(Number);
       const abbinatoStartMin = h * 60 + m + firstServiceDurata;
       const abbinatoOra = `${pad(Math.floor(abbinatoStartMin / 60))}:${pad(abbinatoStartMin % 60)}`;
-
-      // Fetch ALL free hairdressers (no escludi_id) so we can check if primary is also free
-      const res = await fetch(
-        `${EDGE_URL}/parrucchieri-liberi?user_id=${userId}&data=${data}&ora=${abbinatoOra}&durata_minuti=${abbinato_durata}`
-      );
-      const d = await res.json();
-      const tuttiLiberi: Parrucchiere[] = d.parrucchieri ?? [];
+      const { dayStart, dayEnd } = italianDayBounds(data);
+      const [parrRes, appRes, richiesteRes] = await Promise.all([
+        supabase.from('parrucchieri').select('id,nome,colore').eq('user_id', userId).eq('attivo', true).order('nome'),
+        supabase.from('appuntamenti').select('parrucchiere_id,data_ora,durata_minuti').eq('user_id', userId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
+        supabase.from('richieste_appuntamento').select('parrucchiere_id,data_ora,parrucchiere2_id,data_ora2').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
+      ]);
+      const [startH, startM2] = abbinatoOra.split(':').map(Number);
+      const startMin = startH * 60 + startM2;
+      const endMin = startMin + abbinato_durata;
+      const busyByParr: Record<string, { start: number; end: number }[]> = {};
+      for (const a of (appRes.data ?? []) as { parrucchiere_id: string | null; data_ora: string; durata_minuti: number | null }[]) {
+        if (!a.parrucchiere_id) continue;
+        const t = new Date(a.data_ora);
+        if (toItalianDateStr(t) !== data) continue;
+        const s = toItalianMinutes(t);
+        if (!busyByParr[a.parrucchiere_id]) busyByParr[a.parrucchiere_id] = [];
+        busyByParr[a.parrucchiere_id].push({ start: s, end: s + (a.durata_minuti ?? 30) });
+      }
+      for (const r of (richiesteRes.data ?? []) as { parrucchiere_id: string | null; data_ora: string; parrucchiere2_id: string | null; data_ora2: string | null }[]) {
+        if (r.parrucchiere_id) { const t = new Date(r.data_ora); if (toItalianDateStr(t) === data) { const s = toItalianMinutes(t); if (!busyByParr[r.parrucchiere_id]) busyByParr[r.parrucchiere_id] = []; busyByParr[r.parrucchiere_id].push({ start: s, end: s + 90 }); } }
+        if (r.parrucchiere2_id && r.data_ora2) { const t = new Date(r.data_ora2); if (toItalianDateStr(t) === data) { const s = toItalianMinutes(t); if (!busyByParr[r.parrucchiere2_id]) busyByParr[r.parrucchiere2_id] = []; busyByParr[r.parrucchiere2_id].push({ start: s, end: s + 90 }); } }
+      }
+      const tuttiLiberi = ((parrRes.data ?? []) as Parrucchiere[]).filter(p => {
+        return !(busyByParr[p.id] ?? []).some(b => startMin < b.end && endMin > b.start);
+      });
       const primarioLibero = !!tuttiLiberi.find(p => p.id === parrucchierePrimario.id);
       setParrLiberi(tuttiLiberi);
       setParrPrimarioOccupato(!primarioLibero);
@@ -870,20 +1027,85 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       setParrLiberi([]);
       setParrPrimarioOccupato(true);
       return 'scegli';
-    } finally {
-      setLoadingParr2(false);
-    }
+    } finally { setLoadingParr2(false); }
   }
 
   async function loadMieCarte() {
     setLoadingMieCarte(true);
     setMieCarteError('');
     try {
-      const params = buildLookupParams(nome, cognome, telefono, codiceCliente);
-      const res = await fetch(`${MIE_CARTE_URL}/info?user_id=${userId}&${params}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
-      setMieCarteData(data);
+      // Lookup cliente with priority: codice_cliente > telefono > nome+cognome
+      let cliente: { id: string; nome: string; cognome: string; telefono: string } | null = null;
+      const codice = codiceCliente.trim().toUpperCase();
+      if (codice) {
+        const { data } = await supabase.from('clienti').select('id,nome,cognome,telefono').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
+        cliente = data ?? null;
+      }
+      if (!cliente && telefono.trim()) {
+        const telN = normPhone(telefono.trim());
+        const { data: all } = await supabase.from('clienti').select('id,nome,cognome,telefono').eq('user_id', userId).is('deleted_at', null);
+        cliente = (all ?? []).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telN) ?? null;
+      }
+      if (!cliente && nome.trim() && cognome.trim()) {
+        const { data } = await supabase.from('clienti').select('id,nome,cognome,telefono').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null).maybeSingle();
+        cliente = data ?? null;
+      }
+
+      // Impostazioni salone
+      const { data: impRows } = await supabase.from('impostazioni').select('chiave,valore').eq('user_id', userId).in('chiave', ['azienda_telefono','azienda_google_maps','azienda_sito_prenotazioni','nome_salone','wa_template_cs_dona','wa_template_gp_cliente','wa_includi_mappa']);
+      const imp: Record<string, string> = {};
+      for (const r of impRows ?? []) imp[r.chiave] = r.valore;
+
+      if (!cliente) {
+        setMieCarteData({ cliente: null, cartePremium: [], carteInfinity: [], carteUsaEGetta: [], giftPassDonatore: [], giftPassRicevente: [], salone: imp });
+        return;
+      }
+
+      const telNorm = normPhone(cliente.telefono ?? '');
+
+      // Carte Premium
+      const { data: cpRaw } = await supabase.from('carte_premium').select('id,codice,saldo,attiva,created_at').eq('cliente_id', cliente.id).eq('user_id', userId).eq('attiva', true);
+      const cartePremium = await Promise.all((cpRaw ?? []).map(async (cp: { id: string; codice: string; saldo: number; attiva: boolean; created_at: string }) => {
+        const [{ data: ricariche }, { data: utilizzi }] = await Promise.all([
+          supabase.from('ricariche_carta_premium').select('id,importo,importo_pagato,note,tipo_ricarica,created_at').eq('carta_premium_id', cp.id).order('created_at', { ascending: true }),
+          supabase.from('utilizzi_carta_premium').select('id,importo_detratto,note,created_at').eq('carta_premium_id', cp.id).order('created_at', { ascending: true }),
+        ]);
+        const risparmioTotale = Math.round((ricariche ?? []).reduce((acc: number, r: { importo: number | null; importo_pagato: number | null }) => acc + Math.max(0, (r.importo ?? 0) - (r.importo_pagato ?? 0)), 0) * 100) / 100;
+        return { ...cp, tipo: 'premium' as const, ricariche: ricariche ?? [], utilizzi: utilizzi ?? [], risparmioTotale };
+      }));
+
+      // Carte Sconto
+      const { data: ciRaw } = await supabase.from('carte_sconto').select('id,codice,descrizione,tipo_sconto,valore_sconto,attiva,created_at').eq('cliente_id', cliente.id).eq('user_id', userId).eq('usa_e_getta', false).eq('attiva', true);
+      const carteInfinity = (ciRaw ?? []).map((c: Record<string, unknown>) => ({ ...c, tipo: 'infinity' as const }));
+
+      const { data: cuRaw } = await supabase.from('carte_sconto').select('id,codice,descrizione,tipo_sconto,valore_sconto,attiva,created_at').eq('cliente_id', cliente.id).eq('user_id', userId).eq('usa_e_getta', true).eq('regalata', false).eq('attiva', true);
+      const carteUsaEGetta = (cuRaw ?? []).map((c: Record<string, unknown>) => ({ ...c, tipo: 'usa_e_getta' as const }));
+
+      // Gift Pass donatore
+      const gpSelect = 'id,codice,tipo,valore_euro,prodotto_nome,prodotti_rivendita_catalogo(categoria),occasione,attivata_at,scadenza_uso,scadenza_uso_giorni,scadenza_ritiro_giorni,created_at,destinataria_nome,destinataria_telefono,utilizzata,donata';
+      const { data: gpById } = await supabase.from('gift_pass').select(gpSelect).eq('cliente_id', cliente.id).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true).is('attivata_at', null);
+      const { data: fichesGP } = await supabase.from('fiches').select('id').eq('cliente_id', cliente.id).eq('user_id', userId).eq('tipo_fiche', 'gift_pass').is('deleted_at', null);
+      const ficheGPIds = (fichesGP ?? []).map((f: { id: string }) => f.id);
+      let gpByFiche: Record<string, unknown>[] = [];
+      if (ficheGPIds.length > 0) {
+        const { data } = await supabase.from('gift_pass').select(gpSelect).in('fiche_acquisto_id', ficheGPIds).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true).is('attivata_at', null);
+        gpByFiche = (data ?? []) as Record<string, unknown>[];
+      }
+      const seenDon = new Set<string>((gpById ?? []).map((g: { id: string }) => g.id));
+      const giftPassDonatore = [...((gpById ?? []) as Record<string, unknown>[]), ...gpByFiche.filter(g => !seenDon.has(g.id as string))].map(g => ({ ...g, tipo_carta: 'gift_pass_donatore' as const }));
+
+      // Gift Pass ricevente
+      const gpSelRic = 'id,codice,tipo,valore_euro,prodotto_nome,prodotti_rivendita_catalogo(categoria),occasione,attivata_at,scadenza_uso,destinataria_nome,destinataria_telefono,utilizzata';
+      const { data: gpRicById } = await supabase.from('gift_pass').select(gpSelRic).eq('destinataria_cliente_id', cliente.id).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true);
+      const { data: gpRicByPhoneRaw } = await supabase.from('gift_pass').select(gpSelRic).eq('user_id', userId).eq('utilizzata', false).eq('attiva', true).is('destinataria_cliente_id', null);
+      const gpRicByPhone = ((gpRicByPhoneRaw ?? []) as Record<string, unknown>[]).filter(g => { const n = normPhone(String(g.destinataria_telefono ?? '')); return n && telNorm && n === telNorm; });
+      const seenRic = new Set<string>((gpRicById ?? []).map((g: { id: string }) => g.id));
+      const now = new Date();
+      const giftPassRicevente = [...((gpRicById ?? []) as Record<string, unknown>[]), ...gpRicByPhone.filter(g => !seenRic.has(g.id as string))]
+        .filter(g => !((g.tipo !== 'valore') && g.scadenza_uso && new Date(g.scadenza_uso as string) < now))
+        .map(g => ({ ...g, tipo_carta: 'gift_pass_ricevente' as const }));
+
+      setMieCarteData({ cliente: { id: cliente.id, nome: cliente.nome, cognome: cliente.cognome }, cartePremium, carteInfinity, carteUsaEGetta, giftPassDonatore, giftPassRicevente, salone: imp });
     } catch {
       setMieCarteError('Impossibile caricare le carte. Riprova.');
     } finally {
@@ -895,10 +1117,22 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setLoadingProfilo(true);
     setProfiloError('');
     try {
-      const res = await fetch(`${AGGIORNA_PROFILO_URL}?user_id=${userId}&${buildLookupParams(nome, cognome, telefono, codiceCliente)}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
-      const c = data.cliente;
+      // Lookup with same priority: codice_cliente > telefono > nome+cognome
+      let c: { nome: string; cognome: string; telefono: string; email: string | null; data_nascita: string | null; note: string | null; foto_url: string | null } | null = null;
+      const codice = codiceCliente.trim().toUpperCase();
+      if (codice) {
+        const { data } = await supabase.from('clienti').select('nome,cognome,telefono,email,data_nascita,note,foto_url').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
+        c = data ?? null;
+      }
+      if (!c && telefono.trim()) {
+        const telN = normPhone(telefono.trim());
+        const { data: all } = await supabase.from('clienti').select('nome,cognome,telefono,email,data_nascita,note,foto_url').eq('user_id', userId).is('deleted_at', null);
+        c = (all ?? []).find((r: { telefono: string }) => normPhone(r.telefono ?? '') === telN) ?? null;
+      }
+      if (!c && nome.trim() && cognome.trim()) {
+        const { data } = await supabase.from('clienti').select('nome,cognome,telefono,email,data_nascita,note,foto_url').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null).maybeSingle();
+        c = data ?? null;
+      }
       if (c) {
         setProfiloNome(c.nome ?? '');
         setProfiloCognome(c.cognome ?? '');
@@ -909,13 +1143,11 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         setProfiloFotoUrl(c.foto_url ?? '');
         setProfiloFotoPreview(c.foto_url ?? '');
       } else {
-        // Cliente non ancora registrata: precompila con i dati inseriti al primo step
         setProfiloNome(nome);
         setProfiloCognome(cognome);
         setProfiloTelefono(telefono);
       }
     } catch {
-      // Anche in caso di errore, precompila con i dati del primo step
       setProfiloNome(nome);
       setProfiloCognome(cognome);
       setProfiloTelefono(telefono);
@@ -935,78 +1167,41 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setProfiloSaved(false);
     setProfiloSchedaInviata(false);
     try {
-      const body: Record<string, string> = {
-        user_id: userId,
-        nome: profiloNome.trim(),
-        cognome: profiloCognome.trim(),
-        email: profiloEmail.trim(),
-        data_nascita: profiloDataNascita,
-        note: profiloNote.trim(),
-      };
-      // Lookup identity: codice_cliente preferred, then telefono, then nome+cognome (already in body)
+      // Lookup cliente with same priority as loadProfilo
+      let clienteId: string | null = null;
       const codice = codiceCliente.trim().toUpperCase();
       if (codice) {
-        body.codice_cliente = codice;
-        if (telefono.trim()) body.telefono = telefono.trim();
-      } else if (telefono.trim()) {
-        body.telefono = telefono.trim();
+        const { data } = await supabase.from('clienti').select('id').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
+        clienteId = data?.id ?? null;
       }
-      if (profiloFotoBase64) {
-        body.foto_base64 = profiloFotoBase64;
-        body.foto_mime = profiloFotoMime;
+      if (!clienteId && telefono.trim()) {
+        const telN = normPhone(telefono.trim());
+        const { data: all } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
+        clienteId = (all ?? []).find((r: { telefono: string }) => normPhone(r.telefono ?? '') === telN)?.id ?? null;
       }
-      const res = await fetch(AGGIORNA_PROFILO_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
+      if (!clienteId && nome.trim() && cognome.trim()) {
+        const { data } = await supabase.from('clienti').select('id').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null).maybeSingle();
+        clienteId = data?.id ?? null;
+      }
 
-      // Cliente non ancora registrata: crea scheda da confermare
-      if (res.status === 404 || data.error === 'Cliente non trovata') {
-        const anonHeaders = {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        };
+      const schedaPayload = {
+        nome: profiloNome.trim(),
+        cognome: profiloCognome.trim(),
+        email: profiloEmail.trim() || null,
+        data_nascita: profiloDataNascita || null,
+        note: profiloNote.trim() || null,
+      };
+
+      if (!clienteId) {
+        // Cliente not in DB: create/update scheda da confermare
         const tel = (telefono || profiloTelefono).trim();
-        // Controlla se esiste già una scheda in attesa
-        const checkRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&stato=eq.in_attesa&select=id`,
-          { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
-        );
-        const existing = await checkRes.json();
-        const schedaPayload = {
-          nome: profiloNome.trim(),
-          cognome: profiloCognome.trim(),
-          email: profiloEmail.trim() || null,
-          data_nascita: profiloDataNascita || null,
-          note: profiloNote.trim() || null,
-        };
-        if (!Array.isArray(existing) || existing.length === 0) {
-          const schedaRes = await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
-            method: 'POST',
-            headers: anonHeaders,
-            body: JSON.stringify({
-              user_id: userId,
-              telefono: tel,
-              stato: 'in_attesa',
-              ...schedaPayload,
-            }),
-          });
-          if (!schedaRes.ok && schedaRes.status !== 409) throw new Error('Errore durante l\'invio della scheda.');
+        const { data: existing } = await supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', tel).eq('stato', 'in_attesa').maybeSingle();
+        if (existing) {
+          const { error } = await supabase.from('schede_clienti_da_confermare').update(schedaPayload).eq('id', existing.id);
+          if (error) throw new Error('Errore durante l\'aggiornamento della scheda.');
         } else {
-          const existingId = existing[0].id;
-          const updateRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?id=eq.${existingId}`,
-            {
-              method: 'PATCH',
-              headers: anonHeaders,
-              body: JSON.stringify(schedaPayload),
-            }
-          );
-          if (!updateRes.ok) throw new Error('Errore durante l\'aggiornamento della scheda.');
+          const { error } = await supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, telefono: tel, stato: 'in_attesa', ...schedaPayload });
+          if (error && !error.message.includes('duplicate')) throw new Error('Errore durante l\'invio della scheda.');
         }
         setProfiloSchedaInviata(true);
         setProfiloFotoBase64('');
@@ -1014,7 +1209,30 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         return;
       }
 
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
+      const updateData: Record<string, unknown> = {
+        ...schedaPayload,
+        updated_at: new Date().toISOString(),
+      };
+      if (codice && telefono.trim()) updateData.telefono = telefono.trim();
+
+      // Upload foto se presente
+      if (profiloFotoBase64 && profiloFotoMime) {
+        const mimeType = profiloFotoMime.startsWith('image/') ? profiloFotoMime : 'image/jpeg';
+        const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+        const filename = `clienti/${clienteId}_${Date.now()}.${ext}`;
+        const binaryStr = atob(profiloFotoBase64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const { error: uploadErr } = await supabase.storage.from('foto-clienti').upload(filename, bytes, { contentType: mimeType, upsert: true });
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(filename);
+          updateData.foto_url = urlData.publicUrl;
+        }
+      }
+
+      const { error: updateErr } = await supabase.from('clienti').update(updateData).eq('id', clienteId);
+      if (updateErr) throw new Error(updateErr.message);
+
       setProfiloSaved(true);
       setProfiloFotoBase64('');
       setTimeout(() => setProfiloSaved(false), 3000);
@@ -1043,16 +1261,17 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   async function handleSegnaGiftPassDonata(giftPassId: string): Promise<boolean> {
     try {
-      const anonHeaders = {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      };
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/gift_pass?id=eq.${encodeURIComponent(giftPassId)}`,
-        { method: 'PATCH', headers: anonHeaders, body: JSON.stringify({ donata: true }) },
-      );
-      if (!res.ok) throw new Error('Errore aggiornamento');
+      const { data: gp } = await supabase.from('gift_pass').select('id,tipo,scadenza_uso_giorni,cliente_id,fiche_acquisto_id,donata').eq('id', giftPassId).eq('user_id', userId).maybeSingle();
+      if (!gp) throw new Error('Gift pass non trovato');
+      if (gp.donata) { await loadMieCarte(); return true; }
+      const patch: Record<string, unknown> = { donata: true };
+      if (gp.tipo !== 'valore' && gp.scadenza_uso_giorni) {
+        const d = new Date();
+        d.setDate(d.getDate() + gp.scadenza_uso_giorni);
+        patch.scadenza_uso = d.toISOString();
+      }
+      const { error } = await supabase.from('gift_pass').update(patch).eq('id', giftPassId);
+      if (error) throw new Error(error.message);
       await loadMieCarte();
       return true;
     } catch {
@@ -1062,14 +1281,21 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   async function handleRegalaCartaSconto(cartaId: string): Promise<boolean> {
     try {
-      const res = await fetch(`${MIE_CARTE_URL}/regala`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, telefono: telefono.trim(), carta_id: cartaId }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
-      // Ricarica carte dopo regalo
+      const telNorm = normPhone(telefono.trim());
+      // Verify the card belongs to this cliente
+      const { data: clienti } = await supabase.from('clienti').select('id').eq('user_id', userId).is('deleted_at', null);
+      const clienteId = ((clienti ?? []) as { id: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telNorm)?.id ?? null;
+      if (!clienteId) throw new Error('Cliente non trovata');
+      const { data: carta } = await supabase.from('carte_sconto').select('id,cliente_id,usa_e_getta,regalata,ex_proprietaria_nome').eq('id', cartaId).eq('user_id', userId).maybeSingle();
+      if (!carta) throw new Error('Carta non trovata');
+      if (carta.cliente_id !== clienteId) throw new Error('Non autorizzata');
+      if (!carta.usa_e_getta) throw new Error('Non è una carta usa e getta');
+      if (carta.regalata) throw new Error('Carta già regalata');
+      // Lookup nome for ex_proprietaria_nome
+      const { data: cli } = await supabase.from('clienti').select('nome,cognome').eq('id', clienteId).maybeSingle();
+      const exNome = cli ? `${cli.nome} ${cli.cognome}` : '';
+      const { error } = await supabase.from('carte_sconto').update({ regalata: true, ex_proprietaria_nome: exNome, cliente_id: null, regalata_da_cliente_id: clienteId }).eq('id', cartaId);
+      if (error) throw new Error(error.message);
       await loadMieCarte();
       return true;
     } catch {
@@ -1081,7 +1307,6 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // knownExisting=true means we already verified this is a confirmed client (skip isNuovaScheda)
   async function proceedAfterDati(telOverride?: string, knownExisting = false) {
     const tel = (telOverride ?? telefono).trim();
-    const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
 
     const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: tel };
     if (codiceCliente.trim()) saved.codiceCliente = codiceCliente.trim().toUpperCase();
@@ -1101,44 +1326,77 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
     // Crea scheda da confermare nel gestionale (se non esiste già una in attesa per questo numero)
     try {
-      const checkRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(tel)}&stato=eq.in_attesa&select=id`,
-        { headers: anonHeaders }
-      );
-      const existing = await checkRes.json();
-      if (!Array.isArray(existing) || existing.length === 0) {
-        await fetch(`${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare`, {
-          method: 'POST',
-          headers: { ...anonHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            user_id: userId,
-            nome: nome.trim(),
-            cognome: cognome.trim(),
-            telefono: tel,
-            stato: 'in_attesa',
-            ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
-          }),
+      const { data: existing } = await supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', tel).eq('stato', 'in_attesa').maybeSingle();
+      if (!existing) {
+        await supabase.from('schede_clienti_da_confermare').insert({
+          user_id: userId,
+          nome: nome.trim(),
+          cognome: cognome.trim(),
+          telefono: tel,
+          stato: 'in_attesa',
+          ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
         });
       }
     } catch { /* non bloccante */ }
 
     if (cartaScontoCode.trim()) {
       try {
-        await fetch(`${MIE_CARTE_URL}/associa-carta`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel, codice_carta: cartaScontoCode.trim() }),
-        });
+        const codiceUpper = cartaScontoCode.trim().toUpperCase();
+        const { data: carta } = await supabase.from('carte_sconto').select('id,regalata,cliente_id,usa_e_getta,attiva,ex_proprietaria_nome,regalata_da_cliente_id').eq('user_id', userId).eq('codice', codiceUpper).maybeSingle();
+        if (carta && carta.regalata && carta.attiva) {
+          const telN = normPhone(tel);
+          const { data: clientiAll } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
+          const cliente = ((clientiAll ?? []) as { id: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telN);
+          if (cliente) {
+            await supabase.from('carte_sconto').update({ cliente_id: cliente.id, regalata: false, regalata_da_cliente_id: carta.regalata_da_cliente_id ?? null }).eq('id', carta.id);
+          } else {
+            const { data: ex } = await supabase.from('schede_clienti_da_confermare').select('id').eq('telefono', tel.trim()).eq('stato', 'in_attesa').maybeSingle();
+            if (ex) {
+              await supabase.from('schede_clienti_da_confermare').update({ codice_carta_sconto: codiceUpper, presentata_da_nome: carta.ex_proprietaria_nome ?? null }).eq('id', ex.id);
+            } else {
+              await supabase.from('schede_clienti_da_confermare').insert({ nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), codice_carta_sconto: codiceUpper, presentata_da_nome: carta.ex_proprietaria_nome ?? null, stato: 'in_attesa' });
+            }
+          }
+        }
       } catch { /* non bloccante */ }
     }
 
     if (giftPassCode.trim()) {
       try {
-        await fetch(`${MIE_CARTE_URL}/attiva-gift-pass`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, telefono: tel, nome: nome.trim(), cognome: cognome.trim(), codice: giftPassCode.trim().toUpperCase() }),
-        });
+        const codiceUpper = giftPassCode.trim().toUpperCase();
+        const { data: gp } = await supabase.from('gift_pass').select('id,tipo,scadenza_uso_giorni,scadenza_uso,cliente_id,fiche_acquisto_id').eq('user_id', userId).eq('codice', codiceUpper).is('attivata_at', null).eq('utilizzata', false).maybeSingle();
+        if (gp) {
+          const telN = normPhone(tel);
+          const { data: clientiAll } = await supabase.from('clienti').select('id,nome,cognome,telefono').eq('user_id', userId).is('deleted_at', null);
+          const cliente = ((clientiAll ?? []) as { id: string; nome: string; cognome: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telN);
+          // Find donator name
+          let donatoreId: string | null = gp.cliente_id ?? null;
+          if (!donatoreId && gp.fiche_acquisto_id) {
+            const { data: fiche } = await supabase.from('fiches').select('cliente_id').eq('id', gp.fiche_acquisto_id).maybeSingle();
+            donatoreId = fiche?.cliente_id ?? null;
+          }
+          let presentataDaNome: string | null = null;
+          if (donatoreId) {
+            const donatore = ((clientiAll ?? []) as { id: string; nome: string; cognome: string }[]).find((c: { id: string }) => c.id === donatoreId);
+            if (donatore) presentataDaNome = `${donatore.nome} ${donatore.cognome}`.trim();
+          }
+          const now2 = new Date().toISOString();
+          const scadenzaUsoAt = !gp.scadenza_uso && gp.tipo !== 'valore' && gp.scadenza_uso_giorni
+            ? (() => { const d = new Date(); d.setDate(d.getDate() + gp.scadenza_uso_giorni); return d.toISOString(); })()
+            : null;
+          await supabase.from('gift_pass').update({ attivata_at: now2, updated_at: now2, ...(scadenzaUsoAt ? { scadenza_uso: scadenzaUsoAt } : {}), ...(cliente ? { destinataria_cliente_id: cliente.id } : {}) }).eq('id', gp.id);
+          if (!cliente) {
+            const { data: exScheda } = await supabase.from('schede_clienti_da_confermare').select('id,codice_gift_pass').eq('user_id', userId).eq('telefono', tel.trim()).eq('stato', 'in_attesa').maybeSingle();
+            if (exScheda) {
+              const upd: Record<string, unknown> = {};
+              if (!exScheda.codice_gift_pass) upd.codice_gift_pass = codiceUpper;
+              if (presentataDaNome) upd.presentata_da_nome = presentataDaNome;
+              if (Object.keys(upd).length > 0) await supabase.from('schede_clienti_da_confermare').update(upd).eq('id', exScheda.id);
+            } else {
+              await supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), stato: 'in_attesa', codice_gift_pass: codiceUpper, ...(presentataDaNome ? { presentata_da_nome: presentataDaNome } : {}) });
+            }
+          }
+        }
       } catch { /* non bloccante */ }
     }
 
@@ -1155,22 +1413,27 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       return;
     }
 
-    // Validazione server-side codici carte/gift
+    // Validazione locale codici carte/gift (block self-use)
     if (giftPassCode.trim() || cartaScontoCode.trim()) {
       try {
-        const verRes = await fetch(`${MIE_CARTE_URL}/verifica-codici`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            telefono: telefono.trim(),
-            gift_pass_codice: giftPassCode.trim() || null,
-            carta_sconto_codice: cartaScontoCode.trim() || null,
-          }),
-        });
-        const verData = await verRes.json();
-        if (verData.gift_pass_error) { setDatiError(verData.gift_pass_error); return; }
-        if (verData.carta_sconto_error) { setDatiError(verData.carta_sconto_error); return; }
+        const telN = normPhone(telefono.trim());
+        if (giftPassCode.trim()) {
+          const { data: gp } = await supabase.from('gift_pass').select('destinataria_telefono').eq('codice', giftPassCode.trim().toUpperCase()).is('attivata_at', null).eq('utilizzata', false).maybeSingle();
+          if (gp?.destinataria_telefono) {
+            const destN = normPhone(gp.destinataria_telefono);
+            if (destN && telN && destN === telN) { setDatiError('Questo Gift Pass è destinato a essere regalato a qualcun altro. Non puoi usarlo tu stessa.'); return; }
+          }
+        }
+        if (cartaScontoCode.trim()) {
+          const { data: carta } = await supabase.from('carte_sconto').select('regalata,regalata_da_cliente_id').eq('user_id', userId).eq('codice', cartaScontoCode.trim().toUpperCase()).eq('regalata', true).eq('attiva', true).maybeSingle();
+          if (carta?.regalata_da_cliente_id) {
+            const { data: mitt } = await supabase.from('clienti').select('telefono').eq('id', carta.regalata_da_cliente_id).maybeSingle();
+            if (mitt?.telefono) {
+              const mittN = normPhone(mitt.telefono);
+              if (mittN && telN && mittN === telN) { setDatiError("Questa carta sconto è stata regalata a un'amica. Non puoi usarla tu stessa."); return; }
+            }
+          }
+        }
       } catch { /* non bloccante */ }
     }
 
@@ -1179,18 +1442,19 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     // Conflict check: nome+cognome found in DB but with a different telefono?
     try {
       setDatiChecking(true);
-      const res = await fetch(
-        `${AGGIORNA_PROFILO_URL}?action=check_conflict&user_id=${userId}&telefono=${encodeURIComponent(telefono.trim())}&nome=${encodeURIComponent(nome.trim())}&cognome=${encodeURIComponent(cognome.trim())}`
-      );
-      const data = await res.json();
-      if (data.conflitto === true) {
-        setConflittoSubStep('choice');
-        setConflittoVecchioTel('');
-        setConflittoNuovoTelConferma('');
-        setConflittoError('');
-        setDatiChecking(false);
-        setStep('conflitto_numero');
-        return;
+      const telN = normPhone(telefono.trim());
+      const { data: matches } = await supabase.from('clienti').select('telefono').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null);
+      if (matches && matches.length > 0) {
+        const exactMatch = (matches as { telefono: string }[]).some(c => normPhone(c.telefono ?? '') === telN);
+        if (!exactMatch) {
+          setConflittoSubStep('choice');
+          setConflittoVecchioTel('');
+          setConflittoNuovoTelConferma('');
+          setConflittoError('');
+          setDatiChecking(false);
+          setStep('conflitto_numero');
+          return;
+        }
       }
     } catch { /* non bloccante — se fallisce procedi normalmente */ }
 
@@ -1212,20 +1476,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setConflittoLoading(true);
     setConflittoError('');
     try {
-      const res = await fetch(AGGIORNA_PROFILO_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'cambia_numero',
-          user_id: userId,
-          vecchio_telefono: vecchio,
-          nuovo_telefono: nuovo,
-          nome: nome.trim(),
-          cognome: cognome.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante l\'aggiornamento.');
+      const vecchioNorm = normPhone(vecchio);
+      const { data: candidates } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null);
+      const match = ((candidates ?? []) as { id: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === vecchioNorm);
+      if (!match) throw new Error('Il vecchio numero non corrisponde ai dati presenti nel sistema.');
+      const { error } = await supabase.from('clienti').update({ telefono: nuovo, updated_at: new Date().toISOString() }).eq('id', match.id);
+      if (error) throw new Error(error.message);
     } catch (err) {
       setConflittoError(err instanceof Error ? err.message : 'Errore. Riprova.');
       setConflittoLoading(false);
@@ -1262,46 +1518,80 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     }
     setMsgSubmitting(true);
     setMsgError('');
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      const SCRIVICI_URL = `${SUPABASE_URL}/functions/v1/scrivici`;
-      const body: Record<string, string> = {
+      // Upload photos to storage
+      async function uploadMsgFoto(base64: string, mime: string): Promise<string> {
+        const mimeType = mime.startsWith('image/') ? mime : 'image/jpeg';
+        const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+        const filename = `messaggi/${userId}/${crypto.randomUUID()}.${ext}`;
+        const binaryStr = atob(base64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const { error } = await supabase.storage.from('foto-clienti').upload(filename, bytes, { contentType: mimeType, upsert: false });
+        if (error) throw new Error(`Upload foto fallito: ${error.message}`);
+        return supabase.storage.from('foto-clienti').getPublicUrl(filename).data.publicUrl;
+      }
+
+      const [foto_url_1, foto_url_2, foto_url_3] = await Promise.all([
+        msgFotos[0] ? uploadMsgFoto(msgFotos[0].base64, msgFotos[0].mime) : Promise.resolve(''),
+        msgFotos[1] ? uploadMsgFoto(msgFotos[1].base64, msgFotos[1].mime) : Promise.resolve(''),
+        msgFotos[2] ? uploadMsgFoto(msgFotos[2].base64, msgFotos[2].mime) : Promise.resolve(''),
+      ]);
+
+      // Cerca cliente per telefono
+      const telNorm = telefono.trim().replace(/\s/g, '');
+      const { data: clienteRows } = await supabase.from('clienti').select('id').eq('user_id', userId).or(`telefono.eq.${telNorm},telefono.eq.${telefono.trim()}`).limit(1);
+      const cliente_id = clienteRows?.[0]?.id ?? null;
+
+      // Crea scheda da confermare se la cliente non è già registrata
+      if (!cliente_id) {
+        const { data: esistente } = await supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', telefono.trim()).eq('stato', 'in_attesa').maybeSingle();
+        if (!esistente) {
+          await supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim(), stato: 'in_attesa' });
+        }
+      }
+
+      const { error: insertErr } = await supabase.from('messaggi_clienti').insert({
         user_id: userId,
+        cliente_id,
         nome: nome.trim(),
         cognome: cognome.trim(),
         telefono: telefono.trim(),
         testo: msgTesto.trim(),
-      };
-      if (msgFotos[0]) { body.foto1_base64 = msgFotos[0].base64; body.foto1_mime = msgFotos[0].mime; }
-      if (msgFotos[1]) { body.foto2_base64 = msgFotos[1].base64; body.foto2_mime = msgFotos[1].mime; }
-      if (msgFotos[2]) { body.foto3_base64 = msgFotos[2].base64; body.foto3_mime = msgFotos[2].mime; }
-      const res = await fetch(SCRIVICI_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
+        foto_url_1,
+        foto_url_2,
+        foto_url_3,
+        letto: false,
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante l\'invio');
+      if (insertErr) throw new Error(insertErr.message);
+
       setStep('successo_messaggio');
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        setMsgError('Connessione lenta o timeout. Controlla la rete e riprova.');
-      } else {
-        setMsgError(err instanceof Error ? err.message : 'Errore di rete. Riprova.');
-      }
+      setMsgError(err instanceof Error ? err.message : 'Errore di rete. Riprova.');
     } finally {
-      clearTimeout(timeout);
       setMsgSubmitting(false);
     }
   }
 
   async function fetchMieiMessaggi(playSound: boolean): Promise<MioMessaggio[]> {
-    const res = await fetch(`${MIEI_MSG_URL}?user_id=${userId}&${buildLookupParams(nome, cognome, telefono, codiceCliente)}`);
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
-    const messaggi: MioMessaggio[] = data.messaggi ?? [];
+    // Resolve telefono via lookup priority
+    let resolvedTel = telefono.trim();
+    if (!resolvedTel) {
+      const codice = codiceCliente.trim().toUpperCase();
+      if (codice) {
+        const { data } = await supabase.from('clienti').select('telefono').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
+        if (data?.telefono) resolvedTel = data.telefono;
+      }
+      if (!resolvedTel && nome.trim() && cognome.trim()) {
+        const { data } = await supabase.from('clienti').select('telefono').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null).maybeSingle();
+        if (data?.telefono) resolvedTel = data.telefono;
+      }
+    }
+
+    const { data, error } = await supabase.from('messaggi_clienti').select('id,testo,foto_url_1,foto_url_2,foto_url_3,preferito,risposta_testo,risposta_at,risposta_foto_url_1,risposta_foto_url_2,risposta_foto_url_3,created_at,telefono').eq('user_id', userId).order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    const telN = normPhone(resolvedTel);
+    const messaggi: MioMessaggio[] = ((data ?? []) as (MioMessaggio & { telefono: string })[]).filter(m => telN && normPhone(m.telefono ?? '') === telN).map(({ telefono: _t, ...rest }) => rest as MioMessaggio);
 
     let nuovaRisposta = false;
     for (const m of messaggi) {
@@ -1322,10 +1612,50 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     try {
       const tel = telefono.trim();
       if (!tel) throw new Error('Nessun numero di telefono');
-      const res = await fetch(`${EDGE_URL}/miei-servizi?user_id=${userId}&telefono=${encodeURIComponent(tel)}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
-      setMieiServizi(data.sedute ?? []);
+      const telN = normPhone(tel);
+      const { data: clientiAll } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
+      const cliente = ((clientiAll ?? []) as { id: string; telefono: string }[]).find(c => normPhone(c.telefono ?? '') === telN);
+      if (!cliente) { setMieiServizi([]); return; }
+
+      const { data: fichesD } = await supabase.from('fiches').select('id,data_riferimento,appuntamento_id').eq('user_id', userId).eq('cliente_id', cliente.id).eq('convalidata', true).is('deleted_at', null);
+      const { data: apptRaw } = await supabase.from('appuntamenti').select('id,data_ora').eq('user_id', userId).eq('cliente_id', cliente.id).is('deleted_at', null);
+      const appIds = (apptRaw ?? []).map((a: { id: string }) => a.id);
+      const appDataMap = new Map<string, string>((apptRaw ?? []).map((a: { id: string; data_ora: string }) => [a.id, a.data_ora]));
+      const { data: fichesA } = appIds.length > 0
+        ? await supabase.from('fiches').select('id,data_riferimento,appuntamento_id').eq('user_id', userId).in('appuntamento_id', appIds).eq('convalidata', true).is('deleted_at', null)
+        : { data: [] };
+
+      type FicheRaw = { id: string; data_riferimento: string | null; appuntamento_id: string | null };
+      const ficheMap = new Map<string, string>();
+      for (const f of ([...(fichesD ?? []), ...(fichesA ?? [])] as FicheRaw[])) {
+        if (ficheMap.has(f.id)) continue;
+        const d = f.data_riferimento ?? (f.appuntamento_id ? appDataMap.get(f.appuntamento_id) : undefined) ?? null;
+        if (d) ficheMap.set(f.id, d);
+      }
+      if (ficheMap.size === 0) { setMieiServizi([]); return; }
+
+      const ficheIds = Array.from(ficheMap.keys());
+      const { data: vociRaw } = await supabase.from('fiche_voci').select('fiche_id,tipo,nome_voce,parrucchiere_id,parrucchieri(nome)').in('fiche_id', ficheIds);
+      const { data: prodottiRaw } = await supabase.from('rivendita_prodotti').select('fiche_id,nome_prodotto,quantita,parrucchiere_id,parrucchieri(nome)').in('fiche_id', ficheIds);
+
+      type Voce = { fiche_id: string; tipo: string; nome_voce: string; parrucchieri: { nome: string } | null };
+      type Prod = { fiche_id: string; nome_prodotto: string; quantita: number; parrucchieri: { nome: string } | null };
+      const vociByFiche = new Map<string, Voce[]>();
+      for (const v of (vociRaw ?? []) as Voce[]) { if (!vociByFiche.has(v.fiche_id)) vociByFiche.set(v.fiche_id, []); vociByFiche.get(v.fiche_id)!.push(v); }
+      const prodByFiche = new Map<string, Prod[]>();
+      for (const p of (prodottiRaw ?? []) as Prod[]) { if (!p.fiche_id) continue; if (!prodByFiche.has(p.fiche_id)) prodByFiche.set(p.fiche_id, []); prodByFiche.get(p.fiche_id)!.push(p); }
+
+      const sedute = Array.from(ficheMap.entries())
+        .map(([ficheId, data]) => ({
+          fiche_id: ficheId,
+          data,
+          voci: (vociByFiche.get(ficheId) ?? []).map(v => ({ tipo: v.tipo, nome: v.nome_voce, parrucchiere: v.parrucchieri?.nome ?? null })),
+          prodotti: (prodByFiche.get(ficheId) ?? []).map(p => ({ nome: p.nome_prodotto, quantita: p.quantita ?? 1, parrucchiere: p.parrucchieri?.nome ?? null })),
+        }))
+        .filter(s => s.voci.length > 0 || s.prodotti.length > 0)
+        .sort((a, b) => b.data.localeCompare(a.data));
+
+      setMieiServizi(sedute);
     } catch {
       setMieiServiziError('Impossibile caricare i servizi. Riprova.');
     } finally {
@@ -1337,12 +1667,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setLoadingNostralProdotti(true);
     setNostralProdottiError('');
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/prodotti_rivendita_catalogo?select=id,nome,marca,categoria,prezzo_vendita,note,quiz_tags,foto_url,best_seller&attivo=eq.true&user_id=eq.${encodeURIComponent(userId)}&order=categoria.asc,nome.asc`,
-        { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
-      );
-      if (!res.ok) throw new Error('Errore');
-      const data = await res.json();
+      const { data, error } = await supabase.from('prodotti_rivendita_catalogo').select('id,nome,marca,categoria,prezzo_vendita,note,quiz_tags,foto_url,best_seller').eq('attivo', true).eq('user_id', userId).order('categoria', { ascending: true }).order('nome', { ascending: true });
+      if (error) throw new Error(error.message);
       setNostralProdotti(Array.isArray(data) ? data : []);
     } catch {
       setNostralProdottiError('Impossibile caricare i prodotti. Riprova.');
@@ -1357,11 +1683,60 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     try {
       const tel = telefono.trim();
       if (!tel) throw new Error('Nessun numero di telefono');
-      const res = await fetch(`${EDGE_URL}/miei-appuntamenti?user_id=${userId}&telefono=${encodeURIComponent(tel)}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore');
-      setMieiAppuntamenti(data.appuntamenti ?? []);
-      setMieiRichiestePendenti(data.richieste ?? []);
+      const telNorm = tel.replace(/\s/g, '');
+
+      const { data: clienteRow } = await supabase.from('clienti').select('id').eq('user_id', userId).ilike('telefono', telNorm).is('deleted_at', null).maybeSingle();
+
+      let appuntamentiRaw: { id: string; data_ora: string; stato: string; parrucchiere_id: string | null }[] = [];
+      if (clienteRow?.id) {
+        const { data } = await supabase.from('appuntamenti').select('id,data_ora,stato,parrucchiere_id').eq('user_id', userId).eq('cliente_id', clienteRow.id).neq('stato', 'cancellato').is('deleted_at', null).order('data_ora', { ascending: false });
+        appuntamentiRaw = (data ?? []) as typeof appuntamentiRaw;
+      }
+
+      const appIds = appuntamentiRaw.map(a => a.id);
+      let trattamentiRaw: { appuntamento_id: string; nome_trattamento: string }[] = [];
+      if (appIds.length > 0) {
+        const { data } = await supabase.from('appuntamento_trattamenti').select('appuntamento_id,nome_trattamento').in('appuntamento_id', appIds);
+        trattamentiRaw = (data ?? []) as typeof trattamentiRaw;
+      }
+
+      const { data: richiesteRaw } = await supabase.from('richieste_appuntamento').select('id,data_ora,parrucchiere_id,servizio_id,chiunque').eq('user_id', userId).ilike('telefono', telNorm).eq('stato', 'in_attesa').gte('data_ora', new Date().toISOString()).order('data_ora', { ascending: true });
+
+      const parrIds = [...new Set([
+        ...appuntamentiRaw.map(a => a.parrucchiere_id),
+        ...((richiesteRaw ?? []) as { parrucchiere_id: string | null }[]).map(r => r.parrucchiere_id),
+      ].filter(Boolean) as string[])];
+      let parrucchieriRaw: { id: string; nome: string; colore: string }[] = [];
+      if (parrIds.length > 0) {
+        const { data } = await supabase.from('parrucchieri').select('id,nome,colore').in('id', parrIds);
+        parrucchieriRaw = (data ?? []) as typeof parrucchieriRaw;
+      }
+
+      const servizioIds = [...new Set(((richiesteRaw ?? []) as { servizio_id: string }[]).map(r => r.servizio_id).filter(Boolean))];
+      let serviziRaw: { id: string; nome: string }[] = [];
+      if (servizioIds.length > 0) {
+        const { data } = await supabase.from('trattamenti_catalogo').select('id,nome').in('id', servizioIds);
+        serviziRaw = (data ?? []) as typeof serviziRaw;
+      }
+
+      const parrMap = Object.fromEntries(parrucchieriRaw.map(p => [p.id, p]));
+      const servMap = Object.fromEntries(serviziRaw.map(s => [s.id, s.nome]));
+      const trattByApp: Record<string, string[]> = {};
+      for (const t of trattamentiRaw) { if (!trattByApp[t.appuntamento_id]) trattByApp[t.appuntamento_id] = []; if (t.nome_trattamento) trattByApp[t.appuntamento_id].push(t.nome_trattamento); }
+
+      const appuntamenti = appuntamentiRaw.map(a => ({
+        id: a.id, data_ora: a.data_ora, stato: a.stato,
+        parrucchiere: a.parrucchiere_id ? (parrMap[a.parrucchiere_id] ?? null) : null,
+        servizi: trattByApp[a.id] ?? [], tipo: 'appuntamento' as const,
+      }));
+      const richieste = ((richiesteRaw ?? []) as { id: string; data_ora: string; parrucchiere_id: string | null; servizio_id: string; chiunque: boolean }[]).map(r => ({
+        id: r.id, data_ora: r.data_ora, stato: 'in_attesa' as const,
+        parrucchiere: (r.chiunque || !r.parrucchiere_id) ? null : (parrMap[r.parrucchiere_id] ?? null),
+        servizi: r.servizio_id && servMap[r.servizio_id] ? [servMap[r.servizio_id]] : [], tipo: 'richiesta' as const,
+      }));
+
+      setMieiAppuntamenti(appuntamenti);
+      setMieiRichiestePendenti(richieste);
     } catch {
       setMieiAppuntamentiError('Impossibile caricare gli appuntamenti. Riprova.');
     } finally {
@@ -1391,11 +1766,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   async function toggleMioPreferito(id: string, val: boolean) {
     setMieiMsg(prev => prev.map(m => m.id === id ? { ...m, preferito: val } : m));
     try {
-      await fetch(MIEI_MSG_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, telefono: telefono.trim(), messaggio_id: id, preferito: val }),
-      });
+      const { error } = await supabase.from('messaggi_clienti').update({ preferito: val }).eq('id', id).eq('user_id', userId);
+      if (error) throw error;
     } catch {
       setMieiMsg(prev => prev.map(m => m.id === id ? { ...m, preferito: !val } : m));
     }
@@ -1500,34 +1872,46 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       dataOra2 = new Date(endMs).toISOString();
     }
 
-    const body: Record<string, unknown> = {
-      user_id: userId,
-      nome: nome.trim(),
-      cognome: cognome.trim(),
-      telefono: telefono.trim(),
-      parrucchiere_id: chiunque ? null : parrucchiere!.id,
-      servizio_id: servizio.id,
-      data_ora: dataOraBase.toISOString(),
-      parrucchiere2_id: (!chiunque && parrucchiere2?.id) ? parrucchiere2.id : null,
-      servizio2_id: (!chiunque && servizio.servizio_abbinato_online_id) ? servizio.servizio_abbinato_online_id : null,
-      data_ora2: dataOra2,
-      chiunque: chiunque || false,
-      parrucchieri_candidati: chiunque ? parrucchieriCandidati : null,
-      ...(giftPassCode.trim() ? { gift_pass_codice: giftPassCode.trim().toUpperCase() } : {}),
-    };
-
     try {
-      const res = await fetch(`${EDGE_URL}/richiesta`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        setSubmitError(data.error ?? 'Errore durante l\'invio. Riprova.');
+      // Blacklist check
+      const { data: clienteRow } = await supabase.from('clienti').select('id,in_blacklist').eq('user_id', userId).ilike('telefono', telefono.trim().replace(/\s/g, '')).maybeSingle();
+      if (clienteRow?.in_blacklist) {
+        setSubmitError('Non siamo in grado di accettare la tua richiesta al momento.');
         setSubmitting(false);
         return;
+      }
+
+      // Check prenotazioni online are active
+      const { data: impRow } = await supabase.from('impostazioni').select('valore').eq('user_id', userId).eq('chiave', 'prenotazioni_online_attive').maybeSingle();
+      if (impRow?.valore === 'false') {
+        setSubmitError('Il servizio di prenotazione online è momentaneamente sospeso.');
+        setSubmitting(false);
+        return;
+      }
+
+      const { error: insertErr } = await supabase.from('richieste_appuntamento').insert({
+        user_id: userId,
+        nome: nome.trim(),
+        cognome: cognome.trim(),
+        telefono: telefono.trim(),
+        cliente_id: clienteRow?.id ?? null,
+        parrucchiere_id: chiunque ? null : parrucchiere!.id,
+        servizio_id: servizio.id,
+        data_ora: dataOraBase.toISOString(),
+        parrucchiere2_id: (!chiunque && parrucchiere2?.id) ? parrucchiere2.id : null,
+        servizio2_id: (!chiunque && servizio.servizio_abbinato_online_id) ? servizio.servizio_abbinato_online_id : null,
+        data_ora2: dataOra2,
+        chiunque: chiunque || false,
+        parrucchieri_candidati: chiunque && parrucchieriCandidati.length > 0 ? parrucchieriCandidati : null,
+        ...(giftPassCode.trim() ? { gift_pass_codice: giftPassCode.trim().toUpperCase() } : {}),
+      });
+      if (insertErr) { setSubmitError('Errore nel salvataggio della richiesta.'); setSubmitting(false); return; }
+
+      // Crea scheda da confermare se non è in rubrica (non bloccante)
+      if (!clienteRow) {
+        supabase.from('schede_clienti_da_confermare').select('id').eq('user_id', userId).eq('telefono', telefono.trim()).eq('stato', 'in_attesa').maybeSingle().then(({ data: ex }) => {
+          if (!ex) supabase.from('schede_clienti_da_confermare').insert({ user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: telefono.trim(), stato: 'in_attesa' }).then(() => {});
+        });
       }
 
       setStep('successo');
@@ -1621,15 +2005,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           onClose={() => {
             localStorage.setItem(`benvenuto_visto_${userId}_${telefono.trim()}`, '1');
             // Aggiorna il flag nel DB (non bloccante)
-            const anonHeaders = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
-            fetch(
-              `${SUPABASE_URL}/rest/v1/schede_clienti_da_confermare?user_id=eq.${userId}&telefono=eq.${encodeURIComponent(telefono.trim())}`,
-              {
-                method: 'PATCH',
-                headers: { ...anonHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ benvenuto_visto: true }),
-              }
-            ).catch(() => {});
+            supabase.from('schede_clienti_da_confermare').update({ benvenuto_visto: true }).eq('user_id', userId).eq('telefono', telefono.trim()).then(() => {});
             setShowBenvenuto(false);
           }}
         />
