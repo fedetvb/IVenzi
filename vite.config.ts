@@ -46,6 +46,34 @@ function safePublicCopyPlugin(): Plugin {
   };
 }
 
+function customPwaIconsPlugin(): Plugin {
+  return {
+    name: 'custom-pwa-icons',
+    closeBundle() {
+      const distDir = path.resolve(__dirname, 'dist');
+      const customIcon = path.resolve(__dirname, 'public', 'icons', 'photo_2026-06-18_21-21-29.jpg');
+      if (!fs.existsSync(distDir) || !fs.existsSync(customIcon)) return;
+      const iconTargets = [
+        'icons/icon-72x72.png',
+        'icons/icon-96x96.png',
+        'icons/icon-128x128.png',
+        'icons/icon-144x144.png',
+        'icons/icon-152x152.png',
+        'icons/icon-192x192.png',
+        'icons/icon-384x384.png',
+        'icons/icon-512x512.png',
+      ];
+      for (const target of iconTargets) {
+        try {
+          const destPath = path.join(distDir, target);
+          fs.mkdirSync(path.dirname(destPath), { recursive: true });
+          fs.copyFileSync(customIcon, destPath);
+        } catch { /* skip */ }
+      }
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const isElectron = !!process.env.ELECTRON;
   const buildMode = process.env.BUILD_MODE || 'owner';
@@ -74,6 +102,7 @@ export default defineConfig(({ mode }) => {
       react(),
       ...(isElectron ? [removeCrossoriginPlugin()] : []),
       safePublicCopyPlugin(),
+      customPwaIconsPlugin(),
     ],
     optimizeDeps: { exclude: ['lucide-react'] },
     base: isElectron ? './' : '/',
