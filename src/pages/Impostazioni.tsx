@@ -18,7 +18,7 @@ import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -60,6 +60,8 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'template_carta') return <PaginaTemplateCarta onBack={() => setSub(null)} />;
   if (sub === 'template_comunicazioni') return <PaginaTemplateComunicazioni onBack={() => setSub(null)} />;
   if (sub === 'qrcode') return <PaginaQRCode onBack={() => setSub(null)} />;
+  if (sub === 'qr_gestionale') return <PaginaQrGestionale onBack={() => setSub(null)} setSub={setSub} />;
+  if (sub === 'qr_google') return <PaginaQrGoogle onBack={() => setSub('qr_gestionale')} />;
   if (sub === 'backup') return <PaginaBackup onBack={() => setSub(null)} />;
   if (sub === 'connessione') return <PaginaConnessione onBack={() => setSub(null)} />;
   if (sub === 'cartelle') return <PaginaCartelleSalvataggio onBack={() => setSub(null)} />;
@@ -542,18 +544,18 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
 
-        {/* QR Code Registrazione Clienti */}
+        {/* Cartelletta QR del Gestionale */}
         <button
-          onClick={() => setSub('qrcode')}
-          style={show('QR Code Registrazione Clienti', 'Stampa il QR code da esporre in salone per le nuove clienti') ? {} : {display:'none'}}
+          onClick={() => setSub('qr_gestionale')}
+          style={show('Cartelletta QR del Gestionale', 'QR Registrazione Clienti e QR Google Recensioni da stampare') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
             <QrCode size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
           </div>
           <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">QR Code Registrazione Clienti</p>
-            <p className="text-xs text-stone-400 mt-0.5">Stampa il QR code da esporre in salone per le nuove clienti</p>
+            <p className="text-sm font-semibold text-stone-800">Cartelletta QR del Gestionale</p>
+            <p className="text-xs text-stone-400 mt-0.5">QR Registrazione Clienti · QR Google Recensioni</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
@@ -1795,6 +1797,322 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           'Salva impostazioni'
         )}
       </button>
+    </div>
+  );
+}
+
+// ─── Cartelletta QR del Gestionale ───────────────────────────────────────────
+
+function PaginaQrGestionale({ onBack, setSub }: { onBack: () => void; setSub: (s: SubPage) => void }) {
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Cartelletta QR del Gestionale</h2>
+          <p className="text-sm text-stone-400 mt-0.5">Stampa e mostra i QR code alle clienti</p>
+        </div>
+      </div>
+
+      {/* QR Registrazione Clienti */}
+      <button
+        onClick={() => setSub('qrcode')}
+        className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-amber-50 hover:border-amber-200 transition-all text-left group shadow-sm"
+      >
+        <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+          <QrCode size={22} className="text-amber-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-stone-800">QR Registrazione Clienti</p>
+          <p className="text-xs text-stone-400 mt-0.5">Stampa il QR da esporre in salone — le nuove clienti compilano la scheda autonomamente</p>
+        </div>
+        <ChevronRight size={18} className="text-stone-300 group-hover:text-amber-500 transition-colors flex-shrink-0" />
+      </button>
+
+      {/* QR Google Recensioni */}
+      <button
+        onClick={() => setSub('qr_google')}
+        className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-blue-50 hover:border-blue-200 transition-all text-left group shadow-sm"
+      >
+        <div className="w-12 h-12 rounded-xl bg-white border border-stone-200 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform shadow-sm">
+          <svg viewBox="0 0 24 24" width="26" height="26" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-stone-800">QR Google Recensioni</p>
+          <p className="text-xs text-stone-400 mt-0.5">Stampa il QR da mostrare dopo ogni servizio — le clienti soddisfatte lasciano 5 stelle</p>
+        </div>
+        <ChevronRight size={18} className="text-stone-300 group-hover:text-blue-500 transition-colors flex-shrink-0" />
+      </button>
+    </div>
+  );
+}
+
+// ─── QR Google Recensioni ─────────────────────────────────────────────────────
+
+const GOOGLE_REVIEW_TESTO = `Il tuo nuovo look ti fa risplendere? ✨
+
+Se oggi uscendo dal salone ti sei sentita al top (o hai notato sguardi d'invidia specchiandoti nelle vetrine!), dedica 30 secondi a dircelo con una recensione su Google.
+
+Non lo chiediamo per vantarci (okay, forse solo un pochino!), ma perché il tuo passaparola digitale è il motore che ci permette di far crescere il salone e migliorare ogni giorno per te.
+
+Inquadra il QR o clicca qui sotto: le tue 5 stelle sono il nostro premio più bello! ⭐`;
+
+const QR_FORMATO_GOOGLE_MM: Record<string, [number, number]> = {
+  a4: [210, 297],
+  a5: [148, 210],
+  a6: [105, 148],
+  card: [85, 55],
+  square: [100, 100],
+};
+
+function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [googleLink, setGoogleLink] = useState('');
+  const [linkDraft, setLinkDraft] = useState('');
+  const [editingLink, setEditingLink] = useState(false);
+  const [savingLink, setSavingLink] = useState(false);
+  const [formato, setFormato] = useState<string>('a4');
+  const [generando, setGenerando] = useState(false);
+  const [qrPreview, setQrPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    getImpostazione('link_recensioni_google').then(v => {
+      if (v) setGoogleLink(v);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!googleLink) { setQrPreview(null); return; }
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(googleLink)}`;
+    buildQrWithLogo(url, null).then(setQrPreview).catch(() => setQrPreview(url));
+  }, [googleLink]);
+
+  async function handleSaveLink() {
+    const trimmed = linkDraft.trim();
+    if (!trimmed) return;
+    setSavingLink(true);
+    await setImpostazione('link_recensioni_google', trimmed, user?.id);
+    setGoogleLink(trimmed);
+    setEditingLink(false);
+    setSavingLink(false);
+  }
+
+  async function handleDownloadPdf() {
+    if (!googleLink || !qrPreview) return;
+    setGenerando(true);
+    try {
+      const [w, h] = QR_FORMATO_GOOGLE_MM[formato] ?? [210, 297];
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: h > w ? 'portrait' : 'landscape', unit: 'mm', format: [w, h] });
+      const cx = w / 2;
+      const margin = w * 0.08;
+
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, w, h, 'F');
+
+      let y = margin;
+
+      // Google logo area
+      const logoSize = Math.min(w * 0.18, 20);
+      // Draw Google "G" badge
+      doc.setFillColor(234, 67, 53);
+      doc.circle(cx, y + logoSize / 2, logoSize / 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(Math.max(10, logoSize * 0.55));
+      doc.text('G', cx, y + logoSize / 2 + logoSize * 0.2, { align: 'center' });
+      y += logoSize + Math.max(4, w * 0.025);
+
+      // Titolo
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(Math.max(13, w * 0.065));
+      doc.setTextColor(28, 25, 23);
+      doc.text('Lascia una recensione!', cx, y, { align: 'center' });
+      y += Math.max(5, w * 0.035);
+
+      // Stars
+      doc.setFontSize(Math.max(14, w * 0.07));
+      doc.setTextColor(251, 188, 5);
+      doc.text('★★★★★', cx, y, { align: 'center' });
+      y += Math.max(5, w * 0.035);
+
+      // QR code
+      const qrSize = Math.min(w * 0.50, h * 0.38);
+      const qrX = cx - qrSize / 2;
+      doc.setDrawColor(231, 229, 228);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(qrX - 2, y - 2, qrSize + 4, qrSize + 4, 3, 3, 'S');
+      doc.addImage(qrPreview, 'PNG', qrX, y, qrSize, qrSize);
+      y += qrSize + Math.max(4, w * 0.025);
+
+      // Testo simpatico
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(Math.max(6.5, w * 0.033));
+      doc.setTextColor(120, 113, 108);
+      const testoCompatto = 'Se oggi sei uscita dal salone raggiante (o hai notato qualche sguardo d\'invidia!), dedica 30 secondi a dircelo su Google. Le tue 5 stelle sono il nostro premio più bello!';
+      const testoLines = doc.splitTextToSize(testoCompatto, w - margin * 2);
+      doc.text(testoLines, cx, y, { align: 'center' });
+      y += testoLines.length * Math.max(4.5, w * 0.028) + Math.max(3, w * 0.02);
+
+      // Footer
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(Math.max(5.5, w * 0.026));
+      doc.setTextColor(168, 162, 158);
+      doc.text('Grazie di cuore per il tuo tempo e il tuo supporto', cx, h - margin * 0.5, { align: 'center' });
+
+      const formatoLabel = formato.toUpperCase();
+      await saveFile('qrcode', `qr-google-recensioni-${formatoLabel}.pdf`, doc.output('blob'));
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">QR Google Recensioni</h2>
+          <p className="text-sm text-stone-400 mt-0.5">Invita le clienti soddisfatte a lasciare 5 stelle su Google</p>
+        </div>
+      </div>
+
+      {/* Google branding header */}
+      <div className="flex items-center gap-3 bg-gradient-to-r from-blue-50 to-white border border-blue-100 rounded-2xl p-5">
+        <div className="w-12 h-12 rounded-xl bg-white border border-stone-200 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+        </div>
+        <div>
+          <p className="font-semibold text-stone-800">Google Reviews</p>
+          <p className="text-xs text-stone-500 mt-0.5">Le recensioni Google aumentano la visibilità del salone nelle ricerche locali</p>
+        </div>
+      </div>
+
+      {/* Link Google */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-3">
+        <p className="font-semibold text-stone-800">Link delle tue recensioni Google</p>
+        <p className="text-xs text-stone-400">Trovi il link nella tua scheda Google Business Profile — cerca il pulsante "Richiedi recensioni"</p>
+        {editingLink ? (
+          <div className="space-y-2">
+            <input
+              type="url"
+              value={linkDraft}
+              onChange={e => setLinkDraft(e.target.value)}
+              placeholder="https://g.page/r/... oppure https://maps.app.goo.gl/..."
+              autoFocus
+              className="w-full border border-blue-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-stone-700"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveLink}
+                disabled={savingLink || !linkDraft.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                {savingLink ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={14} />}
+                Salva
+              </button>
+              <button onClick={() => setEditingLink(false)} className="px-4 py-2 text-stone-500 hover:text-stone-800 rounded-xl text-sm font-medium transition-colors">
+                Annulla
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5">
+            <ExternalLink size={14} className="text-stone-400 flex-shrink-0" />
+            <p className="flex-1 text-sm text-stone-600 truncate font-mono text-xs">{googleLink || 'Nessun link configurato'}</p>
+            <button
+              onClick={() => { setLinkDraft(googleLink); setEditingLink(true); }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-xs font-semibold transition-colors flex-shrink-0"
+            >
+              <Edit3 size={11} />
+              {googleLink ? 'Modifica' : 'Aggiungi'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Preview QR */}
+      {googleLink && qrPreview && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+          <p className="font-semibold text-stone-800">Anteprima QR</p>
+          <div className="flex gap-5 items-start">
+            <div className="w-28 h-28 rounded-xl border border-stone-200 bg-white p-1 flex-shrink-0 flex items-center justify-center overflow-hidden">
+              <img src={qrPreview} alt="QR Google" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex-1 space-y-2">
+              <p className="text-xs text-stone-500 leading-relaxed">Il QR rimanda direttamente alla pagina recensioni Google del salone. Le clienti inquadrano e lasciano le stelle senza cercare nulla.</p>
+              {googleLink && (
+                <a href={googleLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold transition-colors">
+                  <ExternalLink size={11} /> Verifica link
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Testo simpatico */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Testo da usare nel cartellino stampato</p>
+            <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-line">{GOOGLE_REVIEW_TESTO}</p>
+          </div>
+
+          {/* Formato stampa */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-stone-800">Formato di stampa</p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {Object.keys(QR_FORMATO_GOOGLE_MM).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFormato(f)}
+                  className={`px-3 py-2 rounded-xl border-2 text-xs font-semibold transition-all ${formato === f ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-stone-200 text-stone-600 hover:border-stone-300'}`}
+                >
+                  {f.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handleDownloadPdf}
+            disabled={generando}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-2xl font-semibold text-sm transition-colors"
+          >
+            {generando ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generando PDF…</>
+            ) : (
+              <><Download size={16} /> Stampa QR Google ({formato.toUpperCase()})</>
+            )}
+          </button>
+        </div>
+      )}
+
+      {!googleLink && (
+        <div className="text-center py-8 bg-stone-50 rounded-2xl border border-dashed border-stone-300">
+          <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mx-auto mb-3">
+            <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+          </div>
+          <p className="text-sm font-semibold text-stone-600">Nessun link configurato</p>
+          <p className="text-xs text-stone-400 mt-1">Aggiungi il link Google qui sopra per generare il QR</p>
+        </div>
+      )}
     </div>
   );
 }

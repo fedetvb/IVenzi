@@ -167,6 +167,7 @@ interface SalonInfo {
   };
   benvenutoAttivo?: boolean;
   benvenutoConfig?: BenvenutoConfig | null;
+  linkRecensioniGoogle?: string;
 }
 
 type Step = 'dati' | 'scelta' | 'parrucchiere' | 'data' | 'ora' | 'servizio' | 'abbinato' | 'riepilogo' | 'successo' | 'scrivici' | 'successo_messaggio' | 'miei_messaggi' | 'mie_carte' | 'profilo' | 'miei_appuntamenti' | 'miei_servizi' | 'nostri_prodotti' | 'contatti' | 'quiz_capelli' | 'routine_risultato';
@@ -878,7 +879,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           'azienda_telefono','azienda_email','azienda_pec','azienda_indirizzo','azienda_google_maps',
           'azienda_sito_prenotazioni','azienda_note','orari_salone_json','orari_salone_nota',
           'ferie_inizio','ferie_fine','benvenuto_attivo','benvenuto_config_json',
-          'icona_pwa_url',
+          'icona_pwa_url','fasce_orarie_online_json','link_recensioni_google',
           ...SOCIAL_KEYS,
         ];
 
@@ -954,6 +955,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           },
           benvenutoAttivo: imp['benvenuto_attivo'] !== 'false',
           benvenutoConfig: imp['benvenuto_config_json'] ? JSON.parse(imp['benvenuto_config_json']) : null,
+          linkRecensioniGoogle: imp['link_recensioni_google'] ?? '',
         };
         fasceOrarieRef.current = parseFasceOrarie(imp['fasce_orarie_online_json']);
         setInfo(newInfo);
@@ -2771,7 +2773,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               </p>
             </div>
 
-            <SocialStrip social={info?.social} />
+            <SocialStrip social={info?.social} linkRecensioniGoogle={info?.linkRecensioniGoogle} />
 
             <BackBtn onClick={() => setStep('dati')} />
           </div>
@@ -4215,7 +4217,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               </div>
             )}
 
-            <SocialStrip social={info?.social} />
+            <SocialStrip social={info?.social} linkRecensioniGoogle={info?.linkRecensioniGoogle} />
           </div>
         )}
 
@@ -5677,29 +5679,55 @@ function buildSocialHref(key: string, value: string): string {
   return value;
 }
 
-function SocialStrip({ social }: { social?: Record<string, string> }) {
-  if (!social) return null;
-  const attivi = SOCIAL_META.filter(s => social[s.key]);
-  if (attivi.length === 0) return null;
+function GoogleReviewButton({ href }: { href: string }) {
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-3 flex items-center justify-center gap-2.5 w-full py-3 px-4 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 active:scale-95 transition-all shadow-sm group"
+    >
+      <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      <span className="text-sm font-semibold text-stone-700 group-hover:text-stone-900 transition-colors">Lascia una recensione su Google</span>
+      <span className="text-amber-400 text-sm">⭐⭐⭐⭐⭐</span>
+    </a>
+  );
+}
+
+function SocialStrip({ social, linkRecensioniGoogle }: { social?: Record<string, string>; linkRecensioniGoogle?: string }) {
+  const attivi = SOCIAL_META.filter(s => social?.[s.key]);
+  const hasGoogle = !!linkRecensioniGoogle;
+  if (!attivi.length && !hasGoogle) return null;
 
   return (
-    <div className="mt-2 pt-4 border-t border-stone-100">
-      <p className="text-xs text-stone-400 text-center mb-3 uppercase tracking-wider font-medium">Seguici</p>
-      <div className="flex items-center justify-center gap-3 flex-wrap">
-        {attivi.map(s => (
-          <a
-            key={s.key}
-            href={buildSocialHref(s.key, social[s.key])}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={s.label}
-            className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm hover:scale-110 active:scale-95 transition-transform"
-            style={{ background: s.bg, opacity: 0.88 }}
-          >
-            {s.icon}
-          </a>
-        ))}
-      </div>
+    <div className="mt-2 pt-4 border-t border-stone-100 space-y-3">
+      {hasGoogle && <GoogleReviewButton href={linkRecensioniGoogle!} />}
+      {attivi.length > 0 && (
+        <>
+          <p className="text-xs text-stone-400 text-center uppercase tracking-wider font-medium">Seguici</p>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            {attivi.map(s => (
+              <a
+                key={s.key}
+                href={buildSocialHref(s.key, social![s.key])}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={s.label}
+                className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm hover:scale-110 active:scale-95 transition-transform"
+                style={{ background: s.bg, opacity: 0.88 }}
+              >
+                {s.icon}
+              </a>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
