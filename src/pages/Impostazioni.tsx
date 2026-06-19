@@ -8229,20 +8229,20 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
     setPingOk(null);
     setPingError(null);
     try {
-      const sbUrl = localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL;
-      const sbKey = localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const res = await fetch(`${sbUrl}/functions/v1/keep-alive?force=true`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${sbKey}`, apikey: sbKey },
-      });
-      const json = await res.json();
-      if (json.ok) {
-        setLastPing(json.ts);
-        setLastPingTipo('manuale');
-        setPingOk(true);
-      } else {
-        setPingError(json.error ?? 'risposta non valida');
-      }
+      const now = new Date().toISOString();
+      const { error: e1 } = await supabase.from('impostazioni').upsert(
+        { chiave: 'keep_alive_last_ping', valore: now, updated_at: now, user_id: null },
+        { onConflict: 'chiave,user_id' }
+      );
+      const { error: e2 } = await supabase.from('impostazioni').upsert(
+        { chiave: 'keep_alive_last_ping_tipo', valore: 'manuale', updated_at: now, user_id: null },
+        { onConflict: 'chiave,user_id' }
+      );
+      await supabase.from('keep_alive_ping_log').insert({ eseguito_at: now, tipo: 'manuale' });
+      if (e1 || e2) throw e1 ?? e2;
+      setLastPing(now);
+      setLastPingTipo('manuale');
+      setPingOk(true);
     } catch {
       setPingError('Impossibile raggiungere il server. Controlla la connessione.');
     }
