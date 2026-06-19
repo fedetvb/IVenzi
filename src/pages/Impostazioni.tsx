@@ -1881,18 +1881,23 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
   const [formato, setFormato] = useState<string>('a4');
   const [generando, setGenerando] = useState(false);
   const [qrPreview, setQrPreview] = useState<string | null>(null);
+  const [testoCustom, setTestoCustom] = useState(GOOGLE_REVIEW_TESTO);
+  const [editingTesto, setEditingTesto] = useState(false);
+  const [testoDraft, setTestoDraft] = useState('');
+  const [savingTesto, setSavingTesto] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    getImpostazione('link_recensioni_google').then(v => {
-      if (v) setGoogleLink(v);
-    });
+    getImpostazione('link_recensioni_google').then(v => { if (v) setGoogleLink(v); });
+    getImpostazione('qr_google_testo').then(v => { if (v) setTestoCustom(v); });
+    getImpostazione('logo_salone_url').then(v => { if (v) setLogoUrl(v); });
   }, []);
 
   useEffect(() => {
     if (!googleLink) { setQrPreview(null); return; }
     const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(googleLink)}`;
-    buildQrWithLogo(url, null).then(setQrPreview).catch(() => setQrPreview(url));
-  }, [googleLink]);
+    buildQrWithLogo(url, logoUrl).then(setQrPreview).catch(() => setQrPreview(url));
+  }, [googleLink, logoUrl]);
 
   async function handleSaveLink() {
     const trimmed = linkDraft.trim();
@@ -1902,6 +1907,16 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
     setGoogleLink(trimmed);
     setEditingLink(false);
     setSavingLink(false);
+  }
+
+  async function handleSaveTesto() {
+    const trimmed = testoDraft.trim();
+    if (!trimmed) return;
+    setSavingTesto(true);
+    await setImpostazione('qr_google_testo', trimmed, user?.id ?? '');
+    setTestoCustom(trimmed);
+    setEditingTesto(false);
+    setSavingTesto(false);
   }
 
   async function handleDownloadPdf() {
@@ -1919,15 +1934,33 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
 
       let y = margin;
 
-      // Google logo area
+      // Salon logo or Google "G" badge
       const logoSize = Math.min(w * 0.18, 20);
-      // Draw Google "G" badge
-      doc.setFillColor(234, 67, 53);
-      doc.circle(cx, y + logoSize / 2, logoSize / 2, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(Math.max(10, logoSize * 0.55));
-      doc.text('G', cx, y + logoSize / 2 + logoSize * 0.2, { align: 'center' });
+      if (logoUrl) {
+        try {
+          const logoImg = await loadImage(logoUrl);
+          const canvas = document.createElement('canvas');
+          canvas.width = 200; canvas.height = 200;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(logoImg, 0, 0, 200, 200);
+          const logoData = canvas.toDataURL('image/png');
+          doc.addImage(logoData, 'PNG', cx - logoSize / 2, y, logoSize, logoSize);
+        } catch {
+          doc.setFillColor(234, 67, 53);
+          doc.circle(cx, y + logoSize / 2, logoSize / 2, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(Math.max(10, logoSize * 0.55));
+          doc.text('G', cx, y + logoSize / 2 + logoSize * 0.2, { align: 'center' });
+        }
+      } else {
+        doc.setFillColor(234, 67, 53);
+        doc.circle(cx, y + logoSize / 2, logoSize / 2, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(Math.max(10, logoSize * 0.55));
+        doc.text('G', cx, y + logoSize / 2 + logoSize * 0.2, { align: 'center' });
+      }
       y += logoSize + Math.max(4, w * 0.025);
 
       // Titolo
@@ -1952,12 +1985,11 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
       doc.addImage(qrPreview, 'PNG', qrX, y, qrSize, qrSize);
       y += qrSize + Math.max(4, w * 0.025);
 
-      // Testo simpatico
+      // Testo personalizzato
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(Math.max(6.5, w * 0.033));
       doc.setTextColor(120, 113, 108);
-      const testoCompatto = 'Se oggi sei uscita dal salone raggiante (o hai notato qualche sguardo d\'invidia!), dedica 30 secondi a dircelo su Google. Le tue 5 stelle sono il nostro premio più bello!';
-      const testoLines = doc.splitTextToSize(testoCompatto, w - margin * 2);
+      const testoLines = doc.splitTextToSize(testoCustom.replace(/\n+/g, ' '), w - margin * 2);
       doc.text(testoLines, cx, y, { align: 'center' });
       y += testoLines.length * Math.max(4.5, w * 0.028) + Math.max(3, w * 0.02);
 
@@ -2063,10 +2095,53 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* Testo simpatico */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Testo da usare nel cartellino stampato</p>
-            <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-line">{GOOGLE_REVIEW_TESTO}</p>
+          {/* Testo personalizzato */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Testo nel cartellino stampato</p>
+              {!editingTesto && (
+                <button
+                  onClick={() => { setTestoDraft(testoCustom); setEditingTesto(true); }}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-800 rounded-lg text-xs font-semibold transition-colors"
+                >
+                  <Edit3 size={10} /> Modifica
+                </button>
+              )}
+            </div>
+            {editingTesto ? (
+              <div className="space-y-2">
+                <textarea
+                  value={testoDraft}
+                  onChange={e => setTestoDraft(e.target.value)}
+                  rows={4}
+                  className="w-full border border-amber-300 rounded-xl px-3 py-2 text-xs text-stone-700 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none leading-relaxed"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveTesto}
+                    disabled={savingTesto || !testoDraft.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors"
+                  >
+                    {savingTesto ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={12} />}
+                    Salva
+                  </button>
+                  <button
+                    onClick={() => { setTestoDraft(''); setEditingTesto(false); }}
+                    className="px-3 py-1.5 text-amber-700 hover:text-amber-900 rounded-xl text-xs font-medium transition-colors"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    onClick={() => setTestoDraft(GOOGLE_REVIEW_TESTO)}
+                    className="px-3 py-1.5 text-stone-500 hover:text-stone-700 rounded-xl text-xs font-medium transition-colors ml-auto"
+                  >
+                    Ripristina default
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-line">{testoCustom}</p>
+            )}
           </div>
 
           {/* Formato stampa */}
