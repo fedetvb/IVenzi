@@ -20,6 +20,31 @@ function toItalianDateStr(date: Date): string {
 function italianDayBounds(data: string) {
   return { dayStart: `${data}T00:00:00+02:00`, dayEnd: `${data}T23:59:59+01:00` };
 }
+
+interface FasciaOraria { da: string; a: string; }
+function parseFasceOrarie(json: string | null | undefined): FasciaOraria[] {
+  if (!json) return [{ da: '09:00', a: '18:00' }];
+  try {
+    const arr = JSON.parse(json);
+    if (!Array.isArray(arr) || arr.length === 0) return [{ da: '09:00', a: '18:00' }];
+    return arr;
+  } catch { return [{ da: '09:00', a: '18:00' }]; }
+}
+function buildSlotsFromFasce(fasce: FasciaOraria[], durata: number, busy: (m: number) => boolean): string[] {
+  const slots: string[] = [];
+  for (const fascia of fasce) {
+    const [dh, dm] = fascia.da.split(':').map(Number);
+    const [ah, am] = fascia.a.split(':').map(Number);
+    const start = dh * 60 + dm;
+    const end = ah * 60 + am;
+    for (let m = start; m + durata <= end; m += 15) {
+      if (!busy(m)) {
+        slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+      }
+    }
+  }
+  return slots;
+}
 function normPhone(t: string): string {
   let s = (t ?? '').replace(/\D/g, '');
   if (s.startsWith('0039')) s = s.slice(4);
@@ -138,6 +163,7 @@ interface SalonInfo {
     orariNota: string;
     ferieInizio?: string;
     ferieFine?: string;
+    fasceOrarieOnlineJson?: string | null;
   };
   benvenutoAttivo?: boolean;
   benvenutoConfig?: BenvenutoConfig | null;
@@ -283,6 +309,7 @@ function buildLookupParams(nome: string, cognome: string, telefono: string, codi
 
 export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [info, setInfo] = useState<SalonInfo | null>(null);
+  const fasceOrarieRef = useRef<FasciaOraria[]>([{ da: '09:00', a: '18:00' }]);
   const [loadingInfo, setLoadingInfo] = useState(true);
   const [step, setStep] = useState<Step>('dati');
   const [isNuovaScheda, setIsNuovaScheda] = useState(true);
@@ -894,7 +921,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         const social: Record<string, string> = {};
         for (const k of SOCIAL_KEYS) { if (imp[k]) social[k] = imp[k]; }
 
-        setInfo({
+        const newInfo = {
           prenotazioniAttive,
           portaleNascosto,
           hairQuizAttivo,
@@ -923,10 +950,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             orariNota: imp['orari_salone_nota'] ?? '',
             ferieInizio: imp['ferie_inizio'] ?? '',
             ferieFine: imp['ferie_fine'] ?? '',
+            fasceOrarieOnlineJson: imp['fasce_orarie_online_json'] ?? null,
           },
           benvenutoAttivo: imp['benvenuto_attivo'] !== 'false',
           benvenutoConfig: imp['benvenuto_config_json'] ? JSON.parse(imp['benvenuto_config_json']) : null,
-        });
+        };
+        fasceOrarieRef.current = parseFasceOrarie(imp['fasce_orarie_online_json']);
+        setInfo(newInfo);
       } catch {
         setInfo({ prenotazioniAttive: true, portaleNascosto: false, hairQuizAttivo: true, nomeSalone: '', logoUrl: null, parrucchieri: [], servizi: [], serviziAbbinati: [] });
       } finally {
@@ -934,6 +964,48 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       }
     }
     loadInfo();
+  }, [userId]);
+
+  // Realtime: ricarica fasce orarie quando cambiano in impostazioni
+  useEffect(() => {
+    if (!userId) return;
+    const ch = supabase
+      .channel(`portale_impostazioni_${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'impostazioni', filter: `user_id=eq.${userId}` }, (payload) => {
+        const row = (payload.new ?? payload.old) as { chiave: string; valore: string } | undefined;
+        if (!row) return;
+        if (row.chiave === 'fasce_orarie_online_json') {
+          fasceOrarieRef.current = parseFasceOrarie(row.valore);
+        }
+        if (row.chiave === 'prenotazioni_online_attive') {
+          setInfo(prev => prev ? { ...prev, prenotazioniAttive: row.valore !== 'false' } : prev);
+        }
+        if (row.chiave === 'portale_nascosto') {
+          setInfo(prev => prev ? { ...prev, portaleNascosto: row.valore === 'true' } : prev);
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [userId]);
+
+  // Realtime: ricarica slot quando le assenze parrucchieri cambiano
+  const slotReloadRef = useRef<{ parrId: string | null; chiunque: boolean; data: string; durata: number } | null>(null);
+  useEffect(() => {
+    if (!userId) return;
+    const ch = supabase
+      .channel(`portale_assenze_${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assenze_parrucchieri' }, () => {
+        const ctx = slotReloadRef.current;
+        if (!ctx || !ctx.data || !ctx.durata) return;
+        if (ctx.chiunque) {
+          loadSlotsChiunque(ctx.data, ctx.durata);
+        } else if (ctx.parrId) {
+          loadSlots(ctx.parrId, ctx.data, ctx.durata);
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const loadSlots = useCallback(async (parrId: string, data: string, durata: number) => {
@@ -963,12 +1035,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       }
       const fullDayAbsent = (assenzeRes.data ?? []).some((a: { ora_inizio: string | null }) => !a.ora_inizio);
       if (fullDayAbsent) { setSlotDisponibili([]); return; }
-      const slots: string[] = [];
-      for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
-        if (!busy.some(b => m < b.end && m + durata > b.start)) {
-          slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
-        }
-      }
+      const fasce = fasceOrarieRef.current;
+      const slots = buildSlotsFromFasce(fasce, durata, m => busy.some(b => m < b.end && m + durata > b.start));
       setSlotDisponibili(slots);
     } catch { setSlotDisponibili([]); }
     finally { setLoadingSlot(false); }
@@ -1026,15 +1094,24 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const availableParr = allParr.filter(p => !fullDayAbsent.has(p.id));
       const parrucchieriPerSlot: Record<string, string[]> = {};
       const slotDisponibili: string[] = [];
-      for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
-        const freeParr = availableParr.filter(p => {
-          if (partialAbsences[p.id] !== undefined && m >= partialAbsences[p.id]) return false;
-          return !(busyByParr[p.id] ?? []).some(b => m < b.end && m + durata > b.start);
-        });
-        if (freeParr.length > 0) {
-          const slotKey = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-          slotDisponibili.push(slotKey);
-          parrucchieriPerSlot[slotKey] = freeParr.map(p => p.id);
+      const fasce = fasceOrarieRef.current;
+      for (const fascia of fasce) {
+        const [dh, dm] = fascia.da.split(':').map(Number);
+        const [ah, am] = fascia.a.split(':').map(Number);
+        const fStart = dh * 60 + dm;
+        const fEnd = ah * 60 + am;
+        for (let m = fStart; m + durata <= fEnd; m += 15) {
+          const freeParr = availableParr.filter(p => {
+            if (partialAbsences[p.id] !== undefined && m >= partialAbsences[p.id]) return false;
+            return !(busyByParr[p.id] ?? []).some(b => m < b.end && m + durata > b.start);
+          });
+          if (freeParr.length > 0) {
+            const slotKey = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+            if (!slotDisponibili.includes(slotKey)) {
+              slotDisponibili.push(slotKey);
+              parrucchieriPerSlot[slotKey] = freeParr.map(p => p.id);
+            }
+          }
         }
       }
       setSlotDisponibili(slotDisponibili);
@@ -1879,8 +1956,10 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setParrucchiere2(null);
     setParrPrimarioOccupato(false);
     if (chiunque && dataSelezionata) {
+      slotReloadRef.current = { parrId: null, chiunque: true, data: dataSelezionata, durata: s.durata_minuti };
       loadSlotsChiunque(dataSelezionata, s.durata_minuti);
     } else if (parrucchiere && dataSelezionata) {
+      slotReloadRef.current = { parrId: parrucchiere.id, chiunque: false, data: dataSelezionata, durata: s.durata_minuti };
       loadSlots(parrucchiere.id, dataSelezionata, s.durata_minuti);
     }
     setStep('ora');
@@ -3324,18 +3403,29 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 {buildCalendar(calMonth).map((cell, i) => {
                   if (!cell) return <div key={i} />;
                   const isPast = cell < todayStr();
+                  const ferieInizio = info.contatti?.ferieInizio;
+                  const ferieFine = info.contatti?.ferieFine;
+                  const isFerie = !!(ferieInizio && ferieFine && cell >= ferieInizio && cell <= ferieFine);
+                  const isDisabled = isPast || isFerie;
                   const isSelected = cell === dataSelezionata;
                   const isToday = cell === todayStr();
                   return (
                     <button
                       key={cell}
-                      onClick={() => handleDataSelect(cell)}
-                      disabled={isPast}
-                      className={`aspect-square rounded-xl text-sm font-medium transition-all flex items-center justify-center
-                        ${isPast ? 'text-stone-300 cursor-not-allowed' : 'hover:bg-emerald-50 text-stone-700 cursor-pointer'}
-                        ${isSelected ? 'bg-emerald-600 text-white hover:bg-emerald-700' : ''}
-                        ${isToday && !isSelected ? 'ring-2 ring-emerald-400' : ''}
+                      onClick={() => !isDisabled && handleDataSelect(cell)}
+                      disabled={isDisabled}
+                      title={isFerie ? 'Salone chiuso per ferie' : undefined}
+                      className={`aspect-square rounded-xl text-sm font-medium transition-all flex items-center justify-center relative
+                        ${isPast && !isFerie ? 'text-stone-300 cursor-not-allowed' : ''}
+                        ${isFerie ? 'cursor-not-allowed pointer-events-none' : ''}
+                        ${!isDisabled ? 'hover:bg-emerald-50 text-stone-700 cursor-pointer' : ''}
+                        ${isSelected && !isFerie ? 'bg-emerald-600 text-white hover:bg-emerald-700' : ''}
+                        ${isToday && !isSelected && !isFerie ? 'ring-2 ring-emerald-400' : ''}
                       `}
+                      style={isFerie ? {
+                        background: 'repeating-linear-gradient(45deg, #fef3c7, #fef3c7 3px, #fffbeb 3px, #fffbeb 8px)',
+                        color: '#d97706',
+                      } : undefined}
                     >
                       {parseInt(cell.split('-')[2])}
                     </button>
@@ -5571,10 +5661,16 @@ const SOCIAL_META: Array<{
 
 function buildSocialHref(key: string, value: string): string {
   if (key === 'social_whatsapp') {
-    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('wa.me')) {
-      return value;
+    // Normalize any whatsapp.com URL to wa.me deep link
+    if (/whatsapp\.com/i.test(value)) {
+      const match = value.match(/phone=\+?(\d+)/i) ?? value.match(/(\d{6,})/);
+      if (match) return `https://wa.me/${match[1]}`;
     }
-    // Plain number: strip non-digits (except leading +)
+    if (value.startsWith('wa.me')) return `https://${value}`;
+    if (value.startsWith('https://wa.me') || value.startsWith('http://wa.me')) return value;
+    // Already a generic https URL (non-whatsapp): return as-is
+    if (value.startsWith('http://') || value.startsWith('https://')) return value;
+    // Plain number: strip non-digits and leading +
     const digits = value.replace(/[^\d+]/g, '').replace(/^\+/, '');
     return `https://wa.me/${digits}`;
   }
