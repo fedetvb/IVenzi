@@ -8191,12 +8191,15 @@ function PaginaNotifichePush({ onBack }: { onBack: () => void }) {
 }
 
 function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
   const [lastPing, setLastPing] = useState<string | null>(null);
   const [lastPingTipo, setLastPingTipo] = useState<'automatico' | 'manuale' | null>(null);
   const [pinging, setPinging] = useState(false);
   const [pingOk, setPingOk] = useState<boolean | null>(null);
   const [pingError, setPingError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [intervalGiorni, setIntervalGiorni] = useState(2);
+  const [savingInterval, setSavingInterval] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem(LS_NOTIF_ENABLED) !== 'false');
   const [notifDays, setNotifDays] = useState<number>(() => {
     const v = parseInt(localStorage.getItem(LS_NOTIF_DAYS) ?? '7', 10);
@@ -8215,21 +8218,55 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     async function load() {
+      // Legge l'intervallo configurato dal DB
+      const intervalVal = await getImpostazione('keep_alive_interval_days');
+      const parsed = parseInt(intervalVal ?? '2', 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 6) setIntervalGiorni(parsed);
+
+      // Legge l'ultimo ping: confronta localStorage con keep_alive_ping_log (cron server-side)
       const lsTs = localStorage.getItem('keep_alive_last_ping');
       const lsTipo = localStorage.getItem('keep_alive_last_ping_tipo');
-      if (lsTs) {
-        setLastPing(lsTs);
-        setLastPingTipo((lsTipo as 'automatico' | 'manuale') ?? 'manuale');
-      } else {
-        const pingVal = await getImpostazione('keep_alive_last_ping');
-        const tipoVal = await getImpostazione('keep_alive_last_ping_tipo');
-        setLastPing(pingVal ?? null);
-        setLastPingTipo((tipoVal as 'automatico' | 'manuale') ?? null);
+
+      // Recupera anche l'ultimo ping dal DB (cron automatico che gira anche senza app aperta)
+      const { data: dbPings } = await supabase
+        .from('keep_alive_ping_log')
+        .select('eseguito_at, tipo')
+        .order('eseguito_at', { ascending: false })
+        .limit(1);
+
+      const dbPing = dbPings?.[0] ?? null;
+      const dbTs = dbPing?.eseguito_at ?? null;
+      const dbTipo = dbPing?.tipo as 'automatico' | 'manuale' | null ?? null;
+
+      // Usa il ping più recente tra localStorage e DB
+      let bestTs: string | null = null;
+      let bestTipo: 'automatico' | 'manuale' | null = null;
+      if (lsTs && dbTs) {
+        if (new Date(lsTs) >= new Date(dbTs)) {
+          bestTs = lsTs; bestTipo = (lsTipo as 'automatico' | 'manuale') ?? 'manuale';
+        } else {
+          bestTs = dbTs; bestTipo = dbTipo;
+        }
+      } else if (lsTs) {
+        bestTs = lsTs; bestTipo = (lsTipo as 'automatico' | 'manuale') ?? 'manuale';
+      } else if (dbTs) {
+        bestTs = dbTs; bestTipo = dbTipo;
       }
+
+      setLastPing(bestTs);
+      setLastPingTipo(bestTipo);
       setLoading(false);
     }
     load();
   }, []);
+
+  async function saveIntervalGiorni(val: number) {
+    setIntervalGiorni(val);
+    if (!user) return;
+    setSavingInterval(true);
+    await setImpostazione('keep_alive_interval_days', String(val), user.id);
+    setSavingInterval(false);
+  }
 
   async function eseguiPing() {
     setPinging(true);
@@ -8266,7 +8303,7 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
     const last = new Date(ts).getTime();
     const now = Date.now();
     const elapsed = (now - last) / (1000 * 60 * 60 * 24);
-    const remaining = Math.max(0, KEEPALIVE_INTERVAL_DAYS - elapsed);
+    const remaining = Math.max(0, intervalGiorni - elapsed);
     return Math.round(remaining);
   }
 
@@ -8290,11 +8327,42 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
           <Activity size={18} className="text-emerald-600" />
         </div>
         <div className="flex-1 space-y-1">
-          <p className="text-sm font-bold text-emerald-900">Sistema attivo</p>
+          <p className="text-sm font-bold text-emerald-900">Sistema attivo — funziona anche con il gestionale chiuso</p>
           <p className="text-xs text-emerald-700 leading-relaxed">
-            Un ping automatico visita Supabase ogni {KEEPALIVE_INTERVAL_DAYS} giorni, impedendo la pausa del progetto
-            (che scatterebbe dopo 7 giorni di inattivit&agrave;).
+            Un cron job diretto sul database esegue il ping ogni {intervalGiorni} {intervalGiorni === 1 ? 'giorno' : 'giorni'} alle 17:00 italiane,
+            anche quando non sei connessa al gestionale.
           </p>
+        </div>
+      </div>
+
+      {/* Impostazione intervallo ping */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-stone-700">Intervallo ping automatico</h3>
+          <p className="text-xs text-stone-400 mt-0.5">Ogni quanti giorni il cron deve pingare il database (max 6 — Supabase pausa dopo 7 giorni)</p>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-stone-700">Frequenza</p>
+            <span className="text-sm font-bold text-emerald-700">
+              ogni {intervalGiorni} {intervalGiorni === 1 ? 'giorno' : 'giorni'}
+              {savingInterval && <span className="ml-2 text-[10px] text-stone-400">Salvataggio...</span>}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={6}
+            step={1}
+            value={intervalGiorni}
+            onChange={e => saveIntervalGiorni(Number(e.target.value))}
+            className="w-full accent-emerald-500"
+          />
+          <div className="flex justify-between text-[10px] text-stone-400">
+            <span>1 giorno</span>
+            <span>3 giorni</span>
+            <span>6 giorni</span>
+          </div>
         </div>
       </div>
 
@@ -8340,13 +8408,13 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
             {giorniRimanenti !== null && (
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-stone-400">
-                  <span>Intervallo ping ({KEEPALIVE_INTERVAL_DAYS} giorni)</span>
-                  <span>{Math.min(KEEPALIVE_INTERVAL_DAYS, KEEPALIVE_INTERVAL_DAYS - (giorniRimanenti ?? KEEPALIVE_INTERVAL_DAYS))} / {KEEPALIVE_INTERVAL_DAYS} giorni trascorsi</span>
+                  <span>Intervallo ping ({intervalGiorni} {intervalGiorni === 1 ? 'giorno' : 'giorni'})</span>
+                  <span>{Math.min(intervalGiorni, intervalGiorni - (giorniRimanenti ?? intervalGiorni))} / {intervalGiorni} giorni trascorsi</span>
                 </div>
                 <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, ((KEEPALIVE_INTERVAL_DAYS - (giorniRimanenti ?? KEEPALIVE_INTERVAL_DAYS)) / KEEPALIVE_INTERVAL_DAYS) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((intervalGiorni - (giorniRimanenti ?? intervalGiorni)) / intervalGiorni) * 100)}%` }}
                   />
                 </div>
               </div>
@@ -8437,13 +8505,16 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
         <p className="text-xs font-bold text-stone-700">Come funziona</p>
         <ul className="space-y-1.5">
           <li className="text-xs text-stone-500 leading-relaxed">
-            &bull; Il cron job del database chiama automaticamente la funzione ogni {KEEPALIVE_INTERVAL_DAYS} giorni alle 09:00 UTC
+            &bull; Un cron job diretto sul database gira ogni giorno alle 17:00 italiane e pinga automaticamente se &egrave; trascorso l'intervallo configurato
+          </li>
+          <li className="text-xs text-stone-500 leading-relaxed">
+            &bull; <span className="font-medium text-emerald-700">Funziona anche con il gestionale chiuso</span> — non richiede che tu sia connessa
           </li>
           <li className="text-xs text-stone-500 leading-relaxed">
             &bull; Ogni ping registra il timestamp e se &egrave; stato <span className="font-medium text-sky-600">automatico</span> o <span className="font-medium text-amber-600">manuale</span>
           </li>
           <li className="text-xs text-stone-500 leading-relaxed">
-            &bull; Supabase mette in pausa i progetti dopo 7 giorni senza attivit&agrave; — il ping ogni {KEEPALIVE_INTERVAL_DAYS} giorni previene questo con ampio margine
+            &bull; Supabase mette in pausa i progetti dopo 7 giorni senza attivit&agrave; — imposta l'intervallo a massimo 6 giorni per sicurezza
           </li>
           <li className="text-xs text-stone-500 leading-relaxed">
             &bull; Puoi eseguire un ping manuale in qualsiasi momento con il pulsante qui sopra
