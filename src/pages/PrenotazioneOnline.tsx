@@ -1025,6 +1025,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     supabase
       .from('assenze_parrucchieri')
       .select('parrucchiere_id,data_inizio,data_fine,ora_inizio')
+      .eq('user_id', userId)
       .lte('data_inizio', monthEnd)
       .gte('data_fine', monthStart)
       .then(({ data }) => {
@@ -1041,7 +1042,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const { dayStart, dayEnd } = italianDayBounds(data);
       const [appRes, assenzeRes, richiesteRes] = await Promise.all([
         supabase.from('appuntamenti').select('data_ora,durata_minuti').eq('parrucchiere_id', parrId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
-        supabase.from('assenze_parrucchieri').select('ora_inizio,data_inizio,data_fine').eq('parrucchiere_id', parrId).lte('data_inizio', data).gte('data_fine', data),
+        supabase.from('assenze_parrucchieri').select('ora_inizio,data_inizio,data_fine').eq('user_id', userId).eq('parrucchiere_id', parrId).lte('data_inizio', data).gte('data_fine', data),
         supabase.from('richieste_appuntamento').select('data_ora,data_ora2,parrucchiere2_id').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
       ]);
       const busy: { start: number; end: number }[] = [];
@@ -1093,7 +1094,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const [parrRes, appRes, assenzeRes, richiesteRes] = await Promise.all([
         supabase.from('parrucchieri').select('id,nome,colore').eq('user_id', userId).eq('attivo', true).order('nome'),
         supabase.from('appuntamenti').select('parrucchiere_id,data_ora,durata_minuti').eq('user_id', userId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
-        supabase.from('assenze_parrucchieri').select('parrucchiere_id,ora_inizio,data_inizio,data_fine').lte('data_inizio', data).gte('data_fine', data),
+        supabase.from('assenze_parrucchieri').select('parrucchiere_id,ora_inizio,data_inizio,data_fine').eq('user_id', userId).lte('data_inizio', data).gte('data_fine', data),
         supabase.from('richieste_appuntamento').select('parrucchiere_id,data_ora,parrucchiere2_id,data_ora2,chiunque,parrucchieri_candidati').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
       ]);
       const allParr = (parrRes.data ?? []) as Parrucchiere[];

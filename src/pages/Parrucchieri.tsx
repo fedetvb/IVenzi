@@ -47,8 +47,9 @@ export default function Parrucchieri() {
   }, []);
 
   async function loadAssenze() {
+    if (!user?.id) return;
     setAssenzeLoading(true);
-    const res = await dbSelect({ table: 'assenze_parrucchieri', columns: '*', orderBy: [{col:'data_inizio', asc:false}] });
+    const res = await dbSelect({ table: 'assenze_parrucchieri', columns: '*', filters: [{col:'user_id', op:'eq', val: user.id}], orderBy: [{col:'data_inizio', asc:false}] });
     setAssenze((res.data || []) as Assenza[]);
     setAssenzeLoading(false);
   }
@@ -56,7 +57,8 @@ export default function Parrucchieri() {
   useEffect(() => {
     loadParrucchieri();
     loadAssenze();
-  }, [loadParrucchieri]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadParrucchieri, user?.id]);
 
   function openNew() {
     setForm({ nome: '', colore: '#3B82F6' });
