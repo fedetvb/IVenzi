@@ -1240,6 +1240,26 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     });
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`impostazioni_visibilita_${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'impostazioni',
+        filter: `user_id=eq.${user.id}`,
+      }, (payload) => {
+        const row = (payload.new ?? payload.old) as { chiave: string; valore: string } | undefined;
+        if (!row) return;
+        if (row.chiave === 'prenotazioni_online_attive') setAttiva(row.valore !== 'false');
+        if (row.chiave === 'portale_nascosto') setPortaleNascosto(row.valore === 'true');
+        if (row.chiave === 'hair_quiz_attivo') setHairQuizAttivoLocal(row.valore === 'true');
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
   // Regenerate QR preview whenever URL or logo changes
   useEffect(() => {
     if (!bookingUrl) return;

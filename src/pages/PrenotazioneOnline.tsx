@@ -112,6 +112,7 @@ interface ServizioAbbinato {
 interface SalonInfo {
   prenotazioniAttive: boolean;
   portaleNascosto: boolean;
+  hairQuizAttivo: boolean;
   nomeSalone: string;
   logoUrl: string | null;
   parrucchieri: Parrucchiere[];
@@ -845,7 +846,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       try {
         const SOCIAL_KEYS = ['social_instagram','social_facebook','social_tiktok','social_youtube','social_whatsapp','social_x','social_threads','social_google_business','social_tripadvisor','social_altro'];
         const ALL_KEYS = [
-          'nome_salone','logo_salone_url','prenotazioni_online_attive','portale_nascosto',
+          'nome_salone','logo_salone_url','prenotazioni_online_attive','portale_nascosto','hair_quiz_attivo',
           'annuncio_attivo','annuncio_sfondo','annuncio_testo','annuncio_id','annuncio_compleanno_testo',
           'azienda_telefono','azienda_email','azienda_pec','azienda_indirizzo','azienda_google_maps',
           'azienda_sito_prenotazioni','azienda_note','orari_salone_json','orari_salone_nota',
@@ -869,6 +870,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
         const prenotazioniAttive = imp['prenotazioni_online_attive'] !== 'false';
         const portaleNascosto = imp['portale_nascosto'] === 'true';
+        const hairQuizAttivo = imp['hair_quiz_attivo'] !== 'false';
 
         const serviziAbilitati = (servRes.data ?? []) as Servizio[];
         const abbinatiIds = [...new Set(
@@ -895,6 +897,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         setInfo({
           prenotazioniAttive,
           portaleNascosto,
+          hairQuizAttivo,
           nomeSalone: imp['nome_salone'] ?? '',
           logoUrl: imp['logo_salone_url'] ?? null,
           parrucchieri: (parrRes.data ?? []) as Parrucchiere[],
@@ -925,7 +928,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           benvenutoConfig: imp['benvenuto_config_json'] ? JSON.parse(imp['benvenuto_config_json']) : null,
         });
       } catch {
-        setInfo({ prenotazioniAttive: true, portaleNascosto: false, nomeSalone: '', logoUrl: null, parrucchieri: [], servizi: [], serviziAbbinati: [] });
+        setInfo({ prenotazioniAttive: true, portaleNascosto: false, hairQuizAttivo: true, nomeSalone: '', logoUrl: null, parrucchieri: [], servizi: [], serviziAbbinati: [] });
       } finally {
         setLoadingInfo(false);
       }
@@ -2356,6 +2359,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <NextBtn onClick={handleDatiNext} disabled={datiChecking}>
                 {datiChecking ? 'Controllo in corso…' : 'Avanti'}
               </NextBtn>
+              <button
+                onClick={() => setStep('scelta')}
+                className="w-full py-3 rounded-2xl border border-stone-200 text-stone-500 font-medium text-sm hover:bg-stone-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <ChevronLeft size={15} />
+                Indietro
+              </button>
             </div>
           </Card>
         )}
@@ -2627,7 +2637,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               <ChevronRight size={20} className="text-stone-300 group-hover:text-orange-500 transition-colors flex-shrink-0" />
             </button>
 
-            <button
+            {info.hairQuizAttivo && <button
               onClick={() => {
                 loadNovstralProdotti();
                 setQuizStep(0);
@@ -2645,7 +2655,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 <p className="text-sm text-emerald-600 font-medium mt-1 leading-snug">Rivela la formula ideale per la tua chioma ed evoca il tuo rituale su misura.</p>
               </div>
               <ChevronRight size={20} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
-            </button>
+            </button>}
 
             <button
               onClick={() => { loadNovstralProdotti(); setStep('nostri_prodotti'); }}
@@ -2811,6 +2821,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
               >
                 <CalendarPlus size={16} />
                 Richiedi appuntamento
+              </button>
+              <button
+                onClick={() => setStep('scelta')}
+                className="px-8 py-3 bg-stone-100 text-stone-500 font-medium rounded-2xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <ChevronLeft size={16} />
+                Torna alla home
               </button>
             </div>
           </div>
