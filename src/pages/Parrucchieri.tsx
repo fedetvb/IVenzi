@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, CreditCard as Edit2, Trash2, X, Check, Calendar, UserX } from 'lucide-react';
 import { supabase, type Parrucchiere } from '../lib/supabase';
-import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
+import { dbSelect, dbInsert, dbUpdate } from '../lib/localDb';
 import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
 
@@ -48,8 +48,11 @@ export default function Parrucchieri() {
 
   async function loadAssenze() {
     setAssenzeLoading(true);
-    const res = await dbSelect({ table: 'assenze_parrucchieri', columns: '*', orderBy: [{col:'data_inizio', asc:false}] });
-    setAssenze((res.data || []) as Assenza[]);
+    const { data, error } = await supabase
+      .from('assenze_parrucchieri')
+      .select('*')
+      .order('data_inizio', { ascending: false });
+    if (!error) setAssenze((data || []) as Assenza[]);
     setAssenzeLoading(false);
   }
 
@@ -111,19 +114,16 @@ export default function Parrucchieri() {
       return;
     }
     setSavingAssenza(true);
-    const res = await dbInsert({
-      table: 'assenze_parrucchieri',
-      data: {
-        parrucchiere_id: assenzaForm.parrucchiere_id,
-        data_inizio: assenzaForm.data_inizio,
-        data_fine: assenzaForm.data_fine,
-        ora_inizio: assenzaForm.ora_inizio || null,
-        note: assenzaForm.note,
-        user_id: user?.id,
-      }
+    const { error } = await supabase.from('assenze_parrucchieri').insert({
+      parrucchiere_id: assenzaForm.parrucchiere_id,
+      data_inizio: assenzaForm.data_inizio,
+      data_fine: assenzaForm.data_fine,
+      ora_inizio: assenzaForm.ora_inizio || null,
+      note: assenzaForm.note,
+      user_id: user?.id,
     });
     setSavingAssenza(false);
-    if (res.error) { setAssenzaError(res.error); return; }
+    if (error) { setAssenzaError(error.message); return; }
     setShowAssenzaForm(false);
     setAssenzaForm({ parrucchiere_id: '', data_inizio: '', data_fine: '', ora_inizio: '', note: '' });
     loadAssenze();
@@ -131,7 +131,7 @@ export default function Parrucchieri() {
 
   async function eliminaAssenza(id: string) {
     if (!confirm('Eliminare questa assenza?')) return;
-    await dbDelete({ table: 'assenze_parrucchieri', filters: [{col:'id', op:'eq', val:id}] });
+    await supabase.from('assenze_parrucchieri').delete().eq('id', id);
     loadAssenze();
   }
 
