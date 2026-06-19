@@ -3827,26 +3827,30 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
     e.target.value = '';
     try {
       const blob = await compressImage(file, 400);
+
+      // Leggi immediatamente come data URL per aggiornare l'anteprima a schermo
+      // senza passare per la CDN (che potrebbe servire la versione in cache)
+      const previewDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = ev => resolve(ev.target?.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      setLogoDataUrl(previewDataUrl);
+
       if (user) {
         const path = `icone/${user.id}/qr-registrazione-logo.jpg`;
         const { error } = await supabase.storage.from('foto-clienti').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
         if (!error) {
           const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
           const iconUrl = urlData.publicUrl + '?v=' + Date.now();
-          setLogoDataUrl(iconUrl);
           localStorage.setItem(QR_LOGO_KEY, iconUrl);
           await supabase.from('impostazioni').upsert({ chiave: 'icona_qr_registrazione_url', valore: iconUrl, user_id: user.id }, { onConflict: 'chiave,user_id' });
           return;
         }
       }
       // fallback: store as data URL locally if no user or upload fails
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const result = ev.target?.result as string;
-        setLogoDataUrl(result);
-        localStorage.setItem(QR_LOGO_KEY, result);
-      };
-      reader.readAsDataURL(blob);
+      localStorage.setItem(QR_LOGO_KEY, previewDataUrl);
     } catch { /* ignore */ }
   }
 

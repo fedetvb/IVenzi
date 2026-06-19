@@ -132,7 +132,9 @@ export default function App() {
   const [showNuovaSchedaBanner, setShowNuovaSchedaBanner] = useState(false);
   const [nuovaSchedaNome, setNuovaSchedaNome] = useState('');
   const [nuovaSchedaCurrentId, setNuovaSchedaCurrentId] = useState<string | null>(null);
+  const [nuovaSchedaFoto, setNuovaSchedaFoto] = useState<string | null>(null);
   const [schedaIdToOpen, setSchedaIdToOpen] = useState<string | null>(null);
+  const [schedeBannersVisteSet, setSchedeBannersVisteSet] = useState<Set<string>>(new Set());
 
   // Banner nuova richiesta prenotazione online
   const [showRichiestaPrenotaBanner, setShowRichiestaPrenotaBanner] = useState(false);
@@ -274,6 +276,20 @@ export default function App() {
           setGpBannersVistiSet(new Set(arr));
         } catch { /* noop */ }
       });
+
+    // Carica schede_banners_viste dal DB
+    supabase
+      .from('impostazioni')
+      .select('valore')
+      .eq('user_id', user.id)
+      .eq('chiave', 'schede_banners_viste')
+      .maybeSingle()
+      .then(({ data }) => {
+        try {
+          const arr: string[] = JSON.parse(data?.valore ?? '[]');
+          setSchedeBannersVisteSet(new Set(arr));
+        } catch { /* noop */ }
+      });
   }, [user]);
 
   async function dismissGpBanner(eventId: string) {
@@ -298,6 +314,33 @@ export default function App() {
         { onConflict: 'user_id,chiave' }
       );
     }
+  }
+
+  async function dismissSchedaBannerDb(schedaId: string) {
+    setShowNuovaSchedaBanner(false);
+    setNuovaSchedaCurrentId(null);
+    setNuovaSchedaFoto(null);
+    setSchedeBannersVisteSet(prev => {
+      const next = new Set(prev);
+      next.add(schedaId);
+      return next;
+    });
+    if (!user) return;
+    const { data: existing } = await supabase
+      .from('impostazioni')
+      .select('valore')
+      .eq('user_id', user.id)
+      .eq('chiave', 'schede_banners_viste')
+      .maybeSingle();
+    const current: string[] = (() => { try { return JSON.parse(existing?.valore ?? '[]'); } catch { return []; } })();
+    if (!current.includes(schedaId)) {
+      current.push(schedaId);
+      await supabase.from('impostazioni').upsert(
+        { user_id: user.id, chiave: 'schede_banners_viste', valore: JSON.stringify(current) },
+        { onConflict: 'user_id,chiave' }
+      );
+    }
+    setTimeout(checkAndShowPendingScheda, 400);
   }
 
   // Avviso invio appuntamenti e compleanni — eseguito una volta al caricamento
@@ -664,48 +707,39 @@ export default function App() {
     };
   }, []);
 
-  // Helpers localStorage per schede già mostrate
-  function getSchedeDismissed(): Set<string> {
-    try { return new Set(JSON.parse(localStorage.getItem('nuova_scheda_dismissed') || '[]')); }
-    catch { return new Set(); }
-  }
-  function markSchedaDismissed(id: string) {
-    const s = getSchedeDismissed();
-    s.add(id);
-    localStorage.setItem('nuova_scheda_dismissed', JSON.stringify([...s]));
+  // Helpers DB per schede già mostrate (sostituisce localStorage)
+  function isSchedaVista(id: string): boolean {
+    return schedeBannersVisteSet.has(id);
   }
 
-  function mostraSchedaBanner(id: string, nome: string, cognome: string) {
+  function mostraSchedaBanner(id: string, nome: string, cognome: string, fotoUrl?: string | null) {
+    if (isSchedaVista(id)) return;
     const n = [nome, cognome].filter(Boolean).join(' ') || 'Una cliente';
     setNuovaSchedaCurrentId(id);
     setNuovaSchedaNome(n);
+    setNuovaSchedaFoto(fotoUrl ?? null);
     setShowNuovaSchedaBanner(true);
   }
 
   async function checkAndShowPendingScheda() {
-    const dismissed = getSchedeDismissed();
     const { data } = await supabase
       .from('schede_clienti_da_confermare')
-      .select('id, nome, cognome')
+      .select('id, nome, cognome, foto_url')
       .eq('stato', 'in_attesa')
       .order('created_at', { ascending: false });
-    const unseen = (data || []).find(r => !dismissed.has(r.id));
-    if (unseen) mostraSchedaBanner(unseen.id, unseen.nome, unseen.cognome);
+    const unseen = (data || []).find(r => !schedeBannersVisteSet.has(r.id));
+    if (unseen) mostraSchedaBanner(unseen.id, unseen.nome, unseen.cognome, unseen.foto_url);
   }
 
   function dismissSchedaBanner() {
-    if (nuovaSchedaCurrentId) markSchedaDismissed(nuovaSchedaCurrentId);
-    setShowNuovaSchedaBanner(false);
-    setNuovaSchedaCurrentId(null);
-    setTimeout(checkAndShowPendingScheda, 400);
+    if (nuovaSchedaCurrentId) dismissSchedaBannerDb(nuovaSchedaCurrentId);
+    else { setShowNuovaSchedaBanner(false); }
   }
 
   function apriSchedaDalBanner() {
     if (!nuovaSchedaCurrentId) return;
     const id = nuovaSchedaCurrentId;
-    markSchedaDismissed(id);
-    setShowNuovaSchedaBanner(false);
-    setNuovaSchedaCurrentId(null);
+    dismissSchedaBannerDb(id);
     setSchedaIdToOpen(id);
     navigateTo('clienti');
   }
@@ -901,12 +935,9 @@ export default function App() {
           schema: 'public',
           table: 'schede_clienti_da_confermare',
         }, (payload) => {
-          const row = payload.new as { id?: string; nome?: string; cognome?: string };
-          if (row.id) {
-            const dismissed = getSchedeDismissed();
-            if (!dismissed.has(row.id)) {
-              mostraSchedaBanner(row.id, row.nome ?? '', row.cognome ?? '');
-            }
+          const row = payload.new as { id?: string; nome?: string; cognome?: string; foto_url?: string | null; stato?: string };
+          if (row.id && row.stato === 'in_attesa') {
+            mostraSchedaBanner(row.id, row.nome ?? '', row.cognome ?? '', row.foto_url ?? null);
           }
         })
         .on('system', {}, (status) => {
@@ -1107,12 +1138,29 @@ export default function App() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'impostazioni' }, (payload) => {
         if (destroyed) return;
         const row = payload.new as { chiave?: string; valore?: string; user_id?: string };
-        if (row.chiave === 'gift_pass_banners_visti' && row.user_id === user.id) {
+        if (row.user_id !== user.id) return;
+        if (row.chiave === 'gift_pass_banners_visti') {
           try {
             const arr: string[] = JSON.parse(row.valore ?? '[]');
             const set = new Set(arr);
             setGpBannersVistiSet(set);
             setGpPopups(prev => prev.filter(p => !set.has(p.eventId)));
+          } catch { /* noop */ }
+        }
+        if (row.chiave === 'schede_banners_viste') {
+          try {
+            const arr: string[] = JSON.parse(row.valore ?? '[]');
+            const set = new Set(arr);
+            setSchedeBannersVisteSet(set);
+            // Se il banner attivo e' nella lista visti, nascondilo
+            setNuovaSchedaCurrentId(prev => {
+              if (prev && set.has(prev)) {
+                setShowNuovaSchedaBanner(false);
+                setNuovaSchedaFoto(null);
+                return null;
+              }
+              return prev;
+            });
           } catch { /* noop */ }
         }
       })
@@ -1421,9 +1469,14 @@ export default function App() {
           className="fixed left-1/2 -translate-x-1/2 z-[101] w-full max-w-md px-4 transition-all duration-300"
           style={{ top: showReminderBanner ? '6rem' : '1rem' }}
         >
-          <div className="bg-pink-50 border border-pink-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
-            <div className="w-9 h-9 rounded-xl bg-pink-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <ClipboardList size={16} className="text-pink-500" />
+          <div className="bg-pink-50 border border-pink-300 rounded-2xl shadow-xl px-4 py-3.5 flex items-center gap-3 animate-bounce-once">
+            {/* Avatar con foto o iniziali */}
+            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-pink-200 flex-shrink-0">
+              {nuovaSchedaFoto
+                ? <img src={nuovaSchedaFoto} alt={nuovaSchedaNome} className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-pink-100 flex items-center justify-center text-pink-500 font-bold text-sm">
+                    {nuovaSchedaNome.charAt(0).toUpperCase() || <ClipboardList size={15} />}
+                  </div>}
             </div>
             <button className="flex-1 text-left" onClick={apriSchedaDalBanner}>
               <p className="text-sm font-bold text-pink-900">Nuova scheda da confermare!</p>
