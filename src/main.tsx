@@ -55,6 +55,13 @@ const prenotaUserId =
   window.location.hash.match(/[?&]uid=([^&]+)/)?.[1] ??
   SALON_OWNER_ID;
 
+// Passaporto cliente per la pagina recensioni personalizzata
+const recensioniClienteId =
+  params.get('id') ??
+  hashParams.get('id') ??
+  window.location.hash.match(/[?&]id=([^&]+)/)?.[1] ??
+  null;
+
 if (!isRegistrazione && !isPrenotazione && !isRecensioni) {
   startAutoBackupWatcher();
   startAutoFichesWatcher();
@@ -65,7 +72,7 @@ createRoot(document.getElementById('root')!).render(
     {isRegistrazione ? (
       <RegistrazioneCliente />
     ) : isRecensioni ? (
-      <RecensioniPage userId={prenotaUserId} />
+      <RecensioniPage userId={prenotaUserId} clienteId={recensioniClienteId} />
     ) : isPrenotazione ? (
       <PrenotazioneOnline userId={prenotaUserId} />
     ) : (

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key, Pencil } from 'lucide-react';
+import { DEFAULT_TESTI, NOME_VARIANTE, getTestoKey } from '../lib/recensioniUtils';
 import { isOwnerBuild, generateLocalOtp, generateCloudOtp } from '../lib/license';
 import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 import { BENVENUTO_DEFAULT, type BenvenutoConfig } from '../components/BenvenutoModal';
@@ -18,7 +19,7 @@ import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'testi_recensioni' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -61,7 +62,8 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'template_comunicazioni') return <PaginaTemplateComunicazioni onBack={() => setSub(null)} />;
   if (sub === 'qrcode') return <PaginaQRCode onBack={() => setSub(null)} />;
   if (sub === 'qr_gestionale') return <PaginaQrGestionale onBack={() => setSub(null)} setSub={setSub} />;
-  if (sub === 'qr_google') return <PaginaQrGoogle onBack={() => setSub('qr_gestionale')} />;
+  if (sub === 'qr_google') return <PaginaQrGoogle onBack={() => setSub('qr_gestionale')} setSub={setSub} />;
+  if (sub === 'testi_recensioni') return <PaginaTestiRecensioni onBack={() => setSub('qr_google')} />;
   if (sub === 'backup') return <PaginaBackup onBack={() => setSub(null)} />;
   if (sub === 'connessione') return <PaginaConnessione onBack={() => setSub(null)} />;
   if (sub === 'cartelle') return <PaginaCartelleSalvataggio onBack={() => setSub(null)} />;
@@ -1872,7 +1874,7 @@ const QR_FORMATO_GOOGLE_MM: Record<string, [number, number]> = {
   square: [100, 100],
 };
 
-function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
+function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: SubPage) => void }) {
   const { user } = useAuth();
   const [googleLink, setGoogleLink] = useState('');
   const [linkDraft, setLinkDraft] = useState('');
@@ -2248,16 +2250,23 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
+      {/* Varianti testi per categoria */}
+      <button
+        onClick={() => setSub('testi_recensioni')}
+        className="w-full flex items-center gap-4 px-5 py-4 bg-white rounded-2xl border border-stone-200 shadow-sm hover:bg-stone-50 transition-colors group text-left"
+      >
+        <div className="w-10 h-10 rounded-xl bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 transition-colors">
+          <MessageSquare size={18} className="text-blue-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-stone-800">Personalizza testi per categoria</p>
+          <p className="text-xs text-stone-400 mt-0.5">Modifica i messaggi WhatsApp per ogni tipo di servizio (schiariture, colore, taglio...)</p>
+        </div>
+        <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
+      </button>
+
       {!googleLink && (
         <div className="text-center py-8 bg-stone-50 rounded-2xl border border-dashed border-stone-300">
-          <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mx-auto mb-3">
-            <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-          </div>
           <p className="text-sm font-semibold text-stone-600">Nessun link configurato</p>
           <p className="text-xs text-stone-400 mt-1">Aggiungi il link Google qui sopra per generare il QR</p>
         </div>
@@ -6229,9 +6238,13 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
   const [compleannoAttivo, setCompleannoAttivo] = useState(true);
   const [compleannoOrario, setCompleannoOrario] = useState('09:00');
 
+  // Promemoria Recensioni
+  const [recensioniAttivo, setRecensioniAttivo] = useState(false);
+  const [recensioniOrario, setRecensioniOrario] = useState('19:00');
+
   useEffect(() => {
     (async () => {
-      const [g, fo, infa, inoo, paa, pad, paa2, wa, wao, ca, co] = await Promise.all([
+      const [g, fo, infa, inoo, paa, pad, paa2, wa, wao, ca, co, ra, ro] = await Promise.all([
         getImpostazione('promemoria_convalida_giorni'),
         getImpostazione('promemoria_convalida_orario'),
         getImpostazione('banner_in_forse_attivo'),
@@ -6243,6 +6256,8 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
         getImpostazione('avviso_appuntamenti_orario'),
         getImpostazione('banner_compleanno_attivo'),
         getImpostazione('banner_compleanno_orario'),
+        getImpostazione('banner_recensioni_attivo'),
+        getImpostazione('orario_promemoria_recensioni'),
       ]);
       if (g) { try { setFicheGiorni(JSON.parse(g)); } catch { /* keep default */ } }
       if (fo) setFicheOrario(fo);
@@ -6255,6 +6270,8 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
       if (wao) setAvvisoAppOrario(wao);
       setCompleannoAttivo(ca !== 'false');
       if (co) setCompleannoOrario(co);
+      setRecensioniAttivo(ra === 'true');
+      if (ro) setRecensioniOrario(ro);
       setLoading(false);
     })();
   }, []);
@@ -6283,6 +6300,8 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
         setImpostazione('avviso_appuntamenti_orario', avvisoAppOrario, uid),
         setImpostazione('banner_compleanno_attivo', String(compleannoAttivo), uid),
         setImpostazione('banner_compleanno_orario', compleannoOrario, uid),
+        setImpostazione('banner_recensioni_attivo', String(recensioniAttivo), uid),
+        setImpostazione('orario_promemoria_recensioni', recensioniOrario, uid),
       ]);
       setSaving(false);
       setFeedback({ tipo: 'ok', msg: 'Impostazioni avvisi salvate.' });
@@ -6543,6 +6562,38 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
                 )}
               </div>
               <p className="text-xs text-stone-400 mt-2">Il banner compare nell'agenda a partire da quest'ora</p>
+            </div>
+          )}
+        </div>
+
+        {/* Promemoria Recensioni Google */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className={`px-6 py-4 flex items-center gap-3 ${recensioniAttivo ? 'border-b border-stone-100' : ''}`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${recensioniAttivo ? 'bg-blue-50' : 'bg-stone-100'}`}>
+              <Star size={16} className={recensioniAttivo ? 'text-blue-600' : 'text-stone-400'} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-stone-800">Promemoria Recensioni Google</h3>
+              <p className="text-xs text-stone-500">Avviso serale per inviare la richiesta recensione alle clienti del giorno prima</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setRecensioniAttivo(v => !v); setFeedback(null); }}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${recensioniAttivo ? 'bg-blue-500' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${recensioniAttivo ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          {recensioniAttivo && (
+            <div className="px-6 py-5">
+              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
+              <input
+                type="time"
+                value={recensioniOrario}
+                onChange={e => { setRecensioniOrario(e.target.value); setFeedback(null); }}
+                className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
+              />
+              <p className="text-xs text-stone-400 mt-2">Il banner compare ogni sera a quest'ora — clicca per inviare via WhatsApp</p>
             </div>
           )}
         </div>
@@ -9845,6 +9896,186 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── PaginaTestiRecensioni ────────────────────────────────────────────────────
+
+const TUTTE_VARIANTI_REC: Array<{ categoria: string; hasTaglio: boolean }> = [
+  { categoria: 'schiariture', hasTaglio: true },
+  { categoria: 'schiariture', hasTaglio: false },
+  { categoria: 'colore_organico', hasTaglio: true },
+  { categoria: 'colore_organico', hasTaglio: false },
+  { categoria: 'colore', hasTaglio: true },
+  { categoria: 'colore', hasTaglio: false },
+  { categoria: 'taglio_solo', hasTaglio: false },
+  { categoria: 'hairtouch', hasTaglio: true },
+  { categoria: 'hairtouch', hasTaglio: false },
+  { categoria: 'stiraggio_permanente', hasTaglio: true },
+  { categoria: 'stiraggio_permanente', hasTaglio: false },
+  { categoria: 'trattamento_keratina', hasTaglio: true },
+  { categoria: 'trattamento_keratina', hasTaglio: false },
+  { categoria: 'extension', hasTaglio: true },
+  { categoria: 'extension', hasTaglio: false },
+  { categoria: 'olaplex', hasTaglio: true },
+  { categoria: 'olaplex', hasTaglio: false },
+  { categoria: 'trattamento_rigenerante', hasTaglio: true },
+  { categoria: 'trattamento_rigenerante', hasTaglio: false },
+];
+
+function PaginaTestiRecensioni({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const [testi, setTesti] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [feedbackRec, setFeedbackRec] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('testi_recensioni_dinamici')
+      .select('categoria_principale,has_taglio,testo_completo')
+      .eq('user_id', user.id)
+      .then(({ data }) => {
+        const map: Record<string, string> = {};
+        for (const row of (data ?? []) as { categoria_principale: string; has_taglio: boolean; testo_completo: string }[]) {
+          map[getTestoKey(row.categoria_principale as any, row.has_taglio)] = row.testo_completo;
+        }
+        setTesti(map);
+      });
+  }, [user]);
+
+  async function handleSaveRec(key: string) {
+    if (!user) return;
+    const testo = (drafts[key] ?? '').trim();
+    if (!testo) return;
+    setSaving(true);
+    const parts = key.split('|');
+    const categoria_principale = parts[0];
+    const has_taglio = parts[1] === 'true';
+    await supabase.from('testi_recensioni_dinamici').upsert(
+      { user_id: user.id, categoria_principale, has_taglio, testo_completo: testo, nome_variante: NOME_VARIANTE[key] ?? key },
+      { onConflict: 'user_id,categoria_principale,has_taglio' }
+    );
+    setTesti(prev => ({ ...prev, [key]: testo }));
+    setEditingKey(null);
+    setSaving(false);
+    setFeedbackRec('Salvato!');
+    setTimeout(() => setFeedbackRec(null), 2000);
+  }
+
+  async function handleResetRec(key: string) {
+    if (!user) return;
+    const parts = key.split('|');
+    const categoria_principale = parts[0];
+    const has_taglio = parts[1] === 'true';
+    await supabase.from('testi_recensioni_dinamici').delete()
+      .eq('user_id', user.id)
+      .eq('categoria_principale', categoria_principale)
+      .eq('has_taglio', has_taglio);
+    setTesti(prev => { const n = { ...prev }; delete n[key]; return n; });
+    setEditingKey(null);
+    setFeedbackRec('Ripristinato al default');
+    setTimeout(() => setFeedbackRec(null), 2000);
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-5">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors text-stone-500 hover:text-stone-800">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Testi per Categoria</h2>
+          <p className="text-sm text-stone-500 mt-0.5">Messaggio WhatsApp inviato in base al servizio della cliente</p>
+        </div>
+      </div>
+
+      {feedbackRec && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
+          <Check size={14} /> {feedbackRec}
+        </div>
+      )}
+
+      <p className="text-xs text-stone-400 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 leading-relaxed">
+        Ogni variante viene usata automaticamente in base all'ultimo servizio della cliente. Se non personalizzata, viene usato il testo di default predefinito. Le modifiche si sincronizzano su tutti i dispositivi.
+      </p>
+
+      {TUTTE_VARIANTI_REC.map(({ categoria, hasTaglio }) => {
+        const key = getTestoKey(categoria as any, hasTaglio);
+        const testoAttuale = testi[key] ?? DEFAULT_TESTI[key] ?? '';
+        const isPersonalizzato = !!testi[key];
+        const isEdit = editingKey === key;
+
+        return (
+          <div key={key} className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 flex items-center justify-between border-b border-stone-100">
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold text-stone-800">{NOME_VARIANTE[key] ?? key}</span>
+                {isPersonalizzato && (
+                  <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Personalizzato</span>
+                )}
+              </div>
+              {!isEdit && (
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => { setDrafts(prev => ({ ...prev, [key]: testoAttuale })); setEditingKey(key); }}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl text-xs font-semibold transition-colors"
+                  >
+                    <Pencil size={11} /> Modifica
+                  </button>
+                  {isPersonalizzato && (
+                    <button
+                      onClick={() => handleResetRec(key)}
+                      className="px-3 py-1.5 bg-stone-100 hover:bg-red-50 text-stone-500 hover:text-red-500 rounded-xl text-xs font-semibold transition-colors"
+                    >
+                      Default
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4">
+              {isEdit ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={drafts[key] ?? ''}
+                    onChange={e => setDrafts(prev => ({ ...prev, [key]: e.target.value }))}
+                    rows={9}
+                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-700 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none leading-relaxed"
+                  />
+                  <div className="flex gap-2 items-center">
+                    <button
+                      onClick={() => handleSaveRec(key)}
+                      disabled={saving || !(drafts[key] ?? '').trim()}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors"
+                    >
+                      {saving ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={12} />}
+                      Salva
+                    </button>
+                    <button
+                      onClick={() => setEditingKey(null)}
+                      className="px-4 py-2 text-stone-500 hover:text-stone-700 rounded-xl text-xs font-medium"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      onClick={() => setDrafts(prev => ({ ...prev, [key]: DEFAULT_TESTI[key] ?? '' }))}
+                      className="ml-auto px-3 py-2 text-stone-400 hover:text-stone-600 rounded-xl text-xs font-medium"
+                    >
+                      Ripristina default
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-stone-600 leading-relaxed whitespace-pre-line line-clamp-4">{testoAttuale}</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

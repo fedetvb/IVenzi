@@ -27,7 +27,7 @@ import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing, Star, Gift, HelpCircle } from 'lucide-react';
 import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
-import AiChat from './components/AiChat';
+import RecensioniReminderModal from './components/RecensioniReminderModal';
 import { InForseModal, loadAvvisoInForse, type ClienteInForseEntry } from './components/InForseModal';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione, registerBrowserLocalOps } from './lib/localDb';
 import { isOwnerBuild, getLicenseState } from './lib/license';
@@ -116,6 +116,9 @@ export default function App() {
 
   // Banner promemoria invio messaggi appuntamento (all'avvio)
   const [showAppBanner, setShowAppBanner] = useState(false);
+
+  // Modal promemoria recensioni Google
+  const [showRecensioniModal, setShowRecensioniModal] = useState(false);
 
   // Banner appuntamenti in forse
   const [showInForseBanner, setShowInForseBanner] = useState(false);
@@ -424,6 +427,30 @@ export default function App() {
     const id = setInterval(check, 20_000);
     return () => clearInterval(id);
   }, []);
+
+  // Banner promemoria recensioni — controlla ogni 30 secondi, spara una volta all'orario configurato
+  useEffect(() => {
+    if (!user) return;
+    const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    let lastFiredMinuteRec = '';
+    const checkRec = async () => {
+      const attivo = await getImpostazione('banner_recensioni_attivo');
+      if (attivo !== 'true') return;
+      const orario = await getImpostazione('orario_promemoria_recensioni') ?? '19:00';
+      const nowIt = fmt.format(new Date());
+      if (nowIt !== orario) return;
+      if (lastFiredMinuteRec === nowIt) return;
+      lastFiredMinuteRec = nowIt;
+      const todayKey = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+      const lsKey = `recensioni_banner_shown_${todayKey}_${orario.replace(':', '')}`;
+      if (localStorage.getItem(lsKey)) return;
+      localStorage.setItem(lsKey, '1');
+      setShowRecensioniModal(true);
+    };
+    checkRec();
+    const id = setInterval(checkRec, 30_000);
+    return () => clearInterval(id);
+  }, [user]);
 
   // Controlla se SQLite e' pronto in Electron; se non lo e', si usa Supabase direttamente
   useEffect(() => {
@@ -1827,6 +1854,14 @@ export default function App() {
         <BirthdayModal
           clienti={birthdayClienti}
           onClose={() => setShowBirthdayModal(false)}
+        />
+      )}
+
+      {/* Modal promemoria recensioni Google */}
+      {showRecensioniModal && user && (
+        <RecensioniReminderModal
+          userId={user.id}
+          onClose={() => setShowRecensioniModal(false)}
         />
       )}
 
