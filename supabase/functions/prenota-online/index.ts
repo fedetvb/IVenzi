@@ -247,7 +247,7 @@ Deno.serve(async (req: Request) => {
 
     const { dayStart, dayEnd } = italianDayUtcBounds(data);
 
-    const [parrRes, appRes, richiesteRes] = await Promise.all([
+    const [parrRes, appRes, assenzeRes, richiesteRes] = await Promise.all([
       sb.from("parrucchieri").select("id,nome,colore").eq("user_id", userId).eq("attivo", true).order("nome"),
       sb.from("appuntamenti")
         .select("parrucchiere_id,data_ora,durata_minuti")
@@ -255,6 +255,10 @@ Deno.serve(async (req: Request) => {
         .gte("data_ora", dayStart)
         .lte("data_ora", dayEnd)
         .neq("stato", "cancellato"),
+      sb.from("assenze_parrucchieri")
+        .select("parrucchiere_id,ora_inizio,data_inizio,data_fine")
+        .lte("data_inizio", data)
+        .gte("data_fine", data),
       sb.from("richieste_appuntamento")
         .select("parrucchiere_id,data_ora,parrucchiere2_id,data_ora2")
         .eq("user_id", userId)
@@ -291,8 +295,20 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const fullDayAbsentParr = new Set<string>();
+    const partialAbsenceParr: Record<string, number> = {};
+    for (const a of (assenzeRes.data ?? []) as { parrucchiere_id: string; ora_inizio: string | null }[]) {
+      if (!a.ora_inizio) fullDayAbsentParr.add(a.parrucchiere_id);
+      else {
+        const [ah, am] = a.ora_inizio.substring(0, 5).split(":").map(Number);
+        partialAbsenceParr[a.parrucchiere_id] = ah * 60 + am;
+      }
+    }
+
     const liberi = (parrRes.data ?? []).filter((p) => {
       if (p.id === escludiId) return false;
+      if (fullDayAbsentParr.has(p.id)) return false;
+      if (partialAbsenceParr[p.id] !== undefined && startMin >= partialAbsenceParr[p.id]) return false;
       const busy = busyByParr[p.id] ?? [];
       return !busy.some((b) => startMin < b.end && endMin > b.start);
     });
@@ -326,7 +342,6 @@ Deno.serve(async (req: Request) => {
           .neq("stato", "cancellato"),
         sb.from("assenze_parrucchieri")
           .select("parrucchiere_id,ora_inizio,data_inizio,data_fine")
-          .eq("user_id", userId)
           .lte("data_inizio", data)
           .gte("data_fine", data),
         sb.from("richieste_appuntamento")
