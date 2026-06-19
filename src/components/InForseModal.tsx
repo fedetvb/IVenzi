@@ -127,7 +127,7 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
                         </p>
                       </div>
                       <button
-                        onClick={() => apriWhatsApp(c.telefono, testo)}
+                        onClick={() => { apriWhatsApp(c.telefono, testo); onClose(); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
                       >
                         <MessageCircle size={13} />

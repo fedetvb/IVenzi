@@ -670,7 +670,7 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
                         <p className="text-xs text-stone-400">{c.telefono} · ore {c.ora}</p>
                       </div>
                       <button
-                        onClick={() => apriWhatsApp(c.telefono, testoCompleto)}
+                        onClick={() => { apriWhatsApp(c.telefono, testoCompleto); onClose(); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
                       >
                         <MessageCircle size={13} />
