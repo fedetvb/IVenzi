@@ -3094,6 +3094,23 @@ async function runAutoFichesForDate(dateStr: string, saveXls: boolean): Promise<
   }
 }
 
+function notifyFichesError(msg: string) {
+  const id = 'fiches-auto-error-toast';
+  if (document.getElementById(id)) return;
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = [
+    'position:fixed', 'bottom:1.25rem', 'right:1.25rem', 'z-index:9999',
+    'background:#fef2f2', 'color:#b91c1c', 'border:1px solid #fecaca',
+    'border-radius:0.75rem', 'padding:0.75rem 1rem', 'font-size:0.8125rem',
+    'font-family:inherit', 'box-shadow:0 4px 16px rgba(0,0,0,.12)',
+    'max-width:22rem', 'line-height:1.4',
+  ].join(';');
+  div.textContent = '\u26a0\ufe0f Salvataggio automatico fiches: ' + msg;
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 8000);
+}
+
 async function runAutoFichesIfDue(): Promise<void> {
   if (isMobileDevice()) return;
   if (localStorage.getItem(FS_ENABLED_KEY) !== '1') return;
@@ -3105,20 +3122,25 @@ async function runAutoFichesIfDue(): Promise<void> {
   const allowedDays = daysStr.split(',').map(Number);
 
   const dates = getMissingFichesDates(lastStr, now, hh, mm);
-  // For today, also check allowed days
   const filteredDates = dates.filter(d => {
     const todayStr = toLocalDateStrSimple(now);
-    if (d < todayStr) return true; // past dates always included
+    if (d < todayStr) return true;
     return allowedDays.includes(new Date(d + 'T12:00:00').getDay());
   });
 
   if (filteredDates.length === 0) return;
   const saveXls = localStorage.getItem(FS_XLS_KEY) === '1';
-  for (const dateStr of filteredDates) {
-    await runAutoFichesForDate(dateStr, saveXls);
+  try {
+    for (const dateStr of filteredDates) {
+      await runAutoFichesForDate(dateStr, saveXls);
+    }
+    const latestDate = filteredDates[filteredDates.length - 1];
+    localStorage.setItem(FS_LAST_KEY, latestDate);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    notifyFichesError(msg);
+    console.error('[auto-fiches]', err);
   }
-  const latestDate = filteredDates[filteredDates.length - 1];
-  localStorage.setItem(FS_LAST_KEY, latestDate);
 }
 
 export function startAutoFichesWatcher() {
@@ -3126,13 +3148,17 @@ export function startAutoFichesWatcher() {
 
   if (window.electronAPI) {
     window.electronAPI.onTriggerAutoFiches(async ({ dates, latestDate }) => {
+      const saveXls = localStorage.getItem(FS_XLS_KEY) === '1';
       try {
-        const saveXls = localStorage.getItem(FS_XLS_KEY) === '1';
         for (const dateStr of dates) {
           await runAutoFichesForDate(dateStr, saveXls);
         }
         await window.electronAPI!.markFichesDone(latestDate);
-      } catch { /* silenzioso */ }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        notifyFichesError(msg);
+        console.error('[auto-fiches electron]', err);
+      }
     });
   } else {
     runAutoFichesIfDue();
@@ -7940,7 +7966,24 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
           (window as any).electronAPI.getFichesSched(),
         ]);
         setPaths(p || {});
-        if (s) { setFsEnabled(s.enabled); setFsTime(s.time); setFsDays(s.days ?? [1, 2, 3, 4, 5]); setFsLast(s.last ?? ''); }
+        if (s) {
+          setFsEnabled(s.enabled);
+          // Usa il time dal processo main (fonte autorevole per il timer nativo)
+          setFsTime(s.time ?? localStorage.getItem(FS_TIME_KEY) ?? '20:00');
+          setFsDays(s.days ?? [1, 2, 3, 4, 5]);
+          // last: il renderer lo aggiorna in localStorage dopo ogni salvataggio
+          const lastFromMain = s.last ?? '';
+          const lastFromLocal = localStorage.getItem(FS_LAST_KEY) ?? '';
+          const last = lastFromMain > lastFromLocal ? lastFromMain : lastFromLocal;
+          setFsLast(last);
+        } else {
+          // Nessun dato dal main: usa localStorage come fallback
+          setFsEnabled(localStorage.getItem(FS_ENABLED_KEY) === '1');
+          setFsTime(localStorage.getItem(FS_TIME_KEY) ?? '20:00');
+          const dr = localStorage.getItem(FS_DAYS_KEY);
+          setFsDays(dr ? dr.split(',').map(Number) : [1, 2, 3, 4, 5]);
+          setFsLast(localStorage.getItem(FS_LAST_KEY) ?? '');
+        }
       } else {
         setFsEnabled(localStorage.getItem(FS_ENABLED_KEY) === '1');
         setFsTime(localStorage.getItem(FS_TIME_KEY) ?? '20:00');
@@ -7977,14 +8020,25 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
 
   async function saveSched() {
     setSaving(true);
-    if (isElectronApp) {
-      await (window as any).electronAPI.setFichesSched({ enabled: fsEnabled, time: fsTime, days: fsDays, last: '' });
-    } else {
-      localStorage.setItem(FS_ENABLED_KEY, fsEnabled ? '1' : '0');
-      localStorage.setItem(FS_TIME_KEY, fsTime);
-      localStorage.setItem(FS_DAYS_KEY, fsDays.join(','));
-    }
+    // Scrivi sempre nel localStorage (fonte di verita' per il renderer)
+    localStorage.setItem(FS_ENABLED_KEY, fsEnabled ? '1' : '0');
+    localStorage.setItem(FS_TIME_KEY, fsTime);
+    localStorage.setItem(FS_DAYS_KEY, fsDays.join(','));
     localStorage.setItem(FS_XLS_KEY, fsXls ? '1' : '0');
+    // In Electron: sincronizza anche il processo main (per il timer nativo)
+    if (isElectronApp) {
+      try {
+        const current = await (window as any).electronAPI.getFichesSched();
+        await (window as any).electronAPI.setFichesSched({
+          enabled: fsEnabled,
+          time: fsTime,
+          days: fsDays,
+          last: current?.last ?? localStorage.getItem(FS_LAST_KEY) ?? '',
+        });
+      } catch (err) {
+        console.error('[saveSched electron]', err);
+      }
+    }
     setSaving(false);
     showFlash('Impostazioni salvate');
   }
