@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import type { LocalProfile } from '../electron.d';
 
-type Mode = 'login' | 'register' | 'reset-email' | 'reset-otp' | 'offline';
+type Mode = 'login' | 'register' | 'reset-email' | 'offline';
 
 export default function Login() {
   const { offlineSignIn } = useAuth();
@@ -16,9 +16,6 @@ export default function Login() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [resetEmail, setResetEmail] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
   const [localProfiles, setLocalProfiles] = useState<LocalProfile[]>([]);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -31,12 +28,10 @@ export default function Login() {
     return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
   }, []);
 
-  // Carica i profili locali salvati (solo in Electron)
   useEffect(() => {
     if (!window.electronAPI?.auth) return;
     window.electronAPI.auth.getProfiles().then(profiles => {
       setLocalProfiles(profiles);
-      // Se offline e ci sono profili salvati, vai subito alla schermata offline
       if (!navigator.onLine && profiles.length > 0) {
         setMode('offline');
         setEmail(profiles[0].email);
@@ -44,7 +39,6 @@ export default function Login() {
     }).catch(() => {});
   }, []);
 
-  // Quando la connettivita' cambia, aggiorna la modalita'
   useEffect(() => {
     if (isOffline && localProfiles.length > 0 && mode === 'login') {
       setMode('offline');
@@ -78,7 +72,6 @@ export default function Login() {
       try {
         const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) {
-          // Distingui errori di rete da errori di credenziali
           const isNetworkErr = err.message.toLowerCase().includes('fetch') ||
             err.message.toLowerCase().includes('network') ||
             err.message.toLowerCase().includes('failed') ||
@@ -89,19 +82,15 @@ export default function Login() {
             setError(translateError(err.message));
           }
         } else if (data.user) {
-          // Login riuscito: salva le credenziali per uso offline futuro
           await saveLocalProfile(data.user.id, email, password);
         }
       } catch {
         if (window.electronAPI?.auth) networkError = true;
         else setError('Errore di connessione. Verifica la tua connessione internet.');
       }
-      // Fallback offline Electron: Supabase non raggiungibile ma c'e' un profilo locale
       if (networkError) {
         await handleOfflineLogin();
       }
-      // Caso speciale: l'utente si era registrato offline e non ha ancora un account Supabase.
-      // Se c'è una registrazione cloud pendente, creiamo l'account ora e poi logghiamo.
       if (!networkError && window.electronAPI?.auth) {
         const pendingKey = `pending_cloud_reg:${email.toLowerCase()}`;
         const pendingPwd = localStorage.getItem(pendingKey);
@@ -112,15 +101,13 @@ export default function Login() {
             if (signUpData?.user) {
               localStorage.removeItem(pendingKey);
               await saveLocalProfile(signUpData.user.id, email, password);
-              // signInWithPassword per ottenere la sessione attiva
               const { data: loginData } = await supabase.auth.signInWithPassword({ email, password });
               if (loginData?.user) await saveLocalProfile(loginData.user.id, email, password);
             }
-          } catch { /* ignora, l'utente vedrà l'errore originale */ }
+          } catch { /* ignora */ }
         }
       }
     } else if (mode === 'register') {
-      // Se siamo in Electron e offline, registrazione locale con SQLite
       if (window.electronAPI?.auth && !navigator.onLine) {
         await handleOfflineRegister();
       } else {
@@ -150,9 +137,7 @@ export default function Login() {
         }
       }
     } else if (mode === 'reset-email') {
-      await handleSendOtp();
-    } else if (mode === 'reset-otp') {
-      await handleVerifyOtp();
+      await handleResetEmail();
     }
 
     setLoading(false);
@@ -163,34 +148,26 @@ export default function Login() {
       setError('Registrazione offline non disponibile in questa versione.');
       return;
     }
-    // Controlla che non esista già un profilo con questa email
     const existing = await window.electronAPI.auth.verifyPassword(email, password).catch(() => ({ ok: false }));
     if ((existing as { ok: boolean }).ok) {
       setError('Esiste già un account locale con questa email. Accedi direttamente.');
       return;
     }
-    // Genera un UUID locale e salva il profilo
     const localUserId = crypto.randomUUID();
     const res = await window.electronAPI.auth.saveProfile(localUserId, email, password);
     if (!res.ok) {
       setError(res.error ?? 'Impossibile creare il profilo locale.');
       return;
     }
-    // Segna che questo account deve ancora essere registrato su Supabase
-    // (viene rimosso dopo la creazione riuscita dell'account cloud)
     localStorage.setItem(`pending_cloud_reg:${email.toLowerCase()}`, password);
-
-    // Entra subito con il profilo locale
     offlineSignIn(localUserId, email);
-
-    // Prova subito la registrazione su Supabase se siamo online
     if (navigator.onLine) {
       supabase.auth.signUp({ email, password }).then(async ({ data }) => {
         if (data?.user) {
           localStorage.removeItem(`pending_cloud_reg:${email.toLowerCase()}`);
           await saveLocalProfile(data.user.id, email, password);
         }
-      }).catch(() => { /* la registrazione cloud verrà riprovata al prossimo avvio online */ });
+      }).catch(() => {});
     }
   }
 
@@ -204,67 +181,25 @@ export default function Login() {
       setError(res.error ?? 'Credenziali non valide.');
       return;
     }
-
-    // Accesso locale garantito: apre subito il database con i dati locali
     offlineSignIn(res.userId, res.email);
-
-    // Se internet e' disponibile, usa la stessa password per rinnovare
-    // il token Supabase in background. Se riesce, la sessione offline
-    // viene automaticamente sostituita da quella cloud e la sync riparte
-    // senza che l'utente debba fare nulla.
     if (navigator.onLine) {
       supabase.auth.signInWithPassword({ email, password }).then(async ({ data }) => {
         if (data?.user) {
-          // Aggiorna il profilo locale (gestisce anche la migrazione UUID se necessaria)
           await saveLocalProfile(data.user.id, email, password);
-          // onAuthStateChange in AuthContext aggiornera' automaticamente la sessione
         }
-      }).catch(() => { /* fallimento silenzioso: l'accesso offline rimane attivo */ });
+      }).catch(() => {});
     }
   }
 
-  async function handleSendOtp() {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  async function handleResetEmail() {
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/send-otp-reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
-        body: JSON.stringify({ email: resetEmail }),
+      const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/`,
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante l\'invio.');
-      setMode('reset-otp');
+      if (err) throw err;
+      setResetSuccess(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Errore durante l\'invio.');
-    }
-  }
-
-  async function handleVerifyOtp() {
-    if (newPassword.length < 6) {
-      setError('La password deve essere di almeno 6 caratteri.');
-      setLoading(false);
-      return;
-    }
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/verify-otp-reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
-        body: JSON.stringify({ email: resetEmail, code: otpCode, newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Errore durante la verifica.');
-      setResetSuccess(true);
-      setTimeout(() => {
-        setMode('login');
-        setResetEmail(''); setOtpCode(''); setNewPassword('');
-        setResetSuccess(false);
-        resetState();
-      }, 2500);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Errore durante la verifica.');
     }
   }
 
@@ -343,7 +278,7 @@ export default function Login() {
               <WifiOff size={15} className="text-amber-600 flex-shrink-0" />
               <p className="text-sm text-amber-800">
                 {isElectronOfflineRegister
-                  ? 'Sei offline. L\'account verrà creato localmente e sincronizzato con il cloud al primo accesso online.'
+                  ? "Sei offline. L'account verrà creato localmente e sincronizzato con il cloud al primo accesso online."
                   : 'Sei offline. Accedi con le credenziali salvate localmente.'}
               </p>
             </div>
@@ -355,15 +290,13 @@ export default function Login() {
               {mode === 'login' && 'Accedi al tuo account'}
               {mode === 'register' && (isElectronOfflineRegister ? 'Crea un account locale' : 'Crea un account')}
               {mode === 'reset-email' && 'Password dimenticata'}
-              {mode === 'reset-otp' && 'Inserisci il codice'}
             </h2>
             <p className="text-stone-500 text-sm mt-1">
-              {isOfflineMode && 'Inserisci le tue credenziali per continuare in modalita\' locale'}
+              {isOfflineMode && "Inserisci le tue credenziali per continuare in modalita' locale"}
               {mode === 'login' && 'Inserisci le tue credenziali per continuare'}
               {mode === 'register' && !isElectronOfflineRegister && 'Crea il tuo account per iniziare'}
               {mode === 'register' && isElectronOfflineRegister && 'I tuoi dati rimarranno locali fino alla sincronizzazione online'}
-              {mode === 'reset-email' && 'Inserisci la tua email per ricevere il codice di verifica'}
-              {mode === 'reset-otp' && `Abbiamo inviato un codice a 6 cifre a ${resetEmail}`}
+              {mode === 'reset-email' && 'Inserisci la tua email per ricevere il link di reset'}
             </p>
           </div>
 
@@ -383,7 +316,6 @@ export default function Login() {
                 </svg>
                 Continua con Google
               </button>
-
               <div className="flex items-center gap-3 my-6">
                 <div className="flex-1 h-px bg-stone-200" />
                 <span className="text-xs text-stone-400 font-medium">oppure</span>
@@ -392,19 +324,24 @@ export default function Login() {
             </>
           )}
 
-          {/* Reset success */}
-          {resetSuccess && (
+          {/* Reset email inviata con successo */}
+          {resetSuccess ? (
             <div className="flex flex-col items-center gap-4 py-8 text-center">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
                 <CheckCircle size={32} className="text-green-600" />
               </div>
-              <p className="text-green-700 font-semibold">Password aggiornata con successo!</p>
-              <p className="text-stone-500 text-sm">Verrai reindirizzato al login...</p>
+              <p className="text-green-700 font-semibold text-lg">Email inviata!</p>
+              <p className="text-stone-500 text-sm max-w-xs">
+                Controlla la casella di posta di <strong>{resetEmail}</strong> e clicca il link per reimpostare la password.
+              </p>
+              <button
+                onClick={() => { setMode('login'); setResetEmail(''); setResetSuccess(false); resetState(); }}
+                className="text-sm text-amber-600 hover:text-amber-700 font-medium mt-2 transition-colors"
+              >
+                Torna al login
+              </button>
             </div>
-          )}
-
-          {/* Form */}
-          {!resetSuccess && (
+          ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Reset email step */}
               {mode === 'reset-email' && (
@@ -425,51 +362,9 @@ export default function Login() {
                 </div>
               )}
 
-              {/* Reset OTP step */}
-              {mode === 'reset-otp' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Codice di verifica</label>
-                    <input
-                      type="text"
-                      value={otpCode}
-                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      required
-                      autoFocus
-                      placeholder="123456"
-                      maxLength={6}
-                      className="w-full px-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-center tracking-widest font-mono text-lg transition"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Nuova password</label>
-                    <div className="relative">
-                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                      <input
-                        type={showNewPassword ? 'text' : 'password'}
-                        value={newPassword}
-                        onChange={e => setNewPassword(e.target.value)}
-                        required
-                        placeholder="••••••••"
-                        minLength={6}
-                        className="w-full pl-9 pr-10 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowNewPassword(v => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-                      >
-                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-
               {/* Login / Register / Offline fields */}
               {(mode === 'login' || mode === 'register' || isOfflineMode) && (
                 <>
-                  {/* Selezione profilo se ci sono piu' account offline */}
                   {isOfflineMode && localProfiles.length > 1 && (
                     <div>
                       <label className="block text-sm font-medium text-stone-700 mb-1.5">Account</label>
@@ -555,27 +450,14 @@ export default function Login() {
                   ? 'Accedi'
                   : mode === 'register'
                   ? (isElectronOfflineRegister ? 'Crea account locale' : 'Crea account')
-                  : mode === 'reset-email'
-                  ? 'Invia codice via email'
-                  : 'Reimposta password'}
+                  : 'Invia link di reset'}
               </button>
-
-              {mode === 'reset-otp' && (
-                <button
-                  type="button"
-                  onClick={async () => { resetState(); setLoading(true); await handleSendOtp(); setLoading(false); }}
-                  disabled={loading}
-                  className="w-full text-xs text-stone-400 hover:text-amber-600 transition-colors py-1"
-                >
-                  Non hai ricevuto il codice? Reinvia
-                </button>
-              )}
             </form>
           )}
 
           {/* Footer links */}
           <div className="mt-6 text-center space-y-2">
-            {mode === 'login' && (
+            {mode === 'login' && !resetSuccess && (
               <>
                 <button
                   onClick={() => { setMode('reset-email'); setResetEmail(email); resetState(); }}
@@ -596,7 +478,7 @@ export default function Login() {
             )}
             {mode === 'register' && (
               <p className="text-sm text-stone-500">
-                Hai gia un account?{' '}
+                Hai già un account?{' '}
                 <button
                   onClick={() => { setMode('login'); resetState(); }}
                   className="text-amber-600 font-medium hover:text-amber-700"
@@ -605,9 +487,9 @@ export default function Login() {
                 </button>
               </p>
             )}
-            {(mode === 'reset-email' || mode === 'reset-otp') && (
+            {mode === 'reset-email' && !resetSuccess && (
               <button
-                onClick={() => { setMode('login'); setResetEmail(''); setOtpCode(''); setNewPassword(''); resetState(); }}
+                onClick={() => { setMode('login'); setResetEmail(''); resetState(); }}
                 className="text-sm text-stone-500 hover:text-amber-600 transition-colors"
               >
                 Torna al login
