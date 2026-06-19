@@ -323,6 +323,28 @@ export default function Layout({ currentPage, onNavigate, children, user, messag
       });
   }, []);
 
+  // Ping automatico identico al ping manuale: SELECT impostazioni + salva in localStorage
+  useEffect(() => {
+    const INTERVAL_MS = 12 * 60 * 60 * 1000; // ogni 12 ore
+
+    async function autoPing() {
+      try {
+        const { error } = await supabase.from('impostazioni').select('chiave').limit(1);
+        if (!error) {
+          const now = new Date().toISOString();
+          localStorage.setItem('keep_alive_last_ping', now);
+          localStorage.setItem('keep_alive_last_ping_tipo', 'automatico');
+        }
+      } catch {
+        // ping fallito silenziosamente
+      }
+    }
+
+    autoPing();
+    const timer = setInterval(autoPing, INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
+
   const handleInstall = async () => {
     if (!installPrompt) return;
     (installPrompt as BeforeInstallPromptEvent).prompt();
