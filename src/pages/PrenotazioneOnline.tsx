@@ -3707,7 +3707,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           </Card>
         )}
 
-        {/* STEP: Quiz Capelli */}
+        {/* STEP: Hair Therapist */}
         {step === 'quiz_capelli' && quizAnalizzando && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8 py-16 text-center px-4">
             <div className="relative">
@@ -3733,7 +3733,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   <ChevronLeft size={18} />
                 </button>
                 <div className="flex-1">
-                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Quiz Capelli</p>
+                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Hair Therapist</p>
                   <p className="text-xs text-stone-400">{quizStep + 1} di {QUIZ_DOMANDE.length}</p>
                 </div>
               </div>
@@ -4110,7 +4110,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                     onClick={() => { loadNovstralProdotti(); setQuizStep(0); setQuizRisposte([]); setMappaSalvata(false); setStep('quiz_capelli'); }}
                     className="w-full py-3.5 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-400 transition-colors"
                   >
-                    Inizia il Quiz Capelli — è gratis
+                    Inizia l'Hair Therapist — è gratis
                   </button>
                 </div>
               )}
