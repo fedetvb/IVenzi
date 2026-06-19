@@ -75,12 +75,18 @@ const LOCAL_ONLY_COLS = new Set([
   'foto_base64', 'foto_prima_base64', 'foto_dopo_base64', 'foto_base64_pendente',
 ]);
 
+// Campi obsoleti da rimuovere per tabella (presenti in IndexedDB ma non nel DB remoto)
+const TABLE_EXTRA_STRIP: Record<string, Set<string>> = {
+  gift_pass: new Set(['attiva']),  // campo con A (scorretto) — 'attivo' con O resta intatto
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function stripLocalCols(row: Record<string, unknown>): Record<string, unknown> {
+function stripLocalCols(row: Record<string, unknown>, table?: string): Record<string, unknown> {
+  const extra = table ? (TABLE_EXTRA_STRIP[table] ?? null) : null;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
-    if (!LOCAL_ONLY_COLS.has(k)) out[k] = v;
+    if (!LOCAL_ONLY_COLS.has(k) && !(extra?.has(k))) out[k] = v;
   }
   return out;
 }
@@ -282,7 +288,7 @@ export async function syncBrowserToSupabase(userId: string): Promise<void> {
               continue;
             }
 
-            const rowToSync = { ...stripLocalCols(entry.data), user_id: userId, updated_at: entry.updated_at };
+            const rowToSync = { ...stripLocalCols(entry.data, table), user_id: userId, updated_at: entry.updated_at };
             const conflictCol = TABLE_CONFLICT_COLS[table] ?? 'id';
             const { error } = await supabase.from(table).upsert(rowToSync, { onConflict: conflictCol });
             if (!error) {
@@ -381,7 +387,7 @@ export async function pushRowNow(
 ): Promise<void> {
   if (!navigator.onLine) return;
   try {
-    const rowToSync = { ...stripLocalCols(row), user_id: userId };
+    const rowToSync = { ...stripLocalCols(row, table), user_id: userId };
 
     // Timestamp-check: non sovrascrivere se Supabase ha una versione più recente
     if (row.updated_at && row.id) {
@@ -536,7 +542,7 @@ async function _pushDirtyRowsElectron(
   dirtyRows: Record<string, unknown>[],
   userId: string
 ): Promise<void> {
-  const rows = dirtyRows.map(row => ({ ...stripLocalCols(row), user_id: userId }));
+  const rows = dirtyRows.map(row => ({ ...stripLocalCols(row, table), user_id: userId }));
   const ids = rows.map(r => r.id as string).filter(Boolean);
 
   // Timestamp-check bulk
