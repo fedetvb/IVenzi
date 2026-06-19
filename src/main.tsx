@@ -40,7 +40,7 @@ const isPrenotazione =
   params.get('prenota') === '1' ||
   hashParams.get('prenota') === '1';
 
-const SALON_OWNER_ID = '1c7bb67b-523f-4f7a-aab2-166022a91be2';
+const SALON_OWNER_ID = 'fc9daf6c-ce30-4941-a8ca-18d99e5e9cc3';
 
 const prenotaUserId =
   params.get('uid') ??
