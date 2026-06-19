@@ -1359,6 +1359,9 @@ interface GiftPass {
   donata: boolean;
   note: string;
   created_at: string;
+  // arricchiti al caricamento
+  _destinataria_nome_rubrica?: string | null;
+  _destinataria_gia_cliente?: boolean;
 }
 
 function statoGiftPass(gp: GiftPass): 'da_ritirare' | 'attivata' | 'utilizzata' | 'scaduta' {
@@ -2089,7 +2092,47 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
       dbSelect({ table: 'gift_pass', filters: [{ col: 'deleted_at', op: 'is_null' }], orderBy: [{ col: 'created_at', asc: false }] }),
       getImpostazione('azienda_nome'),
     ]);
-    setCards((res.data || []) as GiftPass[]);
+    const raw = (res.data || []) as GiftPass[];
+
+    // Arricchisci: per le GP con attivata_at, recupera nome destinataria
+    const gpConRicevente = raw.filter(g => g.attivata_at);
+    if (gpConRicevente.length > 0) {
+      // Caso gia' cliente
+      const conClienteId = gpConRicevente.filter(g => g.destinataria_cliente_id);
+      // Caso nuova (scheda da confermare)
+      const senzaClienteId = gpConRicevente.filter(g => !g.destinataria_cliente_id);
+
+      const [clientiRes, schedeRes] = await Promise.all([
+        conClienteId.length > 0
+          ? supabase.from('clienti').select('id, nome, cognome').in('id', conClienteId.map(g => g.destinataria_cliente_id!))
+          : Promise.resolve({ data: [] }),
+        senzaClienteId.length > 0
+          ? supabase.from('schede_clienti_da_confermare').select('nome, cognome, codice_gift_pass').in('codice_gift_pass', senzaClienteId.map(g => g.codice))
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const clientiMap = new Map<string, string>();
+      for (const c of (clientiRes.data ?? []) as { id: string; nome: string; cognome: string }[]) {
+        clientiMap.set(c.id, `${c.nome} ${c.cognome}`.trim());
+      }
+      const schedeMap = new Map<string, string>();
+      for (const s of (schedeRes.data ?? []) as { nome: string; cognome: string; codice_gift_pass: string }[]) {
+        schedeMap.set(s.codice_gift_pass, `${s.nome} ${s.cognome}`.trim());
+      }
+
+      for (const g of raw) {
+        if (!g.attivata_at) continue;
+        if (g.destinataria_cliente_id && clientiMap.has(g.destinataria_cliente_id)) {
+          g._destinataria_nome_rubrica = clientiMap.get(g.destinataria_cliente_id) ?? null;
+          g._destinataria_gia_cliente = true;
+        } else if (!g.destinataria_cliente_id && schedeMap.has(g.codice)) {
+          g._destinataria_nome_rubrica = schedeMap.get(g.codice) ?? null;
+          g._destinataria_gia_cliente = false;
+        }
+      }
+    }
+
+    setCards(raw);
     setNomeSalone(sn ?? 'I Venzi');
     setLoading(false);
   }, []);
@@ -2202,6 +2245,20 @@ function GiftPassTab({ clienti }: { clienti: Cliente[] }) {
                           {copied === gp.codice ? <Check size={12} className="text-emerald-500" /> : <Copy size={11} className="text-stone-300" />}
                         </button>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATO_COLOR[stato]}`}>{STATO_LABEL[stato]}</span>
+                        {/* Badge donazione */}
+                        {gp.donata && !gp.attivata_at && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">Donata — in attesa</span>
+                        )}
+                        {gp.attivata_at && gp._destinataria_gia_cliente === false && gp._destinataria_nome_rubrica && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">
+                            Donata a {gp._destinataria_nome_rubrica} — nuova
+                          </span>
+                        )}
+                        {gp.attivata_at && gp._destinataria_gia_cliente === true && gp._destinataria_nome_rubrica && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                            Donata a {gp._destinataria_nome_rubrica}
+                          </span>
+                        )}
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${gp.tipo === 'prodotto' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
                           {gp.tipo === 'prodotto' ? 'Prodotto' : `€${gp.valore}`}
                         </span>

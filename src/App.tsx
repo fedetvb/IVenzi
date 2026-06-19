@@ -160,9 +160,22 @@ export default function App() {
   interface ReferralPopup { donatrice: string; nuovaCliente: string; tipoCarta: string }
   const [referralPopups, setReferralPopups] = useState<ReferralPopup[]>([]);
 
-  // Popup referral: "ha donato"
+  // Popup referral: "ha donato" (vecchio — mantenuto per compatibilità evento locale)
   interface DonazionePopup { donatrice: string }
   const [donazionePopups, setDonazionePopups] = useState<DonazionePopup[]>([]);
+
+  // Popup Gift Pass Realtime
+  interface GpBannerPopup {
+    eventId: string;
+    codice: string;
+    donatoreName: string;
+    donatriceFotoUrl: string | null;
+    tipo: 'donata' | 'attivata_nuova' | 'attivata_esistente';
+    riceventeName?: string;
+    riceventeFotoUrl?: string | null;
+  }
+  const [gpPopups, setGpPopups] = useState<GpBannerPopup[]>([]);
+  const [gpBannersVistiSet, setGpBannersVistiSet] = useState<Set<string>>(new Set());
 
   // Popup record ambasciatori
   interface RecordPopup { donatrice: string; count: number; isFirst: boolean }
@@ -247,7 +260,45 @@ export default function App() {
       setSuonoRichiesta(suono === 'squillo' ? 'squillo' : 'ping');
       if (vol !== null) setVolumeNotifiche(Math.max(0, Math.min(100, parseInt(vol) || 70)));
     });
+
+    // Carica bannersVisti dal DB
+    supabase
+      .from('impostazioni')
+      .select('valore')
+      .eq('user_id', user.id)
+      .eq('chiave', 'gift_pass_banners_visti')
+      .maybeSingle()
+      .then(({ data }) => {
+        try {
+          const arr: string[] = JSON.parse(data?.valore ?? '[]');
+          setGpBannersVistiSet(new Set(arr));
+        } catch { /* noop */ }
+      });
   }, [user]);
+
+  async function dismissGpBanner(eventId: string) {
+    setGpPopups(prev => prev.filter(p => p.eventId !== eventId));
+    setGpBannersVistiSet(prev => {
+      const next = new Set(prev);
+      next.add(eventId);
+      return next;
+    });
+    if (!user) return;
+    const { data: existing } = await supabase
+      .from('impostazioni')
+      .select('valore')
+      .eq('user_id', user.id)
+      .eq('chiave', 'gift_pass_banners_visti')
+      .maybeSingle();
+    const current: string[] = (() => { try { return JSON.parse(existing?.valore ?? '[]'); } catch { return []; } })();
+    if (!current.includes(eventId)) {
+      current.push(eventId);
+      await supabase.from('impostazioni').upsert(
+        { user_id: user.id, chiave: 'gift_pass_banners_visti', valore: JSON.stringify(current) },
+        { onConflict: 'user_id,chiave' }
+      );
+    }
+  }
 
   // Avviso invio appuntamenti e compleanni — eseguito una volta al caricamento
   useEffect(() => {
@@ -982,6 +1033,98 @@ export default function App() {
     };
   }, [user]);
 
+  // Realtime: banner Gift Pass (donata + attivata)
+  useEffect(() => {
+    if (!user) return;
+    let channelGp: ReturnType<typeof supabase.channel> | null = null;
+    let channelSync: ReturnType<typeof supabase.channel> | null = null;
+    let destroyed = false;
+
+    async function handleGpUpdate(payload: { new: Record<string, unknown>; old: Record<string, unknown> }) {
+      if (destroyed) return;
+      const n = payload.new;
+      const o = payload.old;
+
+      // Banner 1: donata appena impostata a true
+      if (n.donata === true && o.donata !== true && !n.attivata_at) {
+        const eventId = `${n.id}_donata`;
+        if (gpBannersVistiSet.has(eventId)) return;
+        const { data: don } = await supabase.from('clienti').select('nome, cognome, foto_url').eq('id', n.cliente_id as string).maybeSingle();
+        const donatoreName = don ? `${don.nome ?? ''} ${don.cognome ?? ''}`.trim() : (n.destinataria_nome as string ?? '');
+        if (!destroyed) {
+          setGpPopups(prev => [...prev, {
+            eventId,
+            codice: n.codice as string,
+            donatoreName,
+            donatriceFotoUrl: don?.foto_url ?? null,
+            tipo: 'donata',
+          }]);
+        }
+        return;
+      }
+
+      // Banner 2 & 3: attivata_at appena impostata (riscatto online)
+      if (n.attivata_at && !o.attivata_at) {
+        const eventId = `${n.id}_attivata`;
+        if (gpBannersVistiSet.has(eventId)) return;
+        const [donRes, riceventeRes] = await Promise.all([
+          n.cliente_id
+            ? supabase.from('clienti').select('nome, cognome, foto_url').eq('id', n.cliente_id as string).maybeSingle()
+            : Promise.resolve({ data: null }),
+          n.destinataria_cliente_id
+            ? supabase.from('clienti').select('nome, cognome, foto_url').eq('id', n.destinataria_cliente_id as string).maybeSingle()
+            : supabase.from('schede_clienti_da_confermare').select('nome, cognome, foto_url').eq('codice_gift_pass', n.codice as string).maybeSingle(),
+        ]);
+        const don = (donRes as { data: { nome?: string; cognome?: string; foto_url?: string } | null }).data;
+        const ric = (riceventeRes as { data: { nome?: string; cognome?: string; foto_url?: string } | null }).data;
+        const donatoreName = don ? `${don.nome ?? ''} ${don.cognome ?? ''}`.trim() : '';
+        const riceventeName = ric ? `${ric.nome ?? ''} ${ric.cognome ?? ''}`.trim() : '';
+        const tipo = n.destinataria_cliente_id ? 'attivata_esistente' : 'attivata_nuova';
+        if (!destroyed) {
+          setGpPopups(prev => [...prev, {
+            eventId,
+            codice: n.codice as string,
+            donatoreName,
+            donatriceFotoUrl: don?.foto_url ?? null,
+            tipo,
+            riceventeName,
+            riceventeFotoUrl: ric?.foto_url ?? null,
+          }]);
+        }
+      }
+    }
+
+    channelGp = supabase
+      .channel(`gp_realtime_${Date.now()}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gift_pass' }, (payload) => {
+        handleGpUpdate(payload as unknown as { new: Record<string, unknown>; old: Record<string, unknown> });
+      })
+      .subscribe();
+
+    // Sync cross-dispositivo: aggiorna bannersVisti quando un altro device chiude un banner
+    channelSync = supabase
+      .channel(`gp_banners_sync_${Date.now()}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'impostazioni' }, (payload) => {
+        if (destroyed) return;
+        const row = payload.new as { chiave?: string; valore?: string; user_id?: string };
+        if (row.chiave === 'gift_pass_banners_visti' && row.user_id === user.id) {
+          try {
+            const arr: string[] = JSON.parse(row.valore ?? '[]');
+            const set = new Set(arr);
+            setGpBannersVistiSet(set);
+            setGpPopups(prev => prev.filter(p => !set.has(p.eventId)));
+          } catch { /* noop */ }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      destroyed = true;
+      if (channelGp) supabase.removeChannel(channelGp);
+      if (channelSync) supabase.removeChannel(channelSync);
+    };
+  }, [user, gpBannersVistiSet]);
+
   // Realtime + polling: avviso nuova richiesta prenotazione online
   useEffect(() => {
     if (!user) return;
@@ -1462,6 +1605,81 @@ export default function App() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Popup Gift Pass Realtime (donata / attivata nuova / attivata esistente) */}
+      {gpPopups.length > 0 && (
+        <div className="fixed right-4 bottom-20 z-[111] flex flex-col-reverse gap-2 max-w-xs w-full">
+          {gpPopups.map((p) => {
+            const isBlu = p.tipo === 'attivata_esistente';
+            const isTeal = p.tipo === 'attivata_nuova';
+            const bg = isBlu ? 'bg-blue-700' : isTeal ? 'bg-teal-700' : 'bg-violet-700';
+            const bgIcon = isBlu ? 'bg-blue-600' : isTeal ? 'bg-teal-600' : 'bg-violet-600';
+            const textSub = isBlu ? 'text-blue-100' : isTeal ? 'text-teal-100' : 'text-violet-100';
+            const hoverBtn = isBlu ? 'hover:bg-blue-600' : isTeal ? 'hover:bg-teal-600' : 'hover:bg-violet-600';
+            const title = p.tipo === 'donata' ? 'Gift Pass donata!' : 'Gift Pass riscattata!';
+
+            function Avatar({ url, name, badge }: { url?: string | null; name?: string; badge?: string }) {
+              return (
+                <div className="relative flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/30">
+                    {url
+                      ? <img src={url} alt={name} className="w-full h-full object-cover" />
+                      : <div className={`w-full h-full ${bgIcon} flex items-center justify-center text-white text-sm font-bold`}>
+                          {name?.charAt(0)?.toUpperCase() ?? <Gift size={14} />}
+                        </div>}
+                  </div>
+                  {badge && (
+                    <span className="absolute -bottom-1 -right-1 text-[8px] font-bold bg-white text-stone-700 px-1 rounded-full whitespace-nowrap leading-tight py-0.5">
+                      {badge}
+                    </span>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <div key={p.eventId} className={`${bg} rounded-2xl shadow-2xl px-4 py-3.5 flex items-start gap-3 animate-bounce-once`}>
+                {/* Avatar(s) */}
+                <div className="flex gap-1 flex-shrink-0 mt-0.5">
+                  <Avatar url={p.donatriceFotoUrl} name={p.donatoreName} />
+                  {(p.tipo === 'attivata_nuova' || p.tipo === 'attivata_esistente') && (
+                    <Avatar
+                      url={p.riceventeFotoUrl}
+                      name={p.riceventeName}
+                      badge={p.tipo === 'attivata_nuova' ? 'Nuova' : 'Già qui'}
+                    />
+                  )}
+                </div>
+                {/* Testo */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white">{title}</p>
+                  {p.tipo === 'donata' && (
+                    <p className={`text-xs ${textSub} mt-0.5 leading-snug`}>
+                      <span className="font-semibold">{p.donatoreName}</span> ha donato la Gift Pass{' '}
+                      <span className="font-mono font-bold">{p.codice}</span>!
+                    </p>
+                  )}
+                  {(p.tipo === 'attivata_nuova' || p.tipo === 'attivata_esistente') && (
+                    <p className={`text-xs ${textSub} mt-0.5 leading-snug`}>
+                      <span className="font-semibold">{p.riceventeName || 'Una cliente'}</span>
+                      {p.tipo === 'attivata_nuova' ? ' (Nuova Cliente)' : ' (Già Cliente)'}
+                      {' '}ha registrato la Gift Pass ricevuta da{' '}
+                      <span className="font-semibold">{p.donatoreName}</span>
+                    </p>
+                  )}
+                </div>
+                {/* X */}
+                <button
+                  onClick={() => dismissGpBanner(p.eventId)}
+                  className={`p-1 ${hoverBtn} rounded-lg transition-colors text-white/60 hover:text-white flex-shrink-0`}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
