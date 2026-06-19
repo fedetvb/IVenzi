@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, CreditCard as Edit2, Trash2, X, Check, Calendar, UserX } from 'lucide-react';
 import { supabase, type Parrucchiere } from '../lib/supabase';
-import { dbSelect, dbInsert, dbUpdate, dbDelete } from '../lib/localDb';
+import { dbSelect, dbInsert, dbUpdate, dbDelete, invalidateTableCache } from '../lib/localDb';
 import PasswordGateModal from '../components/PasswordGateModal';
 import { useAuth } from '../lib/AuthContext';
 
@@ -49,6 +49,11 @@ export default function Parrucchieri() {
   async function loadAssenze() {
     if (!user?.id) return;
     setAssenzeLoading(true);
+    const migKey = `assenze_cache_cleaned_${user.id}`;
+    if (!localStorage.getItem(migKey)) {
+      await invalidateTableCache('assenze_parrucchieri');
+      localStorage.setItem(migKey, '1');
+    }
     const res = await dbSelect({ table: 'assenze_parrucchieri', columns: '*', filters: [{col:'user_id', op:'eq', val: user.id}], orderBy: [{col:'data_inizio', asc:false}] });
     setAssenze((res.data || []) as Assenza[]);
     setAssenzeLoading(false);
