@@ -988,7 +988,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     setCassettoLoading(true);
     const [carteRes, gpRes] = await Promise.all([
       dbSelect({ table: 'carte_sconto', filters: [{ col: 'regalata', op: 'eq', val: true }, { col: 'attiva', op: 'eq', val: true }], orderBy: [{ col: 'codice', asc: true }] }),
-      dbSelect({ table: 'gift_pass', filters: [{ col: 'utilizzata', op: 'eq', val: false }, { col: 'attiva', op: 'eq', val: true }], orderBy: [{ col: 'codice', asc: true }] }),
+      dbSelect({ table: 'gift_pass', filters: [{ col: 'utilizzata', op: 'eq', val: false }, { col: 'attivo', op: 'eq', val: true }], orderBy: [{ col: 'codice', asc: true }] }),
     ]);
     setCassettoCarte((carteRes.data ?? []) as CartaScontoSimple[]);
     // Gift pass orfani: non ancora associati a un cliente, non ancora attivati oppure già attivati ma senza fiche
@@ -1142,7 +1142,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           filters: [
             { col: 'destinataria_cliente_id', op: 'eq', val: realClienteId },
             { col: 'utilizzata', op: 'eq', val: false },
-            { col: 'attiva', op: 'eq', val: true },
+            { col: 'attivo', op: 'eq', val: true },
           ],
         });
         const gpRicevuti = ((gpRicevutiData || []) as GiftPassSimple[])
@@ -1155,7 +1155,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           filters: [
             { col: 'cliente_id', op: 'eq', val: realClienteId },
             { col: 'utilizzata', op: 'eq', val: false },
-            { col: 'attiva', op: 'eq', val: true },
+            { col: 'attivo', op: 'eq', val: true },
             { col: 'attivata_at', op: 'is_null', val: null },
           ],
         });
