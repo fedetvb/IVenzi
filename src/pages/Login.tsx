@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import type { LocalProfile } from '../electron.d';
 
-type Mode = 'login' | 'register' | 'reset-email' | 'offline';
+type Mode = 'login' | 'register' | 'reset-email' | 'reset-otp' | 'offline';
 
 export default function Login() {
   const { offlineSignIn } = useAuth();
@@ -16,6 +16,10 @@ export default function Login() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [resetEmail, setResetEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
   const [localProfiles, setLocalProfiles] = useState<LocalProfile[]>([]);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -137,7 +141,9 @@ export default function Login() {
         }
       }
     } else if (mode === 'reset-email') {
-      await handleResetEmail();
+      await handleSendOtp();
+    } else if (mode === 'reset-otp') {
+      await handleVerifyOtp();
     }
 
     setLoading(false);
@@ -191,15 +197,45 @@ export default function Login() {
     }
   }
 
-  async function handleResetEmail() {
+  async function handleSendOtp() {
     try {
-      const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/`,
-      });
+      const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail);
       if (err) throw err;
-      setResetSuccess(true);
+      setMode('reset-otp');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Errore durante l\'invio.');
+      setError(err instanceof Error ? err.message : "Errore durante l'invio.");
+    }
+  }
+
+  async function handleVerifyOtp() {
+    if (newPassword.length < 6) {
+      setError('La password deve essere di almeno 6 caratteri.');
+      setLoading(false);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Le password non coincidono.');
+      setLoading(false);
+      return;
+    }
+    try {
+      const { error: verifyErr } = await supabase.auth.verifyOtp({
+        email: resetEmail,
+        token: otpCode,
+        type: 'recovery',
+      });
+      if (verifyErr) throw verifyErr;
+      const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateErr) throw updateErr;
+      setResetSuccess(true);
+      setTimeout(() => {
+        setMode('login');
+        setResetEmail(''); setOtpCode(''); setNewPassword(''); setConfirmPassword('');
+        setResetSuccess(false);
+        resetState();
+      }, 2500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Codice non valido o scaduto. Riprova.');
     }
   }
 
@@ -290,13 +326,15 @@ export default function Login() {
               {mode === 'login' && 'Accedi al tuo account'}
               {mode === 'register' && (isElectronOfflineRegister ? 'Crea un account locale' : 'Crea un account')}
               {mode === 'reset-email' && 'Password dimenticata'}
+              {mode === 'reset-otp' && 'Inserisci il codice'}
             </h2>
             <p className="text-stone-500 text-sm mt-1">
               {isOfflineMode && "Inserisci le tue credenziali per continuare in modalita' locale"}
               {mode === 'login' && 'Inserisci le tue credenziali per continuare'}
               {mode === 'register' && !isElectronOfflineRegister && 'Crea il tuo account per iniziare'}
               {mode === 'register' && isElectronOfflineRegister && 'I tuoi dati rimarranno locali fino alla sincronizzazione online'}
-              {mode === 'reset-email' && 'Inserisci la tua email per ricevere il link di reset'}
+              {mode === 'reset-email' && 'Inserisci la tua email per ricevere il codice OTP'}
+              {mode === 'reset-otp' && `Codice inviato a ${resetEmail} — inseriscilo qui sotto`}
             </p>
           </div>
 
@@ -324,26 +362,19 @@ export default function Login() {
             </>
           )}
 
-          {/* Reset email inviata con successo */}
+          {/* Reset completato */}
           {resetSuccess ? (
             <div className="flex flex-col items-center gap-4 py-8 text-center">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
                 <CheckCircle size={32} className="text-green-600" />
               </div>
-              <p className="text-green-700 font-semibold text-lg">Email inviata!</p>
-              <p className="text-stone-500 text-sm max-w-xs">
-                Controlla la casella di posta di <strong>{resetEmail}</strong> e clicca il link per reimpostare la password.
-              </p>
-              <button
-                onClick={() => { setMode('login'); setResetEmail(''); setResetSuccess(false); resetState(); }}
-                className="text-sm text-amber-600 hover:text-amber-700 font-medium mt-2 transition-colors"
-              >
-                Torna al login
-              </button>
+              <p className="text-green-700 font-semibold text-lg">Password aggiornata!</p>
+              <p className="text-stone-500 text-sm">Verrai reindirizzato al login tra un momento...</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Reset email step */}
+
+              {/* Step 1 — inserisci email */}
               {mode === 'reset-email' && (
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1.5">Email account</label>
@@ -360,6 +391,63 @@ export default function Login() {
                     />
                   </div>
                 </div>
+              )}
+
+              {/* Step 2 — inserisci OTP + nuova password */}
+              {mode === 'reset-otp' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Codice OTP ricevuto via email</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={otpCode}
+                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      required
+                      autoFocus
+                      placeholder="123456"
+                      maxLength={6}
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-center tracking-[0.4em] font-mono text-xl transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Nuova password</label>
+                    <div className="relative">
+                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        minLength={6}
+                        className="w-full pl-9 pr-10 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                      >
+                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Conferma nuova password</label>
+                    <div className="relative">
+                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        minLength={6}
+                        className="w-full pl-9 pr-4 py-3 border border-stone-200 rounded-xl bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm transition"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
 
               {/* Login / Register / Offline fields */}
@@ -450,14 +538,27 @@ export default function Login() {
                   ? 'Accedi'
                   : mode === 'register'
                   ? (isElectronOfflineRegister ? 'Crea account locale' : 'Crea account')
-                  : 'Invia link di reset'}
+                  : mode === 'reset-email'
+                  ? 'Invia codice OTP'
+                  : 'Reimposta password'}
               </button>
+
+              {mode === 'reset-otp' && (
+                <button
+                  type="button"
+                  onClick={async () => { resetState(); setLoading(true); await handleSendOtp(); setLoading(false); }}
+                  disabled={loading}
+                  className="w-full text-xs text-stone-400 hover:text-amber-600 transition-colors py-1"
+                >
+                  Non hai ricevuto il codice? Reinvia
+                </button>
+              )}
             </form>
           )}
 
           {/* Footer links */}
           <div className="mt-6 text-center space-y-2">
-            {mode === 'login' && !resetSuccess && (
+            {mode === 'login' && (
               <>
                 <button
                   onClick={() => { setMode('reset-email'); setResetEmail(email); resetState(); }}
@@ -487,9 +588,9 @@ export default function Login() {
                 </button>
               </p>
             )}
-            {mode === 'reset-email' && !resetSuccess && (
+            {(mode === 'reset-email' || mode === 'reset-otp') && !resetSuccess && (
               <button
-                onClick={() => { setMode('login'); setResetEmail(''); resetState(); }}
+                onClick={() => { setMode('login'); setResetEmail(''); setOtpCode(''); setNewPassword(''); setConfirmPassword(''); resetState(); }}
                 className="text-sm text-stone-500 hover:text-amber-600 transition-colors"
               >
                 Torna al login
