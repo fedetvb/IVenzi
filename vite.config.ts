@@ -119,6 +119,7 @@ export default defineConfig(({ mode }) => {
         input: {
           main: path.resolve(__dirname, 'index.html'),
           prenota: path.resolve(__dirname, 'prenota.html'),
+          recensioni: path.resolve(__dirname, 'recensioni.html'),
         },
       },
     },

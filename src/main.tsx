@@ -16,6 +16,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import RegistrazioneCliente from './pages/RegistrazioneCliente.tsx';
 import PrenotazioneOnline from './pages/PrenotazioneOnline.tsx';
+import RecensioniPage from './pages/RecensioniPage.tsx';
 import { AuthProvider } from './lib/AuthContext.tsx';
 import { startAutoBackupWatcher, startAutoFichesWatcher } from './pages/Impostazioni.tsx';
 import './index.css';
@@ -40,6 +41,12 @@ const isPrenotazione =
   params.get('prenota') === '1' ||
   hashParams.get('prenota') === '1';
 
+const isRecensioni =
+  window.location.pathname === '/recensioni' ||
+  hashPath === 'recensioni' ||
+  params.get('recensioni') === '1' ||
+  hashParams.get('recensioni') === '1';
+
 const SALON_OWNER_ID = 'fc9daf6c-ce30-4941-a8ca-18d99e5e9cc3';
 
 const prenotaUserId =
@@ -48,7 +55,7 @@ const prenotaUserId =
   window.location.hash.match(/[?&]uid=([^&]+)/)?.[1] ??
   SALON_OWNER_ID;
 
-if (!isRegistrazione && !isPrenotazione) {
+if (!isRegistrazione && !isPrenotazione && !isRecensioni) {
   startAutoBackupWatcher();
   startAutoFichesWatcher();
 }
@@ -57,6 +64,8 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isRegistrazione ? (
       <RegistrazioneCliente />
+    ) : isRecensioni ? (
+      <RecensioniPage userId={prenotaUserId} />
     ) : isPrenotazione ? (
       <PrenotazioneOnline userId={prenotaUserId} />
     ) : (

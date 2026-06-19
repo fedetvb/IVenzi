@@ -1886,24 +1886,29 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
   const [testoDraft, setTestoDraft] = useState('');
   const [savingTesto, setSavingTesto] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getImpostazione('link_recensioni_google').then(v => { if (v) setGoogleLink(v); });
-    getImpostazione('qr_google_testo').then(v => { if (v) setTestoCustom(v); });
-    getImpostazione('logo_salone_url').then(v => { if (v) setLogoUrl(v); });
+    getImpostazione('testo_recensioni_google').then(v => { if (v) setTestoCustom(v); });
+    getImpostazione('logo_recensioni_google_url').then(v => { if (v) setLogoUrl(v); });
   }, []);
 
   useEffect(() => {
     if (!googleLink) { setQrPreview(null); return; }
-    const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(googleLink)}`;
+    const landingUrl = user?.id
+      ? `${window.location.origin}/recensioni?uid=${user.id}`
+      : googleLink;
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(landingUrl)}`;
     buildQrWithLogo(url, logoUrl).then(setQrPreview).catch(() => setQrPreview(url));
-  }, [googleLink, logoUrl]);
+  }, [googleLink, logoUrl, user?.id]);
 
   async function handleSaveLink() {
     const trimmed = linkDraft.trim();
     if (!trimmed) return;
     setSavingLink(true);
-    await setImpostazione('link_recensioni_google', trimmed, user?.id);
+    await setImpostazione('link_recensioni_google', trimmed, user?.id ?? '');
     setGoogleLink(trimmed);
     setEditingLink(false);
     setSavingLink(false);
@@ -1913,10 +1918,34 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
     const trimmed = testoDraft.trim();
     if (!trimmed) return;
     setSavingTesto(true);
-    await setImpostazione('qr_google_testo', trimmed, user?.id ?? '');
+    await setImpostazione('testo_recensioni_google', trimmed, user?.id ?? '');
     setTestoCustom(trimmed);
     setEditingTesto(false);
     setSavingTesto(false);
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setLogoUploading(true);
+    try {
+      const compressed = await compressImage(file, 400);
+      const path = `logo/${user.id}/google-recensioni-logo.jpg`;
+      await supabase.storage.from('foto-clienti').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
+      const { data: urlData } = supabase.storage.from('foto-clienti').getPublicUrl(path);
+      const publicUrl = urlData.publicUrl + '?t=' + Date.now();
+      setLogoUrl(publicUrl);
+      await setImpostazione('logo_recensioni_google_url', publicUrl, user.id);
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  }
+
+  async function handleRemoveLogo() {
+    if (!user) return;
+    setLogoUrl(null);
+    await setImpostazione('logo_recensioni_google_url', '', user.id);
   }
 
   async function handleDownloadPdf() {
@@ -2077,6 +2106,39 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
         )}
       </div>
 
+      {/* Logo personalizzato */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+        <div>
+          <p className="font-semibold text-stone-800">Logo personalizzato</p>
+          <p className="text-xs text-stone-400 mt-0.5">Carica il logo del salone — verrà mostrato nel QR stampato e nella pagina di atterraggio</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-xl border-2 border-dashed border-stone-200 bg-stone-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo salone" className="w-full h-full object-cover rounded-xl" />
+            ) : (
+              <ImagePlus size={22} className="text-stone-300" />
+            )}
+          </div>
+          <div className="flex flex-col gap-2 flex-1">
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+            <button
+              onClick={() => logoInputRef.current?.click()}
+              disabled={logoUploading}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+            >
+              {logoUploading ? <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /> : <UploadCloud size={14} />}
+              {logoUploading ? 'Caricamento...' : logoUrl ? 'Cambia logo' : 'Carica logo'}
+            </button>
+            {logoUrl && (
+              <button onClick={handleRemoveLogo} className="flex items-center gap-1.5 px-3 py-1.5 text-red-500 hover:text-red-700 text-xs font-medium transition-colors">
+                <X size={12} /> Rimuovi logo
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Preview QR */}
       {googleLink && qrPreview && (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
@@ -2086,11 +2148,23 @@ function PaginaQrGoogle({ onBack }: { onBack: () => void }) {
               <img src={qrPreview} alt="QR Google" className="w-full h-full object-contain" />
             </div>
             <div className="flex-1 space-y-2">
-              <p className="text-xs text-stone-500 leading-relaxed">Il QR rimanda direttamente alla pagina recensioni Google del salone. Le clienti inquadrano e lasciano le stelle senza cercare nulla.</p>
+              <p className="text-xs text-stone-500 leading-relaxed">Il QR rimanda alla pagina di atterraggio del salone con il testo incentivo. Le clienti leggono il messaggio e toccano il pulsante per recensire su Google.</p>
               {googleLink && (
                 <a href={googleLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold transition-colors">
-                  <ExternalLink size={11} /> Verifica link
+                  <ExternalLink size={11} /> Verifica link Google
                 </a>
+              )}
+              {user?.id && (
+                <div className="flex items-center gap-1">
+                  <a
+                    href={`${window.location.origin}/recensioni?uid=${user.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-semibold transition-colors"
+                  >
+                    <ExternalLink size={11} /> Anteprima pagina
+                  </a>
+                </div>
               )}
             </div>
           </div>
@@ -8691,7 +8765,9 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
 // ─── PaginaMessaggiClienti ─────────────────────────────────────────────────────
 
 function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId: string | undefined }) {
+  const { user } = useAuth();
   const [pwd, setPwd] = useState('');
+  const [pwdOld, setPwdOld] = useState('');
   const [pwdNew, setPwdNew] = useState('');
   const [pwdConfirm, setPwdConfirm] = useState('');
   const [pwdError, setPwdError] = useState('');
@@ -8703,6 +8779,15 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
   const [deleteAllFlash, setDeleteAllFlash] = useState('');
   const [deleting, setDeleting] = useState(false);
 
+  // OTP reset
+  const [otpStep, setOtpStep] = useState<'idle' | 'sent' | 'done'>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpNewPwd, setOtpNewPwd] = useState('');
+  const [otpConfirmPwd, setOtpConfirmPwd] = useState('');
+  const [otpMsg, setOtpMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+
   useEffect(() => {
     getImpostazione('password_messaggi_clienti').then(v => {
       if (v) setPwd(v);
@@ -8710,13 +8795,15 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
   }, []);
 
   async function savePwd() {
+    setPwdError('');
+    const currentPwd = pwd || '1234';
+    if (!pwdOld.trim()) { setPwdError('Inserisci la vecchia password'); return; }
+    if (pwdOld !== currentPwd) { setPwdError('Vecchia password non corretta'); return; }
     if (!pwdNew.trim()) { setPwdError('Inserisci una nuova password'); return; }
-    if (pwdNew !== pwdConfirm) { setPwdError('Le password non coincidono'); return; }
+    if (pwdNew !== pwdConfirm) { setPwdError('Le nuove password non coincidono'); return; }
     await setImpostazione('password_messaggi_clienti', pwdNew.trim(), userId);
     setPwd(pwdNew.trim());
-    setPwdNew('');
-    setPwdConfirm('');
-    setPwdError('');
+    setPwdOld(''); setPwdNew(''); setPwdConfirm('');
     setPwdFlash('Password aggiornata');
     setTimeout(() => setPwdFlash(''), 3000);
   }
@@ -8738,6 +8825,51 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
     }
   }
 
+  async function handleSendOtp() {
+    setOtpLoading(true);
+    setOtpMsg(null);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-otp-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ email: user?.email }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setOtpMsg({ type: 'err', text: data.error ?? 'Errore invio email.' });
+      } else {
+        setOtpStep('sent');
+        setOtpMsg({ type: 'ok', text: `Codice inviato a ${user?.email}.` });
+      }
+    } catch { setOtpMsg({ type: 'err', text: 'Errore di rete.' }); }
+    setOtpLoading(false);
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (otpCode.length !== 6) { setOtpMsg({ type: 'err', text: 'Il codice deve essere di 6 cifre.' }); return; }
+    if (!otpNewPwd.trim()) { setOtpMsg({ type: 'err', text: 'Inserisci la nuova password.' }); return; }
+    if (otpNewPwd !== otpConfirmPwd) { setOtpMsg({ type: 'err', text: 'Le password non coincidono.' }); return; }
+    setOtpLoading(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-otp-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ email: user?.email, code: otpCode, newPassword: otpNewPwd }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setOtpMsg({ type: 'err', text: data.error ?? 'Codice non valido o scaduto.' });
+      } else {
+        // OTP verified — use as new messaggi password too
+        await setImpostazione('password_messaggi_clienti', otpNewPwd.trim(), userId);
+        setPwd(otpNewPwd.trim());
+        setOtpStep('done');
+      }
+    } catch { setOtpMsg({ type: 'err', text: 'Errore di rete.' }); }
+    setOtpLoading(false);
+  }
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3 mb-2">
@@ -8750,14 +8882,40 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+      {/* Elimination section */}
+      <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-6 space-y-4">
         <div className="flex items-center gap-3 mb-2">
+          <div className="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center">
+            <Trash2 size={16} className="text-red-500" />
+          </div>
+          <div>
+            <p className="font-semibold text-stone-800">Elimina tutti i messaggi</p>
+            <p className="text-xs text-stone-400">Cancella lo schedario messaggi e foto di tutte le clienti</p>
+          </div>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-red-700">Questa operazione è irreversibile. Tutti i messaggi e le foto inviate dalle clienti saranno eliminati definitivamente.</p>
+        </div>
+        {deleteAllError && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2">{deleteAllError}</p>}
+        {deleteAllFlash && <p className="text-sm text-emerald-600 bg-emerald-50 rounded-xl px-4 py-2 flex items-center gap-1.5"><Check size={14} />{deleteAllFlash}</p>}
+        <div>
+          <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Inserisci la password per confermare</label>
+          <input type="password" value={deleteAllPwd} onChange={e => setDeleteAllPwd(e.target.value)} placeholder="Password..." className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-400" />
+        </div>
+        <button onClick={deleteAll} disabled={deleting} className="w-full py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+          {deleting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Trash2 size={15} /> Elimina tutti i messaggi</>}
+        </button>
+      </div>
+
+      {/* Password management — moved to bottom */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-sky-100 rounded-xl flex items-center justify-center">
             <Lock size={16} className="text-sky-600" />
           </div>
           <div>
             <p className="font-semibold text-stone-800">Password eliminazione messaggi</p>
-            <p className="text-xs text-stone-400">Gestione password e cancellazione globale</p>
+            <p className="text-xs text-stone-400">Necessaria per eliminare messaggi singoli o tutti in blocco</p>
           </div>
         </div>
 
@@ -8765,6 +8923,16 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
         {pwdFlash && <p className="text-sm text-emerald-600 bg-emerald-50 rounded-xl px-4 py-2 flex items-center gap-1.5"><Check size={14} />{pwdFlash}</p>}
 
         <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Vecchia password</label>
+            <input
+              type={showPwdVis ? 'text' : 'password'}
+              value={pwdOld}
+              onChange={e => setPwdOld(e.target.value)}
+              placeholder="Password attuale..."
+              className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-400"
+            />
+          </div>
           <div>
             <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Nuova password</label>
             <div className="relative">
@@ -8775,7 +8943,7 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
                 placeholder="Nuova password..."
                 className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-400 pr-10"
               />
-              <button onClick={() => setShowPwdVis(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+              <button type="button" onClick={() => setShowPwdVis(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
                 {showPwdVis ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
@@ -8790,50 +8958,98 @@ function PaginaMessaggiClienti({ onBack, userId }: { onBack: () => void; userId:
               className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-400"
             />
           </div>
-          <button
-            onClick={savePwd}
-            className="w-full py-3 bg-sky-500 text-white font-semibold rounded-xl hover:bg-sky-600 transition-colors flex items-center justify-center gap-2"
-          >
+          <button onClick={savePwd} className="w-full py-3 bg-sky-500 text-white font-semibold rounded-xl hover:bg-sky-600 transition-colors flex items-center justify-center gap-2">
             <Check size={15} /> Salva nuova password
           </button>
         </div>
-      </div>
 
-      <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-6 space-y-4">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center">
-            <Trash2 size={16} className="text-red-500" />
-          </div>
-          <div>
-            <p className="font-semibold text-stone-800">Elimina tutti i messaggi</p>
-            <p className="text-xs text-stone-400">Cancella lo schedario messaggi e foto di tutte le clienti</p>
-          </div>
+        {/* OTP recovery toggle */}
+        <div className="border-t border-stone-100 pt-4">
+          <button
+            onClick={() => setShowOtp(v => !v)}
+            className="flex items-center gap-2 text-xs text-stone-400 hover:text-stone-600 transition-colors font-medium"
+          >
+            <KeyRound size={13} />
+            {showOtp ? 'Nascondi recupero OTP' : 'Non ricordi la vecchia password? Recupera via email'}
+          </button>
+
+          {showOtp && (
+            <div className="mt-4 space-y-3">
+              {otpStep === 'idle' && (
+                <div className="space-y-3">
+                  {otpMsg && (
+                    <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 ${otpMsg.type === 'ok' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                      {otpMsg.type === 'ok' ? <Check size={13} className="text-green-600 mt-0.5" /> : <AlertCircle size={13} className="text-red-500 mt-0.5" />}
+                      <p className={`text-xs ${otpMsg.type === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{otpMsg.text}</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={handleSendOtp}
+                    disabled={otpLoading}
+                    className="w-full border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50 text-sm"
+                  >
+                    {otpLoading ? 'Invio in corso...' : `Invia codice OTP a ${user?.email}`}
+                  </button>
+                </div>
+              )}
+
+              {otpStep === 'sent' && (
+                <form onSubmit={handleVerifyOtp} className="space-y-3">
+                  {otpMsg && (
+                    <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 bg-green-50 border border-green-200">
+                      <Check size={13} className="text-green-600 mt-0.5" />
+                      <p className="text-xs text-green-700">{otpMsg.text}</p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-medium text-stone-600 mb-1.5">Codice OTP (6 cifre)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Es. 482910"
+                      className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-sky-400 text-sm font-mono tracking-widest text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-stone-600 mb-1.5">Nuova password</label>
+                    <input type="password" value={otpNewPwd} onChange={e => setOtpNewPwd(e.target.value)} placeholder="Minimo 4 caratteri" className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 focus:outline-none focus:ring-2 focus:ring-sky-400 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-stone-600 mb-1.5">Conferma nuova password</label>
+                    <input type="password" value={otpConfirmPwd} onChange={e => setOtpConfirmPwd(e.target.value)} placeholder="Ripeti la password" className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 focus:outline-none focus:ring-2 focus:ring-sky-400 text-sm" />
+                  </div>
+                  {otpMsg?.type === 'err' && (
+                    <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 bg-red-50 border border-red-200">
+                      <AlertCircle size={13} className="text-red-500 mt-0.5" />
+                      <p className="text-xs text-red-700">{otpMsg.text}</p>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setOtpStep('idle'); setOtpMsg(null); setOtpCode(''); setOtpNewPwd(''); setOtpConfirmPwd(''); }} className="flex-1 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-600 font-semibold py-2.5 rounded-xl text-sm">Annulla</button>
+                    <button type="submit" disabled={otpLoading || otpCode.length !== 6 || !otpNewPwd || !otpConfirmPwd} className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2.5 rounded-xl disabled:opacity-50 text-sm">{otpLoading ? 'Verifica...' : 'Imposta password'}</button>
+                  </div>
+                  <button type="button" onClick={handleSendOtp} disabled={otpLoading} className="w-full text-xs text-stone-400 hover:text-stone-600 py-1">
+                    {otpLoading ? 'Invio...' : 'Non hai ricevuto il codice? Invia di nuovo'}
+                  </button>
+                </form>
+              )}
+
+              {otpStep === 'done' && (
+                <div className="text-center space-y-3 py-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                    <Check size={18} className="text-green-600" />
+                  </div>
+                  <p className="text-sm font-semibold text-stone-800">Password aggiornata!</p>
+                  <p className="text-xs text-stone-400">La nuova password è attiva.</p>
+                  <button onClick={() => { setOtpStep('idle'); setOtpCode(''); setOtpNewPwd(''); setOtpConfirmPwd(''); setOtpMsg(null); setShowOtp(false); }} className="text-xs text-sky-500 hover:text-sky-700 font-medium">Chiudi</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <p className="text-sm text-red-700">Questa operazione è irreversibile. Tutti i messaggi e le foto inviate dalle clienti saranno eliminati definitivamente.</p>
-        </div>
-
-        {deleteAllError && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2">{deleteAllError}</p>}
-        {deleteAllFlash && <p className="text-sm text-emerald-600 bg-emerald-50 rounded-xl px-4 py-2 flex items-center gap-1.5"><Check size={14} />{deleteAllFlash}</p>}
-
-        <div>
-          <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Inserisci la password per confermare</label>
-          <input
-            type="password"
-            value={deleteAllPwd}
-            onChange={e => setDeleteAllPwd(e.target.value)}
-            placeholder="Password..."
-            className="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-400"
-          />
-        </div>
-        <button
-          onClick={deleteAll}
-          disabled={deleting}
-          className="w-full py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-        >
-          {deleting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Trash2 size={15} /> Elimina tutti i messaggi</>}
-        </button>
       </div>
     </div>
   );

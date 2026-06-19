@@ -4317,6 +4317,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 Torna alla home
               </button>
             </div>
+            <SocialStrip social={info?.social} linkRecensioniGoogle={info?.linkRecensioniGoogle} />
           </div>
         )}
       </div>
