@@ -214,7 +214,11 @@ export default function Parrucchieri() {
             <p className="text-xs text-stone-400 mt-0.5">Giornata intera: colonna nascosta dall'agenda. Uscita anticipata: colonna grigia dall'ora indicata.</p>
           </div>
           <button
-            onClick={() => { setShowAssenzaForm(s => !s); setAssenzaError(''); }}
+            onClick={() => {
+              setShowAssenzaForm(s => !s);
+              setAssenzaError('');
+              if (!showAssenzaForm) setAssenzaForm({ parrucchiere_id: '', data_inizio: '', data_fine: '', ora_inizio: '', note: '' });
+            }}
             className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
           >
             <Plus size={16} /> Aggiungi
@@ -272,7 +276,7 @@ export default function Parrucchieri() {
             {assenzaError && <p className="text-xs text-red-600 font-medium">{assenzaError}</p>}
 
             <div className="flex gap-3 justify-end pt-1">
-              <button onClick={() => { setShowAssenzaForm(false); setAssenzaError(''); }}
+              <button onClick={() => { setShowAssenzaForm(false); setAssenzaError(''); setAssenzaForm({ parrucchiere_id: '', data_inizio: '', data_fine: '', ora_inizio: '', note: '' }); }}
                 className="px-4 py-2 text-sm font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50">
                 Annulla
               </button>
