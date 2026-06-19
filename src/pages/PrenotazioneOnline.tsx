@@ -30,31 +30,43 @@ function normPhone(t: string): string {
 // Inserts a scheda da confermare only if:
 //   1. the client does NOT already exist in 'clienti' (rubrica)
 //   2. there is NO existing row with stato='in_attesa' for the same phone number
-// Silently ignores duplicate-key errors (23505) as a last-resort guard.
+// Silently ignores duplicate-key errors (23505) as a last-resort DB-level guard.
 async function insertSchedaSafe(payload: Record<string, unknown>): Promise<void> {
   const userId = payload.user_id as string | undefined;
   const tel = (payload.telefono as string | undefined)?.trim() ?? '';
   const telNorm = normPhone(tel);
 
   if (userId && telNorm) {
-    // Guard 1: client already confirmed in rubrica → never create a new request
-    // Tries cliente_esiste_in_rubrica first; falls back to cliente_ha_fiches if not deployed.
-    try {
-      const { data: esiste } = await supabase.rpc('cliente_esiste_in_rubrica', {
-        p_user_id: userId,
-        p_telefono: tel,
-      });
-      if (esiste) return;
-    } catch { /* RPC not deployed yet — fall back */ }
-    try {
-      const { data: haFiches } = await supabase.rpc('cliente_ha_fiches', {
-        p_user_id: userId,
-        p_telefono: tel,
-      });
-      if (haFiches) return;
-    } catch { /* non bloccante */ }
+    // Guard 1: client already confirmed in rubrica → never create a new request.
+    // Try primary RPC; only fall back to secondary if primary is truly unavailable.
+    // inRubrica stays false only when BOTH RPCs are unreachable (schema cache lag).
+    let inRubrica = false;
+    let guard1Done = false;
 
-    // Guard 2: scheda already in_attesa for this phone → block duplicate
+    try {
+      const { data, error } = await supabase.rpc('cliente_esiste_in_rubrica', {
+        p_user_id: userId,
+        p_telefono: tel,
+      });
+      if (!error) { guard1Done = true; inRubrica = !!data; }
+    } catch { /* RPC not yet in schema cache */ }
+
+    // Guard 1b: only activated when Guard 1 was unreachable
+    if (!guard1Done) {
+      try {
+        const { data, error } = await supabase.rpc('cliente_ha_fiches', {
+          p_user_id: userId,
+          p_telefono: tel,
+        });
+        if (!error) { inRubrica = !!data; }
+      } catch { /* non bloccante */ }
+    }
+
+    // This check is OUTSIDE any try/catch — cannot be bypassed by exceptions
+    if (inRubrica) return;
+
+    // Guard 2: scheda already in_attesa for this phone → block duplicate.
+    // On query failure, fall through: the DB constraint (23505) is the safety net.
     try {
       const { data: pending } = await supabase
         .from('schede_clienti_da_confermare')
@@ -65,7 +77,7 @@ async function insertSchedaSafe(payload: Record<string, unknown>): Promise<void>
         (r: { telefono: string }) => normPhone(r.telefono ?? '') === telNorm
       );
       if (hasPending) return;
-    } catch { /* non bloccante */ }
+    } catch { /* non bloccante: 23505 handles it at DB level */ }
   }
 
   const { error } = await supabase.from('schede_clienti_da_confermare').insert(payload);
