@@ -376,6 +376,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
   // Calendar nav
   const [calMonth, setCalMonth] = useState(new Date());
+  // Assenze pre-caricate per il mese visualizzato nel calendario
+  const [assenzeCalendario, setAssenzeCalendario] = useState<{parrucchiere_id: string; data_inizio: string; data_fine: string; ora_inizio: string | null}[]>([]);
 
   // Submit prenotazione
   const [submitting, setSubmitting] = useState(false);
@@ -1010,6 +1012,28 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  // Carica assenze per il mese visibile nel calendario (usato per graying dei giorni)
+  useEffect(() => {
+    if (!userId) return;
+    const y = calMonth.getFullYear();
+    const m = calMonth.getMonth();
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    const monthStart = `${y}-${pad2(m + 1)}-01`;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const monthEnd = `${y}-${pad2(m + 1)}-${pad2(lastDay)}`;
+    let active = true;
+    supabase
+      .from('assenze_parrucchieri')
+      .select('parrucchiere_id,data_inizio,data_fine,ora_inizio')
+      .lte('data_inizio', monthEnd)
+      .gte('data_fine', monthStart)
+      .then(({ data }) => {
+        if (active) setAssenzeCalendario((data ?? []) as {parrucchiere_id: string; data_inizio: string; data_fine: string; ora_inizio: string | null}[]);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [userId, calMonth, parrucchiere, chiunque]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadSlots = useCallback(async (parrId: string, data: string, durata: number) => {
     setLoadingSlot(true);
     setSlotDisponibili([]);
@@ -1017,7 +1041,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const { dayStart, dayEnd } = italianDayBounds(data);
       const [appRes, assenzeRes, richiesteRes] = await Promise.all([
         supabase.from('appuntamenti').select('data_ora,durata_minuti').eq('parrucchiere_id', parrId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
-        supabase.from('assenze_parrucchieri').select('ora_inizio,data_inizio,data_fine').eq('parrucchiere_id', parrId).eq('user_id', userId).lte('data_inizio', data).gte('data_fine', data),
+        supabase.from('assenze_parrucchieri').select('ora_inizio,data_inizio,data_fine').eq('parrucchiere_id', parrId).lte('data_inizio', data).gte('data_fine', data),
         supabase.from('richieste_appuntamento').select('data_ora,data_ora2,parrucchiere2_id').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
       ]);
       const busy: { start: number; end: number }[] = [];
@@ -1069,7 +1093,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const [parrRes, appRes, assenzeRes, richiesteRes] = await Promise.all([
         supabase.from('parrucchieri').select('id,nome,colore').eq('user_id', userId).eq('attivo', true).order('nome'),
         supabase.from('appuntamenti').select('parrucchiere_id,data_ora,durata_minuti').eq('user_id', userId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
-        supabase.from('assenze_parrucchieri').select('parrucchiere_id,ora_inizio,data_inizio,data_fine').eq('user_id', userId).lte('data_inizio', data).gte('data_fine', data),
+        supabase.from('assenze_parrucchieri').select('parrucchiere_id,ora_inizio,data_inizio,data_fine').lte('data_inizio', data).gte('data_fine', data),
         supabase.from('richieste_appuntamento').select('parrucchiere_id,data_ora,parrucchiere2_id,data_ora2,chiunque,parrucchieri_candidati').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
       ]);
       const allParr = (parrRes.data ?? []) as Parrucchiere[];
@@ -3424,7 +3448,15 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   const ferieInizio = info.contatti?.ferieInizio;
                   const ferieFine = info.contatti?.ferieFine;
                   const isFerie = !!(ferieInizio && ferieFine && cell >= ferieInizio && cell <= ferieFine);
-                  const isDisabled = isPast || isFerie;
+                  // Blocco giorni per assenza intera del parrucchiere selezionato
+                  const assenzeGiorno = assenzeCalendario.filter(a => a.data_inizio <= cell && a.data_fine >= cell && !a.ora_inizio);
+                  let isDayAbsent = false;
+                  if (parrucchiere) {
+                    isDayAbsent = assenzeGiorno.some(a => a.parrucchiere_id === parrucchiere.id);
+                  } else if (chiunque && info.parrucchieri.length > 0) {
+                    isDayAbsent = info.parrucchieri.every(p => assenzeGiorno.some(a => a.parrucchiere_id === p.id));
+                  }
+                  const isDisabled = isPast || isFerie || isDayAbsent;
                   const isSelected = cell === dataSelezionata;
                   const isToday = cell === todayStr();
                   return (
@@ -3432,10 +3464,11 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                       key={cell}
                       onClick={() => !isDisabled && handleDataSelect(cell)}
                       disabled={isDisabled}
-                      title={isFerie ? 'Salone chiuso per ferie' : undefined}
+                      title={isFerie ? 'Salone chiuso per ferie' : isDayAbsent ? 'Non disponibile' : undefined}
                       className={`aspect-square rounded-xl text-sm font-medium transition-all flex items-center justify-center relative
-                        ${isPast && !isFerie ? 'text-stone-300 cursor-not-allowed' : ''}
+                        ${isPast && !isFerie && !isDayAbsent ? 'text-stone-300 cursor-not-allowed' : ''}
                         ${isFerie ? 'cursor-not-allowed pointer-events-none' : ''}
+                        ${isDayAbsent && !isFerie ? 'text-stone-300 cursor-not-allowed' : ''}
                         ${!isDisabled ? 'hover:bg-emerald-50 text-stone-700 cursor-pointer' : ''}
                         ${isSelected && !isFerie ? 'bg-emerald-600 text-white hover:bg-emerald-700' : ''}
                         ${isToday && !isSelected && !isFerie ? 'ring-2 ring-emerald-400' : ''}
