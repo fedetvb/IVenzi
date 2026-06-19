@@ -1017,7 +1017,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const { dayStart, dayEnd } = italianDayBounds(data);
       const [appRes, assenzeRes, richiesteRes] = await Promise.all([
         supabase.from('appuntamenti').select('data_ora,durata_minuti').eq('parrucchiere_id', parrId).gte('data_ora', dayStart).lte('data_ora', dayEnd).neq('stato', 'cancellato'),
-        supabase.from('assenze_parrucchieri').select('ora_inizio,data_inizio,data_fine').eq('parrucchiere_id', parrId).lte('data_inizio', data).gte('data_fine', data),
+        supabase.from('assenze_parrucchieri').select('ora_inizio,data_inizio,data_fine').eq('parrucchiere_id', parrId).eq('user_id', userId).lte('data_inizio', data).gte('data_fine', data),
         supabase.from('richieste_appuntamento').select('data_ora,data_ora2,parrucchiere2_id').eq('user_id', userId).eq('stato', 'in_attesa').gte('data_ora', dayStart).lte('data_ora', dayEnd),
       ]);
       const busy: { start: number; end: number }[] = [];
@@ -1035,10 +1035,26 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           if (toItalianDateStr(t2) === data) { const s = toItalianMinutes(t2); busy.push({ start: s, end: s + 90 }); }
         }
       }
-      const fullDayAbsent = (assenzeRes.data ?? []).some((a: { ora_inizio: string | null }) => !a.ora_inizio);
+      // Gestione assenze: giornata intera = ora_inizio null; uscita anticipata = ora_inizio valorizzata
+      const assenzeRows = (assenzeRes.data ?? []) as { ora_inizio: string | null }[];
+      const fullDayAbsent = assenzeRows.some(a => !a.ora_inizio);
       if (fullDayAbsent) { setSlotDisponibili([]); return; }
+      // Assenze parziali: blocca slot che iniziano dopo l'ora di uscita anticipata
+      let partialAbsenceMinutes: number | null = null;
+      for (const a of assenzeRows) {
+        if (a.ora_inizio) {
+          const [ah, am] = a.ora_inizio.substring(0, 5).split(':').map(Number);
+          const absMin = ah * 60 + am;
+          if (partialAbsenceMinutes === null || absMin < partialAbsenceMinutes) {
+            partialAbsenceMinutes = absMin;
+          }
+        }
+      }
       const fasce = fasceOrarieRef.current;
-      const slots = buildSlotsFromFasce(fasce, durata, m => busy.some(b => m < b.end && m + durata > b.start));
+      const slots = buildSlotsFromFasce(fasce, durata, m => {
+        if (partialAbsenceMinutes !== null && m >= partialAbsenceMinutes) return true;
+        return busy.some(b => m < b.end && m + durata > b.start);
+      });
       setSlotDisponibili(slots);
     } catch { setSlotDisponibili([]); }
     finally { setLoadingSlot(false); }
