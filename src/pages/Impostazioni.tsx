@@ -8215,10 +8215,17 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     async function load() {
-      const pingVal = await getImpostazione('keep_alive_last_ping');
-      const tipoVal = await getImpostazione('keep_alive_last_ping_tipo');
-      setLastPing(pingVal ?? null);
-      setLastPingTipo((tipoVal as 'automatico' | 'manuale') ?? null);
+      const lsTs = localStorage.getItem('keep_alive_last_ping');
+      const lsTipo = localStorage.getItem('keep_alive_last_ping_tipo');
+      if (lsTs) {
+        setLastPing(lsTs);
+        setLastPingTipo((lsTipo as 'automatico' | 'manuale') ?? 'manuale');
+      } else {
+        const pingVal = await getImpostazione('keep_alive_last_ping');
+        const tipoVal = await getImpostazione('keep_alive_last_ping_tipo');
+        setLastPing(pingVal ?? null);
+        setLastPingTipo((tipoVal as 'automatico' | 'manuale') ?? null);
+      }
       setLoading(false);
     }
     load();
@@ -8229,17 +8236,11 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
     setPingOk(null);
     setPingError(null);
     try {
+      const { error } = await supabase.from('impostazioni').select('chiave').limit(1);
+      if (error) throw error;
       const now = new Date().toISOString();
-      const { error: e1 } = await supabase.from('impostazioni').upsert(
-        { chiave: 'keep_alive_last_ping', valore: now, updated_at: now, user_id: null },
-        { onConflict: 'chiave,user_id' }
-      );
-      const { error: e2 } = await supabase.from('impostazioni').upsert(
-        { chiave: 'keep_alive_last_ping_tipo', valore: 'manuale', updated_at: now, user_id: null },
-        { onConflict: 'chiave,user_id' }
-      );
-      await supabase.from('keep_alive_ping_log').insert({ eseguito_at: now, tipo: 'manuale' });
-      if (e1 || e2) throw e1 ?? e2;
+      localStorage.setItem('keep_alive_last_ping', now);
+      localStorage.setItem('keep_alive_last_ping_tipo', 'manuale');
       setLastPing(now);
       setLastPingTipo('manuale');
       setPingOk(true);
