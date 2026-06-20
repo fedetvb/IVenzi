@@ -30,7 +30,7 @@ import { isPushSupported, getPushPermission, requestPushPermission, subscribePus
 import RecensioniReminderModal from './components/RecensioniReminderModal';
 import AiChat from './components/AiChat';
 import { InForseModal, loadAvvisoInForse, type ClienteInForseEntry } from './components/InForseModal';
-import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione, registerBrowserLocalOps } from './lib/localDb';
+import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione, setImpostazione, registerBrowserLocalOps } from './lib/localDb';
 import { isOwnerBuild, getLicenseState } from './lib/license';
 import { syncLocalToRemote, syncRemoteToLocal, pushRowNow, browserLocalWrite, browserLocalDelete, prefetchToIndexedDb } from './lib/sync';
 import { markAllRowsDirty, getTableCache } from './lib/indexedDb';
@@ -160,6 +160,7 @@ export default function App() {
   const lastPingedRichiestaRef = useRef<string | null>(null);
   const richiestaPrenotaIdRef = useRef<string | null>(null);
   const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recensioniIsTestRef = useRef(false);
   richiestaPrenotaIdRef.current = richiestaPrenotaId;
   const [suonoRichiesta, setSuonoRichiesta] = useState<'ping' | 'squillo'>('ping');
   const [volumeNotifiche, setVolumeNotifiche] = useState(70);
@@ -253,12 +254,23 @@ export default function App() {
   }
 
   function triggerRecensioniTest() {
+    recensioniIsTestRef.current = true;
     const stile = localStorage.getItem('stile_promemoria_local') ?? 'schermo_intero';
     if (stile === 'sottile') {
       setShowRecensioniBannerSottile(true);
     } else {
       setShowRecensioniModal(true);
     }
+  }
+
+  function dismissRecensioniReminder() {
+    setShowRecensioniBannerSottile(false);
+    setShowRecensioniModal(false);
+    if (recensioniIsTestRef.current) return;
+    if (!user) return;
+    const todayKey = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+    localStorage.setItem(`recensioni_banner_dismissed_${todayKey}`, '1');
+    setImpostazione('promemoria_recensioni_chiuso_il', todayKey, user.id).catch(() => {});
   }
 
   async function triggerInForseTest() {
@@ -491,10 +503,12 @@ export default function App() {
       lastFiredMinuteRec = nowIt;
       const todayKey = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
       const lsKey = `recensioni_banner_shown_${todayKey}_${orario.replace(':', '')}`;
-      if (localStorage.getItem(lsKey)) return;
+      const dismissKey = `recensioni_banner_dismissed_${todayKey}`;
+      if (localStorage.getItem(lsKey) || localStorage.getItem(dismissKey)) return;
       // Pre-check silenzioso: se nessuna cliente da contattare, non mostrare nulla
       const hasClienti = await checkHasClientiRecensioni(user.id);
       if (!hasClienti) return;
+      recensioniIsTestRef.current = false;
       localStorage.setItem(lsKey, '1');
       const stile = localStorage.getItem('stile_promemoria_local') ?? 'schermo_intero';
       if (stile === 'sottile') {
@@ -506,6 +520,34 @@ export default function App() {
     checkRec();
     const id = setInterval(checkRec, 30_000);
     return () => clearInterval(id);
+  }, [user]);
+
+  // Realtime: quando un altro dispositivo chiude il promemoria recensioni, nascondi anche qui
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`recensioni-dismiss-sync-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'impostazioni',
+          filter: 'chiave=eq.promemoria_recensioni_chiuso_il',
+        },
+        (payload) => {
+          const newVal = (payload.new as any)?.valore;
+          if (!newVal) return;
+          const todayKey = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
+          if (newVal === todayKey) {
+            localStorage.setItem(`recensioni_banner_dismissed_${todayKey}`, '1');
+            setShowRecensioniBannerSottile(false);
+            setShowRecensioniModal(false);
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   // Controlla se SQLite e' pronto in Electron; se non lo e', si usa Supabase direttamente
@@ -1564,7 +1606,7 @@ export default function App() {
               <p className="text-xs text-blue-700 mt-0.5">Clienti di ieri — tocca per aprire la lista</p>
             </button>
             <button
-              onClick={() => setShowRecensioniBannerSottile(false)}
+              onClick={dismissRecensioniReminder}
               className="p-1 hover:bg-blue-100 rounded-lg transition-colors text-blue-400 hover:text-blue-600 flex-shrink-0"
             >
               <X size={15} />
@@ -1944,7 +1986,7 @@ export default function App() {
       {showRecensioniModal && user && (
         <RecensioniReminderModal
           userId={user.id}
-          onClose={() => setShowRecensioniModal(false)}
+          onClose={dismissRecensioniReminder}
         />
       )}
 
