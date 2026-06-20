@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key, Pencil } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, WifiOff, Monitor, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key, Pencil } from 'lucide-react';
 import { DEFAULT_TESTI, NOME_VARIANTE, getTestoKey } from '../lib/recensioniUtils';
 import { isOwnerBuild, generateLocalOtp, generateCloudOtp } from '../lib/license';
 import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
@@ -8156,12 +8156,31 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
   const [lockLoading, setLockLoading] = useState(false);
   const [sqlCopied, setSqlCopied] = useState(false);
 
+  // Cassaforte OTP
+  const [savedCodes, setSavedCodes] = useState({ hwId: '', crId: '', otp1: '', otp2: '' });
+  const [showOtp1, setShowOtp1] = useState(false);
+  const [showOtp2, setShowOtp2] = useState(false);
+  const [copiedCodeKey, setCopiedCodeKey] = useState('');
+
+  // Invia ID per attivazione cloud
+  const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'waiting' | 'done' | 'offline'>('idle');
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     if (!isOwner) {
       import('../lib/license').then(({ getLicenseState }) => {
-        getLicenseState().then(s => setLocked(!s.cloudActivated));
+        getLicenseState().then(s => {
+          setLocked(!s.cloudActivated);
+          setSavedCodes({
+            hwId: s.hardwareId,
+            crId: s.cloudRequestId,
+            otp1: s.localOtpCode,
+            otp2: s.cloudOtpCode,
+          });
+        });
       });
     }
+    return () => { unsubscribeRef.current?.(); };
   }, [isOwner]);
 
   const activeUrl = localStorage.getItem(LS_URL_KEY) ?? defaultUrl;
@@ -8169,7 +8188,6 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
   const hasLocalOverride = !!localStorage.getItem(LS_URL_KEY) || !!localStorage.getItem(LS_KEY_KEY);
   const isDirty = url.trim() !== activeUrl || anonKey.trim() !== activeKey;
   const isCustom = url.trim() !== defaultUrl || anonKey.trim() !== defaultKey;
-
   const projectId = url.trim().replace('https://', '').split('.')[0] || '';
 
   function handleSave() {
@@ -8242,9 +8260,45 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
     }
   }
 
+  async function handleSendId() {
+    if (!navigator.onLine) { setSendStatus('offline'); return; }
+    setSendStatus('sending');
+    try {
+      const { submitLicenseRequest, subscribeToLicenseApproval, verifyCloudOtp, getLicenseState } = await import('../lib/license');
+      const state = await getLicenseState();
+      await submitLicenseRequest(state.hardwareId, state.cloudRequestId);
+      setSendStatus('waiting');
+
+      const unsub = subscribeToLicenseApproval(state.hardwareId, async (_otp1, otp2) => {
+        if (otp2) {
+          const ok = await verifyCloudOtp(otp2);
+          if (ok) {
+            setSendStatus('done');
+            setLocked(false);
+            const fresh = await getLicenseState();
+            setSavedCodes({ hwId: fresh.hardwareId, crId: fresh.cloudRequestId, otp1: fresh.localOtpCode, otp2: fresh.cloudOtpCode });
+          }
+        }
+      });
+      unsubscribeRef.current = unsub;
+    } catch {
+      setSendStatus('idle');
+    }
+  }
+
+  async function copyCode(text: string, key: string) {
+    try { await navigator.clipboard.writeText(text); setCopiedCodeKey(key); setTimeout(() => setCopiedCodeKey(''), 2000); } catch { /* ignore */ }
+  }
+
+  async function handleCopySql2() {
+    await handleCopySql();
+  }
+
   const maskedKey = anonKey.length > 12
     ? anonKey.slice(0, 6) + '••••••••••••••••••••' + anonKey.slice(-4)
     : anonKey;
+
+  const hasSavedCodes = savedCodes.otp1 || savedCodes.otp2;
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -8282,8 +8336,44 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
           </div>
           <p className="text-xs text-stone-500 leading-relaxed">
             Per configurare le credenziali Supabase devi prima completare l'attivazione cloud (Parete 2).
-            Inserisci il codice OTP ricevuto dal supporto.
           </p>
+
+          {/* Invia ID automaticamente */}
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleSendId}
+              disabled={sendStatus === 'sending' || sendStatus === 'waiting' || sendStatus === 'done'}
+              className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors"
+            >
+              {sendStatus === 'sending' && <RefreshCw size={14} className="animate-spin" />}
+              {sendStatus === 'waiting' && <div className="w-2 h-2 rounded-full bg-white animate-pulse" />}
+              {sendStatus === 'done' && <Check size={14} />}
+              {sendStatus === 'offline' && <WifiOff size={14} />}
+              {sendStatus === 'idle' && <Send size={14} />}
+              {sendStatus === 'idle' && 'Invia ID per attivazione automatica'}
+              {sendStatus === 'sending' && 'Invio in corso...'}
+              {sendStatus === 'waiting' && 'In attesa di approvazione...'}
+              {sendStatus === 'done' && 'Attivazione ricevuta!'}
+              {sendStatus === 'offline' && 'Nessuna connessione'}
+            </button>
+            {sendStatus === 'waiting' && (
+              <p className="text-xs text-sky-600 leading-relaxed">
+                Il tuo ID e' stato inviato al supporto. Appena approvato, i campi si sbloccheranno automaticamente.
+              </p>
+            )}
+            {sendStatus === 'offline' && (
+              <p className="text-xs text-amber-600 leading-relaxed">
+                Nessuna connessione Internet. Inserisci il codice manualmente.
+              </p>
+            )}
+          </div>
+
+          <div className="relative flex items-center gap-2">
+            <div className="flex-1 h-px bg-stone-200" />
+            <span className="text-xs text-stone-400">oppure inserisci manualmente</span>
+            <div className="flex-1 h-px bg-stone-200" />
+          </div>
+
           <div className="flex gap-2">
             <input
               type="text"
@@ -8305,8 +8395,7 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
           </div>
           {lockError && (
             <div className="flex items-center gap-2 text-red-500 text-xs">
-              <AlertCircle size={13} />
-              <span>{lockError}</span>
+              <AlertCircle size={13} /><span>{lockError}</span>
             </div>
           )}
         </div>
@@ -8315,12 +8404,8 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
       {/* Form credenziali — visibile solo se sbloccato */}
       {!locked && (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
-
-          {/* URL */}
           <div>
-            <label className="block text-sm font-semibold text-stone-700 mb-1.5">
-              URL del progetto Supabase
-            </label>
+            <label className="block text-sm font-semibold text-stone-700 mb-1.5">URL del progetto Supabase</label>
             <input
               type="text"
               value={url}
@@ -8331,11 +8416,8 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
             <p className="text-xs text-stone-400 mt-1.5">supabase.com → il tuo progetto → Settings → API → Project URL</p>
           </div>
 
-          {/* Anon key */}
           <div>
-            <label className="block text-sm font-semibold text-stone-700 mb-1.5">
-              Chiave API pubblica (anon key)
-            </label>
+            <label className="block text-sm font-semibold text-stone-700 mb-1.5">Chiave API pubblica (anon key)</label>
             <div className="relative">
               {showKey ? (
                 <textarea
@@ -8350,99 +8432,145 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
                   <span className="truncate block">{maskedKey || '—'}</span>
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => setShowKey(v => !v)}
-                className="absolute right-3 top-3 text-stone-400 hover:text-stone-600 transition-colors"
-              >
+              <button type="button" onClick={() => setShowKey(v => !v)} className="absolute right-3 top-3 text-stone-400 hover:text-stone-600 transition-colors">
                 {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             <p className="text-xs text-stone-400 mt-1.5">supabase.com → il tuo progetto → Settings → API → anon public</p>
           </div>
 
-          {/* Risultato test */}
           {testResult && (
             <div className={`flex items-start gap-2 rounded-xl px-4 py-3 border ${testResult.ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              {testResult.ok
-                ? <Check size={15} className="text-green-600 flex-shrink-0 mt-0.5" />
-                : <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />}
+              {testResult.ok ? <Check size={15} className="text-green-600 flex-shrink-0 mt-0.5" /> : <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />}
               <p className={`text-sm ${testResult.ok ? 'text-green-700' : 'text-red-700'}`}>{testResult.msg}</p>
             </div>
           )}
 
-          {/* Azioni */}
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <button
-              onClick={handleTest}
-              disabled={testing || saving}
-              className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50"
-            >
+            <button onClick={handleTest} disabled={testing || saving} className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50">
               <RefreshCw size={14} className={testing ? 'animate-spin' : ''} />
               {testing ? 'Test in corso...' : 'Testa connessione'}
             </button>
-
-            <button
-              onClick={handleSave}
-              disabled={saving || !isDirty || !url.trim() || !anonKey.trim()}
-              className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
-            >
+            <button onClick={handleSave} disabled={saving || !isDirty || !url.trim() || !anonKey.trim()} className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm">
               {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
               {saving ? 'Applicando...' : 'Salva e riavvia'}
             </button>
-
             {hasLocalOverride && !isCustom && (
-              <button
-                onClick={handleReset}
-                disabled={saving}
-                className="flex items-center gap-2 px-4 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50"
-              >
-                <X size={14} />
-                Ripristina predefinite
+              <button onClick={handleReset} disabled={saving} className="flex items-center gap-2 px-4 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50">
+                <X size={14} />Ripristina predefinite
               </button>
             )}
           </div>
-
-          {isDirty && !saving && (
-            <p className="text-xs text-amber-600 font-medium">
-              Hai modifiche non salvate. Clicca "Salva e riavvia" per applicarle.
-            </p>
-          )}
+          {isDirty && !saving && <p className="text-xs text-amber-600 font-medium">Hai modifiche non salvate. Clicca "Salva e riavvia" per applicarle.</p>}
         </div>
       )}
 
-      {/* Bottoni A e B — sempre visibili */}
-      <div className="flex flex-wrap gap-3">
-        {/* Bottone A: apri supabase.com */}
-        <button
-          onClick={() => window.open('https://supabase.com', '_blank')}
-          className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 font-semibold text-sm rounded-xl transition-colors shadow-sm"
-        >
-          <ExternalLink size={14} className="text-stone-500" />
-          Apri Supabase
-        </button>
+      {/* ── Cassaforte OTP ── */}
+      {hasSavedCodes && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-stone-100 flex items-center gap-2">
+            <Shield size={15} className="text-amber-600" />
+            <p className="text-sm font-semibold text-stone-700">Cassaforte Codici di Attivazione</p>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-xs text-stone-500 leading-relaxed">
+              Questi codici sono salvati solo su questo dispositivo. Conservali in un posto sicuro:
+              ti permettono di recuperare l'accesso o configurare un secondo PC.
+            </p>
+            {[
+              { label: 'Hardware ID', value: savedCodes.hwId, key: 'hwid', secret: false, show: true, toggle: () => {} },
+              { label: 'OTP Attivazione Locale', value: savedCodes.otp1, key: 'otp1', secret: true, show: showOtp1, toggle: () => setShowOtp1(v => !v) },
+              { label: 'Cloud Request ID', value: savedCodes.crId, key: 'crid', secret: false, show: true, toggle: () => {} },
+              { label: 'OTP Attivazione Cloud', value: savedCodes.otp2, key: 'otp2', secret: true, show: showOtp2, toggle: () => setShowOtp2(v => !v) },
+            ].map(row => row.value ? (
+              <div key={row.key} className="flex items-center gap-3 bg-stone-50 rounded-xl px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-stone-400 text-xs mb-0.5">{row.label}</p>
+                  <code className="text-stone-800 font-mono text-sm tracking-widest">
+                    {row.secret && !row.show ? '••••-••••' : row.value}
+                  </code>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {row.secret && (
+                    <button onClick={row.toggle} className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-200 transition-colors">
+                      {row.show ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => copyCode(row.value, row.key)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all"
+                    style={{ borderColor: copiedCodeKey === row.key ? '#10b981' : '#e7e5e4', background: copiedCodeKey === row.key ? 'rgb(16 185 129 / 0.08)' : 'white', color: copiedCodeKey === row.key ? '#059669' : '#78716c' }}
+                  >
+                    {copiedCodeKey === row.key ? 'Copiato!' : 'Copia'}
+                  </button>
+                </div>
+              </div>
+            ) : null)}
+          </div>
+        </div>
+      )}
 
-        {/* Bottone B: copia SQL + apri editor */}
-        <button
-          onClick={handleCopySql}
-          disabled={!projectId && sqlCopied === false}
-          className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50 text-stone-700 font-semibold text-sm rounded-xl transition-colors shadow-sm"
-        >
-          {sqlCopied
-            ? <><Check size={14} className="text-emerald-500" /> SQL copiato!</>
-            : <><Copy size={14} className="text-stone-500" /> Copia SQL + Apri Editor</>
-          }
-        </button>
+      {/* ── Tre pulsanti di assistenza ── */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4">
+        <p className="text-sm font-semibold text-stone-700">Strumenti di Configurazione</p>
+
+        <div className="flex flex-wrap gap-3">
+          {/* Pulsante 1: apri supabase.com */}
+          <button
+            onClick={() => window.open('https://supabase.com', '_blank')}
+            className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold text-sm rounded-xl transition-colors"
+          >
+            <ExternalLink size={14} className="text-stone-500" />
+            Trova URL e Anon Key
+          </button>
+
+          {/* Pulsante 2: copia SQL + apri editor */}
+          <button
+            onClick={handleCopySql2}
+            className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold text-sm rounded-xl transition-colors"
+          >
+            {sqlCopied
+              ? <><Check size={14} className="text-emerald-500" /> SQL copiato negli appunti!</>
+              : <><Copy size={14} className="text-stone-500" /> Copia SQL e Apri Editor Query</>
+            }
+          </button>
+
+          {/* Pulsante 3: rileva ID dispositivo */}
+          <button
+            onClick={async () => {
+              const { getHardwareId, getCloudRequestId } = await import('../lib/license');
+              const [hwId, crId] = await Promise.all([getHardwareId(), getCloudRequestId()]);
+              setSavedCodes(prev => ({ ...prev, hwId, crId }));
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold text-sm rounded-xl transition-colors"
+          >
+            <Monitor size={14} className="text-stone-500" />
+            Rileva il mio ID Dispositivo
+          </button>
+        </div>
+
+        {/* Box informativo pulsante 2 */}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p className="text-xs font-bold text-amber-800 mb-2">Come funziona "Copia SQL e Apri Editor"</p>
+          <p className="text-xs text-amber-700 leading-relaxed">
+            Cliccando questo pulsante, l'intero script del database viene copiato automaticamente negli appunti del tuo PC
+            (in un blocco note invisibile) e ti si aprira' direttamente la pagina corretta sul browser.
+            Una volta aperta la pagina di Supabase, ti bastera' fare clic con il tasto destro del mouse e selezionare
+            <strong> "Incolla"</strong> (oppure premere <strong>CTRL+V</strong> sulla tastiera) nel riquadro bianco,
+            e poi cliccare sul pulsante verde <strong>"Run"</strong> in basso a destra.
+            Tutto qui!
+          </p>
+        </div>
       </div>
 
-      {/* Avviso */}
+      {/* Avviso setup */}
       <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2">
         <p className="text-xs font-bold text-stone-700">Come configurare un nuovo progetto Supabase</p>
         <ol className="space-y-1.5 list-decimal list-inside">
-          <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Apri Supabase</strong>, registrati e crea un nuovo progetto</li>
-          <li className="text-xs text-stone-500 leading-relaxed">Vai su <strong>Settings → API</strong> e copia il <em>Project URL</em> e la chiave <em>anon public</em></li>
-          <li className="text-xs text-stone-500 leading-relaxed">Incollali nei campi qui sopra, usa <strong>Testa connessione</strong> per verificare</li>
-          <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Salva e riavvia</strong>, poi usa <strong>Copia SQL + Apri Editor</strong> per creare le tabelle</li>
+          <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Trova URL e Anon Key</strong> — accedi a supabase.com e copia i dati dal tuo progetto</li>
+          <li className="text-xs text-stone-500 leading-relaxed">Incolla URL e Anon Key nei campi qui sopra, poi clicca <strong>Testa connessione</strong></li>
+          <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Salva e riavvia</strong> — l'app si riconnette al nuovo database</li>
+          <li className="text-xs text-stone-500 leading-relaxed">Usa <strong>Copia SQL e Apri Editor</strong>, incolla con CTRL+V e premi Run per creare le tabelle</li>
         </ol>
         <p className="text-xs text-stone-400 pt-1">Le chiavi vengono salvate solo su questo dispositivo e non vengono mai inviate a terzi.</p>
       </div>

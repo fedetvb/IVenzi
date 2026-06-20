@@ -4,9 +4,12 @@
  * - BUILD_MODE=owner  → nessuna parete, tutto sbloccato
  * - BUILD_MODE=user   → WALL 1 (attivazione locale) + WALL 2 (attivazione cloud)
  *
- * Tutti i dati di attivazione sono persistiti in localStorage,
- * crittograficamente vincolati all'hardware ID del dispositivo.
+ * Il client centrale (supabaseCentral) è hardcoded sulle credenziali del
+ * developer baked-in al build time. Viene usato esclusivamente per la tabella
+ * richieste_licenze sul progetto centrale qfpeffzdszdanebmgafb.
  */
+
+import { createClient } from '@supabase/supabase-js';
 
 // Costanti salt (identiche a quelle in electron/main.js)
 const MASTER_SALT = 'MioBrandEsclusivoPass2026';
@@ -30,6 +33,17 @@ export function getBuildMode(): BuildMode {
 export function isOwnerBuild(): boolean {
   return getBuildMode() === 'owner';
 }
+
+// ─── Client centrale (sempre punta a qfpeffzdszdanebmgafb) ───────────────────
+// I valori env sono baked-in nel bundle al build time, indipendentemente da
+// qualsiasi override localStorage runtime.
+
+const _centralUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const _centralKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+export const supabaseCentral = (_centralUrl && _centralKey)
+  ? createClient(_centralUrl, _centralKey)
+  : null;
 
 // ─── SHA-256 browser-native ───────────────────────────────────────────────────
 
@@ -56,7 +70,6 @@ export async function generateCloudOtp(cloudRequestId: string): Promise<string> 
 // ─── Hardware/Cloud ID (da Electron IPC o generato in browser) ────────────────
 
 export async function getHardwareId(): Promise<string> {
-  // Cache in localStorage per evitare IPC ripetuti
   const cached = localStorage.getItem(LS_HARDWARE_ID);
   if (cached) return cached;
 
@@ -69,7 +82,6 @@ export async function getHardwareId(): Promise<string> {
     } catch { /* fallback */ }
   }
 
-  // Fallback browser: genera un fingerprint deterministico da user agent + screen
   const raw = navigator.userAgent + screen.width + screen.height + navigator.language;
   const hash = await sha256Hex(raw);
   const id = hash.substring(0, 16);
@@ -90,7 +102,6 @@ export async function getCloudRequestId(): Promise<string> {
     } catch { /* fallback */ }
   }
 
-  // Fallback: variante dell'hardware ID
   const hwId = await getHardwareId();
   const hash = await sha256Hex(hwId + 'CLOUD');
   const id = hash.substring(0, 16);
@@ -138,7 +149,6 @@ export async function getLicenseState(): Promise<LicenseState> {
 export async function verifyLocalOtp(inputOtp: string): Promise<boolean> {
   const hardwareId = await getHardwareId();
   const expected = await generateLocalOtp(hardwareId);
-  // Confronto case-insensitive, normalizza trattino
   const normalize = (s: string) => s.toUpperCase().replace(/[^A-F0-9]/g, '');
   const match = normalize(inputOtp) === normalize(expected);
   if (match) {
@@ -167,4 +177,72 @@ export function resetLicense(): void {
   localStorage.removeItem(LS_CLOUD_REQUEST_ID);
   localStorage.removeItem(LS_LOCAL_OTP_CODE);
   localStorage.removeItem(LS_CLOUD_OTP_CODE);
+}
+
+// ─── Canale Realtime centralizzato ───────────────────────────────────────────
+
+export interface PendingRequest {
+  otp_livello_1: string | null;
+  otp_livello_2: string | null;
+}
+
+/**
+ * Invia o aggiorna la richiesta di attivazione sul Supabase centrale.
+ * Usa UPSERT su hardware_id (colonna UNIQUE) per evitare duplicati.
+ */
+export async function submitLicenseRequest(hardwareId: string, cloudRequestId: string): Promise<void> {
+  if (!supabaseCentral) return;
+  await supabaseCentral
+    .from('richieste_licenze')
+    .upsert(
+      { hardware_id: hardwareId, cloud_request_id: cloudRequestId },
+      { onConflict: 'hardware_id' }
+    );
+}
+
+/**
+ * Recupera una richiesta già presente (utile al riavvio dell'app: se il team
+ * ha già scritto gli OTP mentre l'app era chiusa, li legge subito senza aspettare
+ * l'evento Realtime).
+ */
+export async function fetchPendingRequest(hardwareId: string): Promise<PendingRequest | null> {
+  if (!supabaseCentral) return null;
+  const { data } = await supabaseCentral
+    .from('richieste_licenze')
+    .select('otp_livello_1, otp_livello_2')
+    .eq('hardware_id', hardwareId)
+    .maybeSingle();
+  return data ?? null;
+}
+
+/**
+ * Si iscrive al canale Realtime sulla riga corrispondente all'hardware_id.
+ * Ritorna una funzione di cleanup da chiamare sull'unmount del componente.
+ */
+export function subscribeToLicenseApproval(
+  hardwareId: string,
+  onOtpReceived: (otp1: string | null, otp2: string | null) => void
+): () => void {
+  if (!supabaseCentral) return () => {};
+
+  const channel = supabaseCentral
+    .channel(`licenza-${hardwareId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'richieste_licenze',
+        filter: `hardware_id=eq.${hardwareId}`,
+      },
+      (payload) => {
+        const row = payload.new as { otp_livello_1?: string; otp_livello_2?: string };
+        onOtpReceived(row.otp_livello_1 ?? null, row.otp_livello_2 ?? null);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabaseCentral.removeChannel(channel);
+  };
 }
