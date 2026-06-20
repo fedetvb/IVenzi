@@ -7119,6 +7119,11 @@ function PaginaMessaggioAvviso({ onBack }: { onBack: () => void }) {
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const uid = user?.id;
+    if (!uid) {
+      setSaving(false);
+      setFeedback({ tipo: 'err', msg: 'Sessione scaduta. Ricarica la pagina.' });
+      return;
+    }
     try {
       await Promise.all([
         setImpostazione('messaggio_avviso_appuntamento', messaggio, uid),

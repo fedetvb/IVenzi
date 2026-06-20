@@ -747,7 +747,12 @@ export async function setImpostazione(chiave: string, valore: string, userId: st
     await dbUpsert({ table: 'impostazioni', data: { chiave, valore, user_id: userId }, onConflict: 'chiave,user_id', userId });
     return;
   }
-  await supabase.from('impostazioni').upsert({ chiave, valore, user_id: userId }, { onConflict: 'chiave,user_id' });
+  await supabase
+    .from('impostazioni')
+    .upsert(
+      { chiave, valore, user_id: userId, updated_at: new Date().toISOString() },
+      { onConflict: 'chiave,user_id' },
+    );
 }
 
 // ─── BACKUP ───────────────────────────────────────────────────────────────────
