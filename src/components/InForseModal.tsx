@@ -18,15 +18,19 @@ function addDays(d: Date, n: number) {
 const DEFAULT_IN_FORSE_TEMPLATE = `Ciao {nome}, ti scriviamo per chiederti di confermarci l'appuntamento di {giorno} alle ore {ora}. Puoi farcelo sapere? Grazie! I Venzi.`;
 
 function buildInForseMessaggio(nome: string, appImmediato: { data: string; ora: string }, altriApp: { data: string; ora: string }[]): string {
-  let msg = DEFAULT_IN_FORSE_TEMPLATE
-    .replace(/\{nome\}/g, nome)
-    .replace(/\{giorno\}/g, appImmediato.data)
-    .replace(/\{ora\}/g, appImmediato.ora);
-  if (altriApp.length > 0) {
-    const lista = altriApp.map(a => `- ${a.data} alle ${a.ora}`).join('\n');
-    msg += `\n\nHai anche altri appuntamenti da confermare:\n${lista}\n\nFacci sapere quali vuoi tenere!`;
+  if (altriApp.length === 0) {
+    return DEFAULT_IN_FORSE_TEMPLATE
+      .replace(/\{nome\}/g, nome)
+      .replace(/\{giorno\}/g, appImmediato.data)
+      .replace(/\{ora\}/g, appImmediato.ora);
   }
-  return msg;
+
+  const altriLista = altriApp
+    .sort((a, b) => a.data.localeCompare(b.data))
+    .map(a => `${a.data} ore ${a.ora}`)
+    .join(' / ');
+
+  return `Ciao ${nome}, hai più appuntamenti in forse in agenda. Mi confermi l'appuntamento più vicino del giorno ${appImmediato.data} alle ore ${appImmediato.ora}? Oppure preferisci confermare uno degli altri appuntamenti in forse del ${altriLista}? Restiamo in attesa di una tua risposta per organizzarci al meglio, a presto! ✨`;
 }
 
 export async function loadAvvisoInForse(): Promise<ClienteInForseEntry[]> {
