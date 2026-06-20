@@ -1,4 +1,5 @@
 import { AlertCircle, ExternalLink, HelpCircle, MessageCircle, X } from 'lucide-react';
+import { useState } from 'react';
 import { dbSelectWithRelated } from '../lib/localDb';
 import { apriWhatsApp } from '../lib/waUtils';
 
@@ -84,6 +85,18 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
   const dopodomani = addDays(new Date(), 2);
   const dopodomaniLabel = dopodomani.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  const [messaggi, setMessaggi] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    clienti.forEach((c, i) => {
+      init[`${i}_${c.telefono}`] = buildInForseMessaggio(c.nome, c.appImmediato, c.altriApp);
+    });
+    return init;
+  });
+
+  function getKey(c: ClienteInForseEntry, i: number) {
+    return `${i}_${c.telefono}`;
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
@@ -116,7 +129,8 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
                 {clienti.length} client{clienti.length === 1 ? 'e' : 'i'} con appuntamento in forse tra 2 giorni. Clicca WhatsApp per chiedere conferma.
               </p>
               {clienti.map((c, i) => {
-                const testo = buildInForseMessaggio(c.nome, c.appImmediato, c.altriApp);
+                const key = getKey(c, i);
+                const testo = messaggi[key] ?? buildInForseMessaggio(c.nome, c.appImmediato, c.altriApp);
                 return (
                   <div key={i} className="bg-stone-50 border border-stone-200 rounded-xl overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3">
@@ -130,17 +144,22 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
                           {c.altriApp.length > 0 && <span className="ml-1 text-amber-500">+{c.altriApp.length} altri</span>}
                         </p>
                       </div>
+                    </div>
+                    <div className="px-4 pb-3 space-y-2">
+                      <textarea
+                        value={testo}
+                        onChange={e => setMessaggi(prev => ({ ...prev, [key]: e.target.value }))}
+                        rows={4}
+                        className="w-full text-[11px] text-stone-700 leading-relaxed bg-white border border-stone-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 transition-colors"
+                      />
                       <button
                         onClick={() => { apriWhatsApp(c.telefono, testo); onClose(); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
+                        className="flex items-center justify-center gap-1.5 w-full px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors"
                       >
                         <MessageCircle size={13} />
-                        WhatsApp
+                        Invia su WhatsApp
                         <ExternalLink size={10} className="opacity-70" />
                       </button>
-                    </div>
-                    <div className="px-4 pb-3">
-                      <p className="text-[11px] text-stone-400 whitespace-pre-wrap leading-relaxed bg-white border border-stone-100 rounded-lg px-3 py-2">{testo}</p>
                     </div>
                   </div>
                 );

@@ -6293,6 +6293,11 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
         setImpostazione('banner_recensioni_attivo', String(recensioniAttivo), uid),
         setImpostazione('orario_promemoria_recensioni', recensioniOrario, uid),
       ]);
+      // Reset banner localStorage so changed settings take effect immediately today
+      const bannerPrefixes = ['avviso_in_forse_shown_', 'recensioni_banner_shown_', 'recensioni_banner_dismissed_', 'promemoria_shown_'];
+      Object.keys(localStorage).forEach(k => {
+        if (bannerPrefixes.some(p => k.startsWith(p))) localStorage.removeItem(k);
+      });
       setSaving(false);
       setFeedback({ tipo: 'ok', msg: 'Impostazioni avvisi salvate.' });
     } catch {
