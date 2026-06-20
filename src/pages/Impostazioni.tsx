@@ -8003,6 +8003,7 @@ CREATE TABLE IF NOT EXISTS appuntamenti (
   note text NOT NULL DEFAULT '',
   prezzo_totale numeric(10,2) NOT NULL DEFAULT 0,
   nuova_cliente boolean NOT NULL DEFAULT false,
+  promemoria_inviato_at timestamptz,
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
