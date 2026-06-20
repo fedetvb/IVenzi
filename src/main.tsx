@@ -1,5 +1,25 @@
-import { StrictMode } from 'react';
+import { StrictMode, Component } from 'react';
 import { initOfflineFetch } from './lib/offlineFetch';
+
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 24, fontFamily: 'monospace', background: '#fee', minHeight: '100vh' }}>
+          <h2 style={{ color: 'red' }}>Errore App</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{this.state.error.message}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, color: '#666' }}>{this.state.error.stack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Must be called before any Supabase fetch happens
 initOfflineFetch();
@@ -69,16 +89,18 @@ if (!isRegistrazione && !isPrenotazione && !isRecensioni) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isRegistrazione ? (
-      <RegistrazioneCliente />
-    ) : isRecensioni ? (
-      <RecensioniPage userId={prenotaUserId} clienteId={recensioniClienteId} />
-    ) : isPrenotazione ? (
-      <PrenotazioneOnline userId={prenotaUserId} />
-    ) : (
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    )}
+    <ErrorBoundary>
+      {isRegistrazione ? (
+        <RegistrazioneCliente />
+      ) : isRecensioni ? (
+        <RecensioniPage userId={prenotaUserId} clienteId={recensioniClienteId} />
+      ) : isPrenotazione ? (
+        <PrenotazioneOnline userId={prenotaUserId} />
+      ) : (
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      )}
+    </ErrorBoundary>
   </StrictMode>
 );
