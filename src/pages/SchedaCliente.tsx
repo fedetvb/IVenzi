@@ -458,6 +458,8 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [schedaModal, setSchedaModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [appModal, setAppModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [resetRecFeedback, setResetRecFeedback] = useState<'ok' | 'err' | null>(null);
+  // Stato recensione caricato direttamente da Supabase (fresco, non dalla cache IndexedDB)
+  const [recStatus, setRecStatus] = useState<{ recensione_lasciata: boolean; data_blocco_recensione: string | null } | null>(null);
   const [carteSconto, setCarteSconto] = useState<CartaScontoCliente[]>([]);
   const [cartePremium, setCartePremium] = useState<CartaPremiumCliente[]>([]);
   const [giftPassList, setGiftPassList] = useState<GiftPassCliente[]>([]);
@@ -503,8 +505,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
         table: 'clienti',
         filters: [{ col: 'id', op: 'eq', val: clienteId }],
         limit: 1,
-      }),
-      dbSelect<SchedaColore>({
+      }),      dbSelect<SchedaColore>({
         table: 'schede_colore',
         filters: [
           { col: 'cliente_id', op: 'eq', val: clienteId },
@@ -550,7 +551,15 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
     const premiumList = cprRes.data || [];
     setCartePremium(premiumList);
 
-    // Carica gift pass acquistate da questa cliente (lei è la donatrice)
+    // Carica stato recensione FRESCO direttamente da Supabase (non dalla cache IndexedDB)
+    supabase
+      .from('clienti')
+      .select('recensione_lasciata,data_blocco_recensione')
+      .eq('id', clienteId)
+      .single()
+      .then(({ data }) => {
+        if (data) setRecStatus({ recensione_lasciata: data.recensione_lasciata ?? false, data_blocco_recensione: data.data_blocco_recensione ?? null });
+      });
     const { data: gpData } = await dbSelect<GiftPassCliente>({
       table: 'gift_pass',
       columns: 'id, codice, tipo, valore, prodotto_nome, occasione, attivata_at, utilizzata, destinataria_nome, destinataria_cliente_id',
@@ -949,10 +958,15 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
             Cliente dal {new Date(cliente.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
 
-          {/* Blocco recensioni */}
+          {/* Blocco recensioni — legge da Supabase diretto, non dalla cache IndexedDB */}
           <div className="mt-4 pt-4 border-t border-stone-100">
             <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">Stato Recensione Google</p>
-            {cliente.recensione_lasciata ? (
+            {recStatus === null ? (
+              <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3">
+                <div className="w-3 h-3 border-2 border-stone-300 border-t-stone-500 rounded-full animate-spin" />
+                <span className="text-xs text-stone-400">Caricamento...</span>
+              </div>
+            ) : recStatus.recensione_lasciata ? (
               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Star size={15} className="text-emerald-600 fill-emerald-600" />
@@ -961,7 +975,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
                 <button
                   onClick={async () => {
                     const { error } = await supabase.from('clienti').update({ recensione_lasciata: false, data_blocco_recensione: null }).eq('id', cliente.id);
-                    if (!error) { setCliente(prev => prev ? { ...prev, recensione_lasciata: false, data_blocco_recensione: null } : prev); setResetRecFeedback('ok'); setTimeout(() => setResetRecFeedback(null), 2500); }
+                    if (!error) { setRecStatus({ recensione_lasciata: false, data_blocco_recensione: null }); setResetRecFeedback('ok'); setTimeout(() => setResetRecFeedback(null), 2500); }
                     else setResetRecFeedback('err');
                   }}
                   className="text-xs text-emerald-600 hover:text-emerald-800 font-semibold underline"
@@ -969,18 +983,18 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
                   Reimposta
                 </button>
               </div>
-            ) : cliente.data_blocco_recensione && new Date(cliente.data_blocco_recensione) > new Date() ? (
+            ) : recStatus.data_blocco_recensione && new Date(recStatus.data_blocco_recensione) > new Date() ? (
               <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-amber-700">In periodo di cortesia</p>
                   <p className="text-xs text-amber-600 mt-0.5">
-                    Link inviato — blocco fino al {new Date(cliente.data_blocco_recensione).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    Link inviato — blocco fino al {new Date(recStatus.data_blocco_recensione).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
                   </p>
                 </div>
                 <button
                   onClick={async () => {
                     const { error } = await supabase.from('clienti').update({ data_blocco_recensione: null }).eq('id', cliente.id);
-                    if (!error) { setCliente(prev => prev ? { ...prev, data_blocco_recensione: null } : prev); setResetRecFeedback('ok'); setTimeout(() => setResetRecFeedback(null), 2500); }
+                    if (!error) { setRecStatus(prev => prev ? { ...prev, data_blocco_recensione: null } : prev); setResetRecFeedback('ok'); setTimeout(() => setResetRecFeedback(null), 2500); }
                     else setResetRecFeedback('err');
                   }}
                   className="flex-shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
