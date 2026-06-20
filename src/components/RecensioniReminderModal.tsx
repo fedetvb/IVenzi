@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Send, Star, ChevronDown, ChevronUp, Check, AlertCircle } from 'lucide-react';
+import { X, Send, Star, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { analizzaVociWithMap, getTestoKey, getDefaultTesto } from '../lib/recensioniUtils';
+import { apriWhatsApp } from '../lib/waUtils';
 
 interface ClienteRecensione {
   clienteId: string;
@@ -13,7 +14,6 @@ interface ClienteRecensione {
   hasTaglio: boolean;
   recensioneLasciata: boolean;
   bloccataFino: Date | null;
-  inviato: boolean;
 }
 
 interface Props {
@@ -165,7 +165,6 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
           hasTaglio,
           recensioneLasciata: recLasciata,
           bloccataFino,
-          inviato: false,
         });
       }
 
@@ -183,17 +182,19 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
     if (!cliente?.telefono) return;
 
     const link = `${siteOrigin}/recensioni?id=${clienteId}`;
-    const testo = drafts[clienteId] ?? cliente.testo;
-    const msg = encodeURIComponent(`${testo}\n\n${link}`);
-    const tel = cliente.telefono.replace(/\s/g, '').replace(/^0/, '+39');
-    window.open(`https://wa.me/${tel}?text=${msg}`, '_blank');
+    const testo = (drafts[clienteId] ?? cliente.testo) + `\n\n${link}`;
+    apriWhatsApp(cliente.telefono, testo);
 
     // Traccia solo la data di invio, senza bloccare la cliente
     await supabase.rpc('segna_invio_recensione', { p_cliente_id: clienteId });
-    setClienti(prev => prev.map(c => c.clienteId === clienteId ? { ...c, inviato: true } : c));
-  }
 
-  const tuttiInviati = clienti.length > 0 && clienti.every(c => c.inviato);
+    // Rimuove il cliente dalla lista; chiude il modal se era l'ultimo
+    setClienti(prev => {
+      const next = prev.filter(c => c.clienteId !== clienteId);
+      if (next.length === 0) onClose();
+      return next;
+    });
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -229,21 +230,15 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
             </div>
           )}
 
-          {tuttiInviati && (
-            <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
-              <Check size={15} /> Tutti i messaggi sono stati inviati!
-            </div>
-          )}
-
           {clienti.map(c => (
             <div
               key={c.clienteId}
-              className={`rounded-2xl border transition-all ${c.inviato ? 'border-green-200 bg-green-50' : 'border-stone-200 bg-white shadow-sm'}`}
+              className="rounded-2xl border border-stone-200 bg-white shadow-sm transition-all"
             >
               {/* Cliente row */}
               <div className="flex items-center gap-3 px-4 py-3.5">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-semibold text-sm ${c.inviato ? 'bg-green-200 text-green-700' : 'bg-stone-100 text-stone-600'}`}>
-                  {c.inviato ? <Check size={16} /> : (c.nome.charAt(0) + c.cognome.charAt(0)).toUpperCase()}
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-semibold text-sm bg-stone-100 text-stone-600">
+                  {(c.nome.charAt(0) + c.cognome.charAt(0)).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-stone-800 truncate">{c.nome} {c.cognome}</p>
@@ -257,21 +252,17 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
                   >
                     {expanded === c.clienteId ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
-                  {c.telefono && !c.inviato && (
+                  {c.telefono ? (
                     <button
                       onClick={() => handleInvia(c.clienteId)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors"
                     >
                       <Send size={11} /> Invia WA
                     </button>
-                  )}
-                  {!c.telefono && (
+                  ) : (
                     <span className="flex items-center gap-1 text-xs text-stone-400">
                       <AlertCircle size={11} /> No tel
                     </span>
-                  )}
-                  {c.inviato && (
-                    <span className="text-xs text-green-600 font-semibold">Inviato</span>
                   )}
                 </div>
               </div>

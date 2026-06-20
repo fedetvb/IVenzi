@@ -81,13 +81,15 @@ interface InForseModalProps {
   onClose: () => void;
 }
 
-export function InForseModal({ clienti, onClose }: InForseModalProps) {
+export function InForseModal({ clienti: clientiIniziali, onClose }: InForseModalProps) {
   const dopodomani = addDays(new Date(), 2);
   const dopodomaniLabel = dopodomani.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  const [lista, setLista] = useState(clientiIniziali);
+
   const [messaggi, setMessaggi] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    clienti.forEach((c, i) => {
+    clientiIniziali.forEach((c, i) => {
       init[`${i}_${c.telefono}`] = buildInForseMessaggio(c.nome, c.appImmediato, c.altriApp);
     });
     return init;
@@ -95,6 +97,15 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
 
   function getKey(c: ClienteInForseEntry, i: number) {
     return `${i}_${c.telefono}`;
+  }
+
+  function handleInvia(c: ClienteInForseEntry, i: number) {
+    apriWhatsApp(c.telefono, messaggi[getKey(c, i)] ?? buildInForseMessaggio(c.nome, c.appImmediato, c.altriApp));
+    setLista(prev => {
+      const next = prev.filter((_, idx) => idx !== i);
+      if (next.length === 0) onClose();
+      return next;
+    });
   }
 
   return (
@@ -116,7 +127,7 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
-          {clienti.length === 0 ? (
+          {lista.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center mb-3">
                 <AlertCircle size={20} className="text-stone-400" />
@@ -126,13 +137,13 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
           ) : (
             <>
               <p className="text-xs text-stone-500 pb-1">
-                {clienti.length} client{clienti.length === 1 ? 'e' : 'i'} con appuntamento in forse tra 2 giorni. Clicca WhatsApp per chiedere conferma.
+                {lista.length} client{lista.length === 1 ? 'e' : 'i'} con appuntamento in forse tra 2 giorni. Clicca WhatsApp per chiedere conferma.
               </p>
-              {clienti.map((c, i) => {
+              {lista.map((c, i) => {
                 const key = getKey(c, i);
                 const testo = messaggi[key] ?? buildInForseMessaggio(c.nome, c.appImmediato, c.altriApp);
                 return (
-                  <div key={i} className="bg-stone-50 border border-stone-200 rounded-xl overflow-hidden">
+                  <div key={`${c.telefono}_${i}`} className="bg-stone-50 border border-stone-200 rounded-xl overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3">
                       <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 text-sm font-bold text-amber-700">
                         {c.nome[0]?.toUpperCase()}
@@ -153,7 +164,7 @@ export function InForseModal({ clienti, onClose }: InForseModalProps) {
                         className="w-full text-[11px] text-stone-700 leading-relaxed bg-white border border-stone-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 transition-colors"
                       />
                       <button
-                        onClick={() => { apriWhatsApp(c.telefono, testo); onClose(); }}
+                        onClick={() => handleInvia(c, i)}
                         className="flex items-center justify-center gap-1.5 w-full px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors"
                       >
                         <MessageCircle size={13} />
