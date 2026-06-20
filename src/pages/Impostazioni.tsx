@@ -6208,62 +6208,34 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
   );
 
   // Promemoria convalida fiches
-  const [ficheGiorni, setFicheGiorni] = useState<number[]>([1, 2, 3, 4, 5, 6]);
-  const [ficheOrario, setFicheOrario] = useState('20:00');
+  const [ficheGiorni, setFicheGiorni] = useState<number[]>(() => {
+    try { return JSON.parse(localStorage.getItem('loc_promemoria_convalida_giorni') ?? '[1,2,3,4,5,6]'); } catch { return [1,2,3,4,5,6]; }
+  });
+  const [ficheOrario, setFicheOrario] = useState(() => localStorage.getItem('loc_promemoria_convalida_orario') ?? '20:00');
 
   // Avviso in forse
-  const [inForseAttivo, setInForseAttivo] = useState(true);
-  const [inForseOrario, setInForseOrario] = useState('18:00');
+  const [inForseAttivo, setInForseAttivo] = useState(() => (localStorage.getItem('loc_banner_in_forse_attivo') ?? 'true') !== 'false');
+  const [inForseOrario, setInForseOrario] = useState(() => localStorage.getItem('loc_orario_in_forse') ?? '18:00');
 
   // Banner promemoria invio messaggi appuntamento (mattina)
-  const [promAppAttivo, setPromAppAttivo] = useState(true);
-  const [promAppDa, setPromAppDa] = useState('07:00');
-  const [promAppA, setPromAppA] = useState('11:00');
+  const [promAppAttivo, setPromAppAttivo] = useState(() => (localStorage.getItem('loc_banner_promapp_attivo') ?? 'true') !== 'false');
+  const [promAppDa, setPromAppDa] = useState(() => localStorage.getItem('loc_banner_promapp_da') ?? '07:00');
+  const [promAppA, setPromAppA] = useState(() => localStorage.getItem('loc_banner_promapp_a') ?? '11:00');
 
   // Avviso appuntamenti WhatsApp
-  const [avvisoAppAttivo, setAvvisoAppAttivo] = useState(true);
-  const [avvisoAppOrario, setAvvisoAppOrario] = useState('17:00');
+  const [avvisoAppAttivo, setAvvisoAppAttivo] = useState(() => (localStorage.getItem('loc_avviso_wa_disabilitato') ?? 'false') !== 'true');
+  const [avvisoAppOrario, setAvvisoAppOrario] = useState(() => localStorage.getItem('loc_avviso_appuntamenti_orario') ?? '17:00');
 
   // Banner compleanni
-  const [compleannoAttivo, setCompleannoAttivo] = useState(true);
-  const [compleannoOrario, setCompleannoOrario] = useState('09:00');
+  const [compleannoAttivo, setCompleannoAttivo] = useState(() => (localStorage.getItem('loc_banner_compleanno_attivo') ?? 'true') !== 'false');
+  const [compleannoOrario, setCompleannoOrario] = useState(() => localStorage.getItem('loc_banner_compleanno_orario') ?? '09:00');
 
   // Promemoria Recensioni
-  const [recensioniAttivo, setRecensioniAttivo] = useState(false);
-  const [recensioniOrario, setRecensioniOrario] = useState('19:00');
+  const [recensioniAttivo, setRecensioniAttivo] = useState(() => localStorage.getItem('loc_banner_recensioni_attivo') === 'true');
+  const [recensioniOrario, setRecensioniOrario] = useState(() => localStorage.getItem('loc_orario_recensioni') ?? '19:00');
 
   useEffect(() => {
-    (async () => {
-      const [g, fo, infa, inoo, paa, pad, paa2, wa, wao, ca, co, ra, ro] = await Promise.all([
-        getImpostazione('promemoria_convalida_giorni'),
-        getImpostazione('promemoria_convalida_orario'),
-        getImpostazione('banner_in_forse_attivo'),
-        getImpostazione('orario_avviso_in_forse'),
-        getImpostazione('banner_promemoria_app_attivo'),
-        getImpostazione('banner_promemoria_app_da'),
-        getImpostazione('banner_promemoria_app_a'),
-        getImpostazione('whatsapp_avviso_disabilitato'),
-        getImpostazione('avviso_appuntamenti_orario'),
-        getImpostazione('banner_compleanno_attivo'),
-        getImpostazione('banner_compleanno_orario'),
-        getImpostazione('banner_recensioni_attivo'),
-        getImpostazione('orario_promemoria_recensioni'),
-      ]);
-      if (g) { try { setFicheGiorni(JSON.parse(g)); } catch { /* keep default */ } }
-      if (fo) setFicheOrario(fo);
-      setInForseAttivo(infa !== 'false');
-      if (inoo) setInForseOrario(inoo);
-      setPromAppAttivo(paa !== 'false');
-      if (pad) setPromAppDa(pad);
-      if (paa2) setPromAppA(paa2);
-      setAvvisoAppAttivo(wa !== 'true');
-      if (wao) setAvvisoAppOrario(wao);
-      setCompleannoAttivo(ca !== 'false');
-      if (co) setCompleannoOrario(co);
-      setRecensioniAttivo(ra === 'true');
-      if (ro) setRecensioniOrario(ro);
-      setLoading(false);
-    })();
+    setLoading(false);
   }, []);
 
   function toggleFicheGiorno(v: number) {
@@ -6275,31 +6247,22 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
     e.preventDefault();
     setFeedback(null);
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const uid = user?.id;
-    if (!uid) {
-      setSaving(false);
-      setFeedback({ tipo: 'err', msg: 'Sessione scaduta. Ricarica la pagina.' });
-      return;
-    }
     try {
-      await Promise.all([
-        setImpostazione('promemoria_convalida_giorni', JSON.stringify(ficheGiorni), uid),
-        setImpostazione('promemoria_convalida_orario', ficheOrario, uid),
-        setImpostazione('banner_in_forse_attivo', String(inForseAttivo), uid),
-        setImpostazione('orario_avviso_in_forse', inForseOrario, uid),
-        setImpostazione('banner_promemoria_app_attivo', String(promAppAttivo), uid),
-        setImpostazione('banner_promemoria_app_da', promAppDa, uid),
-        setImpostazione('banner_promemoria_app_a', promAppA, uid),
-        setImpostazione('whatsapp_avviso_disabilitato', String(!avvisoAppAttivo), uid),
-        setImpostazione('avviso_appuntamenti_orario', avvisoAppOrario, uid),
-        setImpostazione('banner_compleanno_attivo', String(compleannoAttivo), uid),
-        setImpostazione('banner_compleanno_orario', compleannoOrario, uid),
-        setImpostazione('banner_recensioni_attivo', String(recensioniAttivo), uid),
-        setImpostazione('orario_promemoria_recensioni', recensioniOrario, uid),
-      ]);
+      localStorage.setItem('loc_promemoria_convalida_giorni', JSON.stringify(ficheGiorni));
+      localStorage.setItem('loc_promemoria_convalida_orario', ficheOrario);
+      localStorage.setItem('loc_banner_in_forse_attivo', String(inForseAttivo));
+      localStorage.setItem('loc_orario_in_forse', inForseOrario);
+      localStorage.setItem('loc_banner_promapp_attivo', String(promAppAttivo));
+      localStorage.setItem('loc_banner_promapp_da', promAppDa);
+      localStorage.setItem('loc_banner_promapp_a', promAppA);
+      localStorage.setItem('loc_avviso_wa_disabilitato', String(!avvisoAppAttivo));
+      localStorage.setItem('loc_avviso_appuntamenti_orario', avvisoAppOrario);
+      localStorage.setItem('loc_banner_compleanno_attivo', String(compleannoAttivo));
+      localStorage.setItem('loc_banner_compleanno_orario', compleannoOrario);
+      localStorage.setItem('loc_banner_recensioni_attivo', String(recensioniAttivo));
+      localStorage.setItem('loc_orario_recensioni', recensioniOrario);
       // Reset banner localStorage so changed settings take effect immediately today
-      const bannerPrefixes = ['avviso_in_forse_shown_', 'recensioni_banner_shown_', 'recensioni_banner_dismissed_', 'promemoria_shown_'];
+      const bannerPrefixes = ['avviso_in_forse_shown_', 'recensioni_banner_shown_', 'recensioni_banner_dismissed_', 'promemoria_shown_', 'compleanno_shown_'];
       Object.keys(localStorage).forEach(k => {
         if (bannerPrefixes.some(p => k.startsWith(p))) localStorage.removeItem(k);
       });

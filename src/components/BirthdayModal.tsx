@@ -219,12 +219,16 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
     if (!c.telefono) return;
     apriWhatsApp(c.telefono, buildMessaggio(c));
     setSentIds(prev => new Set([...prev, c.id]));
+    const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    supabase.from('clienti').update({ auguri_inviati_il: todayKey }).eq('id', c.id).then(() => {});
   }
 
   function sendTutti() {
     const daInviare = clienti.filter(c => c.telefono && !sentIds.has(c.id));
+    const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
     for (const c of daInviare) {
       apriWhatsApp(c.telefono!, buildMessaggio(c));
+      supabase.from('clienti').update({ auguri_inviati_il: todayKey }).eq('id', c.id).then(() => {});
     }
     setSentIds(prev => new Set([...prev, ...daInviare.map(c => c.id)]));
   }
@@ -254,6 +258,9 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
       telefono_override: cliente.telefono ?? '',
       user_id: user?.id,
     });
+
+    const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    supabase.from('clienti').update({ auguri_inviati_il: todayKey }).eq('id', cliente.id).then(() => {});
 
     setCreatingCarta(null);
     setCartaCreata({

@@ -414,39 +414,42 @@ export default function App() {
       const romeStr = now.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
       const todayKey = romeStr.split(' ')[0]; // yyyy-mm-dd
 
-      // 1. Banner "ricorda di inviare i messaggi appuntamento" — orario configurabile
-      const [appBannerAttivo, appBannerDa, appBannerA] = await Promise.all([
-        getImpostazione('banner_promemoria_app_attivo'),
-        getImpostazione('banner_promemoria_app_da'),
-        getImpostazione('banner_promemoria_app_a'),
-      ]);
+      // 1. Banner "ricorda di inviare i messaggi appuntamento" — orario configurabile (localStorage)
+      const appBannerAttivo = localStorage.getItem('loc_banner_promapp_attivo') ?? 'true';
+      const appBannerDa = localStorage.getItem('loc_banner_promapp_da') ?? '07:00';
+      const appBannerA = localStorage.getItem('loc_banner_promapp_a') ?? '11:00';
       if (appBannerAttivo !== 'false') {
         const nowTime = romeStr.split(' ')[1].slice(0, 5); // HH:mm
-        const da = appBannerDa ?? '07:00';
-        const a = appBannerA ?? '11:00';
-        if (nowTime >= da && nowTime <= a) {
+        if (nowTime >= appBannerDa && nowTime <= appBannerA) {
           setShowAppBanner(true);
         }
       }
 
-      // 2. Compleanni del giorno — mostrato ad ogni apertura dell'app
-      const [month, day] = todayKey.split('-').slice(1).map(Number);
-      const { data } = await supabase
-        .from('clienti')
-        .select('id, nome, cognome, telefono, data_nascita')
-        .not('data_nascita', 'is', null);
+      // 2. Compleanni del giorno — mostrati con debounce giornaliero
+      const birthdayShownKey = `compleanno_shown_${todayKey}`;
+      const compleannoAttivo = localStorage.getItem('loc_banner_compleanno_attivo') ?? 'true';
+      if (compleannoAttivo !== 'false' && !localStorage.getItem(birthdayShownKey)) {
+        const [month, day] = todayKey.split('-').slice(1).map(Number);
+        const { data } = await supabase
+          .from('clienti')
+          .select('id, nome, cognome, telefono, data_nascita, auguri_inviati_il')
+          .not('data_nascita', 'is', null);
 
-      const compleanni = ((data || []) as { id: string; nome: string; cognome: string; telefono: string | null; data_nascita: string }[])
+      const compleanni = ((data || []) as { id: string; nome: string; cognome: string; telefono: string | null; data_nascita: string; auguri_inviati_il: string | null }[])
         .filter(c => {
           const parts = c.data_nascita.split('-');
-          return parseInt(parts[1], 10) === month && parseInt(parts[2], 10) === day;
+          if (parseInt(parts[1], 10) !== month || parseInt(parts[2], 10) !== day) return false;
+          if (c.auguri_inviati_il === todayKey) return false; // gia' gestito oggi da un altro dispositivo
+          return true;
         })
         .map(c => ({ id: c.id, nome: c.nome, cognome: c.cognome, telefono: c.telefono }));
 
       if (compleanni.length > 0) {
+        localStorage.setItem(birthdayShownKey, '1');
         setBirthdayClienti(compleanni);
         setTimeout(() => setShowBirthdayModal(true), 800);
       }
+      } // end if compleannoAttivo
     }
 
     checkStartupAlerts();
@@ -457,9 +460,9 @@ export default function App() {
     const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
     let lastFiredMinute = '';
     const check = async () => {
-      const attivo = await getImpostazione('banner_in_forse_attivo');
+      const attivo = localStorage.getItem('loc_banner_in_forse_attivo') ?? 'true';
       if (attivo === 'false') return;
-      const orario = await getImpostazione('orario_avviso_in_forse') ?? '18:00';
+      const orario = localStorage.getItem('loc_orario_in_forse') ?? '18:00';
       const nowIt = fmt.format(new Date());
       if (nowIt !== orario) return;
       if (lastFiredMinute === nowIt) return; // already fired this minute
@@ -495,9 +498,9 @@ export default function App() {
     const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
     let lastFiredMinuteRec = '';
     const checkRec = async () => {
-      const attivo = await getImpostazione('banner_recensioni_attivo');
+      const attivo = localStorage.getItem('loc_banner_recensioni_attivo') ?? 'false';
       if (attivo !== 'true') return;
-      const orario = await getImpostazione('orario_promemoria_recensioni') ?? '19:00';
+      const orario = localStorage.getItem('loc_orario_recensioni') ?? '19:00';
       const nowIt = fmt.format(new Date());
       if (nowIt !== orario) return;
       if (lastFiredMinuteRec === nowIt) return;
@@ -785,18 +788,11 @@ export default function App() {
     }
 
     async function checkAndFire() {
-      const [{ data: gData, error: gErr }, { data: oData, error: oErr }] = await Promise.all([
-        supabase.from('impostazioni').select('valore').eq('chiave', 'promemoria_convalida_giorni').maybeSingle(),
-        supabase.from('impostazioni').select('valore').eq('chiave', 'promemoria_convalida_orario').maybeSingle(),
-      ]);
-
-      if (gErr) console.error('[Promemoria] errore lettura giorni:', gErr);
-      if (oErr) console.error('[Promemoria] errore lettura orario:', oErr);
+      const giorniRaw = localStorage.getItem('loc_promemoria_convalida_giorni');
+      const orario = localStorage.getItem('loc_promemoria_convalida_orario') ?? '20:00';
 
       let giorni: number[] = [1, 2, 3, 4, 5, 6];
-      let orario = '20:00';
-      try { if (gData?.valore) giorni = JSON.parse(gData.valore); } catch { /* keep default */ }
-      if (oData?.valore) orario = oData.valore;
+      try { if (giorniRaw) giorni = JSON.parse(giorniRaw); } catch { /* keep default */ }
 
       const [targetH, targetM] = orario.split(':').map(Number);
       const targMinutes = targetH * 60 + targetM;
