@@ -3513,6 +3513,7 @@ async function runAutoBackupIfDue(): Promise<boolean> {
   const now = new Date();
   const todayStr = localDateStr(now);
   if (lastStr === todayStr) return false;
+  if (!navigator.onLine) return false; // offline: rimanda al prossimo avvio online
 
   const [hh, mm] = timeStr.split(':').map(Number);
   const timePassed = now.getHours() > hh || (now.getHours() === hh && now.getMinutes() >= mm);
@@ -3534,21 +3535,11 @@ async function runAutoBackupIfDue(): Promise<boolean> {
   }
 
   try {
-    const sbUrl = localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL;
-    const sbKey = localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
-    const apiUrl = `${sbUrl}/functions/v1/backup-database`;
-    const res = await fetch(apiUrl, {
-      headers: { Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    const jsonStr = JSON.stringify(data, null, 2);
+    const jsonStr = await exportDataForAutoBackup(targetDate);
+    if (!jsonStr) return false;
     const italDate = targetDate.split('-').reverse().join('-');
     const filename = `backup-salone-${italDate}.json`;
-
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    browserDownload(filename, blob);
-
+    browserDownload(filename, jsonStr);
     localStorage.setItem(AB_LAST_KEY, targetDate);
     return true;
   } catch {
@@ -5807,16 +5798,13 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
   async function scaricaBackup() {
     setLoading('backup');
     try {
-      const cloudApiUrl = `${localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-database`;
-      const cloudHeaders = {
-        'Authorization': `Bearer ${localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      };
-      const res = await fetch(cloudApiUrl, { headers: cloudHeaders });
-      if (!res.ok) throw new Error('Errore esportazione');
-      const data = await res.json();
-      const filename = `backup-salone-${localDateStr()}.json`;
-      await saveFile('backup', filename, JSON.stringify(data, null, 2));
+      const todayStr = localDateStr();
+      // Usa il client Supabase JS direttamente (no edge function, no CORS).
+      // offlineFetch intercetta le chiamate e restituisce la cache IndexedDB se offline.
+      const jsonStr = await exportDataForAutoBackup(todayStr);
+      if (!jsonStr) throw new Error('Nessun dato disponibile');
+      const filename = `backup-salone-${todayStr}.json`;
+      await saveFile('backup', filename, jsonStr);
       showFeedback('backup', `Backup scaricato: ${filename}`);
     } catch {
       showFeedback('backup', 'Errore durante il backup. Riprova.', false);
