@@ -28,6 +28,7 @@ import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing, Star, Gift, HelpCircle } from 'lucide-react';
 import { isPushSupported, getPushPermission, requestPushPermission, subscribePush } from './lib/webPush';
 import RecensioniReminderModal from './components/RecensioniReminderModal';
+import AiChat from './components/AiChat';
 import { InForseModal, loadAvvisoInForse, type ClienteInForseEntry } from './components/InForseModal';
 import { isElectron, setCurrentUserId, registerPushRowNow, setElectronDbReady, getImpostazione, registerBrowserLocalOps } from './lib/localDb';
 import { isOwnerBuild, getLicenseState } from './lib/license';
