@@ -7924,9 +7924,225 @@ function PasswordRow({ chiave, titolo, descrizione, feedbackMsg, onSaved, aperta
 const LS_URL_KEY = 'sb_custom_url';
 const LS_KEY_KEY = 'sb_custom_anon_key';
 
+// Script SQL da eseguire sul nuovo progetto Supabase del salon
+const SETUP_SQL = `-- Gestionale Salone — Setup iniziale
+-- Esegui questo script nel SQL Editor del tuo progetto Supabase.
+
+-- Abilita le estensioni necessarie
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_net";
+
+-- ─── Funzione updated_at ──────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ─── clienti ─────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS clienti (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  nome text NOT NULL DEFAULT '',
+  cognome text NOT NULL DEFAULT '',
+  telefono text NOT NULL DEFAULT '',
+  email text NOT NULL DEFAULT '',
+  data_nascita date,
+  note text NOT NULL DEFAULT '',
+  foto_url text NOT NULL DEFAULT '',
+  in_blacklist boolean NOT NULL DEFAULT false,
+  motivo_blacklist text,
+  recensione_lasciata boolean NOT NULL DEFAULT false,
+  data_blocco_recensione date,
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE clienti ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_clienti" ON clienti FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_clienti" ON clienti FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_clienti" ON clienti FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_clienti" ON clienti FOR DELETE TO authenticated USING (auth.uid() = user_id);
+CREATE TRIGGER trg_clienti_updated_at BEFORE UPDATE ON clienti FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ─── parrucchieri ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS parrucchieri (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  nome text NOT NULL,
+  colore text NOT NULL DEFAULT '#f59e0b',
+  attivo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE parrucchieri ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_parrucchieri" ON parrucchieri FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_parrucchieri" ON parrucchieri FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_parrucchieri" ON parrucchieri FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_parrucchieri" ON parrucchieri FOR DELETE TO authenticated USING (auth.uid() = user_id);
+GRANT SELECT ON parrucchieri TO anon;
+CREATE POLICY "anon_sel_parrucchieri" ON parrucchieri FOR SELECT TO anon USING (true);
+
+-- ─── trattamenti_catalogo ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS trattamenti_catalogo (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  nome text NOT NULL,
+  descrizione text NOT NULL DEFAULT '',
+  durata_minuti integer NOT NULL DEFAULT 30,
+  prezzo numeric(10,2) NOT NULL DEFAULT 0,
+  colore text NOT NULL DEFAULT '#f59e0b',
+  attivo boolean NOT NULL DEFAULT true,
+  tipo text NOT NULL DEFAULT 'servizio' CHECK (tipo IN ('servizio','trattamento')),
+  inizio_posa integer,
+  durata_posa integer,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE trattamenti_catalogo ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_tratt_cat" ON trattamenti_catalogo FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_tratt_cat" ON trattamenti_catalogo FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_tratt_cat" ON trattamenti_catalogo FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_tratt_cat" ON trattamenti_catalogo FOR DELETE TO authenticated USING (auth.uid() = user_id);
+GRANT SELECT ON trattamenti_catalogo TO anon;
+CREATE POLICY "anon_sel_tratt_cat" ON trattamenti_catalogo FOR SELECT TO anon USING (true);
+
+-- ─── appuntamenti ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS appuntamenti (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  cliente_id uuid REFERENCES clienti(id),
+  parrucchiere_id uuid REFERENCES parrucchieri(id),
+  data_ora timestamptz NOT NULL,
+  durata_minuti integer NOT NULL DEFAULT 60,
+  stato text NOT NULL DEFAULT 'confermato' CHECK (stato IN ('confermato','in_attesa','completato','cancellato','in_forse')),
+  note text NOT NULL DEFAULT '',
+  prezzo_totale numeric(10,2) NOT NULL DEFAULT 0,
+  nuova_cliente boolean NOT NULL DEFAULT false,
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE appuntamenti ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_app" ON appuntamenti FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_app" ON appuntamenti FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_app" ON appuntamenti FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_app" ON appuntamenti FOR DELETE TO authenticated USING (auth.uid() = user_id);
+CREATE TRIGGER trg_app_updated_at BEFORE UPDATE ON appuntamenti FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ─── appuntamento_trattamenti ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS appuntamento_trattamenti (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  appuntamento_id uuid NOT NULL REFERENCES appuntamenti(id) ON DELETE CASCADE,
+  trattamento_id uuid REFERENCES trattamenti_catalogo(id),
+  nome_trattamento text NOT NULL,
+  prezzo numeric(10,2) NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE appuntamento_trattamenti ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_app_tratt" ON appuntamento_trattamenti FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_app_tratt" ON appuntamento_trattamenti FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_app_tratt" ON appuntamento_trattamenti FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_app_tratt" ON appuntamento_trattamenti FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+-- ─── schede_colore ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS schede_colore (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  cliente_id uuid NOT NULL REFERENCES clienti(id) ON DELETE CASCADE,
+  data_trattamento date NOT NULL,
+  formula_colore text NOT NULL DEFAULT '',
+  ossidante text NOT NULL DEFAULT '',
+  tempo_posa integer NOT NULL DEFAULT 30,
+  note text NOT NULL DEFAULT '',
+  colore_base text NOT NULL DEFAULT '',
+  colore_target text NOT NULL DEFAULT '',
+  tecnica text NOT NULL DEFAULT '',
+  foto_prima_url text NOT NULL DEFAULT '',
+  foto_dopo_url text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE schede_colore ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_sc" ON schede_colore FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_sc" ON schede_colore FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_sc" ON schede_colore FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_sc" ON schede_colore FOR DELETE TO authenticated USING (auth.uid() = user_id);
+CREATE TRIGGER trg_sc_updated_at BEFORE UPDATE ON schede_colore FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ─── impostazioni ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS impostazioni (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  chiave text NOT NULL,
+  valore text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, chiave)
+);
+ALTER TABLE impostazioni ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_imp" ON impostazioni FOR SELECT TO authenticated USING (auth.uid() = user_id OR user_id IS NULL);
+CREATE POLICY "ins_imp" ON impostazioni FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_imp" ON impostazioni FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_imp" ON impostazioni FOR DELETE TO authenticated USING (auth.uid() = user_id);
+GRANT SELECT ON impostazioni TO anon;
+CREATE POLICY "anon_sel_imp" ON impostazioni FOR SELECT TO anon USING (true);
+CREATE TRIGGER trg_imp_updated_at BEFORE UPDATE ON impostazioni FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ─── fiches ───────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS fiches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  cliente_id uuid REFERENCES clienti(id),
+  data_ora timestamptz NOT NULL DEFAULT now(),
+  totale numeric(10,2) NOT NULL DEFAULT 0,
+  note text NOT NULL DEFAULT '',
+  tipo text NOT NULL DEFAULT 'standard',
+  tipo_pagamento text NOT NULL DEFAULT 'contante',
+  data_riferimento date,
+  convalidata boolean NOT NULL DEFAULT false,
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE fiches ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_fiches" ON fiches FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_fiches" ON fiches FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_fiches" ON fiches FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_fiches" ON fiches FOR DELETE TO authenticated USING (auth.uid() = user_id);
+CREATE TRIGGER trg_fiches_updated_at BEFORE UPDATE ON fiches FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ─── fiche_voci ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS fiche_voci (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id),
+  fiche_id uuid NOT NULL REFERENCES fiches(id) ON DELETE CASCADE,
+  descrizione text NOT NULL,
+  importo numeric(10,2) NOT NULL DEFAULT 0,
+  quantita integer NOT NULL DEFAULT 1,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE fiche_voci ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sel_fv" ON fiche_voci FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "ins_fv" ON fiche_voci FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "upd_fv" ON fiche_voci FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "del_fv" ON fiche_voci FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+-- ─── Storage bucket foto-clienti ──────────────────────────────────────────────
+INSERT INTO storage.buckets (id, name, public) VALUES ('foto-clienti', 'foto-clienti', true) ON CONFLICT DO NOTHING;
+CREATE POLICY "auth_upload_foto" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'foto-clienti');
+CREATE POLICY "auth_update_foto" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'foto-clienti');
+CREATE POLICY "auth_delete_foto" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'foto-clienti');
+CREATE POLICY "public_read_foto" ON storage.objects FOR SELECT TO public USING (bucket_id = 'foto-clienti');
+
+-- Fine setup base. Tutte le tabelle aggiuntive si aggiungeranno con le migrazioni successive.
+`;
+
 function PaginaConnessione({ onBack }: { onBack: () => void }) {
-  const defaultUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
-  const defaultKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+  const isOwner = isOwnerBuild();
+  const defaultUrl = isOwner ? (import.meta.env.VITE_SUPABASE_URL ?? '') : '';
+  const defaultKey = isOwner ? (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '') : '';
 
   const [url, setUrl] = useState(() => localStorage.getItem(LS_URL_KEY) ?? defaultUrl);
   const [anonKey, setAnonKey] = useState(() => localStorage.getItem(LS_KEY_KEY) ?? defaultKey);
@@ -7934,14 +8150,27 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [locked, setLocked] = useState(!isOwner);
+  const [lockOtp, setLockOtp] = useState('');
+  const [lockError, setLockError] = useState('');
+  const [lockLoading, setLockLoading] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+
+  useEffect(() => {
+    if (!isOwner) {
+      import('../lib/license').then(({ getLicenseState }) => {
+        getLicenseState().then(s => setLocked(!s.cloudActivated));
+      });
+    }
+  }, [isOwner]);
 
   const activeUrl = localStorage.getItem(LS_URL_KEY) ?? defaultUrl;
   const activeKey = localStorage.getItem(LS_KEY_KEY) ?? defaultKey;
   const hasLocalOverride = !!localStorage.getItem(LS_URL_KEY) || !!localStorage.getItem(LS_KEY_KEY);
-
-  // Whether the current form values differ from what's actually active
   const isDirty = url.trim() !== activeUrl || anonKey.trim() !== activeKey;
   const isCustom = url.trim() !== defaultUrl || anonKey.trim() !== defaultKey;
+
+  const projectId = url.trim().replace('https://', '').split('.')[0] || '';
 
   function handleSave() {
     const newUrl = url.trim();
@@ -7950,7 +8179,6 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
     localStorage.setItem(LS_URL_KEY, newUrl);
     localStorage.setItem(LS_KEY_KEY, newKey);
     setSaving(true);
-    // Reload so the Supabase client is recreated with the new credentials
     setTimeout(() => window.location.reload(), 800);
   }
 
@@ -7960,7 +8188,6 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
     setUrl(defaultUrl);
     setAnonKey(defaultKey);
     setTestResult(null);
-    // Reload so the Supabase client reverts to default credentials
     setTimeout(() => window.location.reload(), 400);
   }
 
@@ -7973,7 +8200,6 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
       const res = await fetch(`${testUrl}/rest/v1/`, {
         headers: { apikey: testKey, Authorization: `Bearer ${testKey}` },
       });
-      // Supabase REST root returns 200 with valid key, 401 with invalid
       if (res.status === 200 || res.status === 400) {
         setTestResult({ ok: true, msg: 'Connessione riuscita. Le chiavi sono valide.' });
       } else if (res.status === 401) {
@@ -7985,6 +8211,35 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
       setTestResult({ ok: false, msg: "Impossibile raggiungere il server. Controlla l'URL." });
     }
     setTesting(false);
+  }
+
+  async function handleUnlock() {
+    if (!lockOtp.trim()) return;
+    setLockLoading(true);
+    setLockError('');
+    try {
+      const { verifyCloudOtp } = await import('../lib/license');
+      const ok = await verifyCloudOtp(lockOtp);
+      if (ok) {
+        setLocked(false);
+        setLockOtp('');
+      } else {
+        setLockError('Codice non valido.');
+      }
+    } finally {
+      setLockLoading(false);
+    }
+  }
+
+  async function handleCopySql() {
+    try {
+      await navigator.clipboard.writeText(SETUP_SQL);
+      setSqlCopied(true);
+      setTimeout(() => setSqlCopied(false), 2500);
+    } catch { /* ignore */ }
+    if (projectId) {
+      window.open(`https://supabase.com/dashboard/project/${projectId}/sql/new`, '_blank');
+    }
   }
 
   const maskedKey = anonKey.length > 12
@@ -8012,117 +8267,182 @@ function PaginaConnessione({ onBack }: { onBack: () => void }) {
           <p className={`text-sm font-bold ${hasLocalOverride ? 'text-amber-900' : 'text-green-900'}`}>
             {hasLocalOverride ? 'Configurazione personalizzata attiva' : 'Configurazione predefinita in uso'}
           </p>
-          <p className={`text-xs mt-0.5 leading-relaxed ${hasLocalOverride ? 'text-amber-700' : 'text-green-700'}`}>
-            URL attivo: <span className="font-mono break-all">{activeUrl}</span>
+          <p className={`text-xs mt-0.5 leading-relaxed break-all ${hasLocalOverride ? 'text-amber-700' : 'text-green-700'}`}>
+            URL attivo: <span className="font-mono">{activeUrl || '(non configurato)'}</span>
           </p>
         </div>
       </div>
 
-      {/* Form */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
-
-        {/* URL */}
-        <div>
-          <label className="block text-sm font-semibold text-stone-700 mb-1.5">
-            URL del progetto Supabase
-          </label>
-          <input
-            type="text"
-            value={url}
-            onChange={e => { setUrl(e.target.value); setTestResult(null); }}
-            placeholder="https://xxxxxxxxxxxx.supabase.co"
-            className="w-full px-4 py-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm font-mono transition"
-          />
-          <p className="text-xs text-stone-400 mt-1.5">supabase.com → il tuo progetto → Settings → API → Project URL</p>
-        </div>
-
-        {/* Anon key */}
-        <div>
-          <label className="block text-sm font-semibold text-stone-700 mb-1.5">
-            Chiave API pubblica (anon key)
-          </label>
-          <div className="relative">
-            {showKey ? (
-              <textarea
-                value={anonKey}
-                onChange={e => { setAnonKey(e.target.value); setTestResult(null); }}
-                rows={3}
-                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                className="w-full px-4 py-3 pr-10 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-xs font-mono transition resize-none"
-              />
-            ) : (
-              <div className="w-full px-4 py-3 pr-10 border border-stone-200 rounded-xl bg-stone-50 text-stone-500 text-sm font-mono">
-                <span className="truncate block">{maskedKey || '—'}</span>
-              </div>
-            )}
+      {/* Mini-gate OTP2 per user build non ancora sbloccato */}
+      {locked && (
+        <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Lock size={15} className="text-amber-600" />
+            <p className="text-sm font-semibold text-stone-700">Sblocca con codice di attivazione cloud</p>
+          </div>
+          <p className="text-xs text-stone-500 leading-relaxed">
+            Per configurare le credenziali Supabase devi prima completare l'attivazione cloud (Parete 2).
+            Inserisci il codice OTP ricevuto dal supporto.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={lockOtp}
+              onChange={e => { setLockOtp(e.target.value.toUpperCase().replace(/[^A-F0-9\-]/g, '').slice(0, 9)); setLockError(''); }}
+              onKeyDown={e => { if (e.key === 'Enter') handleUnlock(); }}
+              placeholder="XXXX-XXXX"
+              className="flex-1 px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm font-mono tracking-widest"
+              spellCheck={false}
+              autoComplete="off"
+            />
             <button
-              type="button"
-              onClick={() => setShowKey(v => !v)}
-              className="absolute right-3 top-3 text-stone-400 hover:text-stone-600 transition-colors"
+              onClick={handleUnlock}
+              disabled={lockLoading || !lockOtp.trim()}
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-semibold text-sm rounded-xl transition-colors"
             >
-              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              {lockLoading ? <RefreshCw size={14} className="animate-spin" /> : 'Sblocca'}
             </button>
           </div>
-          <p className="text-xs text-stone-400 mt-1.5">supabase.com → il tuo progetto → Settings → API → anon public</p>
-        </div>
-
-        {/* Risultato test */}
-        {testResult && (
-          <div className={`flex items-start gap-2 rounded-xl px-4 py-3 border ${testResult.ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-            {testResult.ok
-              ? <Check size={15} className="text-green-600 flex-shrink-0 mt-0.5" />
-              : <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />}
-            <p className={`text-sm ${testResult.ok ? 'text-green-700' : 'text-red-700'}`}>{testResult.msg}</p>
-          </div>
-        )}
-
-        {/* Azioni */}
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          <button
-            onClick={handleTest}
-            disabled={testing || saving}
-            className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={testing ? 'animate-spin' : ''} />
-            {testing ? 'Test in corso...' : 'Testa connessione'}
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={saving || !isDirty || !url.trim() || !anonKey.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
-          >
-            {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
-            {saving ? 'Applicando...' : 'Salva e riavvia'}
-          </button>
-
-          {hasLocalOverride && (
-            <button
-              onClick={handleReset}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50"
-            >
-              <X size={14} />
-              Ripristina predefinite
-            </button>
+          {lockError && (
+            <div className="flex items-center gap-2 text-red-500 text-xs">
+              <AlertCircle size={13} />
+              <span>{lockError}</span>
+            </div>
           )}
         </div>
+      )}
 
-        {isDirty && !saving && (
-          <p className="text-xs text-amber-600 font-medium">
-            Hai modifiche non salvate. Clicca "Salva e riavvia" per applicarle.
-          </p>
-        )}
+      {/* Form credenziali — visibile solo se sbloccato */}
+      {!locked && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
+
+          {/* URL */}
+          <div>
+            <label className="block text-sm font-semibold text-stone-700 mb-1.5">
+              URL del progetto Supabase
+            </label>
+            <input
+              type="text"
+              value={url}
+              onChange={e => { setUrl(e.target.value); setTestResult(null); }}
+              placeholder="https://xxxxxxxxxxxx.supabase.co"
+              className="w-full px-4 py-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm font-mono transition"
+            />
+            <p className="text-xs text-stone-400 mt-1.5">supabase.com → il tuo progetto → Settings → API → Project URL</p>
+          </div>
+
+          {/* Anon key */}
+          <div>
+            <label className="block text-sm font-semibold text-stone-700 mb-1.5">
+              Chiave API pubblica (anon key)
+            </label>
+            <div className="relative">
+              {showKey ? (
+                <textarea
+                  value={anonKey}
+                  onChange={e => { setAnonKey(e.target.value); setTestResult(null); }}
+                  rows={3}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="w-full px-4 py-3 pr-10 border border-stone-200 rounded-xl bg-stone-50 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-xs font-mono transition resize-none"
+                />
+              ) : (
+                <div className="w-full px-4 py-3 pr-10 border border-stone-200 rounded-xl bg-stone-50 text-stone-500 text-sm font-mono">
+                  <span className="truncate block">{maskedKey || '—'}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowKey(v => !v)}
+                className="absolute right-3 top-3 text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className="text-xs text-stone-400 mt-1.5">supabase.com → il tuo progetto → Settings → API → anon public</p>
+          </div>
+
+          {/* Risultato test */}
+          {testResult && (
+            <div className={`flex items-start gap-2 rounded-xl px-4 py-3 border ${testResult.ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              {testResult.ok
+                ? <Check size={15} className="text-green-600 flex-shrink-0 mt-0.5" />
+                : <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />}
+              <p className={`text-sm ${testResult.ok ? 'text-green-700' : 'text-red-700'}`}>{testResult.msg}</p>
+            </div>
+          )}
+
+          {/* Azioni */}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              onClick={handleTest}
+              disabled={testing || saving}
+              className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={testing ? 'animate-spin' : ''} />
+              {testing ? 'Test in corso...' : 'Testa connessione'}
+            </button>
+
+            <button
+              onClick={handleSave}
+              disabled={saving || !isDirty || !url.trim() || !anonKey.trim()}
+              className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
+            >
+              {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+              {saving ? 'Applicando...' : 'Salva e riavvia'}
+            </button>
+
+            {hasLocalOverride && !isCustom && (
+              <button
+                onClick={handleReset}
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm rounded-xl transition-colors disabled:opacity-50"
+              >
+                <X size={14} />
+                Ripristina predefinite
+              </button>
+            )}
+          </div>
+
+          {isDirty && !saving && (
+            <p className="text-xs text-amber-600 font-medium">
+              Hai modifiche non salvate. Clicca "Salva e riavvia" per applicarle.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Bottoni A e B — sempre visibili */}
+      <div className="flex flex-wrap gap-3">
+        {/* Bottone A: apri supabase.com */}
+        <button
+          onClick={() => window.open('https://supabase.com', '_blank')}
+          className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 font-semibold text-sm rounded-xl transition-colors shadow-sm"
+        >
+          <ExternalLink size={14} className="text-stone-500" />
+          Apri Supabase
+        </button>
+
+        {/* Bottone B: copia SQL + apri editor */}
+        <button
+          onClick={handleCopySql}
+          disabled={!projectId && sqlCopied === false}
+          className="flex items-center gap-2 px-4 py-2.5 border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-50 text-stone-700 font-semibold text-sm rounded-xl transition-colors shadow-sm"
+        >
+          {sqlCopied
+            ? <><Check size={14} className="text-emerald-500" /> SQL copiato!</>
+            : <><Copy size={14} className="text-stone-500" /> Copia SQL + Apri Editor</>
+          }
+        </button>
       </div>
 
       {/* Avviso */}
       <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2">
-        <p className="text-xs font-bold text-stone-700">Come cambiare account Supabase</p>
+        <p className="text-xs font-bold text-stone-700">Come configurare un nuovo progetto Supabase</p>
         <ol className="space-y-1.5 list-decimal list-inside">
-          <li className="text-xs text-stone-500 leading-relaxed">Accedi a <strong>supabase.com</strong> e seleziona (o crea) il nuovo progetto</li>
+          <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Apri Supabase</strong>, registrati e crea un nuovo progetto</li>
           <li className="text-xs text-stone-500 leading-relaxed">Vai su <strong>Settings → API</strong> e copia il <em>Project URL</em> e la chiave <em>anon public</em></li>
           <li className="text-xs text-stone-500 leading-relaxed">Incollali nei campi qui sopra, usa <strong>Testa connessione</strong> per verificare</li>
-          <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Salva e riavvia</strong> — il programma si ricarica e si connette al nuovo database</li>
+          <li className="text-xs text-stone-500 leading-relaxed">Clicca <strong>Salva e riavvia</strong>, poi usa <strong>Copia SQL + Apri Editor</strong> per creare le tabelle</li>
         </ol>
         <p className="text-xs text-stone-400 pt-1">Le chiavi vengono salvate solo su questo dispositivo e non vengono mai inviate a terzi.</p>
       </div>

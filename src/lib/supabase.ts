@@ -1,13 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Legge ESCLUSIVAMENTE dal file .env del progetto (iniettato da Vite al build-time).
-// Non esistono override, localStorage, sandbox o deviazioni di alcun tipo.
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const _mode = import.meta.env.VITE_BUILD_MODE || 'owner';
 
-if (!supabaseUrl || !supabaseUrl.includes('qfpeffzdszdanebmgafb')) {
-  throw new Error(`ERRORE CRITICO: VITE_SUPABASE_URL non punta al progetto reale. Valore letto: ${supabaseUrl}`);
-}
+const supabaseUrl =
+  localStorage.getItem('sb_custom_url') ||
+  (_mode === 'owner' ? (import.meta.env.VITE_SUPABASE_URL as string) : '');
+
+const supabaseAnonKey =
+  localStorage.getItem('sb_custom_anon_key') ||
+  (_mode === 'owner' ? (import.meta.env.VITE_SUPABASE_ANON_KEY as string) : '');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

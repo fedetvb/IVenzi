@@ -198,9 +198,10 @@ export default function App() {
   const [licenseActivated, setLicenseActivated] = useState<boolean | null>(null);
   const hasFicheNonConvalidateRef = { current: false };
 
-  // License check: solo per build utente. Owner build è sempre sbloccato.
+  // License check: solo per build utente. Owner build Electron è sempre sbloccato.
+  // Browser owner e qualsiasi user build passano dal LicenseWall.
   useEffect(() => {
-    if (isOwnerBuild()) {
+    if (isOwnerBuild() && isElectron()) {
       setLicenseActivated(true);
       return;
     }

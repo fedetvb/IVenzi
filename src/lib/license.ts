@@ -16,6 +16,8 @@ const LS_LOCAL_ACTIVATED = 'license_local_activated';
 const LS_CLOUD_ACTIVATED = 'license_cloud_activated';
 const LS_HARDWARE_ID = 'license_hardware_id';
 const LS_CLOUD_REQUEST_ID = 'license_cloud_request_id';
+const LS_LOCAL_OTP_CODE = 'license_local_otp_code';
+const LS_CLOUD_OTP_CODE = 'license_cloud_otp_code';
 
 // ─── Build mode ───────────────────────────────────────────────────────────────
 
@@ -103,11 +105,20 @@ export interface LicenseState {
   cloudActivated: boolean;
   hardwareId: string;
   cloudRequestId: string;
+  localOtpCode: string;
+  cloudOtpCode: string;
 }
 
 export async function getLicenseState(): Promise<LicenseState> {
   if (isOwnerBuild()) {
-    return { localActivated: true, cloudActivated: true, hardwareId: '', cloudRequestId: '' };
+    return {
+      localActivated: true,
+      cloudActivated: true,
+      hardwareId: '',
+      cloudRequestId: '',
+      localOtpCode: '',
+      cloudOtpCode: '',
+    };
   }
 
   const [hardwareId, cloudRequestId] = await Promise.all([getHardwareId(), getCloudRequestId()]);
@@ -117,6 +128,8 @@ export async function getLicenseState(): Promise<LicenseState> {
     cloudActivated: localStorage.getItem(LS_CLOUD_ACTIVATED) === 'true',
     hardwareId,
     cloudRequestId,
+    localOtpCode: localStorage.getItem(LS_LOCAL_OTP_CODE) ?? '',
+    cloudOtpCode: localStorage.getItem(LS_CLOUD_OTP_CODE) ?? '',
   };
 }
 
@@ -128,7 +141,10 @@ export async function verifyLocalOtp(inputOtp: string): Promise<boolean> {
   // Confronto case-insensitive, normalizza trattino
   const normalize = (s: string) => s.toUpperCase().replace(/[^A-F0-9]/g, '');
   const match = normalize(inputOtp) === normalize(expected);
-  if (match) localStorage.setItem(LS_LOCAL_ACTIVATED, 'true');
+  if (match) {
+    localStorage.setItem(LS_LOCAL_ACTIVATED, 'true');
+    localStorage.setItem(LS_LOCAL_OTP_CODE, inputOtp.toUpperCase());
+  }
   return match;
 }
 
@@ -137,7 +153,10 @@ export async function verifyCloudOtp(inputOtp: string): Promise<boolean> {
   const expected = await generateCloudOtp(cloudRequestId);
   const normalize = (s: string) => s.toUpperCase().replace(/[^A-F0-9]/g, '');
   const match = normalize(inputOtp) === normalize(expected);
-  if (match) localStorage.setItem(LS_CLOUD_ACTIVATED, 'true');
+  if (match) {
+    localStorage.setItem(LS_CLOUD_ACTIVATED, 'true');
+    localStorage.setItem(LS_CLOUD_OTP_CODE, inputOtp.toUpperCase());
+  }
   return match;
 }
 
@@ -146,4 +165,6 @@ export function resetLicense(): void {
   localStorage.removeItem(LS_CLOUD_ACTIVATED);
   localStorage.removeItem(LS_HARDWARE_ID);
   localStorage.removeItem(LS_CLOUD_REQUEST_ID);
+  localStorage.removeItem(LS_LOCAL_OTP_CODE);
+  localStorage.removeItem(LS_CLOUD_OTP_CODE);
 }
