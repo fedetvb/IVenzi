@@ -61,8 +61,8 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
         return new Date(naive.getTime() - offsetMs).toISOString();
       };
       const yesterdayStart = romeToUtc(yesterdayKey);
-      // Fine range = adesso (include convalidazioni notturne fino all'apertura del modal)
-      const yesterdayEnd = now.toISOString();
+      // Fine range = mezzanotte di oggi ora Roma (fine della giornata di ieri)
+      const yesterdayEnd = romeToUtc(todayKey);
 
       // Carica fiches convalidate ieri (incluse convalidazioni notturne di oggi)
       const { data: fiches } = await supabase
