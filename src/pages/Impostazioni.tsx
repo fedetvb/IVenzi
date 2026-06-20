@@ -22,7 +22,7 @@ import RecensioniMappingPanel from '../components/RecensioniMappingPanel';
 
 type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'testi_recensioni' | 'mappatura_recensioni' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
 
-export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
+export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno, onTestRecensioni }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void; onTestRecensioni?: () => void }) {
   const { user } = useAuth();
   const [sub, setSub] = useState<SubPage>(null);
   const [msgOpen, setMsgOpen] = useState(false);
@@ -56,7 +56,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     </StatisticheGate>
   );
   if (sub === 'password') return <PaginaPassword onBack={() => setSub(null)} />;
-  if (sub === 'avvisi_banner') return <PaginaAvvisiBanner onBack={() => setSub(null)} onTestReminder={onTestReminder} onTestInForse={onTestInForse} onTestPromApp={onTestPromApp} onTestCompleanno={onTestCompleanno} />;
+  if (sub === 'avvisi_banner') return <PaginaAvvisiBanner onBack={() => setSub(null)} onTestReminder={onTestReminder} onTestInForse={onTestInForse} onTestPromApp={onTestPromApp} onTestCompleanno={onTestCompleanno} onTestRecensioni={onTestRecensioni} />;
   if (sub === 'promemoria') return <PaginaPromemoria onBack={() => setSub(null)} onTestReminder={onTestReminder} />;
   if (sub === 'messaggio_avviso') return <PaginaMessaggioAvviso onBack={() => setSub(null)} />;
   if (sub === 'template_carta') return <PaginaTemplateCarta onBack={() => setSub(null)} />;
@@ -6214,10 +6214,13 @@ function PaginaPassword({ onBack }: { onBack: () => void }) {
 
 // ─── PaginaAvvisiBanner ───────────────────────────────────────────────────────
 
-function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onBack: () => void; onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
+function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno, onTestRecensioni }: { onBack: () => void; onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void; onTestRecensioni?: () => void }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
+  const [stilePromemoriaLocal, setStilePromemoriaLocal] = useState<'schermo_intero' | 'sottile'>(
+    () => (localStorage.getItem('stile_promemoria_local') as 'schermo_intero' | 'sottile') ?? 'schermo_intero'
+  );
 
   // Promemoria convalida fiches
   const [ficheGiorni, setFicheGiorni] = useState<number[]>([1, 2, 3, 4, 5, 6]);
@@ -6587,15 +6590,69 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
             </button>
           </div>
           {recensioniAttivo && (
-            <div className="px-6 py-5">
-              <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
-              <input
-                type="time"
-                value={recensioniOrario}
-                onChange={e => { setRecensioniOrario(e.target.value); setFeedback(null); }}
-                className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
-              />
-              <p className="text-xs text-stone-400 mt-2">Il banner compare ogni sera a quest'ora — clicca per inviare via WhatsApp</p>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Orario di comparsa</label>
+                <input
+                  type="time"
+                  value={recensioniOrario}
+                  onChange={e => { setRecensioniOrario(e.target.value); setFeedback(null); }}
+                  className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
+                />
+                <p className="text-xs text-stone-400 mt-2">Il banner compare ogni sera a quest'ora — clicca per inviare via WhatsApp</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+                  Stile avviso
+                  <span className="ml-1.5 text-[10px] font-normal normal-case text-stone-400">(salvato solo su questo dispositivo)</span>
+                </p>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-stone-50 border border-stone-100 transition-colors">
+                    <input
+                      type="radio"
+                      name="stile_promemoria_recensioni"
+                      checked={stilePromemoriaLocal === 'schermo_intero'}
+                      onChange={() => {
+                        setStilePromemoriaLocal('schermo_intero');
+                        localStorage.setItem('stile_promemoria_local', 'schermo_intero');
+                      }}
+                      className="accent-blue-500 w-4 h-4 flex-shrink-0"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-stone-800">Banner a Schermo Intero</p>
+                      <p className="text-xs text-stone-400">Pop-up centrale classico con lista clienti</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-stone-50 border border-stone-100 transition-colors">
+                    <input
+                      type="radio"
+                      name="stile_promemoria_recensioni"
+                      checked={stilePromemoriaLocal === 'sottile'}
+                      onChange={() => {
+                        setStilePromemoriaLocal('sottile');
+                        localStorage.setItem('stile_promemoria_local', 'sottile');
+                      }}
+                      className="accent-blue-500 w-4 h-4 flex-shrink-0"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-stone-800">Notifica Sottile in Alto</p>
+                      <p className="text-xs text-stone-400">Stile discreto in cima alla pagina — tocca per aprire la lista</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {onTestRecensioni && (
+                <button
+                  type="button"
+                  onClick={onTestRecensioni}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-semibold rounded-xl transition-colors"
+                >
+                  <Star size={14} />
+                  Testa avviso recensioni
+                </button>
+              )}
             </div>
           )}
         </div>

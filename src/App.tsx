@@ -120,6 +120,8 @@ export default function App() {
 
   // Modal promemoria recensioni Google
   const [showRecensioniModal, setShowRecensioniModal] = useState(false);
+  // Banner sottile promemoria recensioni (alternativo al modal)
+  const [showRecensioniBannerSottile, setShowRecensioniBannerSottile] = useState(false);
 
   // Banner appuntamenti in forse
   const [showInForseBanner, setShowInForseBanner] = useState(false);
@@ -210,8 +212,53 @@ export default function App() {
     return `promemoria_shown_${todayKey}_${orario}`;
   }
 
+  async function checkHasClientiRecensioni(userId: string): Promise<boolean> {
+    const romeNow = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
+    const todayKey = romeNow.split(' ')[0];
+    const yesterdayKey = (() => {
+      const d = new Date(`${todayKey}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - 1);
+      return d.toISOString().split('T')[0];
+    })();
+    const romeToUtc = (dateKey: string): string => {
+      const naive = new Date(`${dateKey}T00:00:00Z`);
+      const romeStr = naive.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
+      const naiveRome = new Date(romeStr.replace(' ', 'T') + 'Z');
+      const offsetMs = naive.getTime() - naiveRome.getTime();
+      return new Date(naive.getTime() - offsetMs).toISOString();
+    };
+    const { data } = await supabase
+      .from('fiches')
+      .select('id, clienti(recensione_lasciata, data_blocco_recensione)')
+      .eq('user_id', userId)
+      .eq('convalidata', true)
+      .gte('convalidata_at', romeToUtc(yesterdayKey))
+      .lte('convalidata_at', romeToUtc(todayKey))
+      .is('deleted_at', null);
+    if (!data || data.length === 0) return false;
+    const now = new Date();
+    const seen = new Set<string>();
+    return (data as any[]).some(f => {
+      if (seen.has(f.id)) return false;
+      seen.add(f.id);
+      const c = f.clienti as any;
+      if (!c || c.recensione_lasciata) return false;
+      const blocco = c.data_blocco_recensione ? new Date(c.data_blocco_recensione) : null;
+      return !blocco || blocco <= now;
+    });
+  }
+
   function triggerReminderTest() {
     setShowReminderBanner(true);
+  }
+
+  function triggerRecensioniTest() {
+    const stile = localStorage.getItem('stile_promemoria_local') ?? 'schermo_intero';
+    if (stile === 'sottile') {
+      setShowRecensioniBannerSottile(true);
+    } else {
+      setShowRecensioniModal(true);
+    }
   }
 
   async function triggerInForseTest() {
@@ -445,8 +492,16 @@ export default function App() {
       const todayKey = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }).split(' ')[0];
       const lsKey = `recensioni_banner_shown_${todayKey}_${orario.replace(':', '')}`;
       if (localStorage.getItem(lsKey)) return;
+      // Pre-check silenzioso: se nessuna cliente da contattare, non mostrare nulla
+      const hasClienti = await checkHasClientiRecensioni(user.id);
+      if (!hasClienti) return;
       localStorage.setItem(lsKey, '1');
-      setShowRecensioniModal(true);
+      const stile = localStorage.getItem('stile_promemoria_local') ?? 'schermo_intero';
+      if (stile === 'sottile') {
+        setShowRecensioniBannerSottile(true);
+      } else {
+        setShowRecensioniModal(true);
+      }
     };
     checkRec();
     const id = setInterval(checkRec, 30_000);
@@ -1491,11 +1546,38 @@ export default function App() {
         </div>
       )}
 
+      {/* Banner sottile promemoria recensioni Google */}
+      {showRecensioniBannerSottile && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[99] w-full max-w-md px-4 transition-all duration-300"
+          style={{ top: showReminderBanner ? '6rem' : '1rem' }}
+        >
+          <div className="bg-blue-50 border border-blue-300 rounded-2xl shadow-xl px-5 py-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <Star size={16} className="text-blue-600" />
+            </div>
+            <button
+              className="flex-1 text-left"
+              onClick={() => { setShowRecensioniBannerSottile(false); setShowRecensioniModal(true); }}
+            >
+              <p className="text-sm font-bold text-blue-900">Promemoria Recensioni</p>
+              <p className="text-xs text-blue-700 mt-0.5">Clienti di ieri — tocca per aprire la lista</p>
+            </button>
+            <button
+              onClick={() => setShowRecensioniBannerSottile(false)}
+              className="p-1 hover:bg-blue-100 rounded-lg transition-colors text-blue-400 hover:text-blue-600 flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Banner nuova scheda cliente da confermare */}
       {showNuovaSchedaBanner && (
         <div
           className="fixed left-1/2 -translate-x-1/2 z-[101] w-full max-w-md px-4 transition-all duration-300"
-          style={{ top: showReminderBanner ? '6rem' : '1rem' }}
+          style={{ top: showReminderBanner || showRecensioniBannerSottile ? '6rem' : '1rem' }}
         >
           <div className="bg-pink-50 border border-pink-300 rounded-2xl shadow-xl px-4 py-3.5 flex items-center gap-3 animate-bounce-once">
             {/* Avatar con foto o iniziali */}
@@ -1918,7 +2000,7 @@ export default function App() {
         {page === 'magazzino' && <Magazzino />}
         {page === 'prodotti_online' && <ProdottiOnline />}
         {page === 'parrucchieri' && <Parrucchieri />}
-        {page === 'impostazioni' && <Impostazioni onTestReminder={triggerReminderTest} onTestInForse={triggerInForseTest} onTestPromApp={triggerPromAppTest} onTestCompleanno={triggerCompleannoTest} />}
+        {page === 'impostazioni' && <Impostazioni onTestReminder={triggerReminderTest} onTestInForse={triggerInForseTest} onTestPromApp={triggerPromAppTest} onTestCompleanno={triggerCompleannoTest} onTestRecensioni={triggerRecensioniTest} />}
         {page === 'cestino' && <Cestino />}
         {page === 'guida' && <Guida />}
       </Layout>
