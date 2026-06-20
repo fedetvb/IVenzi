@@ -18,8 +18,9 @@ import { generateCartaPremiumStampaPdf } from '../lib/cartePremiumPdfGenerator';
 import { generateCartaScontoPdfStampa } from '../lib/carteScontoPdfGenerator';
 import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator';
 import StatisticheGate from '../components/StatisticheGate';
+import RecensioniMappingPanel from '../components/RecensioniMappingPanel';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'testi_recensioni' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'testi_recensioni' | 'mappatura_recensioni' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void }) {
   const { user } = useAuth();
@@ -63,7 +64,8 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'qrcode') return <PaginaQRCode onBack={() => setSub(null)} />;
   if (sub === 'qr_gestionale') return <PaginaQrGestionale onBack={() => setSub(null)} setSub={setSub} />;
   if (sub === 'qr_google') return <PaginaQrGoogle onBack={() => setSub('qr_gestionale')} setSub={setSub} />;
-  if (sub === 'testi_recensioni') return <PaginaTestiRecensioni onBack={() => setSub('qr_google')} />;
+  if (sub === 'testi_recensioni') return <PaginaTestiRecensioni onBack={() => setSub('qr_google')} onNavigateMappatura={() => setSub('mappatura_recensioni')} />;
+  if (sub === 'mappatura_recensioni') return <RecensioniMappingPanel onBack={() => setSub('testi_recensioni')} />;
   if (sub === 'backup') return <PaginaBackup onBack={() => setSub(null)} />;
   if (sub === 'connessione') return <PaginaConnessione onBack={() => setSub(null)} />;
   if (sub === 'cartelle') return <PaginaCartelleSalvataggio onBack={() => setSub(null)} />;
@@ -9924,7 +9926,7 @@ const TUTTE_VARIANTI_REC: Array<{ categoria: string; hasTaglio: boolean }> = [
   { categoria: 'trattamento_rigenerante', hasTaglio: false },
 ];
 
-function PaginaTestiRecensioni({ onBack }: { onBack: () => void }) {
+function PaginaTestiRecensioni({ onBack, onNavigateMappatura }: { onBack: () => void; onNavigateMappatura?: () => void }) {
   const { user } = useAuth();
   const [testi, setTesti] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -9987,10 +9989,18 @@ function PaginaTestiRecensioni({ onBack }: { onBack: () => void }) {
         <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors text-stone-500 hover:text-stone-800">
           <ArrowLeft size={18} />
         </button>
-        <div>
+        <div className="flex-1">
           <h2 className="text-xl font-bold text-stone-800">Testi per Categoria</h2>
           <p className="text-sm text-stone-500 mt-0.5">Messaggio WhatsApp inviato in base al servizio della cliente</p>
         </div>
+        {onNavigateMappatura && (
+          <button
+            onClick={onNavigateMappatura}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-colors flex-shrink-0"
+          >
+            <Tag size={12} /> Mappatura Servizi
+          </button>
+        )}
       </div>
 
       {feedbackRec && (

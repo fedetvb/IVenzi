@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Star, ChevronDown, ChevronUp, Check, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { analizzaVoci, getTestoKey, getDefaultTesto } from '../lib/recensioniUtils';
+import { analizzaVociWithMap, getTestoKey, getDefaultTesto } from '../lib/recensioniUtils';
 
 interface ClienteRecensione {
   clienteId: string;
@@ -65,7 +65,7 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
         return;
       }
 
-      // Carica varianti testi personalizzati
+      // Carica varianti testi personalizzati (categorie standard)
       const { data: variantiDb } = await supabase
         .from('testi_recensioni_dinamici')
         .select('categoria_principale,has_taglio,testo_completo')
@@ -73,6 +73,26 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
       const variantiMap: Record<string, string> = {};
       for (const v of (variantiDb ?? []) as { categoria_principale: string; has_taglio: boolean; testo_completo: string }[]) {
         variantiMap[getTestoKey(v.categoria_principale as any, v.has_taglio)] = v.testo_completo;
+      }
+
+      // Carica mappa DB: nome servizio → categoria_recensione
+      const { data: trattamentiDb } = await supabase
+        .from('trattamenti_catalogo')
+        .select('nome,categoria_recensione')
+        .eq('user_id', userId);
+      const serviceMap: Record<string, string> = {};
+      for (const t of (trattamentiDb ?? []) as { nome: string; categoria_recensione: string | null }[]) {
+        if (t.categoria_recensione) serviceMap[t.nome.toLowerCase()] = t.categoria_recensione;
+      }
+
+      // Carica testi categorie personalizzate
+      const { data: customCatsDb } = await supabase
+        .from('recensioni_categorie')
+        .select('slug,testo_con_taglio,testo_senza_taglio')
+        .eq('user_id', userId);
+      const customCatMap: Record<string, { con: string; senza: string }> = {};
+      for (const c of (customCatsDb ?? []) as { slug: string; testo_con_taglio: string | null; testo_senza_taglio: string | null }[]) {
+        customCatMap[c.slug] = { con: c.testo_con_taglio ?? '', senza: c.testo_senza_taglio ?? '' };
       }
 
       // Deduplica per cliente_id, prendi l'ultima fiche
@@ -106,9 +126,19 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
           .select('nome_voce, tipo')
           .eq('fiche_id', (f as any).id);
 
-        const { categoria, hasTaglio } = analizzaVoci((voci ?? []) as { nome_voce: string; tipo: string }[]);
-        const key = getTestoKey(categoria, hasTaglio);
-        const testo = variantiMap[key] ?? getDefaultTesto(categoria, hasTaglio);
+        const { categoria, hasTaglio } = analizzaVociWithMap(
+          (voci ?? []) as { nome_voce: string; tipo: string }[],
+          serviceMap
+        );
+        const key = `${categoria}|${hasTaglio}`;
+
+        // Cerca testo: prima varianti custom standard, poi categorie personalizzate, poi default
+        let testo = variantiMap[key];
+        if (!testo && customCatMap[categoria]) {
+          const entry = customCatMap[categoria];
+          testo = hasTaglio ? (entry.con || entry.senza) : (entry.senza || entry.con);
+        }
+        if (!testo) testo = getDefaultTesto(categoria as any, hasTaglio);
 
         result.push({
           clienteId: clienteRaw.id,
@@ -143,7 +173,7 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
     const tel = cliente.telefono.replace(/\s/g, '').replace(/^0/, '+39');
     window.open(`https://wa.me/${tel}?text=${msg}`, '_blank');
 
-    // Salva data invio
+    // Traccia solo la data di invio, senza bloccare la cliente
     await supabase.rpc('segna_invio_recensione', { p_cliente_id: clienteId });
     setClienti(prev => prev.map(c => c.clienteId === clienteId ? { ...c, inviato: true } : c));
   }

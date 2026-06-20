@@ -96,6 +96,11 @@ export default function RecensioniPage({ userId, clienteId }: { userId: string; 
         if (clienteId) {
           const d = await loadByClienteId(clienteId);
           setData(d);
+          // La cliente ha APERTO la pagina: imposta blocco 365 giorni
+          // (se non ha già recensito e non è già in un blocco attivo)
+          if (d && !d.recensioneLasciata && (!d.bloccataFino || d.bloccataFino <= new Date())) {
+            await supabase.rpc('segna_visualizzazione_recensione', { p_cliente_id: clienteId });
+          }
         } else if (userId) {
           const d = await loadBySalonUserId(userId);
           setData(d);

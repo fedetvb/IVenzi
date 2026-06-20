@@ -140,3 +140,44 @@ export function getDefaultTesto(categoria: CategoriaRecensione, hasTaglio: boole
   const key = getTestoKey(categoria, hasTaglio);
   return DEFAULT_TESTI[key] ?? DEFAULT_TESTI['default|false'];
 }
+
+// Variante che usa prima la mappa DB (nome servizio → categoria slug) poi il regex
+export function analizzaVociWithMap(
+  voci: { nome_voce: string; tipo?: string }[],
+  categoryMap: Record<string, string>
+): { categoria: string; hasTaglio: boolean } {
+  const categorie = new Set<string>();
+  let hasTaglio = false;
+
+  for (const v of voci) {
+    const n = v.nome_voce?.toLowerCase() ?? '';
+    if (/taglio (donna|uomo|under|bambino)/i.test(v.nome_voce) || n === 'taglio') {
+      hasTaglio = true;
+      continue;
+    }
+    const mapped = categoryMap[n];
+    if (mapped) {
+      if (mapped !== 'default') categorie.add(mapped);
+      continue;
+    }
+    const cat = classificaVoce(v.nome_voce);
+    if (cat) categorie.add(cat);
+  }
+
+  if (categorie.has('colore') && categorie.has('hairtouch')) {
+    categorie.delete('hairtouch');
+  }
+
+  for (const p of PRIORITA) {
+    if (categorie.has(p)) return { categoria: p, hasTaglio };
+  }
+
+  // Categoria personalizzata (non in PRIORITA standard)
+  for (const cat of categorie) {
+    return { categoria: cat, hasTaglio };
+  }
+
+  if (hasTaglio) return { categoria: 'taglio_solo', hasTaglio: false };
+
+  return { categoria: 'default', hasTaglio };
+}
