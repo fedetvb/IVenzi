@@ -777,53 +777,52 @@ export async function restoreBackup(backupData: Record<string, unknown>): Promis
     return res as { success: boolean; error?: string; results?: Record<string, unknown> };
   }
 
-  // Fallback offline: salva in IndexedDB e accoda la sincronizzazione a Supabase per quando torna online
+  // Offline: salva in IndexedDB e accoda un upsert REST per tabella (no edge function)
   if (!navigator.onLine) {
     const res = await restoreToIndexedDb(backupData);
     if (res.success) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sb = supabase as any;
-        const apiUrl = `${sb.supabaseUrl}/functions/v1/backup-database`;
-        const payload = JSON.stringify({
-          version: 1,
-          tables: Object.keys(backupData),
-          data: backupData,
-        });
-        await addPendingMutation({
-          url: apiUrl,
-          method: 'POST',
-          body: payload,
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': sb.supabaseKey ?? '',
-          },
-          ts: Date.now(),
-        });
+        const sbUrl: string = sb.supabaseUrl ?? '';
+        const sbKey: string = sb.supabaseKey ?? '';
+        for (const table of BACKUP_TABLES) {
+          const records = (backupData[table] as Record<string, unknown>[]) ?? [];
+          if (records.length === 0) continue;
+          await addPendingMutation({
+            url: `${sbUrl}/rest/v1/${table}`,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': sbKey,
+              'Prefer': 'resolution=merge-duplicates,return=minimal',
+            },
+            body: JSON.stringify(records),
+            ts: Date.now(),
+          });
+        }
       } catch { /* non critico: il ripristino locale e' avvenuto */ }
     }
     return res;
   }
 
-  // Online: invia a Supabase via edge function + aggiorna anche IndexedDB come cache
+  // Online: upsert diretto per tabella via client Supabase standard (no edge function, no CORS)
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sb = supabase as any;
-    const apiUrl = `${sb.supabaseUrl}/functions/v1/backup-database`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'apikey': sb.supabaseKey ?? '',
-    };
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    const res = await fetch(apiUrl, { method: 'POST', headers, body: JSON.stringify(backupData) });
-    const result = await res.json();
-    // Aggiorna anche IndexedDB in background cosi' i dati sono subito disponibili
-    if (result.success) restoreToIndexedDb(backupData).catch(() => {/* best effort */});
-    return result;
-  } catch {
-    // Se la chiamata a Supabase fallisce (es. connessione persa a meta'), salva in IndexedDB
-    return await restoreToIndexedDb(backupData);
+    const results: Record<string, unknown> = {};
+    for (const table of BACKUP_TABLES) {
+      const records = (backupData[table] as Record<string, unknown>[]) ?? [];
+      if (records.length === 0) continue;
+      try {
+        const { error } = await supabase.from(table).upsert(records, { onConflict: 'id' });
+        results[table] = error ? { ok: false, error: error.message } : { ok: true, count: records.length };
+      } catch (e) {
+        results[table] = { ok: false, error: String(e) };
+      }
+    }
+    restoreToIndexedDb(backupData).catch(() => {/* best effort */});
+    return { success: true, results };
+  } catch (e) {
+    return { success: false, error: String(e) };
   }
 }
 
