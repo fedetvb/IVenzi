@@ -737,9 +737,8 @@ export async function getImpostazione(chiave: string, userId?: string): Promise<
     .select('valore')
     .eq('chiave', chiave)
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data as { valore: string } | null)?.valore ?? null;
+    .limit(1);
+  return (data as { valore: string }[] | null)?.[0]?.valore ?? null;
 }
 
 export async function setImpostazione(chiave: string, valore: string, userId: string): Promise<void> {
