@@ -3547,10 +3547,7 @@ async function runAutoBackupIfDue(): Promise<boolean> {
     const filename = `backup-salone-${italDate}.json`;
 
     const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+    browserDownload(filename, blob);
 
     localStorage.setItem(AB_LAST_KEY, targetDate);
     return true;
