@@ -30,7 +30,7 @@ function buildInForseMessaggio(nome: string, appImmediato: { data: string; ora: 
     .map(a => `${a.data} ore ${a.ora}`)
     .join(' / ');
 
-  return `Ciao ${nome}, hai più appuntamenti in forse in agenda. Mi confermi l'appuntamento più vicino del giorno ${appImmediato.data} alle ore ${appImmediato.ora}? Oppure preferisci confermare uno degli altri appuntamenti in forse del ${altriLista}? Restiamo in attesa di una tua risposta per organizzarci al meglio, a presto! ✨`;
+  return `Ciao ${nome}, hai più appuntamenti in forse in agenda. Mi confermi l'appuntamento più vicino del giorno ${appImmediato.data} alle ore ${appImmediato.ora}? Oppure preferisci confermare uno degli altri appuntamenti in forse del ${altriLista}? Restiamo in attesa di una tua risposta per organizzarci al meglio, a presto! ✨ I Venzi`;
 }
 
 export async function loadAvvisoInForse(): Promise<ClienteInForseEntry[]> {
