@@ -457,6 +457,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [editCliente, setEditCliente] = useState(false);
   const [schedaModal, setSchedaModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [appModal, setAppModal] = useState<{ open: boolean; id?: string }>({ open: false });
+  const [resetRecFeedback, setResetRecFeedback] = useState<'ok' | 'err' | null>(null);
   const [carteSconto, setCarteSconto] = useState<CartaScontoCliente[]>([]);
   const [cartePremium, setCartePremium] = useState<CartaPremiumCliente[]>([]);
   const [giftPassList, setGiftPassList] = useState<GiftPassCliente[]>([]);
@@ -947,6 +948,55 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
           <p className="text-xs text-stone-400 mt-4 pt-4 border-t border-stone-100">
             Cliente dal {new Date(cliente.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
+
+          {/* Blocco recensioni */}
+          <div className="mt-4 pt-4 border-t border-stone-100">
+            <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">Stato Recensione Google</p>
+            {cliente.recensione_lasciata ? (
+              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Star size={15} className="text-emerald-600 fill-emerald-600" />
+                  <span className="text-sm font-semibold text-emerald-700">Recensione lasciata</span>
+                </div>
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase.from('clienti').update({ recensione_lasciata: false, data_blocco_recensione: null }).eq('id', cliente.id);
+                    if (!error) { setCliente(prev => prev ? { ...prev, recensione_lasciata: false, data_blocco_recensione: null } : prev); setResetRecFeedback('ok'); setTimeout(() => setResetRecFeedback(null), 2500); }
+                    else setResetRecFeedback('err');
+                  }}
+                  className="text-xs text-emerald-600 hover:text-emerald-800 font-semibold underline"
+                >
+                  Reimposta
+                </button>
+              </div>
+            ) : cliente.data_blocco_recensione && new Date(cliente.data_blocco_recensione) > new Date() ? (
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-amber-700">In periodo di cortesia</p>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Link inviato — blocco fino al {new Date(cliente.data_blocco_recensione).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase.from('clienti').update({ data_blocco_recensione: null }).eq('id', cliente.id);
+                    if (!error) { setCliente(prev => prev ? { ...prev, data_blocco_recensione: null } : prev); setResetRecFeedback('ok'); setTimeout(() => setResetRecFeedback(null), 2500); }
+                    else setResetRecFeedback('err');
+                  }}
+                  className="flex-shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Sblocca
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3">
+                <Star size={15} className="text-stone-400" />
+                <span className="text-sm text-stone-500">Nessun blocco attivo — riceverà il promemoria</span>
+              </div>
+            )}
+            {resetRecFeedback === 'ok' && <p className="text-xs text-emerald-600 mt-2">Stato aggiornato con successo.</p>}
+            {resetRecFeedback === 'err' && <p className="text-xs text-red-500 mt-2">Errore durante l'aggiornamento.</p>}
+          </div>
         </div>
       )}
 
