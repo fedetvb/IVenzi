@@ -40,16 +40,31 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
   async function loadClienti() {
     setLoading(true);
     try {
-      // Ieri (fuso orario Rome)
+      // Range: da ieri 00:00 ora di Roma fino ad adesso
+      // Questo include convalidazioni notturne (es. 01:00 di oggi = fine serata di ieri)
       const now = new Date();
-      const romeStr = now.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
-      const todayKey = romeStr.split(' ')[0];
-      const today = new Date(todayKey + 'T00:00:00');
-      const yesterday = new Date(today.getTime() - 86400000);
-      const yesterdayStart = yesterday.toISOString();
-      const yesterdayEnd = new Date(today.getTime() - 1).toISOString();
+      const romeNow = now.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
+      const todayKey = romeNow.split(' ')[0]; // "2026-06-20"
+      // Calcola ieri come chiave YYYY-MM-DD
+      const yesterdayKey = (() => {
+        const d = new Date(`${todayKey}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - 1);
+        return d.toISOString().split('T')[0];
+      })();
+      // Converti mezzanotte di ieri ora Roma → UTC
+      // Tecnica: crea il timestamp come se fosse UTC, poi trova l'offset effettivo di Roma
+      const romeToUtc = (dateKey: string): string => {
+        const naive = new Date(`${dateKey}T00:00:00Z`);
+        const romeStr = naive.toLocaleString('sv-SE', { timeZone: 'Europe/Rome' });
+        const naiveRome = new Date(romeStr.replace(' ', 'T') + 'Z');
+        const offsetMs = naive.getTime() - naiveRome.getTime();
+        return new Date(naive.getTime() - offsetMs).toISOString();
+      };
+      const yesterdayStart = romeToUtc(yesterdayKey);
+      // Fine range = adesso (include convalidazioni notturne fino all'apertura del modal)
+      const yesterdayEnd = now.toISOString();
 
-      // Carica fiches convalidate ieri
+      // Carica fiches convalidate ieri (incluse convalidazioni notturne di oggi)
       const { data: fiches } = await supabase
         .from('fiches')
         .select('id, cliente_id, clienti(id, nome, cognome, telefono, recensione_lasciata, data_blocco_recensione)')
