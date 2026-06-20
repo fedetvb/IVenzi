@@ -732,7 +732,13 @@ export async function getImpostazione(chiave: string, userId?: string): Promise<
     const res = await dbSelect<{ valore: string }>({ table: 'impostazioni', columns: 'valore', filters });
     return res.data?.[0]?.valore ?? null;
   }
-  const { data } = await supabase.from('impostazioni').select('valore').eq('chiave', chiave).maybeSingle();
+  const { data } = await supabase
+    .from('impostazioni')
+    .select('valore')
+    .eq('chiave', chiave)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
   return (data as { valore: string } | null)?.valore ?? null;
 }
 

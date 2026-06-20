@@ -6277,6 +6277,11 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const uid = user?.id;
+    if (!uid) {
+      setSaving(false);
+      setFeedback({ tipo: 'err', msg: 'Sessione scaduta. Ricarica la pagina.' });
+      return;
+    }
     try {
       await Promise.all([
         setImpostazione('promemoria_convalida_giorni', JSON.stringify(ficheGiorni), uid),
@@ -6706,6 +6711,11 @@ function PaginaPromemoria({ onBack, onTestReminder }: { onBack: () => void; onTe
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const uid = user?.id;
+    if (!uid) {
+      setSaving(false);
+      setFeedback({ tipo: 'err', msg: 'Sessione scaduta. Ricarica la pagina.' });
+      return;
+    }
     try {
       await Promise.all([
         setImpostazione('promemoria_convalida_giorni', JSON.stringify(giorni), uid),
