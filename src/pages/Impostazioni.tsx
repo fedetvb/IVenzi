@@ -7939,6 +7939,7 @@ CREATE TABLE IF NOT EXISTS clienti (
   motivo_blacklist text,
   recensione_lasciata boolean NOT NULL DEFAULT false,
   data_blocco_recensione date,
+  auguri_inviati_il date,
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
