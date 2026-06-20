@@ -73,7 +73,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [clickedDate, setClickedDate] = useState<Date | undefined>();
   const [multiModal, setMultiModal] = useState(false);
   const [avvisoModal, setAvvisoModal] = useState(false);
-  const [avvisoClienti, setAvvisoClienti] = useState<{ nome: string; telefono: string; ora: string; data: string }[]>([]);
+  const [avvisoClienti, setAvvisoClienti] = useState<{ nome: string; telefono: string; ora: string; data: string; appuntamento_id: string; promemoria_inviato_at: string | null }[]>([]);
   const [avvisoTemplate, setAvvisoTemplate] = useState('');
   const [avvisoIndirizzo, setAvvisoIndirizzo] = useState('');
   const [avvisoLoading, setAvvisoLoading] = useState(false);
@@ -137,7 +137,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     const [appRes, tmplRes, indirizzoRes] = await Promise.all([
       dbSelectWithRelated({
         table: 'appuntamenti',
-        columns: 'id, data_ora, stato, cliente_id, deleted_at',
+        columns: 'id, data_ora, stato, cliente_id, deleted_at, promemoria_inviato_at',
         filters: [
           { col: 'data_ora', op: 'gte', val: start },
           { col: 'data_ora', op: 'lte', val: end },
@@ -148,7 +148,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
         relations: [
           { key: 'clienti', table: 'clienti', fk: 'cliente_id', columns: 'id, nome, telefono' }
         ],
-        supabaseSelect: 'data_ora, stato, clienti(id, nome, telefono)'
+        supabaseSelect: 'id, data_ora, stato, promemoria_inviato_at, clienti(id, nome, telefono)'
       }),
       dbSelect({ table: 'impostazioni', columns: 'valore', filters: [{ col: 'chiave', op: 'eq', val: 'messaggio_avviso_appuntamento' }] }),
       dbSelect({ table: 'impostazioni', columns: 'valore', filters: [{ col: 'chiave', op: 'eq', val: 'avviso_appuntamento_indirizzo' }] })
@@ -157,13 +157,13 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
     const template = tmplRes.data?.[0]?.valore ?? `Ciao {nome} ti ricordiamo l'appuntamento di domani {data} alle ore {ora} presso il nostro salone in via Palermo 15 Roma, ti aspettiamo!\n\nI Venzi.`;
     const indirizzo = indirizzoRes.data?.[0]?.valore ?? 'via Palermo 15, Roma';
 
-    const clientiMap: Record<string, { nome: string; telefono: string; ora: string; data: string }> = {};
+    const clientiMap: Record<string, { nome: string; telefono: string; ora: string; data: string; appuntamento_id: string; promemoria_inviato_at: string | null }> = {};
     for (const app of (appRes.data || []).filter((a: { stato?: string }) => a.stato !== 'in_forse')) {
       const c = app.clienti as { id: string; nome: string; telefono?: string } | null;
       if (!c || !c.telefono?.trim()) continue;
       if (clientiMap[c.id]) continue;
       const ora = new Date(app.data_ora).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
-      clientiMap[c.id] = { nome: c.nome, telefono: c.telefono.trim(), ora, data: dataLabel };
+      clientiMap[c.id] = { nome: c.nome, telefono: c.telefono.trim(), ora, data: dataLabel, appuntamento_id: app.id, promemoria_inviato_at: app.promemoria_inviato_at ?? null };
     }
 
     setAvvisoTemplate(template);
@@ -576,7 +576,7 @@ function buildWhatsAppTesto(testo: string, mapUrl: string): string {
 }
 
 interface AvvisoModalProps {
-  clienti: { nome: string; telefono: string; ora: string; data: string }[];
+  clienti: { nome: string; telefono: string; ora: string; data: string; appuntamento_id: string; promemoria_inviato_at: string | null }[];
   template: string;
   indirizzo: string;
   onClose: () => void;
@@ -591,6 +591,14 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
   const [templateEdit, setTemplateEdit] = useState(template);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [inviati, setInviati] = useState<Set<string>>(() =>
+    new Set(clienti.filter(c => c.promemoria_inviato_at != null).map(c => c.appuntamento_id))
+  );
+
+  async function segnaInviato(appuntamentoId: string) {
+    setInviati(prev => new Set(prev).add(appuntamentoId));
+    await supabase.from('appuntamenti').update({ promemoria_inviato_at: new Date().toISOString() }).eq('id', appuntamentoId);
+  }
 
   async function salvaTemplate() {
     setSaving(true);
@@ -659,22 +667,26 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
               {clienti.map((c, i) => {
                 const testo = applyTemplate(templateEdit, { nome: c.nome, data: c.data, ora: c.ora });
                 const testoCompleto = buildWhatsAppTesto(testo, mapUrl);
+                const inviato = inviati.has(c.appuntamento_id);
                 return (
-                  <div key={i} className="bg-stone-50 border border-stone-200 rounded-xl overflow-hidden">
+                  <div key={i} className={`border rounded-xl overflow-hidden transition-colors ${inviato ? 'bg-emerald-50 border-emerald-200' : 'bg-stone-50 border-stone-200'}`}>
                     <div className="flex items-center gap-3 px-4 py-3">
-                      <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-sm font-bold text-emerald-700">
-                        {c.nome[0]?.toUpperCase()}
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${inviato ? 'bg-emerald-200 text-emerald-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {inviato ? <Check size={16} /> : c.nome[0]?.toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-stone-800">{c.nome}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-semibold text-stone-800">{c.nome}</p>
+                          {inviato && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">Inviato</span>}
+                        </div>
                         <p className="text-xs text-stone-400">{c.telefono} · ore {c.ora}</p>
                       </div>
                       <button
-                        onClick={() => { apriWhatsApp(c.telefono, testoCompleto); onClose(); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
+                        onClick={() => { apriWhatsApp(c.telefono, testoCompleto); segnaInviato(c.appuntamento_id); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0 ${inviato ? 'bg-emerald-400 hover:bg-emerald-500' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                       >
                         <MessageCircle size={13} />
-                        WhatsApp
+                        {inviato ? 'Reinvia' : 'WhatsApp'}
                         <ExternalLink size={10} className="opacity-70" />
                       </button>
                     </div>

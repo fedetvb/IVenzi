@@ -73,6 +73,7 @@ export interface Appuntamento {
   created_at: string;
   updated_at: string;
   nuova_cliente?: boolean;
+  promemoria_inviato_at?: string | null;
   clienti?: Cliente;
   parrucchieri?: Parrucchiere;
   appuntamento_trattamenti?: AppuntamentoTrattamento[];
