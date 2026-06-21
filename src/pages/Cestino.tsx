@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
-import { dbSelect, dbDelete, dbUpdate } from '../lib/localDb';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../lib/supabase';
+import { dbUpdate } from '../lib/localDb';
 import {
   Trash2, RotateCcw, Users, Calendar, CreditCard, Scissors, ShoppingBag,
-  TrendingDown, AlertTriangle, ChevronDown, ChevronUp, Loader2, X,
+  TrendingDown, AlertTriangle, ChevronDown, ChevronUp, Loader2, X, RefreshCw,
 } from 'lucide-react';
 
 type Sezione = 'clienti' | 'appuntamenti' | 'schede_colore' | 'parrucchieri' | 'carte_sconto' | 'carte_premium' | 'rivendita_prodotti' | 'spese';
@@ -49,15 +50,16 @@ const sezioni: SezioneConfig[] = [
   { id: 'spese', label: 'Spese', icon: TrendingDown, color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-200' },
 ];
 
+// Tutte le query leggono SEMPRE da Supabase (mai dalla cache locale)
+// così tutti i dispositivi vedono lo stesso stato in tempo reale.
 async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
   switch (id) {
     case 'clienti': {
-      const { data } = await dbSelect({
-        table: 'clienti',
-        columns: 'id, nome, cognome, telefono, deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('clienti')
+        .select('id, nome, cognome, telefono, deleted_at')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: `${r.nome} ${r.cognome}`,
@@ -66,26 +68,24 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'appuntamenti': {
-      const { data } = await dbSelect({
-        table: 'appuntamenti',
-        columns: 'id, data_ora, stato, clienti(nome, cognome), deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('appuntamenti')
+        .select('id, data_ora, stato, deleted_at, clienti(nome, cognome)')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
-        label: `${new Date(r.data_ora).toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+        label: new Date(r.data_ora).toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         sublabel: r.clienti ? `${r.clienti.nome} ${r.clienti.cognome}` : undefined,
         deleted_at: r.deleted_at,
       }));
     }
     case 'schede_colore': {
-      const { data } = await dbSelect({
-        table: 'schede_colore',
-        columns: 'id, data_trattamento, formula_colore, tecnica, clienti(nome, cognome), deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('schede_colore')
+        .select('id, data_trattamento, formula_colore, tecnica, deleted_at, clienti(nome, cognome)')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: `Scheda colore ${fmtDataSemplice(r.data_trattamento)}`,
@@ -94,12 +94,11 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'parrucchieri': {
-      const { data } = await dbSelect({
-        table: 'parrucchieri',
-        columns: 'id, nome, colore, deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('parrucchieri')
+        .select('id, nome, colore, deleted_at')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: r.nome,
@@ -107,12 +106,11 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'carte_sconto': {
-      const { data } = await dbSelect({
-        table: 'carte_sconto',
-        columns: 'id, codice, descrizione, tipo_sconto, valore_sconto, deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('carte_sconto')
+        .select('id, codice, descrizione, tipo_sconto, valore_sconto, deleted_at')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: r.codice,
@@ -121,12 +119,11 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'carte_premium': {
-      const { data } = await dbSelect({
-        table: 'carte_premium',
-        columns: 'id, codice, saldo, clienti(nome, cognome), deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('carte_premium')
+        .select('id, codice, saldo, deleted_at, clienti(nome, cognome)')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: r.codice,
@@ -135,12 +132,11 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'rivendita_prodotti': {
-      const { data } = await dbSelect({
-        table: 'rivendita_prodotti',
-        columns: 'id, nome_prodotto, totale, data_vendita, parrucchieri(nome), deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('rivendita_prodotti')
+        .select('id, nome_prodotto, totale, data_vendita, deleted_at, parrucchieri(nome)')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: r.nome_prodotto,
@@ -149,12 +145,11 @@ async function caricaSezione(id: Sezione): Promise<ItemCestino[]> {
       }));
     }
     case 'spese': {
-      const { data } = await dbSelect({
-        table: 'spese',
-        columns: 'id, descrizione, categoria, importo, data, deleted_at',
-        filters: [{ col: 'deleted_at', op: 'not_null' }],
-        orderBy: [{ col: 'deleted_at', asc: false }],
-      });
+      const { data } = await supabase
+        .from('spese')
+        .select('id, descrizione, categoria, importo, data, deleted_at')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
       return (data || []).map((r: any) => ({
         id: r.id,
         label: r.descrizione || r.categoria,
@@ -176,26 +171,12 @@ async function ripristinaItem(sezione: Sezione, id: string) {
 }
 
 async function eliminaDefinitivamente(sezione: Sezione, id: string) {
-  await dbDelete({
-    table: sezione,
-    filters: [{ col: 'id', op: 'eq', val: id }],
-  });
+  await supabase.from(sezione).delete().eq('id', id);
 }
 
+// Cancellazione batch diretta su Supabase: un solo round-trip, sincronizzato su tutti i dispositivi.
 async function svuotaSezione(sezione: Sezione) {
-  const { data } = await dbSelect({
-    table: sezione,
-    columns: 'id',
-    filters: [{ col: 'deleted_at', op: 'not_null' }],
-  });
-  if (!data || data.length === 0) return;
-  const ids = (data as any[]).map((r: { id: string }) => r.id);
-  for (const id of ids) {
-    await dbDelete({
-      table: sezione,
-      filters: [{ col: 'id', op: 'eq', val: id }],
-    });
-  }
+  await supabase.from(sezione).delete().not('deleted_at', 'is', null);
 }
 
 interface CestinoSezioneProps {
@@ -348,20 +329,30 @@ export default function Cestino() {
     clienti: true, appuntamenti: true, schede_colore: true, parrucchieri: true,
     carte_sconto: true, carte_premium: true, rivendita_prodotti: true, spese: true,
   });
+  const [refreshing, setRefreshing] = useState(false);
+  const lastRefreshRef = useRef<Date>(new Date());
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) setRefreshing(true);
     const results = await Promise.all(sezioni.map(s => caricaSezione(s.id).then(items => ({ id: s.id, items }))));
-    const newData = { ...data };
-    const newLoading = { ...loading };
+    const newData = {} as Record<Sezione, ItemCestino[]>;
+    const newLoading = {} as Record<Sezione, boolean>;
     for (const { id, items } of results) {
       newData[id] = items;
       newLoading[id] = false;
     }
     setData(newData);
     setLoading(newLoading);
+    lastRefreshRef.current = new Date();
+    if (showRefreshing) setRefreshing(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    // Auto-refresh ogni 30 secondi: mantiene il cestino sincronizzato tra tutti i dispositivi
+    const id = setInterval(() => load(), 30_000);
+    return () => clearInterval(id);
+  }, [load]);
 
   async function handleRipristina(sezione: Sezione, id: string) {
     await ripristinaItem(sezione, id);
@@ -390,12 +381,23 @@ export default function Cestino() {
             Gli elementi eliminati possono essere ripristinati da qui. La cancellazione definitiva è irreversibile.
           </p>
         </div>
-        {totale > 0 && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-            <Trash2 size={14} className="text-red-500" />
-            <span className="text-sm font-bold text-red-600">{totale}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {totale > 0 && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              <Trash2 size={14} className="text-red-500" />
+              <span className="text-sm font-bold text-red-600">{totale}</span>
+            </div>
+          )}
+          <button
+            onClick={() => load(true)}
+            disabled={refreshing}
+            title="Aggiorna da cloud"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 text-stone-500 hover:bg-stone-50 text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Aggiorna</span>
+          </button>
+        </div>
       </div>
 
       {/* Avviso */}
@@ -403,7 +405,8 @@ export default function Cestino() {
         <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700">
           Gli elementi nel cestino sono nascosti dall'applicazione ma non eliminati dal database. Puoi ripristinarli in qualsiasi momento.
-          La cancellazione definitiva rimuove i dati permanentemente e non può essere annullata.
+          La cancellazione definitiva rimuove i dati permanentemente dal cloud e non può essere annullata.
+          Il cestino si aggiorna automaticamente ogni 30 secondi su tutti i dispositivi.
         </p>
       </div>
 
