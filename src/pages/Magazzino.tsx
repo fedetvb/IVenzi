@@ -550,6 +550,7 @@ function MagazzinoView() {
   const [includiRivendita, setIncludiRivendita] = useState(true);
   const [savingScheda, setSavingScheda] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
+  const [savedError, setSavedError] = useState('');
 
   async function load() {
     const [catsRes, prodsRes, rivRes] = await Promise.all([
@@ -603,8 +604,10 @@ function MagazzinoView() {
 
   async function handleSalvaScheda() {
     setSavingScheda(true);
+    setSavedMsg(false);
+    setSavedError('');
     const nome = `Inventario ${dataStr}${filterCat !== 'all' ? ` — ${catNome(filterCat)}` : ''}${onlyScarse ? ' — Scorte scarse' : ''}`;
-    dbInsert({
+    const { error } = await dbInsert({
       table: 'magazzino_schede_salvate',
       data: {
         nome,
@@ -617,8 +620,13 @@ function MagazzinoView() {
       },
     });
     setSavingScheda(false);
-    setSavedMsg(true);
-    setTimeout(() => setSavedMsg(false), 2500);
+    if (!error) {
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2500);
+    } else {
+      setSavedError('Errore nel salvataggio. Riprova.');
+      setTimeout(() => setSavedError(''), 3000);
+    }
   }
 
   if (loading) return (
@@ -668,7 +676,10 @@ function MagazzinoView() {
         </label>
 
         <div className="flex items-center gap-2 ml-auto flex-wrap">
-          <button onClick={handleSalvaScheda} disabled={savingScheda} className={`flex items-center gap-2 px-4 py-2.5 font-semibold text-sm rounded-xl transition-colors shadow-sm border ${savedMsg ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'bg-white border-stone-200 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 text-stone-600'}`}>
+          {savedError && (
+            <span className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">{savedError}</span>
+          )}
+          <button onClick={handleSalvaScheda} disabled={savingScheda} className={`flex items-center gap-2 px-4 py-2.5 font-semibold text-sm rounded-xl transition-colors shadow-sm border ${savedMsg ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : savedError ? 'bg-red-50 border-red-300 text-red-600' : 'bg-white border-stone-200 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 text-stone-600'}`}>
             {savedMsg ? <Check size={14} /> : <Save size={14} />}
             {savedMsg ? 'Salvata!' : savingScheda ? 'Salvataggio…' : 'Salva Scheda'}
           </button>
@@ -762,24 +773,42 @@ function MagazzinoView() {
 // ─── SchedeSalvate view ────────────────────────────────────────────────────────
 
 function SchedeSalvateView() {
+  const { user } = useAuth();
   const [schede, setSchede] = useState<SchedaSalvata[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SchedaSalvata | null>(null);
 
   async function load() {
+    if (!user?.id) return;
     const { data } = await supabase
       .from('magazzino_schede_salvate')
       .select('*')
+      .eq('user_id', user.id)
       .order('data_creazione', { ascending: false });
     setSchede((data || []) as SchedaSalvata[]);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Realtime: aggiorna automaticamente su tutti i dispositivi quando una scheda viene salvata o eliminata
+  useEffect(() => {
+    if (!user?.id) return;
+    const ch = supabase
+      .channel(`magazzino_schede_${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'magazzino_schede_salvate',
+        filter: `user_id=eq.${user.id}`,
+      }, () => { load(); })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDelete(id: string) {
     if (!confirm('Eliminare questa scheda salvata?')) return;
-    dbDelete({
+    await dbDelete({
       table: 'magazzino_schede_salvate',
       filters: [{ col: 'id', op: 'eq', val: id }],
     });
