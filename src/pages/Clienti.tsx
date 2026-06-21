@@ -70,10 +70,9 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
         .is('deleted_at', null),
       supabase.from('carte_sconto')
         .select('regalata_da_cliente_id, cliente_id')
-        .not('regalata_da_cliente_id', 'is', null)
-        .is('deleted_at', null),
+        .not('regalata_da_cliente_id', 'is', null),
       supabase.from('schede_clienti_da_confermare')
-        .select('nome, cognome, codice_gift_pass, codice_carta_sconto')
+        .select('nome, cognome, codice_gift_pass, codice_carta_sconto, presentata_da_nome')
         .eq('stato', 'in_attesa'),
     ]);
 
@@ -106,23 +105,47 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
       }
     }
 
-    // Da schede in attesa (non ancora confermate) che hanno presentata_da_nome
-    for (const s of (schedaRes.data || []) as Array<{ nome: string; cognome: string; codice_gift_pass: string | null; codice_carta_sconto: string | null }>) {
-      // Troviamo il donatore tramite il codice della carta
+    // Da schede in attesa: usa codice carta/gift pass e, come ultimo fallback, presentata_da_nome
+    for (const s of (schedaRes.data || []) as Array<{ nome: string; cognome: string; codice_gift_pass: string | null; codice_carta_sconto: string | null; presentata_da_nome: string | null }>) {
+      let linked = false;
+
       if (s.codice_gift_pass) {
         const { data: gp } = await supabase.from('gift_pass').select('cliente_id').eq('codice', s.codice_gift_pass).maybeSingle();
-        if (gp?.cliente_id) {
-          if (!map.has(gp.cliente_id)) map.set(gp.cliente_id, []);
-          const exists = map.get(gp.cliente_id)!.some(p => p.nome === s.nome && p.cognome === s.cognome);
-          if (!exists) map.get(gp.cliente_id)!.push({ nome: s.nome, cognome: s.cognome, clienteId: null });
+        const donatoreId = gp?.cliente_id ?? null;
+        if (donatoreId) {
+          const donatoreCl = clienti.find(c => c.id === donatoreId);
+          const nomeD = donatoreCl ? `${donatoreCl.nome} ${donatoreCl.cognome}`.trim() : '';
+          if (nomeD && !/^ignot/i.test(nomeD)) {
+            if (!map.has(donatoreId)) map.set(donatoreId, []);
+            const exists = map.get(donatoreId)!.some(p => p.nome === s.nome && p.cognome === s.cognome);
+            if (!exists) map.get(donatoreId)!.push({ nome: s.nome, cognome: s.cognome, clienteId: null });
+            linked = true;
+          }
         }
       }
-      if (s.codice_carta_sconto) {
+
+      if (!linked && s.codice_carta_sconto) {
         const { data: cs } = await supabase.from('carte_sconto').select('regalata_da_cliente_id').eq('codice', s.codice_carta_sconto).maybeSingle();
         if (cs?.regalata_da_cliente_id) {
           if (!map.has(cs.regalata_da_cliente_id)) map.set(cs.regalata_da_cliente_id, []);
           const exists = map.get(cs.regalata_da_cliente_id)!.some(p => p.nome === s.nome && p.cognome === s.cognome);
           if (!exists) map.get(cs.regalata_da_cliente_id)!.push({ nome: s.nome, cognome: s.cognome, clienteId: null });
+          linked = true;
+        }
+      }
+
+      // Fallback: presentata_da_nome → cerca il cliente in rubrica per nome
+      if (!linked && s.presentata_da_nome) {
+        const nomeCandidato = s.presentata_da_nome.trim();
+        if (nomeCandidato && !/^ignot/i.test(nomeCandidato)) {
+          const donByName = clienti.find(c =>
+            `${c.nome} ${c.cognome}`.trim().toLowerCase() === nomeCandidato.toLowerCase()
+          );
+          if (donByName) {
+            if (!map.has(donByName.id)) map.set(donByName.id, []);
+            const exists = map.get(donByName.id)!.some(p => p.nome === s.nome && p.cognome === s.cognome);
+            if (!exists) map.get(donByName.id)!.push({ nome: s.nome, cognome: s.cognome, clienteId: null });
+          }
         }
       }
     }

@@ -525,15 +525,11 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
         ],
         supabaseSelect: '*, appuntamento_trattamenti(nome_trattamento, prezzo)',
       }),
-      dbSelect<CartaScontoCliente>({
-        table: 'carte_sconto',
-        columns: 'id, codice, descrizione, tipo_sconto, valore_sconto, attiva, usa_e_getta',
-        filters: [
-          { col: 'cliente_id', op: 'eq', val: clienteId },
-          { col: 'deleted_at', op: 'is_null', val: true },
-        ],
-        orderBy: [{ col: 'created_at', asc: false }],
-      }),
+      supabase.from('carte_sconto')
+        .select('id, codice, descrizione, tipo_sconto, valore_sconto, attiva, usa_e_getta')
+        .eq('cliente_id', clienteId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false }),
       dbSelect<CartaPremiumCliente>({
         table: 'carte_premium',
         columns: 'id, codice, saldo, note, attiva',
