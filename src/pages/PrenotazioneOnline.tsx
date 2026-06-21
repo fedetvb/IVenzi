@@ -92,8 +92,10 @@ async function insertSchedaSafe(payload: Record<string, unknown>): Promise<void>
       // Client already confirmed: still try to assign ambassador if not yet set
       if (payload.presentata_da_nome) {
         try {
-          await supabase.functions.invoke('aggiorna-profilo', {
-            body: { user_id: userId, telefono: tel, presentata_da_nome: payload.presentata_da_nome },
+          await supabase.rpc('assegna_ambasciatore', {
+            p_user_id: userId,
+            p_telefono: tel,
+            p_presentata_da_nome: String(payload.presentata_da_nome),
           });
         } catch { /* non bloccante */ }
       }
