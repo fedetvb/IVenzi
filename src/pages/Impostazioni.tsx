@@ -3785,11 +3785,6 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
     setTimeout(() => setAbSaved(false), 2000);
   }
 
-  const cloudApiUrl = `${localStorage.getItem('sb_custom_url') || import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-database`;
-  const cloudHeaders = {
-    'Authorization': `Bearer ${localStorage.getItem('sb_custom_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json',
-  };
 
   async function exportFromSupabaseClient(): Promise<Record<string, unknown>> {
     const backup: Record<string, unknown[]> = {};
@@ -3817,10 +3812,8 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
           data = await exportFromSupabaseClient();
         }
       } else {
-        // Web: usa edge function con service_role
-        const res = await fetch(cloudApiUrl, { headers: cloudHeaders });
-        if (!res.ok) throw new Error('Errore durante l\'esportazione');
-        data = await res.json();
+        // Web: legge direttamente da Supabase JS client (nessun CORS)
+        data = await exportFromSupabaseClient();
       }
 
       const jsonStr = JSON.stringify(data, null, 2);
