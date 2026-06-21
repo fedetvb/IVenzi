@@ -90,18 +90,26 @@ async function insertSchedaSafe(payload: Record<string, unknown>): Promise<void>
     // This check is OUTSIDE any try/catch — cannot be bypassed by exceptions
     if (inRubrica) return;
 
-    // Guard 2: scheda already in_attesa for this phone → block duplicate.
-    // On query failure, fall through: the DB constraint (23505) is the safety net.
+    // Guard 2: scheda already in_attesa for this phone → patch it with any new fields
+    // rather than discarding them (gift pass code / ambasciatore might be new info).
     try {
       const { data: pending } = await supabase
         .from('schede_clienti_da_confermare')
-        .select('id, telefono')
+        .select('id, telefono, codice_gift_pass, codice_carta_sconto, presentata_da_nome')
         .eq('user_id', userId)
         .eq('stato', 'in_attesa');
-      const hasPending = (pending ?? []).some(
-        (r: { telefono: string }) => normPhone(r.telefono ?? '') === telNorm
-      );
-      if (hasPending) return;
+      const existingScheda = ((pending ?? []) as Array<{ id: string; telefono: string; codice_gift_pass: string | null; codice_carta_sconto: string | null; presentata_da_nome: string | null }>)
+        .find(r => normPhone(r.telefono ?? '') === telNorm);
+      if (existingScheda) {
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (payload.codice_gift_pass && !existingScheda.codice_gift_pass) patch.codice_gift_pass = payload.codice_gift_pass;
+        if (payload.codice_carta_sconto && !existingScheda.codice_carta_sconto) patch.codice_carta_sconto = payload.codice_carta_sconto;
+        if (payload.presentata_da_nome && !existingScheda.presentata_da_nome) patch.presentata_da_nome = payload.presentata_da_nome;
+        if (Object.keys(patch).length > 1) {
+          await supabase.from('schede_clienti_da_confermare').update(patch).eq('id', existingScheda.id);
+        }
+        return;
+      }
     } catch { /* non bloccante: 23505 handles it at DB level */ }
   }
 
@@ -1501,7 +1509,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
         // Doppia query parallela: Gift Pass e Carta Sconto
         const [gpRes, csExactRes] = await Promise.all([
-          supabase.from('gift_pass').select('id,tipo,scadenza_uso_giorni,scadenza_uso,cliente_id,fiche_acquisto_id').eq('user_id', userId).eq('codice', codiceUpper).is('attivata_at', null).eq('utilizzata', false).maybeSingle(),
+          supabase.from('gift_pass').select('id,tipo,scadenza_uso_giorni,scadenza_uso,cliente_id,fiche_acquisto_id').eq('user_id', userId).eq('codice', codiceUpper).eq('utilizzata', false).or('attivata_at.is.null,destinataria_cliente_id.is.null').maybeSingle(),
           supabase.from('carte_sconto').select('id,regalata,cliente_id,usa_e_getta,attiva,ex_proprietaria_nome,regalata_da_cliente_id,codice').eq('user_id', userId).eq('codice', codiceUpper).maybeSingle(),
         ]);
 
@@ -2470,7 +2478,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   <Users size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                   <input
                     value={ambasciatoreName}
-                    onChange={e => { const v = e.target.value; setAmbasciatoreName(v.length > 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v); }}
+                    onChange={e => { const v = e.target.value; setAmbasciatoreName(v.length > 0 ? v.split(' ').map((w: string) => w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(' ') : v); }}
                     placeholder="Es. Maria Rossi"
                     className="input pl-9"
                   />
