@@ -4471,16 +4471,6 @@ function MieCarteStep({
         <p className="text-xl font-bold text-stone-800">Le mie carte</p>
       </div>
 
-      {!hasCarte && (
-        <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-10 text-center">
-          <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <CreditCard size={24} className="text-stone-300" />
-          </div>
-          <p className="font-semibold text-stone-500">Nessuna carta associata</p>
-          <p className="text-sm text-stone-400 mt-1">Non hai carte associate a questo numero di telefono.</p>
-        </div>
-      )}
-
       {(data?.cartePremium ?? []).length === 0 && <CartaPremiumPromo />}
       {(data?.cartePremium ?? []).map(carta => (
         <CartaPremiumCard key={carta.id} carta={carta} cliente={data?.cliente} />
@@ -4508,7 +4498,17 @@ function MieCarteStep({
         <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome="" onSegnaGiftPassDonata={onSegnaGiftPassDonata} />
       ))}
 
-      <GiftPassPromo hasActiveGiftPass={(data?.giftPassRicevente ?? []).length > 0} />
+      {hasCarte && <GiftPassPromo hasActiveGiftPass={(data?.giftPassRicevente ?? []).length > 0} />}
+
+      {!hasCarte && (
+        <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-10 text-center">
+          <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <CreditCard size={24} className="text-stone-300" />
+          </div>
+          <p className="font-semibold text-stone-500">Nessuna carta associata</p>
+          <p className="text-sm text-stone-400 mt-1">Non hai carte associate a questo numero di telefono.</p>
+        </div>
+      )}
 
       <BackBtn onClick={onBack} />
     </div>
