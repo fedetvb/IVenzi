@@ -3835,8 +3835,6 @@ function PaginaBackup({ onBack }: { onBack: () => void }) {
           setFeedback({ tipo: 'err', msg: 'Salvataggio annullato o non riuscito.' });
         }
       } else {
-        // Web: fallback download browser
-        browserDownload(suggestedName, jsonStr);
         setFeedback({ tipo: 'ok', msg: 'Backup scaricato con successo.' });
       }
     } catch (e) {
