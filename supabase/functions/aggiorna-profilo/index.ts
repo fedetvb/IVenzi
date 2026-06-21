@@ -14,13 +14,13 @@ function normalizePhone(tel: string): string {
   return t.slice(-9);
 }
 
-type ClienteRow = { id: string; nome: string; cognome: string; telefono: string; email: string | null; data_nascita: string | null; note: string | null; foto_url: string | null; codice_cliente: string | null };
+type ClienteRow = { id: string; nome: string; cognome: string; telefono: string; email: string | null; data_nascita: string | null; note: string | null; foto_url: string | null; codice_cliente: string | null; presentata_da_cliente_id: string | null };
 
 async function findCliente(
   admin: ReturnType<typeof createClient>,
   userId: string,
   params: { codiceCliente?: string | null; telefono?: string | null; nome?: string | null; cognome?: string | null },
-  selectFields = "id, nome, cognome, telefono, email, data_nascita, note, foto_url, codice_cliente",
+  selectFields = "id, nome, cognome, telefono, email, data_nascita, note, foto_url, codice_cliente, presentata_da_cliente_id",
 ): Promise<ClienteRow | null> {
   const baseQuery = () =>
     admin.from("clienti").select(selectFields).eq("user_id", userId).is("deleted_at", null);
@@ -167,14 +167,14 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── default: aggiorna profilo ────────────────────────────────────────
-      const { user_id, telefono, codice_cliente, nome, cognome, email, data_nascita, note, foto_base64, foto_mime } = body;
+      const { user_id, telefono, codice_cliente, nome, cognome, email, data_nascita, note, foto_base64, foto_mime, presentata_da_nome } = body;
 
       if (!user_id || (!telefono && !codice_cliente && (!nome || !cognome))) {
         return json({ error: "Parametri mancanti" }, 400);
       }
 
       const admin = createClient(su, serviceKey);
-      const cliente = await findCliente(admin, user_id, { codiceCliente: codice_cliente, telefono, nome, cognome }, "id, foto_url");
+      const cliente = await findCliente(admin, user_id, { codiceCliente: codice_cliente, telefono, nome, cognome }, "id, foto_url, presentata_da_cliente_id");
 
       if (!cliente) {
         return json({ error: "Cliente non trovata" }, 404);
@@ -193,6 +193,25 @@ Deno.serve(async (req: Request) => {
       if (data_nascita !== undefined) updateData.data_nascita = data_nascita || null;
       if (note !== undefined) updateData.note = String(note ?? "").trim() || null;
       if (codice_cliente && telefono !== undefined) updateData.telefono = String(telefono).trim();
+
+      // Assign ambassador only when not already set
+      if (presentata_da_nome && !cliente.presentata_da_cliente_id) {
+        const parts = String(presentata_da_nome).trim().split(/\s+/);
+        const nomeAmb = parts[0] ?? "";
+        const cognomeAmb = parts.slice(1).join(" ");
+        if (nomeAmb && cognomeAmb) {
+          const { data: candidates } = await admin
+            .from("clienti")
+            .select("id")
+            .eq("user_id", user_id)
+            .ilike("nome", nomeAmb)
+            .ilike("cognome", cognomeAmb)
+            .is("deleted_at", null);
+          if (candidates && candidates.length === 1) {
+            updateData.presentata_da_cliente_id = (candidates[0] as { id: string }).id;
+          }
+        }
+      }
 
       if (foto_base64 && foto_mime) {
         const mimeType = String(foto_mime).startsWith("image/") ? String(foto_mime) : "image/jpeg";

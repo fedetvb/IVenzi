@@ -88,7 +88,17 @@ async function insertSchedaSafe(payload: Record<string, unknown>): Promise<void>
     }
 
     // This check is OUTSIDE any try/catch — cannot be bypassed by exceptions
-    if (inRubrica) return;
+    if (inRubrica) {
+      // Client already confirmed: still try to assign ambassador if not yet set
+      if (payload.presentata_da_nome) {
+        try {
+          await supabase.functions.invoke('aggiorna-profilo', {
+            body: { user_id: userId, telefono: tel, presentata_da_nome: payload.presentata_da_nome },
+          });
+        } catch { /* non bloccante */ }
+      }
+      return;
+    }
 
     // Guard 2: scheda already in_attesa for this phone → patch it with any new fields
     // rather than discarding them (gift pass code / ambasciatore might be new info).
