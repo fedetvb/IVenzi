@@ -300,12 +300,8 @@ function buildCalendar(baseDate: Date) {
   return cells;
 }
 
-function buildLookupParams(nome: string, cognome: string, telefono: string, codiceCliente: string): string {
-  const nomeEnc = `&nome=${encodeURIComponent(nome.trim())}&cognome=${encodeURIComponent(cognome.trim())}`;
-  const codice = codiceCliente.trim().toUpperCase();
-  if (codice) return `codice_cliente=${encodeURIComponent(codice)}${nomeEnc}`;
-  if (telefono.trim()) return `telefono=${encodeURIComponent(telefono.trim())}${nomeEnc}`;
-  return `nome=${encodeURIComponent(nome.trim())}&cognome=${encodeURIComponent(cognome.trim())}`;
+function normalizeCode(s: string): string {
+  return s.replace(/[-\s]/g, '').toUpperCase();
 }
 
 export default function PrenotazioneOnline({ userId }: { userId: string }) {
@@ -319,9 +315,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [nome, setNome] = useState('');
   const [cognome, setCognome] = useState('');
   const [telefono, setTelefono] = useState('');
-  const [codiceCliente, setCodiceCliente] = useState('');
-  const [cartaScontoCode, setCartaScontoCode] = useState('');
-  const [giftPassCode, setGiftPassCode] = useState('');
+  const [codiceOmaggio, setCodiceOmaggio] = useState('');
+  const [ambasciatoreName, setAmbasciatoreName] = useState('');
   const [datiError, setDatiError] = useState('');
   const [datiChecking, setDatiChecking] = useState(false);
 
@@ -843,7 +838,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       if (saved.nome) setNome(saved.nome.charAt(0).toUpperCase() + saved.nome.slice(1));
       if (saved.cognome) setCognome(saved.cognome.charAt(0).toUpperCase() + saved.cognome.slice(1));
       if (saved.telefono) setTelefono(saved.telefono);
-      if (saved.codiceCliente) setCodiceCliente(saved.codiceCliente.toUpperCase());
+      if (saved.codiceOmaggio) setCodiceOmaggio(saved.codiceOmaggio.toUpperCase());
     } catch { /* ignore */ }
   }, []);
 
@@ -1217,14 +1212,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setLoadingMieCarte(true);
     setMieCarteError('');
     try {
-      // Lookup cliente with priority: codice_cliente > telefono > nome+cognome
+      // Lookup cliente: telefono > nome+cognome
       let cliente: { id: string; nome: string; cognome: string; telefono: string } | null = null;
-      const codice = codiceCliente.trim().toUpperCase();
-      if (codice) {
-        const { data } = await supabase.from('clienti').select('id,nome,cognome,telefono').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
-        cliente = data ?? null;
-      }
-      if (!cliente && telefono.trim()) {
+      if (telefono.trim()) {
         const telN = normPhone(telefono.trim());
         const { data: all } = await supabase.from('clienti').select('id,nome,cognome,telefono').eq('user_id', userId).is('deleted_at', null);
         cliente = (all ?? []).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telN) ?? null;
@@ -1300,14 +1290,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setLoadingProfilo(true);
     setProfiloError('');
     try {
-      // Lookup with same priority: codice_cliente > telefono > nome+cognome
+      // Lookup: telefono > nome+cognome
       let c: { nome: string; cognome: string; telefono: string; email: string | null; data_nascita: string | null; note: string | null; foto_url: string | null } | null = null;
-      const codice = codiceCliente.trim().toUpperCase();
-      if (codice) {
-        const { data } = await supabase.from('clienti').select('nome,cognome,telefono,email,data_nascita,note,foto_url').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
-        c = data ?? null;
-      }
-      if (!c && telefono.trim()) {
+      if (telefono.trim()) {
         const telN = normPhone(telefono.trim());
         const { data: all } = await supabase.from('clienti').select('nome,cognome,telefono,email,data_nascita,note,foto_url').eq('user_id', userId).is('deleted_at', null);
         c = (all ?? []).find((r: { telefono: string }) => normPhone(r.telefono ?? '') === telN) ?? null;
@@ -1350,14 +1335,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     setProfiloSaved(false);
     setProfiloSchedaInviata(false);
     try {
-      // Lookup cliente with same priority as loadProfilo
+      // Lookup cliente: telefono > nome+cognome
       let clienteId: string | null = null;
-      const codice = codiceCliente.trim().toUpperCase();
-      if (codice) {
-        const { data } = await supabase.from('clienti').select('id').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
-        clienteId = data?.id ?? null;
-      }
-      if (!clienteId && telefono.trim()) {
+      if (telefono.trim()) {
         const telN = normPhone(telefono.trim());
         const { data: all } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
         clienteId = (all ?? []).find((r: { telefono: string }) => normPhone(r.telefono ?? '') === telN)?.id ?? null;
@@ -1390,8 +1370,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       const updateData: Record<string, unknown> = {
         ...schedaPayload,
         updated_at: new Date().toISOString(),
+        ...(telefono.trim() ? { telefono: telefono.trim() } : {}),
       };
-      if (codice && telefono.trim()) updateData.telefono = telefono.trim();
 
       // Upload foto se presente
       if (profiloFotoBase64 && profiloFotoMime) {
@@ -1487,9 +1467,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     const tel = (telOverride ?? telefono).trim();
 
     const saved: Record<string, string> = { nome: nome.trim(), cognome: cognome.trim(), telefono: tel };
-    if (codiceCliente.trim()) saved.codiceCliente = codiceCliente.trim().toUpperCase();
-    if (cartaScontoCode.trim()) saved.cartaScontoCode = cartaScontoCode.trim();
-    if (giftPassCode.trim()) saved.giftPassCode = giftPassCode.trim();
+    if (codiceOmaggio.trim()) saved.codiceOmaggio = codiceOmaggio.trim().toUpperCase();
     localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(saved));
 
     // Verifica se la cliente esiste già in rubrica (confermata) — blocca la creazione di
@@ -1514,49 +1492,36 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       if (haFiches) clienteGiaEsiste = true;
     } catch { /* non bloccante — default true (restrittivo) */ }
 
-    // Crea scheda da confermare solo se la cliente NON è già registrata in rubrica.
-    // Se esiste già, non serve alcuna conferma — evita schede duplicate.
-    if (!clienteGiaEsiste) {
+    // Processa codice omaggio (Gift Pass o Carta Sconto) con doppia query parallela.
+    // Fuzzy matching sulla carta sconto: normalizza rimuovendo trattini e spazi.
+    if (codiceOmaggio.trim()) {
       try {
-        await insertSchedaSafe({
-          user_id: userId,
-          nome: nome.trim(),
-          cognome: cognome.trim(),
-          telefono: tel,
-          stato: 'in_attesa',
-          ...(giftPassCode.trim() ? { codice_gift_pass: giftPassCode.trim().toUpperCase() } : {}),
-        });
-      } catch { /* non bloccante */ }
-    }
+        const codiceUpper = codiceOmaggio.trim().toUpperCase();
+        const normalizedInput = normalizeCode(codiceUpper);
 
-    if (cartaScontoCode.trim()) {
-      try {
-        const codiceUpper = cartaScontoCode.trim().toUpperCase();
-        const { data: carta } = await supabase.from('carte_sconto').select('id,regalata,cliente_id,usa_e_getta,attiva,ex_proprietaria_nome,regalata_da_cliente_id').eq('user_id', userId).eq('codice', codiceUpper).maybeSingle();
-        if (carta && carta.regalata && carta.attiva) {
-          const telN = normPhone(tel);
-          const { data: clientiAll } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
-          const cliente = ((clientiAll ?? []) as { id: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telN);
-          if (cliente) {
-            await supabase.from('carte_sconto').update({ cliente_id: cliente.id, regalata: false, regalata_da_cliente_id: carta.regalata_da_cliente_id ?? null }).eq('id', carta.id);
-          } else {
-            await insertSchedaSafe(
-              { user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), codice_carta_sconto: codiceUpper, presentata_da_nome: carta.ex_proprietaria_nome ?? null, stato: 'in_attesa' }
-            );
-          }
+        // Doppia query parallela: Gift Pass e Carta Sconto
+        const [gpRes, csExactRes] = await Promise.all([
+          supabase.from('gift_pass').select('id,tipo,scadenza_uso_giorni,scadenza_uso,cliente_id,fiche_acquisto_id').eq('user_id', userId).eq('codice', codiceUpper).is('attivata_at', null).eq('utilizzata', false).maybeSingle(),
+          supabase.from('carte_sconto').select('id,regalata,cliente_id,usa_e_getta,attiva,ex_proprietaria_nome,regalata_da_cliente_id,codice').eq('user_id', userId).eq('codice', codiceUpper).maybeSingle(),
+        ]);
+
+        let carta = csExactRes.data ?? null;
+
+        // Fuzzy fallback: se la ricerca esatta fallisce, normalizza e confronta
+        if (!carta) {
+          const { data: candidati } = await supabase.from('carte_sconto').select('id,regalata,cliente_id,usa_e_getta,attiva,ex_proprietaria_nome,regalata_da_cliente_id,codice').eq('user_id', userId).eq('regalata', true).eq('attiva', true);
+          carta = ((candidati ?? []) as { codice: string; [key: string]: unknown }[]).find(c => normalizeCode(c.codice) === normalizedInput) as typeof carta ?? null;
         }
-      } catch { /* non bloccante */ }
-    }
 
-    if (giftPassCode.trim()) {
-      try {
-        const codiceUpper = giftPassCode.trim().toUpperCase();
-        const { data: gp } = await supabase.from('gift_pass').select('id,tipo,scadenza_uso_giorni,scadenza_uso,cliente_id,fiche_acquisto_id').eq('user_id', userId).eq('codice', codiceUpper).is('attivata_at', null).eq('utilizzata', false).maybeSingle();
+        const gp = gpRes.data ?? null;
+
+        // Gift Pass ha priorità se entrambi trovati (teoricamente impossibile)
         if (gp) {
           const telN = normPhone(tel);
           const { data: clientiAll } = await supabase.from('clienti').select('id,nome,cognome,telefono').eq('user_id', userId).is('deleted_at', null);
           const cliente = ((clientiAll ?? []) as { id: string; nome: string; cognome: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telN);
-          // Find donator name
+
+          // Risale al nome del donatore
           let donatoreId: string | null = gp.cliente_id ?? null;
           if (!donatoreId && gp.fiche_acquisto_id) {
             const { data: fiche } = await supabase.from('fiches').select('cliente_id').eq('id', gp.fiche_acquisto_id).maybeSingle();
@@ -1567,18 +1532,59 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             const donatore = ((clientiAll ?? []) as { id: string; nome: string; cognome: string }[]).find((c: { id: string }) => c.id === donatoreId);
             if (donatore) presentataDaNome = `${donatore.nome} ${donatore.cognome}`.trim();
           }
+          // Fallback: campo ambasciatore manuale
+          if (!presentataDaNome && ambasciatoreName.trim()) presentataDaNome = ambasciatoreName.trim();
+
           const now2 = new Date().toISOString();
           const scadenzaUsoAt = !gp.scadenza_uso && gp.tipo !== 'valore' && gp.scadenza_uso_giorni
             ? (() => { const d = new Date(); d.setDate(d.getDate() + gp.scadenza_uso_giorni); return d.toISOString(); })()
             : null;
           await supabase.from('gift_pass').update({ attivata_at: now2, updated_at: now2, ...(scadenzaUsoAt ? { scadenza_uso: scadenzaUsoAt } : {}), ...(cliente ? { destinataria_cliente_id: cliente.id } : {}) }).eq('id', gp.id);
-          if (!cliente) {
-            await insertSchedaSafe(
-              { user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel.trim(), stato: 'in_attesa', codice_gift_pass: codiceUpper, ...(presentataDaNome ? { presentata_da_nome: presentataDaNome } : {}) }
-            );
+
+          if (!clienteGiaEsiste) {
+            await insertSchedaSafe({
+              user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel, stato: 'in_attesa',
+              codice_gift_pass: codiceUpper,
+              ...(presentataDaNome ? { presentata_da_nome: presentataDaNome } : {}),
+            });
+          } else if (cliente) {
+            // La cliente esiste già: collega direttamente il gift pass
+          }
+        } else if (carta && carta.regalata && carta.attiva) {
+          const telN = normPhone(tel);
+          const { data: clientiAll } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
+          const cliente = ((clientiAll ?? []) as { id: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telN);
+          if (cliente) {
+            await supabase.from('carte_sconto').update({ cliente_id: cliente.id, regalata: false, regalata_da_cliente_id: carta.regalata_da_cliente_id ?? null }).eq('id', carta.id);
+          } else {
+            let presentataDaNome: string | null = carta.ex_proprietaria_nome ?? null;
+            if (!presentataDaNome && ambasciatoreName.trim()) presentataDaNome = ambasciatoreName.trim();
+            await insertSchedaSafe({
+              user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel, stato: 'in_attesa',
+              codice_carta_sconto: carta.codice,
+              ...(presentataDaNome ? { presentata_da_nome: presentataDaNome } : {}),
+            });
+          }
+        } else if (!gp && !carta) {
+          // Codice non trovato — crea scheda base con ambasciatore manuale se fornito
+          if (!clienteGiaEsiste) {
+            await insertSchedaSafe({
+              user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel, stato: 'in_attesa',
+              ...(ambasciatoreName.trim() ? { presentata_da_nome: ambasciatoreName.trim() } : {}),
+            });
           }
         }
       } catch { /* non bloccante */ }
+    } else {
+      // Nessun codice: crea scheda base con ambasciatore manuale se fornito
+      if (!clienteGiaEsiste) {
+        try {
+          await insertSchedaSafe({
+            user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel, stato: 'in_attesa',
+            ...(ambasciatoreName.trim() ? { presentata_da_nome: ambasciatoreName.trim() } : {}),
+          });
+        } catch { /* non bloccante */ }
+      }
     }
 
     setStep('scelta');
@@ -1594,25 +1600,35 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       return;
     }
 
-    // Validazione locale codici carte/gift (block self-use)
-    if (giftPassCode.trim() || cartaScontoCode.trim()) {
+    // Validazione: previene l'uso del proprio codice omaggio (self-use)
+    if (codiceOmaggio.trim()) {
       try {
         const telN = normPhone(telefono.trim());
-        if (giftPassCode.trim()) {
-          const { data: gp } = await supabase.from('gift_pass').select('destinataria_telefono').eq('codice', giftPassCode.trim().toUpperCase()).is('attivata_at', null).eq('utilizzata', false).maybeSingle();
-          if (gp?.destinataria_telefono) {
-            const destN = normPhone(gp.destinataria_telefono);
-            if (destN && telN && destN === telN) { setDatiError('Questo Gift Pass è destinato a essere regalato a qualcun altro. Non puoi usarlo tu stessa.'); return; }
-          }
+        const codiceUpper = codiceOmaggio.trim().toUpperCase();
+        const normalizedInput = normalizeCode(codiceUpper);
+
+        // Controlla Gift Pass (5 cifre numeriche)
+        const { data: gp } = await supabase.from('gift_pass').select('destinataria_telefono').eq('codice', codiceUpper).is('attivata_at', null).eq('utilizzata', false).maybeSingle();
+        if (gp?.destinataria_telefono) {
+          const destN = normPhone(gp.destinataria_telefono);
+          if (destN && telN && destN === telN) { setDatiError('Questo Gift Pass è destinato a essere regalato a qualcun altro. Non puoi usarlo tu stessa.'); return; }
         }
-        if (cartaScontoCode.trim()) {
-          const { data: carta } = await supabase.from('carte_sconto').select('regalata,regalata_da_cliente_id').eq('user_id', userId).eq('codice', cartaScontoCode.trim().toUpperCase()).eq('regalata', true).eq('attiva', true).maybeSingle();
-          if (carta?.regalata_da_cliente_id) {
-            const { data: mitt } = await supabase.from('clienti').select('telefono').eq('id', carta.regalata_da_cliente_id).maybeSingle();
-            if (mitt?.telefono) {
-              const mittN = normPhone(mitt.telefono);
-              if (mittN && telN && mittN === telN) { setDatiError("Questa carta sconto è stata regalata a un'amica. Non puoi usarla tu stessa."); return; }
-            }
+
+        // Controlla Carta Sconto: prima esatta, poi fuzzy
+        let cartaCs: { regalata: boolean; regalata_da_cliente_id: string | null } | null = null;
+        const { data: csExact } = await supabase.from('carte_sconto').select('regalata,regalata_da_cliente_id,codice').eq('user_id', userId).eq('codice', codiceUpper).eq('regalata', true).eq('attiva', true).maybeSingle();
+        if (csExact) {
+          cartaCs = csExact;
+        } else {
+          const { data: candidati } = await supabase.from('carte_sconto').select('regalata,regalata_da_cliente_id,codice').eq('user_id', userId).eq('regalata', true).eq('attiva', true);
+          const fuzzy = ((candidati ?? []) as { codice: string; regalata: boolean; regalata_da_cliente_id: string | null }[]).find(c => normalizeCode(c.codice) === normalizedInput);
+          if (fuzzy) cartaCs = fuzzy;
+        }
+        if (cartaCs?.regalata_da_cliente_id) {
+          const { data: mitt } = await supabase.from('clienti').select('telefono').eq('id', cartaCs.regalata_da_cliente_id).maybeSingle();
+          if (mitt?.telefono) {
+            const mittN = normPhone(mitt.telefono);
+            if (mittN && telN && mittN === telN) { setDatiError("Questa carta sconto è stata regalata a un'amica. Non puoi usarla tu stessa."); return; }
           }
         }
       } catch { /* non bloccante */ }
@@ -1756,16 +1772,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   async function fetchMieiMessaggi(playSound: boolean): Promise<MioMessaggio[]> {
     // Resolve telefono via lookup priority
     let resolvedTel = telefono.trim();
-    if (!resolvedTel) {
-      const codice = codiceCliente.trim().toUpperCase();
-      if (codice) {
-        const { data } = await supabase.from('clienti').select('telefono').eq('user_id', userId).eq('codice_cliente', codice).is('deleted_at', null).maybeSingle();
-        if (data?.telefono) resolvedTel = data.telefono;
-      }
-      if (!resolvedTel && nome.trim() && cognome.trim()) {
-        const { data } = await supabase.from('clienti').select('telefono').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null).maybeSingle();
-        if (data?.telefono) resolvedTel = data.telefono;
-      }
+    if (!resolvedTel && nome.trim() && cognome.trim()) {
+      const { data } = await supabase.from('clienti').select('telefono').eq('user_id', userId).ilike('nome', nome.trim()).ilike('cognome', cognome.trim()).is('deleted_at', null).maybeSingle();
+      if (data?.telefono) resolvedTel = data.telefono;
     }
 
     const { data, error } = await supabase.from('messaggi_clienti').select('id,testo,foto_url_1,foto_url_2,foto_url_3,preferito,risposta_testo,risposta_at,risposta_foto_url_1,risposta_foto_url_2,risposta_foto_url_3,created_at,telefono').eq('user_id', userId).order('created_at', { ascending: false });
@@ -2438,42 +2447,29 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                   />
                 </div>
               </Field>
-              <Field label="Il tuo codice cliente (opzionale)">
-                <div className="relative">
-                  <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                  <input
-                    value={codiceCliente}
-                    onChange={e => setCodiceCliente(e.target.value.toUpperCase())}
-                    placeholder="Es. AB3X7K"
-                    className="input pl-9 font-mono tracking-widest"
-                    maxLength={8}
-                  />
-                </div>
-                <p className="text-[11px] text-stone-400 mt-1">Il codice personale assegnato dal salone — ti permette di accedere al tuo profilo anche se cambi numero</p>
-              </Field>
-              <Field label="Codice carta sconto (opzionale)">
-                <div className="relative">
-                  <CreditCard size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                  <input
-                    value={cartaScontoCode}
-                    onChange={e => setCartaScontoCode(e.target.value.toUpperCase())}
-                    placeholder="Es. SCONTO-XXXX"
-                    className="input pl-9 font-mono"
-                  />
-                </div>
-                <p className="text-[11px] text-stone-400 mt-1">Se hai ricevuto una carta sconto, inserisci il codice qui</p>
-              </Field>
-              <Field label="Codice Gift Pass (opzionale)">
+              <Field label="Hai un codice sconto o un Gift Pass? (opzionale)">
                 <div className="relative">
                   <Gift size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                   <input
-                    value={giftPassCode}
-                    onChange={e => setGiftPassCode(e.target.value.toUpperCase())}
-                    placeholder="Es. 12345"
-                    className="input pl-9 font-mono"
+                    value={codiceOmaggio}
+                    onChange={e => setCodiceOmaggio(e.target.value.toUpperCase())}
+                    placeholder="Es. SCONTO-3M9K-7Q2L oppure 47362"
+                    className="input pl-9 font-mono tracking-wider"
                   />
                 </div>
-                <p className="text-[11px] text-stone-400 mt-1">Se hai ricevuto un Gift Pass, inserisci il codice numerico qui</p>
+                <p className="text-[11px] text-stone-400 mt-1">Inserisci qui il codice della tua Carta Sconto o del tuo Gift Pass ricevuto in regalo</p>
+              </Field>
+              <Field label="Chi ti ha parlato di noi? (opzionale)">
+                <div className="relative">
+                  <Users size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    value={ambasciatoreName}
+                    onChange={e => { const v = e.target.value; setAmbasciatoreName(v.length > 0 ? v.charAt(0).toUpperCase() + v.slice(1) : v); }}
+                    placeholder="Es. Maria Rossi"
+                    className="input pl-9"
+                  />
+                </div>
+                <p className="text-[11px] text-stone-400 mt-1">Il nome e cognome dell'amica che ti ha consigliato il nostro salone</p>
               </Field>
               <p className="text-xs text-stone-400 bg-stone-50 rounded-xl p-3">
                 La prenotazione è una <strong>richiesta</strong> e deve essere confermata dal salone via WhatsApp. Non è garantita finché non ricevi conferma.
