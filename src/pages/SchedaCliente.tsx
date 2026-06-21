@@ -484,6 +484,9 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [editingAmbasciatore, setEditingAmbasciatore] = useState(false);
   const [ambQuery, setAmbQuery] = useState('');
   const [ambResults, setAmbResults] = useState<{id: string; nome: string; cognome: string}[]>([]);
+  const [editingHaPortato, setEditingHaPortato] = useState(false);
+  const [haPortatoQuery, setHaPortatoQuery] = useState('');
+  const [haPortatoResults, setHaPortatoResults] = useState<{id: string; nome: string; cognome: string}[]>([]);
 
   interface MappaBellezzaRecord {
     id: string;
@@ -864,6 +867,30 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
     setAmbResults([]);
   }
 
+  async function searchHaPortato(q: string) {
+    setHaPortatoQuery(q);
+    if (q.trim().length < 2) { setHaPortatoResults([]); return; }
+    const { data } = await supabase
+      .from('clienti')
+      .select('id, nome, cognome')
+      .is('deleted_at', null)
+      .or(`nome.ilike.%${q}%,cognome.ilike.%${q}%`)
+      .neq('id', clienteId)
+      .limit(6);
+    setHaPortatoResults(data ?? []);
+  }
+
+  async function saveHaPortato(id: string, nome: string, cognome: string) {
+    await supabase.from('clienti').update({ presentata_da_cliente_id: clienteId }).eq('id', id);
+    setHaPortato(prev => {
+      const nome_completo = `${nome} ${cognome}`;
+      return prev.includes(nome_completo) ? prev : [...prev, nome_completo];
+    });
+    setEditingHaPortato(false);
+    setHaPortatoQuery('');
+    setHaPortatoResults([]);
+  }
+
   if (!cliente) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-7 h-7 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -1031,10 +1058,52 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
                 </button>
               </div>
             )}
-            {haPortato.length > 0 && (
-              <div className="bg-sky-50 rounded-xl px-4 py-3 border border-sky-100">
-                <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-0.5">Ha presentato al salone</p>
-                <p className="text-sm text-sky-800">{haPortato.join(', ')}</p>
+            {!editingHaPortato ? (
+              <div className="bg-sky-50 rounded-xl px-4 py-3 border border-sky-100 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-0.5">Ha presentato al salone</p>
+                  {haPortato.length > 0
+                    ? <p className="text-sm text-sky-800 font-semibold">{haPortato.join(', ')}</p>
+                    : <p className="text-xs text-stone-400 italic">Nessuno ancora</p>
+                  }
+                </div>
+                <button
+                  onClick={() => setEditingHaPortato(true)}
+                  className="flex-shrink-0 text-xs text-sky-600 hover:text-sky-800 font-semibold underline underline-offset-2 whitespace-nowrap"
+                >
+                  + Aggiungi
+                </button>
+              </div>
+            ) : (
+              <div className="bg-sky-50 rounded-xl px-4 py-3 border border-sky-200">
+                <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-2">Cerca cliente presentato</p>
+                <input
+                  type="text"
+                  value={haPortatoQuery}
+                  onChange={e => searchHaPortato(e.target.value)}
+                  placeholder="Nome o cognome..."
+                  autoFocus
+                  className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:border-sky-400 bg-white"
+                />
+                {haPortatoResults.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {haPortatoResults.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => saveHaPortato(r.id, r.nome, r.cognome)}
+                        className="w-full text-left px-3 py-2 text-sm text-stone-700 bg-white rounded-lg hover:bg-sky-50 border border-stone-100"
+                      >
+                        {r.nome} {r.cognome}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => { setEditingHaPortato(false); setHaPortatoQuery(''); setHaPortatoResults([]); }}
+                  className="mt-2 text-xs text-stone-400 hover:text-stone-600"
+                >
+                  Annulla
+                </button>
               </div>
             )}
           </div>

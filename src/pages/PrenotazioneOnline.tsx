@@ -4498,7 +4498,7 @@ function MieCarteStep({
         <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome="" onSegnaGiftPassDonata={onSegnaGiftPassDonata} />
       ))}
 
-      {hasCarte && <GiftPassPromo hasActiveGiftPass={(data?.giftPassRicevente ?? []).length > 0} />}
+      <GiftPassPromo hasActiveGiftPass={(data?.giftPassRicevente ?? []).length > 0} />
 
       {!hasCarte && (
         <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-10 text-center">
