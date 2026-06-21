@@ -5153,7 +5153,7 @@ function GiftPassInfoModal({ onClose }: { onClose: () => void }) {
               <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
                 <span className="font-semibold text-white">Flessibilità Totale:</span>{' '}
-                Chi riceve la Gift Pass può usarla per qualsiasi servizio in salone, scegliendo liberamente cosa fare con il credito ricevuto. Nessun vincolo, nessuna scadenza.
+                Chi riceve la Gift Pass può usarla per qualsiasi servizio in salone, scegliendo liberamente cosa fare con il credito ricevuto (ad eccezione del servizio extension). Nessun vincolo, nessuna scadenza.
               </p>
             </div>
             <div className="flex gap-3">
