@@ -4508,6 +4508,8 @@ function MieCarteStep({
         <GiftPassCard key={gp.id} gp={gp} salone={data?.salone ?? {}} nomeSalone={nomeSalone} compratore_nome="" onSegnaGiftPassDonata={onSegnaGiftPassDonata} />
       ))}
 
+      <GiftPassPromo hasActiveGiftPass={(data?.giftPassRicevente ?? []).length > 0} />
+
       <BackBtn onClick={onBack} />
     </div>
   );
@@ -5099,6 +5101,203 @@ function CartaUsaEGettaCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function GiftPassInfoModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: 'rgba(0,0,0,0.88)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+        style={{ background: 'linear-gradient(160deg, #1a0000 0%, #2d0f0a 30%, #1a0800 60%, #0d0400 100%)', maxHeight: '90vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-rose-900 via-rose-300 to-rose-900" />
+        <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(201,137,122,0.22) 0%, transparent 70%)' }} />
+
+        <div className="overflow-y-auto flex-1 px-6 pt-8 pb-2">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #c9897a 0%, #f5d0be 50%, #b8705a 100%)', boxShadow: '0 0 24px rgba(201,137,122,0.5)' }}>
+              <span className="text-3xl">🎁</span>
+            </div>
+          </div>
+          <h2 className="text-center font-bold text-lg tracking-widest uppercase mb-1" style={{ color: '#f5d0be', textShadow: '0 0 16px rgba(201,137,122,0.5)' }}>
+            Gift Pass
+          </h2>
+          <p className="text-center text-xs tracking-[0.2em] uppercase mb-5" style={{ color: 'rgba(245,208,190,0.55)' }}>
+            Il Regalo Perfetto di Bellezza
+          </p>
+          <div className="h-px mb-6 bg-gradient-to-r from-transparent via-rose-700 to-transparent" />
+
+          <p className="text-sm leading-relaxed mb-6" style={{ color: 'rgba(255,255,255,0.78)' }}>
+            Vuoi fare un regalo speciale a qualcuno che ami? La Gift Pass è il dono più raffinato che puoi offrire: un'esperienza di bellezza esclusiva, personalizzata e senza scadenza, pensata per stupire davvero.
+          </p>
+
+          <p className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: '#f5d0be' }}>
+            💝 Come Funziona?
+          </p>
+          <div className="space-y-3 mb-6">
+            <div className="flex gap-3">
+              <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Un Gesto di Cura:</span>{' '}
+                Acquisti la Gift Pass in salone e scegli l'importo che desideri. Il salone la prepara per te, pronta da regalare a chiunque tu voglia.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Flessibilità Totale:</span>{' '}
+                Chi riceve la Gift Pass può usarla per qualsiasi servizio in salone, scegliendo liberamente cosa fare con il credito ricevuto. Nessun vincolo, nessuna scadenza.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Eleganza nel Dettaglio:</span>{' '}
+                La Gift Pass viene consegnata in una confezione elegante, un piccolo lusso che fa sentire speciale chi la riceve ancor prima di entrare in salone.
+              </p>
+            </div>
+          </div>
+
+          <p className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: '#f5d0be' }}>
+            🌸 Per Chi è Perfetta?
+          </p>
+          <div className="space-y-3 mb-6">
+            <div className="flex gap-3">
+              <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                Per <span className="font-semibold text-white">compleanni, anniversari, feste della mamma</span> o semplicemente per dire "ti voglio bene" in modo originale e premuroso.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                Per chi <span className="font-semibold text-white">non sai mai cosa regalare</span>: con la Gift Pass non sbagli mai, perché lasci a lei (o lui) la libertà di scegliere.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                Per <span className="font-semibold text-white">sorprendere davvero</span>: un'esperienza di bellezza di qualità vale molto di più di un qualsiasi oggetto.
+              </p>
+            </div>
+          </div>
+
+          <div className="h-px mb-5 bg-gradient-to-r from-transparent via-rose-800 to-transparent" />
+          <div className="text-center mb-4 px-1">
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
+              Vuoi regalare un'esperienza indimenticabile?
+            </p>
+            <p className="font-bold mt-1" style={{ color: '#f5d0be' }}>
+              Chiedi la Gift Pass alla tua prossima visita in salone! 💖
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 pt-2 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full py-4 rounded-2xl font-bold text-sm tracking-widest uppercase transition-all active:scale-95"
+            style={{ background: 'linear-gradient(90deg, #c9897a 0%, #f5d0be 40%, #e8b4a0 60%, #c9897a 100%)', color: '#3a0f0a', boxShadow: '0 4px 20px rgba(201,137,122,0.4)' }}
+          >
+            Chiudi
+          </button>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-rose-900 via-rose-300 to-rose-900" />
+      </div>
+    </div>
+  );
+}
+
+function GiftPassPromo({ hasActiveGiftPass }: { hasActiveGiftPass: boolean }) {
+  const [showInfo, setShowInfo] = useState(false);
+
+  const roseGold = {
+    base: 'linear-gradient(135deg, #f9e8e0 0%, #f2d5c8 25%, #f7e0d4 50%, #eddac9 75%, #f5e4d8 100%)',
+    stripe: 'linear-gradient(90deg, #c9897a, #e8b4a0, #d4a090, #e8b4a0, #c9897a)',
+    chip: 'linear-gradient(135deg, #c9897a 0%, #e8b4a0 40%, #d4966a 60%, #b8705a 100%)',
+    chipInner: 'linear-gradient(135deg, #e8b4a0 0%, #f5d0be 50%, #c9897a 100%)',
+    glow1: 'radial-gradient(circle, rgba(201,137,122,0.25) 0%, transparent 70%)',
+    glow2: 'radial-gradient(circle, rgba(232,180,160,0.18) 0%, transparent 70%)',
+    pattern: 'repeating-linear-gradient(45deg, rgba(180,100,80,0.06) 0px, rgba(180,100,80,0.06) 1px, transparent 0px, transparent 28px)',
+    title: '#8b4a3a',
+    accent: '#c9897a',
+  };
+
+  return (
+    <div className="space-y-3">
+      <div
+        className="cursor-pointer select-none transition-transform active:scale-[0.99]"
+        style={{ opacity: hasActiveGiftPass ? 1 : 0.4, filter: hasActiveGiftPass ? 'none' : 'grayscale(0.5)' }}
+        onClick={() => setShowInfo(true)}
+      >
+        <div
+          className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+          style={{
+            background: roseGold.base,
+            minHeight: 210,
+            boxShadow: '0 8px 32px rgba(180,100,80,0.18), 0 2px 8px rgba(180,100,80,0.1)',
+            border: '1px solid rgba(201,137,122,0.35)',
+          }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-1" style={{ background: roseGold.stripe }} />
+          <div className="absolute inset-0" style={{ backgroundImage: roseGold.pattern, backgroundSize: '28px 28px' }} />
+          <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: roseGold.glow1 }} />
+          <div className="absolute -left-4 -bottom-4 w-36 h-36 rounded-full" style={{ background: roseGold.glow2 }} />
+
+          <div className="relative p-6 flex flex-col" style={{ minHeight: 210 }}>
+            <div className="flex items-start justify-between mb-auto">
+              <div>
+                <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: roseGold.title }}>Gift Pass</p>
+                <p className="text-xs mt-0.5 font-medium" style={{ color: roseGold.accent }}>PRODOTTO</p>
+              </div>
+              <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: roseGold.chip, boxShadow: '0 2px 6px rgba(139,74,58,0.3), inset 0 1px 1px rgba(255,255,255,0.4)' }}>
+                <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(139,74,58,0.4)', background: roseGold.chipInner }} />
+              </div>
+            </div>
+
+            <div className="mt-8 mb-4">
+              <p className="font-bold text-lg tracking-wide" style={{ color: roseGold.title, textShadow: '0 1px 4px rgba(180,100,80,0.15)' }}>Il regalo ideale</p>
+              <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: roseGold.accent }}>GIFT-PASS-XXXX</p>
+            </div>
+
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-xs font-medium" style={{ color: 'rgba(139,74,58,0.7)' }}>Esperienza di bellezza</p>
+                <p className="text-2xl font-bold" style={{ color: roseGold.title }}>Per chi ami</p>
+              </div>
+              <span className="text-3xl">🎁</span>
+            </div>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: roseGold.stripe }} />
+        </div>
+      </div>
+
+      <p className="text-xs text-center text-stone-500 leading-relaxed px-2">
+        {hasActiveGiftPass ? (
+          <>
+            Hai un regalo attivo!{' '}
+            <button onClick={() => setShowInfo(true)} className="font-semibold underline underline-offset-2" style={{ color: '#c9897a' }}>
+              Clicca sulla carta per rivedere le informazioni.
+            </button>
+          </>
+        ) : (
+          <>
+            Devi fare un regalo e non sai cosa fare?{' '}
+            <button onClick={() => setShowInfo(true)} className="font-semibold underline underline-offset-2" style={{ color: '#c9897a' }}>
+              Clicca sulla Gift Pass per scoprire come stupire chi ami!
+            </button>
+          </>
+        )}
+      </p>
+
+      {showInfo && <GiftPassInfoModal onClose={() => setShowInfo(false)} />}
     </div>
   );
 }
