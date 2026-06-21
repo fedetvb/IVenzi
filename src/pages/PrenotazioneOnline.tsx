@@ -4458,6 +4458,7 @@ function MieCarteStep({
         </div>
       )}
 
+      {(data?.cartePremium ?? []).length === 0 && <CartaPremiumPromo />}
       {(data?.cartePremium ?? []).map(carta => (
         <CartaPremiumCard key={carta.id} carta={carta} cliente={data?.cliente} />
       ))}
@@ -4489,8 +4490,166 @@ function MieCarteStep({
   );
 }
 
+function CartaPremiumInfoModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: 'rgba(0,0,0,0.88)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+        style={{ background: 'linear-gradient(160deg, #0f0c00 0%, #1c1500 30%, #120e00 60%, #080600 100%)', maxHeight: '90vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-900 via-yellow-400 to-amber-900" />
+        <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(212,175,55,0.18) 0%, transparent 70%)' }} />
+
+        <div className="overflow-y-auto flex-1 px-6 pt-8 pb-2">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #b8860b 0%, #f5e17a 50%, #8b6914 100%)', boxShadow: '0 0 24px rgba(212,175,55,0.5)' }}>
+              <span className="text-3xl">👑</span>
+            </div>
+          </div>
+          <h2 className="text-center font-bold text-lg tracking-widest uppercase mb-1" style={{ color: '#f5e17a', textShadow: '0 0 16px rgba(212,175,55,0.5)' }}>
+            Carta Premium
+          </h2>
+          <p className="text-center text-xs tracking-[0.2em] uppercase mb-5" style={{ color: 'rgba(245,225,122,0.55)' }}>
+            Il tuo Club Esclusivo di Bellezza
+          </p>
+          <div className="h-px mb-6 bg-gradient-to-r from-transparent via-amber-600 to-transparent" />
+
+          <p className="text-sm leading-relaxed mb-6" style={{ color: 'rgba(255,255,255,0.78)' }}>
+            Benvenuta/o nel massimo livello di cura e privilegio per i tuoi capelli. La Carta Premium non è un semplice abbonamento, ma un investimento sulla tua bellezza che ti regala vantaggi esclusivi fin dal primo istante.
+          </p>
+
+          <p className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: '#f5e17a' }}>
+            💎 Come Funziona?
+          </p>
+          <div className="space-y-3 mb-6">
+            <div className="flex gap-3">
+              <span className="text-amber-400 mt-0.5 flex-shrink-0 text-lg leading-none">•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Un Privilegio per Sempre:</span>{' '}
+                Attivi la carta una sola volta e non scade mai. Rimarrà tua, attiva e utilizzabile per sempre.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-amber-400 mt-0.5 flex-shrink-0 text-lg leading-none">•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Attivazione e Ricarica Flessibile:</span>{' '}
+                L'attivazione della carta ha un costo iniziale di 250€, ma trovi immediatamente a tua disposizione un credito reale di 300€ da spendere in salone{' '}
+                <span style={{ color: '#f5e17a', fontStyle: 'italic' }}>(50€ veri e propri te li regaliamo noi in denaro sulla tua carta come benvenuto nel Club!)</span>.
+                {' '}Per tutte le ricariche successive, sarai libera/o di scegliere il budget che preferisci (a partire da un minimo di 200€) e il salone continuerà a premiarti aggiungendo del credito extra in denaro omaggio sulla tua carta. Sarà sempre così, a ogni singola ricarica, per tutta la vita della tua carta!
+              </p>
+            </div>
+          </div>
+
+          <p className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: '#f5e17a' }}>
+            🌟 I tuoi Vantaggi Esclusivi:
+          </p>
+          <div className="space-y-3 mb-6">
+            <div className="flex gap-3">
+              <span className="text-amber-400 mt-0.5 flex-shrink-0 text-lg leading-none">•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Credito Extra in Denaro Reale:</span>{' '}
+                Nessun finto coupon o trattamento predefinito. Il salone aggiunge soldi veri sulla tua carta sia all'attivazione sia su ogni singola ricarica futura, senza eccezioni.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-amber-400 mt-0.5 flex-shrink-0 text-lg leading-none">•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Nessuna Scadenza:</span>{' '}
+                Gestisci i tuoi appuntamenti e il tuo credito in totale libertà, senza l'ansia del tempo.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-amber-400 mt-0.5 flex-shrink-0 text-lg leading-none">•</span>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                <span className="font-semibold text-white">Massima Libertà di Utilizzo:</span>{' '}
+                Puoi utilizzare il tuo credito accumulato per qualsiasi tipo di trattamento o servizio tu voglia fare in salone (ad esclusione del servizio extension), senza alcun vincolo di listino.
+              </p>
+            </div>
+          </div>
+
+          <div className="h-px mb-5 bg-gradient-to-r from-transparent via-amber-700 to-transparent" />
+          <div className="text-center mb-4 px-1">
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
+              Non hai ancora sbloccato i tuoi privilegi?
+            </p>
+            <p className="font-bold mt-1" style={{ color: '#f5e17a' }}>
+              Attiva la tua Carta Premium alla tua prossima visita in salone! 💖
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 pt-2 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full py-4 rounded-2xl font-bold text-sm tracking-widest uppercase transition-all active:scale-95"
+            style={{ background: 'linear-gradient(90deg, #b8860b 0%, #f5e17a 40%, #d4af37 60%, #b8860b 100%)', color: '#1a0f00', boxShadow: '0 4px 20px rgba(212,175,55,0.4)' }}
+          >
+            Chiudi
+          </button>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-900 via-yellow-400 to-amber-900" />
+      </div>
+    </div>
+  );
+}
+
+function CartaPremiumPromo() {
+  const [showInfo, setShowInfo] = useState(false);
+  return (
+    <div className="space-y-3">
+      <div
+        className="cursor-pointer select-none"
+        style={{ filter: 'grayscale(1)', opacity: 0.4 }}
+        onClick={() => setShowInfo(true)}
+      >
+        <div
+          className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+          style={{ background: 'linear-gradient(135deg, #111008 0%, #2a2000 25%, #1a1500 50%, #2d2200 75%, #0d0a00 100%)', minHeight: 210 }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, #b8860b, #f5e17a, #d4af37, #f5e17a, #b8860b)' }} />
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #d4af37 0px, #d4af37 1px, transparent 0px, transparent 28px)', backgroundSize: '28px 28px' }} />
+          <div className="absolute -right-6 -top-6 w-52 h-52 rounded-full" style={{ background: 'radial-gradient(circle, rgba(212,175,55,0.35) 0%, transparent 70%)' }} />
+          <div className="absolute -left-4 -bottom-4 w-32 h-32 rounded-full" style={{ background: 'radial-gradient(circle, rgba(212,175,55,0.2) 0%, transparent 70%)' }} />
+          <div className="relative p-6 flex flex-col h-full" style={{ minHeight: 210 }}>
+            <div className="flex items-start justify-between mb-auto">
+              <p className="text-xs font-bold tracking-[0.25em] uppercase" style={{ color: '#f5e17a', textShadow: '0 0 8px rgba(212,175,55,0.6)' }}>Carta Premium</p>
+              <div className="w-12 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #b8860b 0%, #f5e17a 40%, #d4af37 60%, #8b6914 100%)', boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
+                <div className="w-7 h-5 rounded-sm border" style={{ borderColor: 'rgba(139,105,20,0.6)', background: 'linear-gradient(135deg, #d4af37 0%, #f5e17a 50%, #b8860b 100%)' }} />
+              </div>
+            </div>
+            <div className="mt-8 mb-4">
+              <p className="text-white font-bold text-lg tracking-wide" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>Il tuo nome</p>
+              <p className="text-xs mt-1 font-mono tracking-[0.15em]" style={{ color: '#f5e17a' }}>PREMIUM-XXXX-XXXX</p>
+            </div>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-xs font-medium" style={{ color: 'rgba(245,225,122,0.7)' }}>Saldo disponibile</p>
+                <p className="text-3xl font-bold" style={{ color: '#f5e17a', textShadow: '0 0 12px rgba(212,175,55,0.5)' }}>€ 0.00</p>
+              </div>
+            </div>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, #d4af37, #f5e17a, #d4af37, transparent)' }} />
+        </div>
+      </div>
+      <p className="text-xs text-center text-stone-500 leading-relaxed px-2">
+        Non hai ancora la tua Carta Premium?{' '}
+        <button onClick={() => setShowInfo(true)} className="font-semibold text-amber-700 underline underline-offset-2">
+          Clicca sulla carta per scoprire tutti i vantaggi!
+        </button>
+      </p>
+      {showInfo && <CartaPremiumInfoModal onClose={() => setShowInfo(false)} />}
+    </div>
+  );
+}
+
 function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: MieCarteData['cliente'] }) {
   const [showMovimenti, setShowMovimenti] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const saldoEsaurito = carta.saldo <= 0;
 
   const movimenti = [
@@ -4500,9 +4659,10 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
 
   return (
     <div className="space-y-3">
-      {/* Card grafica premium */}
+      {/* Card grafica premium — cliccabile per aprire info */}
       <div
-        className="relative w-full rounded-3xl overflow-hidden shadow-xl"
+        className="relative w-full rounded-3xl overflow-hidden shadow-xl cursor-pointer active:scale-[0.99] transition-transform"
+        onClick={() => setShowInfo(true)}
         style={{
           background: saldoEsaurito
             ? 'linear-gradient(135deg, #3d0000 0%, #6b0f0f 25%, #4a0808 50%, #7a1010 75%, #2d0000 100%)'
@@ -4595,6 +4755,11 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
         }} />
       </div>
 
+      {/* Frase club membro */}
+      <p className="text-xs text-center font-medium leading-relaxed px-2" style={{ color: '#92600a' }}>
+        Sei un membro del nostro Club! 👑 Clicca sulla carta per rinfrescarti la memoria sui tuoi privilegi.
+      </p>
+
       {/* Frase risparmio */}
       <div className="px-1">
         <p className="text-xs text-stone-500 italic leading-relaxed">
@@ -4667,6 +4832,7 @@ function CartaPremiumCard({ carta, cliente }: { carta: CartaPremium; cliente: Mi
           )}
         </div>
       )}
+      {showInfo && <CartaPremiumInfoModal onClose={() => setShowInfo(false)} />}
     </div>
   );
 }
