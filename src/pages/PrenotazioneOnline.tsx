@@ -1530,9 +1530,13 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           let presentataDaNome: string | null = null;
           if (donatoreId) {
             const donatore = ((clientiAll ?? []) as { id: string; nome: string; cognome: string }[]).find((c: { id: string }) => c.id === donatoreId);
-            if (donatore) presentataDaNome = `${donatore.nome} ${donatore.cognome}`.trim();
+            if (donatore) {
+              const candidate = `${donatore.nome} ${donatore.cognome}`.trim();
+              // Ignora nomi anonimi — il testo manuale ha priorità in questi casi
+              if (candidate && !/^ignot/i.test(candidate)) presentataDaNome = candidate;
+            }
           }
-          // Fallback: campo ambasciatore manuale
+          // Il campo manuale vince se il donatore estratto è anonimo, vuoto o assente
           if (!presentataDaNome && ambasciatoreName.trim()) presentataDaNome = ambasciatoreName.trim();
 
           const now2 = new Date().toISOString();
@@ -1557,7 +1561,9 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           if (cliente) {
             await supabase.from('carte_sconto').update({ cliente_id: cliente.id, regalata: false, regalata_da_cliente_id: carta.regalata_da_cliente_id ?? null }).eq('id', carta.id);
           } else {
-            let presentataDaNome: string | null = carta.ex_proprietaria_nome ?? null;
+            let presentataDaNome: string | null = null;
+            const exNome = (carta.ex_proprietaria_nome ?? '').trim();
+            if (exNome && !/^ignot/i.test(exNome)) presentataDaNome = exNome;
             if (!presentataDaNome && ambasciatoreName.trim()) presentataDaNome = ambasciatoreName.trim();
             await insertSchedaSafe({
               user_id: userId, nome: nome.trim(), cognome: cognome.trim(), telefono: tel, stato: 'in_attesa',
