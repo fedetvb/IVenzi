@@ -325,6 +325,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [telefono, setTelefono] = useState('');
   const [codiceOmaggio, setCodiceOmaggio] = useState('');
   const [ambasciatoreName, setAmbasciatoreName] = useState('');
+  const [clienteGiaEsiste, setClienteGiaEsiste] = useState(false);
   const [datiError, setDatiError] = useState('');
   const [datiChecking, setDatiChecking] = useState(false);
 
@@ -849,6 +850,27 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       if (saved.codiceOmaggio) setCodiceOmaggio(saved.codiceOmaggio.toUpperCase());
     } catch { /* ignore */ }
   }, []);
+
+  // Controlla in tempo reale se il telefono appartiene a una cliente già registrata
+  useEffect(() => {
+    const tel = telefono.trim();
+    if (!tel || tel.replace(/\D/g, '').length < 7) {
+      setClienteGiaEsiste(false);
+      return;
+    }
+    let active = true;
+    const timer = setTimeout(async () => {
+      if (!active) return;
+      try {
+        const { data } = await supabase.rpc('cliente_esiste_in_rubrica', {
+          p_user_id: userId,
+          p_telefono: tel,
+        });
+        if (active) setClienteGiaEsiste(!!data);
+      } catch { /* non bloccante */ }
+    }, 600);
+    return () => { active = false; clearTimeout(timer); };
+  }, [telefono, userId]);
 
 
   // Update apple-touch-icon when salon has a custom icon
@@ -2122,8 +2144,11 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 
       try {
         const lsData = JSON.parse(localStorage.getItem(LS_CLIENTE_KEY) ?? '{}');
-        delete lsData.codiceOmaggio;
-        localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(lsData));
+        const clean: Record<string, string> = {};
+        if (lsData.nome) clean.nome = lsData.nome;
+        if (lsData.cognome) clean.cognome = lsData.cognome;
+        if (lsData.telefono) clean.telefono = lsData.telefono;
+        localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(clean));
       } catch { /* ignore */ }
 
       setStep('successo');
@@ -2480,6 +2505,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 </div>
                 <p className="text-[11px] text-stone-400 mt-1">Inserisci qui il codice della tua Carta Sconto o del tuo Gift Pass ricevuto in regalo</p>
               </Field>
+              {!clienteGiaEsiste && (
               <Field label="Chi ti ha parlato di noi? (opzionale)">
                 <div className="relative">
                   <Users size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -2492,6 +2518,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 </div>
                 <p className="text-[11px] text-stone-400 mt-1">Il nome e cognome dell'amica che ti ha consigliato il nostro salone</p>
               </Field>
+              )}
               <p className="text-xs text-stone-400 bg-stone-50 rounded-xl p-3">
                 La prenotazione è una <strong>richiesta</strong> e deve essere confermata dal salone via WhatsApp. Non è garantita finché non ricevi conferma.
               </p>
