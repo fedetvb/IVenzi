@@ -1449,7 +1449,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     try {
       const telNorm = normPhone(telefono.trim());
       // Verify the card belongs to this cliente
-      const { data: clienti } = await supabase.from('clienti').select('id').eq('user_id', userId).is('deleted_at', null);
+      const { data: clienti } = await supabase.from('clienti').select('id,telefono').eq('user_id', userId).is('deleted_at', null);
       const clienteId = ((clienti ?? []) as { id: string; telefono: string }[]).find((c: { telefono: string }) => normPhone(c.telefono ?? '') === telNorm)?.id ?? null;
       if (!clienteId) throw new Error('Cliente non trovata');
       const { data: carta } = await supabase.from('carte_sconto').select('id,cliente_id,usa_e_getta,regalata,ex_proprietaria_nome').eq('id', cartaId).eq('user_id', userId).maybeSingle();
