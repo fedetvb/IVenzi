@@ -308,7 +308,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
       const nomeTrimmed = scheda.presentata_da_nome.trim();
       if (nomeTrimmed && !/^ignot/i.test(nomeTrimmed)) {
         const parts = nomeTrimmed.split(/\s+/);
-        let q = supabase.from('clienti').select('id').is('deleted_at', null);
+        let q = supabase.from('clienti').select('id').eq('user_id', user?.id).is('deleted_at', null);
         if (parts.length >= 2) {
           q = q.ilike('nome', parts[0]).ilike('cognome', parts.slice(1).join(' '));
         } else {
