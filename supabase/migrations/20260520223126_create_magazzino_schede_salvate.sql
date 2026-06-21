@@ -8,6 +8,8 @@
       - `id` (uuid, primary key)
       - `nome` (text) — user-provided label, defaults to the date
       - `data_creazione` (timestamptz)
+      - `created_at` (timestamptz) — required by localDb.ts dbInsert
+      - `updated_at` (timestamptz) — required by localDb.ts dbInsert/dbUpdate
       - `filtro_categoria` (text, nullable) — category id or null for all
       - `solo_scarse` (boolean) — whether only low-stock items were included
       - `snapshot` (jsonb) — full array of prodotto rows at save time
@@ -22,6 +24,8 @@ CREATE TABLE IF NOT EXISTS magazzino_schede_salvate (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   nome             text NOT NULL DEFAULT '',
   data_creazione   timestamptz NOT NULL DEFAULT now(),
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
   filtro_categoria text,
   solo_scarse      boolean NOT NULL DEFAULT false,
   snapshot         jsonb NOT NULL DEFAULT '[]',
