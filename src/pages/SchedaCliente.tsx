@@ -481,6 +481,9 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [presentataDa, setPresentataDa] = useState<string | null>(null);
   const [haPortato, setHaPortato] = useState<string[]>([]);
   const [haFicheConvalidate, setHaFicheConvalidate] = useState(false);
+  const [editingAmbasciatore, setEditingAmbasciatore] = useState(false);
+  const [ambQuery, setAmbQuery] = useState('');
+  const [ambResults, setAmbResults] = useState<{id: string; nome: string; cognome: string}[]>([]);
 
   interface MappaBellezzaRecord {
     id: string;
@@ -840,6 +843,27 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
     load();
   }
 
+  async function searchAmbasciatore(q: string) {
+    setAmbQuery(q);
+    if (q.trim().length < 2) { setAmbResults([]); return; }
+    const { data } = await supabase
+      .from('clienti')
+      .select('id, nome, cognome')
+      .is('deleted_at', null)
+      .or(`nome.ilike.%${q}%,cognome.ilike.%${q}%`)
+      .neq('id', clienteId)
+      .limit(6);
+    setAmbResults(data ?? []);
+  }
+
+  async function saveAmbasciatore(id: string, nome: string, cognome: string) {
+    await supabase.from('clienti').update({ presentata_da_cliente_id: id }).eq('id', clienteId);
+    setPresentataDa(`${nome} ${cognome}`);
+    setEditingAmbasciatore(false);
+    setAmbQuery('');
+    setAmbResults([]);
+  }
+
   if (!cliente) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-7 h-7 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -958,22 +982,62 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
               <p className="text-sm text-stone-700">{cliente.note}</p>
             </div>
           )}
-          {(presentataDa || haPortato.length > 0) && (
-            <div className="mt-4 pt-4 border-t border-stone-100 space-y-3">
-              {presentataDa && (
-                <div className="bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100">
+          <div className="mt-4 pt-4 border-t border-stone-100 space-y-3">
+            {!editingAmbasciatore ? (
+              <div className="bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100 flex items-center justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-0.5">Presentata da</p>
-                  <p className="text-sm text-emerald-800 font-semibold">La cliente è stata presentata da: {presentataDa}</p>
+                  {presentataDa
+                    ? <p className="text-sm text-emerald-800 font-semibold truncate">{presentataDa}</p>
+                    : <p className="text-xs text-stone-400 italic">Nessun ambasciatore impostato</p>
+                  }
                 </div>
-              )}
-              {haPortato.length > 0 && (
-                <div className="bg-sky-50 rounded-xl px-4 py-3 border border-sky-100">
-                  <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-0.5">Ha presentato al salone</p>
-                  <p className="text-sm text-sky-800">{haPortato.join(', ')}</p>
-                </div>
-              )}
-            </div>
-          )}
+                <button
+                  onClick={() => setEditingAmbasciatore(true)}
+                  className="flex-shrink-0 text-xs text-emerald-600 hover:text-emerald-800 font-semibold underline underline-offset-2 whitespace-nowrap"
+                >
+                  {presentataDa ? 'Modifica' : '+ Aggiungi'}
+                </button>
+              </div>
+            ) : (
+              <div className="bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-200">
+                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-2">Cerca ambasciatore</p>
+                <input
+                  type="text"
+                  value={ambQuery}
+                  onChange={e => searchAmbasciatore(e.target.value)}
+                  placeholder="Nome o cognome..."
+                  autoFocus
+                  className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400 bg-white"
+                />
+                {ambResults.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {ambResults.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => saveAmbasciatore(r.id, r.nome, r.cognome)}
+                        className="w-full text-left px-3 py-2 text-sm text-stone-700 bg-white rounded-lg hover:bg-emerald-50 border border-stone-100"
+                      >
+                        {r.nome} {r.cognome}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => { setEditingAmbasciatore(false); setAmbQuery(''); setAmbResults([]); }}
+                  className="mt-2 text-xs text-stone-400 hover:text-stone-600"
+                >
+                  Annulla
+                </button>
+              </div>
+            )}
+            {haPortato.length > 0 && (
+              <div className="bg-sky-50 rounded-xl px-4 py-3 border border-sky-100">
+                <p className="text-xs font-bold text-sky-600 uppercase tracking-wide mb-0.5">Ha presentato al salone</p>
+                <p className="text-sm text-sky-800">{haPortato.join(', ')}</p>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-stone-400 mt-4 pt-4 border-t border-stone-100">
             Cliente dal {new Date(cliente.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
