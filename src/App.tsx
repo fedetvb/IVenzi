@@ -1122,8 +1122,7 @@ export default function App() {
     async function handleNuovaScheda(row: Record<string, unknown>) {
       const codiceGp = row.codice_gift_pass as string | null;
       const codiceCs = row.codice_carta_sconto as string | null;
-
-      if (!codiceGp && !codiceCs) return;
+      const presentataDaNome = (row.presentata_da_nome as string | null)?.trim() || null;
 
       const nuovaCliente = [row.nome, row.cognome].filter(Boolean).join(' ') || 'Nuova cliente';
 
@@ -1156,6 +1155,9 @@ export default function App() {
             setRecordPopups(prev => [...prev, { donatrice, count, isFirst: count === 5 }]);
           }
         }
+      } else if (presentataDaNome && !/^ignot/i.test(presentataDaNome)) {
+        // Segnalazione manuale senza codice carta
+        addReferralPopup(presentataDaNome, nuovaCliente, 'Segnalazione');
       }
     }
 

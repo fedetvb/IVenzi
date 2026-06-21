@@ -2119,6 +2119,12 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         ).then(() => {});
       }
 
+      try {
+        const lsData = JSON.parse(localStorage.getItem(LS_CLIENTE_KEY) ?? '{}');
+        delete lsData.codiceOmaggio;
+        localStorage.setItem(LS_CLIENTE_KEY, JSON.stringify(lsData));
+      } catch { /* ignore */ }
+
       setStep('successo');
     } catch {
       setSubmitError('Errore di rete. Controlla la connessione e riprova.');
