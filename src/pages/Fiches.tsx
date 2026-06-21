@@ -954,8 +954,11 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   function doAfterConvalida() {
     if (primaFicheRef.current) {
       const { referrerNome, nuovaClienteNome, referrerPhone } = primaFicheRef.current;
-      const amicoAmica = genderAmicoAmica(nuovaClienteNome);
-      const testo = `✨ Ciao ${referrerNome}!\n\nTi scriviamo per dirti un grazie immenso: oggi è venuta a trovarci in salone la tua ${amicoAmica} ${nuovaClienteNome}! ✨\n\nSiamo felicissimi che tu abbia pensato a noi. Un abbraccio e a presto!`;
+      const isFemminile = genderAmicoAmica(nuovaClienteNome) === 'amica';
+      const amicoAmica = isFemminile ? 'amica' : 'amico';
+      const venutoVenuta = isFemminile ? 'venuta' : 'venuto';
+      const ilLaTuo = isFemminile ? 'la tua' : 'il tuo';
+      const testo = `✨ Ciao ${referrerNome}!\n\nTi scriviamo per dirti un grazie immenso: oggi è ${venutoVenuta} a trovarci in salone ${ilLaTuo} ${amicoAmica} ${nuovaClienteNome}! ✨\n\nSiamo felicissimi che tu abbia pensato a noi. Un abbraccio e a presto!`;
       setWaPrimaFiche({ testo, telefono: referrerPhone, nomeReferrer: referrerNome });
     } else {
       onConvalidata();
