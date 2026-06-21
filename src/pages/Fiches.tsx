@@ -5,7 +5,7 @@ import {
   Pencil, Check, BookOpen, Printer, Download, ShieldCheck, AlertCircle, UserPlus, Scissors, Eye, EyeOff, ShoppingBag, Search,
   Banknote, CreditCard, Gift, MessageCircle,
 } from 'lucide-react';
-import { localDateStr } from '../lib/supabase';
+import { localDateStr, supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import PasswordGateModal from '../components/PasswordGateModal';
@@ -939,17 +939,15 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [showNuovaCartaFiche, setShowNuovaCartaFiche] = useState(false);
   const [pendingGiftPassIds, setPendingGiftPassIds] = useState<string[]>([]);
 
-  // WA benvenuto prima visita
-  const [waPrimaFiche, setWaPrimaFiche] = useState<{ testo: string } | null>(null);
-  const isNuovaClienteRef = useRef(false);
-
-  function buildMessaggioPrimaFiche(nome: string): string {
-    return `Grazie ${nome}! 🌟\n\nÈ stato un piacere averti con noi per la prima volta!\n\nSperiamo che tu sia rimasta soddisfatta e ci auguriamo di rivederti presto! 💛`;
-  }
+  // WA ringraziamento ambasciatore alla prima visita della cliente portata
+  const [waPrimaFiche, setWaPrimaFiche] = useState<{ testo: string; telefono: string; nomeReferrer: string } | null>(null);
+  const primaFicheRef = useRef<{ referrerPhone: string; referrerNome: string; nuovaClienteNome: string } | null>(null);
 
   function doAfterConvalida() {
-    if (isNuovaClienteRef.current && clienteTelefono) {
-      setWaPrimaFiche({ testo: buildMessaggioPrimaFiche(gruppo.clienteNome) });
+    if (primaFicheRef.current) {
+      const { referrerNome, nuovaClienteNome, referrerPhone } = primaFicheRef.current;
+      const testo = `Ciao ${referrerNome}! 🌟\n\nLa tua amica ${nuovaClienteNome} è venuta oggi per la prima volta in salone!\n\nGrazie mille per il passaparola — è il più bel modo con cui qualcuno può farci un complimento! 💛`;
+      setWaPrimaFiche({ testo, telefono: referrerPhone, nomeReferrer: referrerNome });
     } else {
       onConvalidata();
     }
@@ -1376,7 +1374,45 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   async function handleConvalida() {
     setConvalidando(true);
     setShowConvalidaConfirm(false);
-    isNuovaClienteRef.current = gruppo.appuntamenti.some(a => a.nuova_cliente);
+
+    // Risolvi cliente ID prima del salvataggio (stesso calcolo fatto dopo, anticipato)
+    const rawGruppoIdPre = gruppo.clienteId;
+    const clienteIdPre = rawGruppoIdPre === '__sconosciuto__' ? null
+      : rawGruppoIdPre.startsWith('__manuale__') ? rawGruppoIdPre.replace('__manuale__', '')
+      : rawGruppoIdPre.startsWith('__premium__') ? (gruppo.clienteUuid ?? null)
+      : rawGruppoIdPre;
+    const clienteIdPreValid = clienteIdPre && /^[0-9a-f-]{36}$/i.test(clienteIdPre) ? clienteIdPre : null;
+
+    // Verifica prima visita PRIMA del salvataggio per evitare falsi positivi
+    primaFicheRef.current = null;
+    if (clienteIdPreValid && clienteTelefono && user?.id) {
+      const { data: hasFiches } = await supabase.rpc('cliente_ha_fiches', {
+        p_user_id: user.id,
+        p_telefono: clienteTelefono,
+      });
+      if (hasFiches === false) {
+        const { data: cl } = await supabase
+          .from('clienti')
+          .select('presentata_da_cliente_id, nome, cognome')
+          .eq('id', clienteIdPreValid)
+          .maybeSingle();
+        if (cl?.presentata_da_cliente_id) {
+          const { data: ref } = await supabase
+            .from('clienti')
+            .select('nome, cognome, telefono')
+            .eq('id', cl.presentata_da_cliente_id)
+            .maybeSingle();
+          if (ref?.telefono) {
+            primaFicheRef.current = {
+              referrerPhone: ref.telefono,
+              referrerNome: ref.nome,
+              nuovaClienteNome: `${cl.nome} ${cl.cognome}`.trim(),
+            };
+          }
+        }
+      }
+    }
+
     // Ricalcola il totale direttamente dalle voci correnti per evitare race condition
     const totaleCalcolato = Math.max(0,
       voci.reduce((s, v) => s + prezzoEffettivo(v), 0) - scontoAmt - creditoPremium
@@ -2694,14 +2730,14 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         />
       )}
 
-      {/* WA benvenuto prima visita */}
+      {/* WA ringraziamento ambasciatore — prima visita della cliente portata */}
       {waPrimaFiche && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
               <div className="flex items-center gap-2">
                 <MessageCircle size={18} className="text-green-600" />
-                <span className="font-semibold text-stone-800">Prima visita — messaggio di benvenuto</span>
+                <span className="font-semibold text-stone-800">Ringrazia l'ambasciatore!</span>
               </div>
               <button onClick={() => { setWaPrimaFiche(null); onConvalidata(); }}
                 className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors">
@@ -2709,11 +2745,11 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
               </button>
             </div>
             <div className="p-5 space-y-3">
-              <p className="text-xs text-stone-500">Prima visita di {gruppo.clienteNome} — modifica il messaggio se vuoi.</p>
+              <p className="text-xs text-stone-500">Prima visita portata da <strong>{waPrimaFiche.nomeReferrer}</strong> — modifica il messaggio se vuoi.</p>
               <textarea
                 value={waPrimaFiche.testo}
-                onChange={e => setWaPrimaFiche(prev => prev ? { testo: e.target.value } : prev)}
-                rows={5}
+                onChange={e => setWaPrimaFiche(prev => prev ? { ...prev, testo: e.target.value } : prev)}
+                rows={6}
                 className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm text-stone-700 resize-none focus:outline-none focus:ring-2 focus:ring-green-300"
               />
             </div>
@@ -2724,7 +2760,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
               </button>
               <button
                 onClick={() => {
-                  apriWhatsApp(clienteTelefono, waPrimaFiche.testo);
+                  apriWhatsApp(waPrimaFiche.telefono, waPrimaFiche.testo);
                   setWaPrimaFiche(null);
                   onConvalidata();
                 }}
