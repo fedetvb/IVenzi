@@ -943,10 +943,19 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [waPrimaFiche, setWaPrimaFiche] = useState<{ testo: string; telefono: string; nomeReferrer: string } | null>(null);
   const primaFicheRef = useRef<{ referrerPhone: string; referrerNome: string; nuovaClienteNome: string } | null>(null);
 
+  function genderAmicoAmica(nomeCompleto: string): 'amica' | 'amico' {
+    const primoNome = nomeCompleto.trim().split(' ')[0].toLowerCase();
+    const maschiliEccezioni = ['luca', 'andrea', 'nicola', 'mattia', 'enea', 'elia', 'tobia', 'battista'];
+    if (maschiliEccezioni.includes(primoNome)) return 'amico';
+    if (primoNome.endsWith('a') || primoNome.endsWith('e')) return 'amica';
+    return 'amico';
+  }
+
   function doAfterConvalida() {
     if (primaFicheRef.current) {
       const { referrerNome, nuovaClienteNome, referrerPhone } = primaFicheRef.current;
-      const testo = `Ciao ${referrerNome}! 🌟\n\nLa tua amica ${nuovaClienteNome} è venuta oggi per la prima volta in salone!\n\nGrazie mille per il passaparola — è il più bel modo con cui qualcuno può farci un complimento! 💛`;
+      const amicoAmica = genderAmicoAmica(nuovaClienteNome);
+      const testo = `✨ Ciao ${referrerNome}!\n\nTi scriviamo per dirti un grazie immenso: oggi è venuta a trovarci in salone la tua ${amicoAmica} ${nuovaClienteNome}! ✨\n\nSiamo felicissimi che tu abbia pensato a noi. Un abbraccio e a presto!`;
       setWaPrimaFiche({ testo, telefono: referrerPhone, nomeReferrer: referrerNome });
     } else {
       onConvalidata();
