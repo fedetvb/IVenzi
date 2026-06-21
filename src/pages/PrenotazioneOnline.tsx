@@ -4538,7 +4538,8 @@ function CartaPremiumInfoModal({ onClose }: { onClose: () => void }) {
               <span className="text-amber-400 mt-0.5 flex-shrink-0 text-lg leading-none">•</span>
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
                 <span className="font-semibold text-white">Attivazione e Ricarica Flessibile:</span>{' '}
-                L'attivazione della carta ha un costo iniziale di 250€, ma trovi immediatamente a tua disposizione un credito reale di 300€ da spendere in salone{' '}
+                L'attivazione della carta ha un costo iniziale di 250€, ma trovi immediatamente a tua disposizione un credito reale di{' '}
+                <span style={{ color: '#f5e17a', fontWeight: 700 }}>300€</span> da spendere in salone{' '}
                 <span style={{ color: '#f5e17a', fontStyle: 'italic' }}>(50€ veri e propri te li regaliamo noi in denaro sulla tua carta come benvenuto nel Club!)</span>.
                 {' '}Per tutte le ricariche successive, sarai libera/o di scegliere il budget che preferisci (a partire da un minimo di 200€) e il salone continuerà a premiarti aggiungendo del credito extra in denaro omaggio sulla tua carta. Sarà sempre così, a ogni singola ricarica, per tutta la vita della tua carta!
               </p>
@@ -4604,7 +4605,7 @@ function CartaPremiumPromo() {
     <div className="space-y-3">
       <div
         className="cursor-pointer select-none"
-        style={{ filter: 'grayscale(1)', opacity: 0.4 }}
+        style={{ opacity: 0.5 }}
         onClick={() => setShowInfo(true)}
       >
         <div
