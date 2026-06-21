@@ -281,7 +281,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
     });
 
     if (!clienteRes.error && clienteRes.data?.id) {
-      await dbUpdate({ table: 'schede_clienti_da_confermare', id: scheda.id, data: { stato: 'confermato' } });
+      await supabase.from('schede_clienti_da_confermare').delete().eq('id', scheda.id);
 
       // Se la scheda aveva un codice carta sconto, assegna la carta al nuovo cliente
       if (scheda.codice_carta_sconto) {
