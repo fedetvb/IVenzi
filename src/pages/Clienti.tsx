@@ -302,6 +302,23 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
       loadSchede();
       return;
     }
+    // Risolvi ID ambasciatore PRIMA dell'insert per evitare race condition col sync IndexedDB
+    let presentataDaId: string | null = null;
+    if (scheda.presentata_da_nome) {
+      const nomeTrimmed = scheda.presentata_da_nome.trim();
+      if (nomeTrimmed && !/^ignot/i.test(nomeTrimmed)) {
+        const parts = nomeTrimmed.split(/\s+/);
+        let q = supabase.from('clienti').select('id').is('deleted_at', null);
+        if (parts.length >= 2) {
+          q = q.ilike('nome', parts[0]).ilike('cognome', parts.slice(1).join(' '));
+        } else {
+          q = q.or(`nome.ilike.${nomeTrimmed},cognome.ilike.${nomeTrimmed}`);
+        }
+        const { data: ref } = await q.maybeSingle();
+        if (ref?.id) presentataDaId = ref.id;
+      }
+    }
+
     const clienteRes = await dbInsert({
       table: 'clienti',
       data: {
@@ -313,6 +330,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
         note: scheda.note || '',
         foto_url: scheda.foto_url || '',
         user_id: user?.id,
+        presentata_da_cliente_id: presentataDaId,
       }
     });
 
@@ -365,24 +383,6 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
           await supabase.from('gift_pass').update({
             destinataria_cliente_id: clienteRes.data.id,
           }).eq('id', gp.id);
-        }
-      }
-
-      // Se la scheda aveva un nome referente (passaparola senza carta), cerca il cliente per nome e salva il link
-      if (scheda.presentata_da_nome) {
-        const nomeTrimmed = scheda.presentata_da_nome.trim();
-        if (nomeTrimmed && !/^ignot/i.test(nomeTrimmed)) {
-          const parts = nomeTrimmed.split(/\s+/);
-          let query = supabase.from('clienti').select('id').eq('user_id', user?.id).is('deleted_at', null);
-          if (parts.length >= 2) {
-            query = query.ilike('nome', parts[0]).ilike('cognome', parts.slice(1).join(' '));
-          } else {
-            query = query.or(`nome.ilike.${nomeTrimmed},cognome.ilike.${nomeTrimmed}`);
-          }
-          const { data: referente } = await query.maybeSingle();
-          if (referente?.id) {
-            await supabase.from('clienti').update({ presentata_da_cliente_id: referente.id }).eq('id', clienteRes.data.id);
-          }
         }
       }
 

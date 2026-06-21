@@ -3,7 +3,6 @@ const CACHE_NAME = 'gestionale-salone-v8';
 // Asset statici da mettere in cache
 const STATIC_ASSETS = [
   '/',
-  '/manifest.json',
 ];
 
 self.addEventListener('install', (event) => {
@@ -81,6 +80,9 @@ self.addEventListener('notificationclick', (event) => {
 
 // ── Fetch handler ──────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
+  // Ignora URL non-HTTP (es. chrome-extension://, blob:, data:)
+  if (!event.request.url.startsWith('http')) return;
+
   const url = new URL(event.request.url);
 
   // Le chiamate Supabase vanno sempre alla rete (dati live)

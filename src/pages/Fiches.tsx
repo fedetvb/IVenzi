@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Plus, Trash2, X, Euro, ChevronDown, ChevronUp, FileText,
   Pencil, Check, BookOpen, Printer, Download, ShieldCheck, AlertCircle, UserPlus, Scissors, Eye, EyeOff, ShoppingBag, Search,
-  Banknote, CreditCard, Gift,
+  Banknote, CreditCard, Gift, MessageCircle,
 } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import jsPDF from 'jspdf';
@@ -14,6 +14,7 @@ import NuovaCartaFicheModal, { type CartaFicheResult } from '../components/Nuova
 import { useAuth } from '../lib/AuthContext';
 import { dbSelect, dbInsert, dbUpdate, dbDelete, dbSelectWithRelated, dbRpc } from '../lib/localDb';
 import { saveFile } from '../lib/fileSaver';
+import { apriWhatsApp } from '../lib/waUtils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -938,6 +939,22 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   const [showNuovaCartaFiche, setShowNuovaCartaFiche] = useState(false);
   const [pendingGiftPassIds, setPendingGiftPassIds] = useState<string[]>([]);
 
+  // WA benvenuto prima visita
+  const [waPrimaFiche, setWaPrimaFiche] = useState<{ testo: string } | null>(null);
+  const isNuovaClienteRef = useRef(false);
+
+  function buildMessaggioPrimaFiche(nome: string): string {
+    return `Grazie ${nome}! 🌟\n\nÈ stato un piacere averti con noi per la prima volta!\n\nSperiamo che tu sia rimasta soddisfatta e ci auguriamo di rivederti presto! 💛`;
+  }
+
+  function doAfterConvalida() {
+    if (isNuovaClienteRef.current && clienteTelefono) {
+      setWaPrimaFiche({ testo: buildMessaggioPrimaFiche(gruppo.clienteNome) });
+    } else {
+      onConvalidata();
+    }
+  }
+
   // Cassetto carte sconto regalate + gift pass orfani
   const [showCassetto, setShowCassetto] = useState(false);
   const [cassettoCarte, setCassettoCarte] = useState<CartaScontoSimple[]>([]);
@@ -1359,6 +1376,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   async function handleConvalida() {
     setConvalidando(true);
     setShowConvalidaConfirm(false);
+    isNuovaClienteRef.current = gruppo.appuntamenti.some(a => a.nuova_cliente);
     // Ricalcola il totale direttamente dalle voci correnti per evitare race condition
     const totaleCalcolato = Math.max(0,
       voci.reduce((s, v) => s + prezzoEffettivo(v), 0) - scontoAmt - creditoPremium
@@ -1538,7 +1556,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
         azione: { tipo: 'detrazione', importoDetratto: creditoPremium, nuovoSaldo: cartaPremium.saldo - creditoPremium },
       });
     } else {
-      onConvalidata();
+      doAfterConvalida();
     }
   }
 
@@ -2672,8 +2690,52 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           codice={smsModal.codiceOverride ?? cartaPremium?.codice ?? ''}
           telefono={clienteTelefono}
           azione={smsModal.azione}
-          onClose={() => { setSmsModal(null); onConvalidata(); }}
+          onClose={() => { setSmsModal(null); doAfterConvalida(); }}
         />
+      )}
+
+      {/* WA benvenuto prima visita */}
+      {waPrimaFiche && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+              <div className="flex items-center gap-2">
+                <MessageCircle size={18} className="text-green-600" />
+                <span className="font-semibold text-stone-800">Prima visita — messaggio di benvenuto</span>
+              </div>
+              <button onClick={() => { setWaPrimaFiche(null); onConvalidata(); }}
+                className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-stone-500">Prima visita di {gruppo.clienteNome} — modifica il messaggio se vuoi.</p>
+              <textarea
+                value={waPrimaFiche.testo}
+                onChange={e => setWaPrimaFiche(prev => prev ? { testo: e.target.value } : prev)}
+                rows={5}
+                className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm text-stone-700 resize-none focus:outline-none focus:ring-2 focus:ring-green-300"
+              />
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => { setWaPrimaFiche(null); onConvalidata(); }}
+                className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+                Salta
+              </button>
+              <button
+                onClick={() => {
+                  apriWhatsApp(clienteTelefono, waPrimaFiche.testo);
+                  setWaPrimaFiche(null);
+                  onConvalidata();
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                <MessageCircle size={14} />
+                Apri WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal nuova carta/gift pass da fiche */}
