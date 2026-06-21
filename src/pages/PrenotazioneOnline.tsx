@@ -2094,7 +2094,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
         data_ora2: dataOra2,
         chiunque: chiunque || false,
         parrucchieri_candidati: chiunque && parrucchieriCandidati.length > 0 ? parrucchieriCandidati : null,
-        ...(giftPassCode.trim() ? { gift_pass_codice: giftPassCode.trim().toUpperCase() } : {}),
+        ...(codiceOmaggio.trim() && /^\d{5}$/.test(codiceOmaggio.trim()) ? { gift_pass_codice: codiceOmaggio.trim().toUpperCase() } : {}),
       });
       if (insertErr) { setSubmitError('Errore nel salvataggio della richiesta.'); setSubmitting(false); return; }
 
