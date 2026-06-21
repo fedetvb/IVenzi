@@ -326,6 +326,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   const [codiceOmaggio, setCodiceOmaggio] = useState('');
   const [ambasciatoreName, setAmbasciatoreName] = useState('');
   const [clienteGiaEsiste, setClienteGiaEsiste] = useState(false);
+  const [ambasciatorGiaAssegnato, setAmbasciatorGiaAssegnato] = useState(false);
   const [datiError, setDatiError] = useState('');
   const [datiChecking, setDatiChecking] = useState(false);
 
@@ -851,22 +852,28 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
     } catch { /* ignore */ }
   }, []);
 
-  // Controlla in tempo reale se il telefono appartiene a una cliente già registrata
+  // Controlla se la cliente ha già un ambasciatore assegnato nel DB
   useEffect(() => {
     const tel = telefono.trim();
     if (!tel || tel.replace(/\D/g, '').length < 7) {
-      setClienteGiaEsiste(false);
+      setAmbasciatorGiaAssegnato(false);
       return;
     }
     let active = true;
     const timer = setTimeout(async () => {
       if (!active) return;
       try {
-        const { data } = await supabase.rpc('cliente_esiste_in_rubrica', {
-          p_user_id: userId,
-          p_telefono: tel,
-        });
-        if (active) setClienteGiaEsiste(!!data);
+        const telNorm = tel.replace(/[\s\-()]/g, '');
+        const { data: rows } = await supabase
+          .from('clienti')
+          .select('presentata_da_cliente_id, telefono')
+          .eq('user_id', userId)
+          .is('deleted_at', null);
+        if (!active) return;
+        const cliente = (rows ?? []).find(r =>
+          ((r as { telefono?: string }).telefono ?? '').replace(/[\s\-()]/g, '') === telNorm
+        );
+        setAmbasciatorGiaAssegnato(!!(cliente as { presentata_da_cliente_id?: string | null } | undefined)?.presentata_da_cliente_id);
       } catch { /* non bloccante */ }
     }, 600);
     return () => { active = false; clearTimeout(timer); };
@@ -2505,7 +2512,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
                 </div>
                 <p className="text-[11px] text-stone-400 mt-1">Inserisci qui il codice della tua Carta Sconto o del tuo Gift Pass ricevuto in regalo</p>
               </Field>
-              {!clienteGiaEsiste && (
+              {!ambasciatorGiaAssegnato && (
               <Field label="Chi ti ha parlato di noi? (opzionale)">
                 <div className="relative">
                   <Users size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
