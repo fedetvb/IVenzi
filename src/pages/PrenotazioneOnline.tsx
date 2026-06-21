@@ -1643,6 +1643,15 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       }
     }
 
+    // Always try to assign ambassador (RPC is idempotent: skips if already set or client not found)
+    if (ambasciatoreName.trim() && userId && tel) {
+      supabase.rpc('assegna_ambasciatore', {
+        p_user_id: userId,
+        p_telefono: tel,
+        p_presentata_da_nome: ambasciatoreName.trim(),
+      }).catch(() => {});
+    }
+
     setStep('scelta');
   }
 
