@@ -1157,7 +1157,7 @@ export default function App() {
         }
       } else if (presentataDaNome && !/^ignot/i.test(presentataDaNome)) {
         // Segnalazione manuale senza codice carta
-        addReferralPopup(presentataDaNome, nuovaCliente, 'Segnalazione');
+        addReferralPopup(presentataDaNome, nuovaCliente, 'Passaparola');
       }
     }
 
