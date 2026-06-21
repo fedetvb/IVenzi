@@ -1464,7 +1464,8 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
       if (error) throw new Error(error.message);
       await loadMieCarte();
       return true;
-    } catch {
+    } catch (err) {
+      console.error('[handleRegalaCartaSconto]', err);
       return false;
     }
   }
