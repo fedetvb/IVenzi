@@ -281,7 +281,21 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
     });
 
     if (!clienteRes.error && clienteRes.data?.id) {
-      await supabase.from('schede_clienti_da_confermare').delete().eq('id', scheda.id);
+      // Hard delete with retry on auth failure
+      let { error: delErr } = await supabase
+        .from('schede_clienti_da_confermare')
+        .delete()
+        .eq('id', scheda.id);
+      if (delErr) {
+        // Token potrebbe essere scaduto — forza il refresh e riprova una volta
+        await supabase.auth.refreshSession();
+        const retry = await supabase
+          .from('schede_clienti_da_confermare')
+          .delete()
+          .eq('id', scheda.id);
+        delErr = retry.error;
+        if (delErr) console.error('[confermaScheda] delete failed:', delErr.message);
+      }
 
       // Se la scheda aveva un codice carta sconto, assegna la carta al nuovo cliente
       if (scheda.codice_carta_sconto) {
@@ -327,7 +341,6 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
         .is('cliente_id', null);
 
       setSchedaAperta(null);
-      loadSchede();
       loadClienti();
       const waDisabilitato = await getImpostazione('whatsapp_avviso_disabilitato');
       if (waDisabilitato !== 'true') {
@@ -335,6 +348,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
       }
     }
     setConfermando(null);
+    loadSchede();
   }
 
   async function eliminaScheda(id: string) {
