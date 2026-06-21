@@ -63,7 +63,7 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
     setAmbLoading(true);
     // Recupera tutte le gift_pass con cliente_id (donatore) e destinataria_cliente_id
     // e tutte le carte_sconto con regalata_da_cliente_id
-    const [gpRes, csRes, schedaRes] = await Promise.all([
+    const [gpRes, csRes, schedaRes, passaparolaRes] = await Promise.all([
       supabase.from('gift_pass')
         .select('cliente_id, destinataria_cliente_id, destinataria_nome')
         .not('cliente_id', 'is', null)
@@ -74,6 +74,10 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
       supabase.from('schede_clienti_da_confermare')
         .select('nome, cognome, codice_gift_pass, codice_carta_sconto, presentata_da_nome')
         .eq('stato', 'in_attesa'),
+      supabase.from('clienti')
+        .select('id, nome, cognome, presentata_da_cliente_id')
+        .not('presentata_da_cliente_id', 'is', null)
+        .is('deleted_at', null),
     ]);
 
     // Mappa: donatore_id -> lista presentate
@@ -103,6 +107,15 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
           if (!exists) map.get(cs.regalata_da_cliente_id)!.push({ nome: dest.nome, cognome: dest.cognome, clienteId: dest.id });
         }
       }
+    }
+
+    // Da passaparola diretto (presentata_da_cliente_id su clienti confermati)
+    for (const c of (passaparolaRes.data || []) as Array<{ id: string; nome: string; cognome: string; presentata_da_cliente_id: string }>) {
+      const refId = c.presentata_da_cliente_id;
+      if (!refId) continue;
+      if (!map.has(refId)) map.set(refId, []);
+      const exists = map.get(refId)!.some(p => p.clienteId === c.id);
+      if (!exists) map.get(refId)!.push({ nome: c.nome, cognome: c.cognome, clienteId: c.id });
     }
 
     // Da schede in attesa: usa codice carta/gift pass e, come ultimo fallback, presentata_da_nome
@@ -352,6 +365,24 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
           await supabase.from('gift_pass').update({
             destinataria_cliente_id: clienteRes.data.id,
           }).eq('id', gp.id);
+        }
+      }
+
+      // Se la scheda aveva un nome referente (passaparola senza carta), cerca il cliente per nome e salva il link
+      if (scheda.presentata_da_nome) {
+        const nomeTrimmed = scheda.presentata_da_nome.trim();
+        if (nomeTrimmed && !/^ignot/i.test(nomeTrimmed)) {
+          const parts = nomeTrimmed.split(/\s+/);
+          let query = supabase.from('clienti').select('id').eq('user_id', user?.id).is('deleted_at', null);
+          if (parts.length >= 2) {
+            query = query.ilike('nome', parts[0]).ilike('cognome', parts.slice(1).join(' '));
+          } else {
+            query = query.or(`nome.ilike.${nomeTrimmed},cognome.ilike.${nomeTrimmed}`);
+          }
+          const { data: referente } = await query.maybeSingle();
+          if (referente?.id) {
+            await supabase.from('clienti').update({ presentata_da_cliente_id: referente.id }).eq('id', clienteRes.data.id);
+          }
         }
       }
 

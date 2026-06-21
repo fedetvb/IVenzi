@@ -757,7 +757,23 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
         if (gifter) setPresentataDa(`${gifter.nome} ${gifter.cognome}`);
         else setPresentataDa(null);
       } else {
-        setPresentataDa(null);
+        // Fallback: legge presentata_da_cliente_id direttamente sul record clienti
+        const { data: selfCliente } = await supabase
+          .from('clienti')
+          .select('presentata_da_cliente_id')
+          .eq('id', clienteId)
+          .maybeSingle();
+        if (selfCliente?.presentata_da_cliente_id) {
+          const { data: gifter } = await supabase
+            .from('clienti')
+            .select('nome, cognome')
+            .eq('id', selfCliente.presentata_da_cliente_id)
+            .maybeSingle();
+          if (gifter) setPresentataDa(`${gifter.nome} ${gifter.cognome}`);
+          else setPresentataDa(null);
+        } else {
+          setPresentataDa(null);
+        }
       }
 
       // Chi ha portato in salone — via carte sconto
@@ -781,6 +797,14 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
       (gpDonate ?? []).forEach((gp: { destinataria_cliente_id: string }) => {
         portateIds.add(gp.destinataria_cliente_id);
       });
+
+      // Chi ha portato in salone — via passaparola diretto (presentata_da_cliente_id)
+      const { data: portatiPassaparola } = await supabase
+        .from('clienti')
+        .select('id')
+        .eq('presentata_da_cliente_id', clienteId)
+        .is('deleted_at', null);
+      (portatiPassaparola ?? []).forEach((c: { id: string }) => portateIds.add(c.id));
 
       if (portateIds.size > 0) {
         const { data: portate } = await supabase
