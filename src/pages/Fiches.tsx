@@ -1322,7 +1322,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
   function removeVoce(id: string) { setVoci(prev => prev.filter(v => v.id !== id)); }
   function updateVoce(id: string, patch: Partial<FicheVoce>) { setVoci(prev => prev.map(v => v.id === id ? { ...v, ...patch } : v)); }
 
-  async function persistFiche(extraFields?: Record<string, unknown>): Promise<string | null> {
+  async function persistFiche(extraFields?: Record<string, unknown>, pagamentoOverride?: TipoPagamento): Promise<string | null> {
     const isManuale = gruppo.appuntamenti.length === 0;
     const rawId = gruppo.clienteId;
     const strippedId = rawId.startsWith('__manuale__') ? rawId.replace('__manuale__', '') : rawId === '__sconosciuto__' ? null : rawId;
@@ -1330,7 +1330,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
       ? strippedId
       : null;
 
-    const ficheFields: Record<string, unknown> = { note, tipo_pagamento: tipoPagamento, updated_at: new Date().toISOString(), ...extraFields };
+    const tipoPag = pagamentoOverride !== undefined ? pagamentoOverride : tipoPagamento;
+    const ficheFields: Record<string, unknown> = { note, tipo_pagamento: tipoPag, updated_at: new Date().toISOString(), ...extraFields };
     if (isManuale) {
       ficheFields.manuale = true;
       ficheFields.cliente_id = realClienteId;
@@ -1402,7 +1403,8 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     }
   }
 
-  async function handleConvalida() {
+  async function handleConvalida(pagamentoOverride?: TipoPagamento) {
+    const tipoPag = pagamentoOverride !== undefined ? pagamentoOverride : tipoPagamento;
     setConvalidando(true);
     setShowConvalidaConfirm(false);
 
@@ -1452,7 +1454,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
       convalidata: true,
       convalidata_at: new Date().toISOString(),
       importo_convalidato: totaleCalcolato,
-    });
+    }, tipoPag);
 
     for (const app of gruppo.appuntamenti) {
       if (app.nuova_cliente) {
@@ -1472,7 +1474,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
     if (ficheId) {
       const clienteNome = `${gruppo.clienteNome} ${gruppo.clienteCognome}`.trim();
       // Registra incasso solo se NON è contanti_nero
-      if (tipoPagamento !== 'contanti_nero') {
+      if (tipoPag !== 'contanti_nero') {
         await dbDelete({ table: 'incassi_giornalieri', filters: [{ col: 'fiche_id', op: 'eq', val: ficheId }] });
         await dbInsert({ table: 'incassi_giornalieri', data: {
           data: selectedDate,
@@ -1921,7 +1923,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                 <p className="text-xs text-emerald-600">Importo registrato: {showImporti ? `€${gruppo.importoConvalidato.toFixed(2)}` : '€•••'}</p>
               </div>
               <button
-                onClick={() => setShowConvalidaConfirm(true)}
+                onClick={() => handleConvalida()}
                 className="text-xs text-emerald-600 hover:text-emerald-800 underline"
               >
                 Riconvalida
@@ -2542,7 +2544,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                   onClick={() => {
                     // No ricarica: usa saldo disponibile e vai a convalida
                     setShowRicaricaAlert(false);
-                    setShowConvalidaConfirm(true);
+                    handleConvalida();
                   }}
                   className="px-4 py-1.5 text-xs font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50"
                 >
@@ -2583,7 +2585,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                       setTipoPagamento(opt.val);
                       setShowPagamentoModal(false);
                       if (saldoInsufficient) setShowRicaricaAlert(true);
-                      else setShowConvalidaConfirm(true);
+                      else handleConvalida(opt.val);
                     }}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg border border-stone-200 hover:border-amber-400 hover:bg-amber-50 text-sm font-medium text-stone-700 transition-all"
                   >
@@ -2662,7 +2664,7 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                     <Check size={14} />
                     {saving ? 'Salvataggio…' : 'Salva bozza'}
                   </button>
-                  {!showConvalidaConfirm && !showRicaricaAlert && !showRicaricaModal && !showPasswordGate && !showPagamentoModal && (
+                  {!showRicaricaAlert && !showRicaricaModal && !showPasswordGate && !showPagamentoModal && (
                     <button
                       onClick={() => {
                         if (!tipoPagamento) {
