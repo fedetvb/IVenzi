@@ -1877,6 +1877,21 @@ function PaginaQrGestionale({ onBack, setSub }: { onBack: () => void; setSub: (s
         </div>
         <ChevronRight size={18} className="text-stone-300 group-hover:text-blue-500 transition-colors flex-shrink-0" />
       </button>
+
+      {/* QR Prenotazioni Online */}
+      <button
+        onClick={() => setSub('prenotazioni_online')}
+        className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left group shadow-sm"
+      >
+        <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+          <CalendarClock size={22} className="text-emerald-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-stone-800">QR Prenotazioni Online</p>
+          <p className="text-xs text-stone-400 mt-0.5">Stampa il QR da condividere — le clienti prenotano direttamente dal telefono</p>
+        </div>
+        <ChevronRight size={18} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+      </button>
     </div>
   );
 }

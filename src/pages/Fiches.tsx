@@ -387,7 +387,7 @@ function FichesTab() {
     .filter(g => g.ficheConvalidata)
     .reduce((s, g) => s + g.importoConvalidato, 0);
   const convalidate = gruppi.filter(g => g.ficheConvalidata).length;
-  const daConvalidare = gruppi.filter(g => !g.ficheConvalidata && g.ficheIds.length > 0);
+  const daConvalidare = gruppi.filter(g => !g.ficheConvalidata && (g.ficheIds.length > 0 || g.appuntamenti.length > 0));
 
   async function handleBulkConvalida() {
     if (!bulkTipoPagamento) return;
@@ -398,7 +398,26 @@ function FichesTab() {
       const totale = g.voci.reduce((s, v) => s + prezzoEffettivo(v), 0);
       const clienteNome = `${g.clienteNome} ${g.clienteCognome}`.trim();
       const tipoPag = bulkTipoPagamento;
-      for (const ficheId of g.ficheIds) {
+
+      // Se la fiche non esiste ancora (es. gruppo da agenda non ancora salvato), creala
+      let ficheIds = g.ficheIds;
+      if (ficheIds.length === 0 && g.appuntamenti.length > 0) {
+        const appId = g.appuntamenti[0].id;
+        const isManuale = g.clienteId.startsWith('__manuale__');
+        const ficheFields: Record<string, unknown> = {
+          note: '',
+          appuntamento_id: isManuale ? undefined : appId,
+          manuale: isManuale || undefined,
+          cliente_id: isManuale ? (g.clienteUuid ?? null) : undefined,
+          data_riferimento: selectedDate,
+          user_id: user?.id,
+        };
+        const { data: newFiche } = await dbInsert({ table: 'fiches', data: ficheFields });
+        const newId = (newFiche as any)?.id ?? null;
+        if (newId) ficheIds = [newId];
+      }
+
+      for (const ficheId of ficheIds) {
         await dbUpdate({ table: 'fiches', id: ficheId, data: {
           convalidata: true,
           convalidata_at: now,
