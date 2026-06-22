@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, AlertCircle, Gift, HelpCircle, Check, MapPin, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, AlertCircle, Gift, HelpCircle, Check, MapPin, Save, Pencil } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
 import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
@@ -669,23 +669,25 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
   const hasMultiRimanenti = rimanenti.length > 1;
   const previewTesto = applyTemplate(templateEdit, { nome: clienti[0]?.nome ?? 'Mario', data: clienti[0]?.data ?? domaniLabel, ora: clienti[0]?.ora ?? '10:00' });
 
+  const [editingBubble, setEditingBubble] = useState(false);
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div className="rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" style={{ background: 'linear-gradient(160deg, #f0fdf4 0%, #dcfce7 40%, #bbf7d0 100%)' }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
-              <Bell size={16} className="text-emerald-600" />
+        {/* Header verde sfumato */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #16a34a 0%, #22c55e 60%, #4ade80 100%)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+              <Bell size={16} className="text-white" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-stone-800">Avviso appuntamento clienti</h2>
-              <p className="text-xs text-stone-400 capitalize">{domaniLabel} · {clienti.length} client{clienti.length === 1 ? 'e' : 'i'}</p>
+              <h2 className="text-sm font-bold text-white">Avviso appuntamento clienti</h2>
+              <p className="text-xs text-green-100 capitalize">{domaniLabel} · {clienti.length} client{clienti.length === 1 ? 'e' : 'i'}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors">
-            <X size={16} className="text-stone-500" />
+          <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
+            <X size={16} className="text-white" />
           </button>
         </div>
 
@@ -693,41 +695,60 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
         <div className="flex-1 overflow-hidden flex flex-col sm:flex-row min-h-0">
 
           {/* Colonna sinistra */}
-          <div className="sm:w-80 flex-shrink-0 border-b sm:border-b-0 sm:border-r border-stone-100 overflow-y-auto flex flex-col">
+          <div className="sm:w-80 flex-shrink-0 border-b sm:border-b-0 sm:border-r border-green-200/60 overflow-y-auto flex flex-col">
             <div className="p-4 space-y-3">
-              <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">Anteprima messaggio</p>
-
-              {/* Bolla WhatsApp */}
-              <div className="bg-[#e7ffd4] rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                <p className="text-sm text-stone-800 leading-relaxed whitespace-pre-wrap">
-                  {previewTesto}
-                  {includiMappa && rawMapUrl && <span className="text-stone-500">{'\n\n'}{rawMapUrl}</span>}
-                </p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wide">Anteprima messaggio</p>
+                <button
+                  onClick={() => setEditingBubble(v => !v)}
+                  className="text-[10px] font-semibold text-green-600 hover:text-green-800 bg-green-100 hover:bg-green-200 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
+                >
+                  <Pencil size={10} />
+                  {editingBubble ? 'Chiudi' : 'Modifica'}
+                </button>
               </div>
 
-              {/* Textarea template */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Testo template</label>
-                <p className="text-[10px] text-stone-400">Usa <span className="font-mono bg-stone-100 px-1 rounded">{'{nome}'}</span>, <span className="font-mono bg-stone-100 px-1 rounded">{'{data}'}</span>, <span className="font-mono bg-stone-100 px-1 rounded">{'{ora}'}</span></p>
-                <textarea
-                  value={templateEdit}
-                  onChange={e => { setTemplateEdit(e.target.value); setSaved(false); }}
-                  rows={4}
-                  className="w-full text-xs border border-stone-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 text-stone-700 transition-colors"
-                />
-                <button
-                  onClick={salvaTemplate}
-                  disabled={saving || templateEdit === savedTemplate}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
-                >
-                  {saved ? <Check size={12} /> : <Save size={12} />}
-                  {saving ? 'Salvataggio...' : saved ? 'Salvato!' : 'Salva messaggio'}
-                </button>
+              {/* Sfondo chat stile WhatsApp */}
+              <div className="rounded-2xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(180deg, #e5ddd5 0%, #d4c5b5 100%)' }}>
+                <div className="px-3 py-3 space-y-1">
+                  {editingBubble ? (
+                    <div className="bg-[#e7ffd4] rounded-2xl rounded-tl-sm px-3 py-2.5 shadow-sm">
+                      <p className="text-[10px] text-green-600 font-semibold mb-1.5 flex items-center gap-1"><Pencil size={9} /> Modifica testo — usa {'{nome}'}, {'{data}'}, {'{ora}'}</p>
+                      <textarea
+                        value={templateEdit}
+                        onChange={e => { setTemplateEdit(e.target.value); setSaved(false); }}
+                        rows={5}
+                        className="w-full text-sm bg-transparent border-0 resize-none focus:outline-none text-stone-800 leading-relaxed placeholder-stone-400"
+                        placeholder="Scrivi il tuo messaggio..."
+                        autoFocus
+                      />
+                      {includiMappa && rawMapUrl && <p className="text-[11px] text-stone-400 mt-1 truncate">{rawMapUrl}</p>}
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={async () => { await salvaTemplate(); setEditingBubble(false); }}
+                          disabled={saving || templateEdit === savedTemplate}
+                          className="flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white text-xs font-semibold transition-colors"
+                        >
+                          {saved ? <Check size={11} /> : <Save size={11} />}
+                          {saving ? 'Salvo...' : saved ? 'Salvato!' : 'Salva'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#e7ffd4] rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                      <p className="text-sm text-stone-800 leading-relaxed whitespace-pre-wrap">
+                        {previewTesto}
+                        {includiMappa && rawMapUrl && <span className="text-stone-500">{'\n\n'}{rawMapUrl}</span>}
+                      </p>
+                      <p className="text-[10px] text-stone-400 text-right mt-1">anteprima</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Toggle posizione */}
               {rawMapUrl && (
-                <label className={`flex items-center gap-3 cursor-pointer px-3 py-2.5 rounded-xl border transition-colors ${includiMappa ? 'bg-emerald-50 border-emerald-200' : 'border-stone-200 hover:bg-stone-50'}`}>
+                <label className={`flex items-center gap-3 cursor-pointer px-3 py-2.5 rounded-xl border transition-colors ${includiMappa ? 'bg-green-50 border-green-200' : 'border-green-100 hover:bg-green-50/50'}`}>
                   <div
                     onClick={() => handleToggleMappa(!includiMappa)}
                     className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${includiMappa ? 'bg-emerald-500' : 'bg-stone-200'}`}
@@ -735,8 +756,8 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${includiMappa ? 'translate-x-4' : ''}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-stone-700 flex items-center gap-1"><MapPin size={11} /> Condividi posizione</p>
-                    <p className="text-[10px] text-stone-400 truncate mt-0.5">{includiMappa ? rawMapUrl : 'Link mappa non incluso'}</p>
+                    <p className="text-xs font-semibold text-green-800 flex items-center gap-1"><MapPin size={11} /> Condividi posizione</p>
+                    <p className="text-[10px] text-green-600/70 truncate mt-0.5">{includiMappa ? rawMapUrl : 'Link mappa non incluso'}</p>
                   </div>
                 </label>
               )}
@@ -747,18 +768,18 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
           <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
             {clienti.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center px-6">
-                <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center mb-3">
-                  <AlertCircle size={20} className="text-stone-400" />
+                <div className="w-12 h-12 rounded-2xl bg-green-100 flex items-center justify-center mb-3">
+                  <AlertCircle size={20} className="text-green-400" />
                 </div>
-                <p className="text-sm font-medium text-stone-600">Nessun cliente con numero di telefono</p>
+                <p className="text-sm font-medium text-green-800">Nessun cliente con numero di telefono</p>
               </div>
             ) : (
               <div className="flex-1 p-4 space-y-2">
-                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1">Elenco clienti</p>
+                <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wide mb-1">Elenco clienti</p>
                 {clienti.map((c, i) => {
                   const inviato = inviati.has(c.appuntamento_id);
                   return (
-                    <div key={i} className={`rounded-xl border overflow-hidden transition-colors ${inviato ? 'border-emerald-200 bg-emerald-50' : 'border-stone-200 bg-white hover:border-stone-300'}`}>
+                    <div key={i} className={`rounded-xl border overflow-hidden transition-all ${inviato ? 'border-emerald-300 bg-emerald-50/80' : 'border-green-200 bg-white/70 hover:border-green-300 hover:bg-white/90'}`}>
                       <div className="flex items-center gap-3 px-3 py-2.5">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${inviato ? 'bg-emerald-200 text-emerald-800' : 'bg-emerald-100 text-emerald-700'}`}>
                           {inviato ? <Check size={14} /> : c.nome[0]?.toUpperCase()}
@@ -786,14 +807,14 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
 
             {/* Invia a tutti (solo wa web) */}
             {waMode === 'web' && hasMultiRimanenti && (
-              <div className="p-4 border-t border-stone-100 flex-shrink-0 space-y-2">
+              <div className="p-4 border-t border-green-200/60 flex-shrink-0 space-y-2">
                 {queueIdx !== null ? (
                   <div className="space-y-2">
-                    <div className="flex justify-between text-xs text-stone-500">
+                    <div className="flex justify-between text-xs text-green-700">
                       <span>Inviati {inviati.size} di {clienti.length}</span>
                       <span>{Math.round((inviati.size / clienti.length) * 100)}%</span>
                     </div>
-                    <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-green-100 rounded-full overflow-hidden">
                       <div className="h-full bg-[#25D366] rounded-full transition-all" style={{ width: `${(inviati.size / clienti.length) * 100}%` }} />
                     </div>
                     {clienti.findIndex((c, i) => i > queueIdx && !inviati.has(c.appuntamento_id)) >= 0 ? (
@@ -802,7 +823,7 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
                         Apri prossima chat
                       </button>
                     ) : (
-                      <button onClick={() => setQueueIdx(null)} className="w-full py-2.5 rounded-xl bg-stone-100 text-stone-600 text-sm font-semibold">
+                      <button onClick={() => setQueueIdx(null)} className="w-full py-2.5 rounded-xl bg-green-100 text-green-700 text-sm font-semibold">
                         <Check size={14} className="inline mr-2" />Completato
                       </button>
                     )}
@@ -816,13 +837,14 @@ function AvvisoModal({ clienti, template, indirizzo, onClose }: AvvisoModalProps
                 )}
               </div>
             )}
-          </div>
-        </div>
 
-        <div className="px-5 py-3 border-t border-stone-100 flex-shrink-0">
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
-            Chiudi
-          </button>
+            {/* Chiudi in fondo alla colonna destra */}
+            <div className="p-4 pt-2 flex-shrink-0">
+              <button onClick={onClose} className="w-full py-2 rounded-xl border border-green-200 text-sm font-medium text-green-700 hover:bg-green-100/60 transition-colors">
+                Chiudi
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
