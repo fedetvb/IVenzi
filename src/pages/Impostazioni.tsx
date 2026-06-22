@@ -8102,6 +8102,18 @@ CREATE POLICY "upd_imp" ON impostazioni FOR UPDATE TO authenticated USING (auth.
 CREATE POLICY "del_imp" ON impostazioni FOR DELETE TO authenticated USING (auth.uid() = user_id);
 GRANT SELECT ON impostazioni TO anon;
 CREATE POLICY "anon_sel_imp" ON impostazioni FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_read_logo_salone_url" ON impostazioni FOR SELECT TO anon USING (chiave = 'logo_salone_url');
+CREATE POLICY "anon_read_recensioni_keys" ON impostazioni FOR SELECT TO anon USING (chiave IN ('link_recensioni_google','testo_recensioni_google','logo_recensioni_google_url','nome_salone'));
+CREATE POLICY "anon_read_portale_prenotazioni" ON impostazioni FOR SELECT TO anon USING (chiave IN (
+  'prenotazioni_online_attive','portale_nascosto','hair_quiz_attivo','fasce_orarie_online_json',
+  'annuncio_attivo','annuncio_sfondo','annuncio_testo','annuncio_id','annuncio_compleanno_testo',
+  'azienda_telefono','azienda_email','azienda_pec','azienda_indirizzo','azienda_google_maps',
+  'azienda_sito_prenotazioni','azienda_note','orari_salone_json','orari_salone_nota',
+  'ferie_inizio','ferie_fine','benvenuto_attivo','benvenuto_config_json','icona_pwa_url',
+  'mostra_carta_premium_sbiadita','social_instagram','social_facebook','social_tiktok',
+  'social_youtube','social_whatsapp','social_x','social_threads','social_google_business',
+  'social_tripadvisor','social_altro'
+));
 CREATE TRIGGER trg_imp_updated_at BEFORE UPDATE ON impostazioni FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ─── fiches ───────────────────────────────────────────────────────────────────
