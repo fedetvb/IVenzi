@@ -1089,9 +1089,10 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [fasceSaved, setFasceSaved] = useState(false);
   const fasceLoadedRef = useRef(false);
 
-  const bookingUrl = user
-    ? `${window.location.origin}/prenota?uid=${user.id}`
-    : '';
+  const _siteOrigin1 = window.location.protocol === 'file:'
+    ? (localStorage.getItem('infra_netlify_url') || 'https://saloneivenzi.netlify.app')
+    : window.location.origin;
+  const bookingUrl = user ? `${_siteOrigin1}/prenota?uid=${user.id}` : '';
 
   useEffect(() => {
     if (!user) return;
@@ -1908,8 +1909,11 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
 
   useEffect(() => {
     if (!googleLink) { setQrPreview(null); return; }
+    const _siteOrigin2 = window.location.protocol === 'file:'
+      ? (localStorage.getItem('infra_netlify_url') || 'https://saloneivenzi.netlify.app')
+      : window.location.origin;
     const landingUrl = user?.id
-      ? `${window.location.origin}/recensioni?uid=${user.id}`
+      ? `${_siteOrigin2}/recensioni?uid=${user.id}`
       : googleLink;
     const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&ecc=H&data=${encodeURIComponent(landingUrl)}`;
     buildQrWithLogo(url, logoUrl).then(setQrPreview).catch(() => setQrPreview(url));
@@ -2255,6 +2259,19 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
             ) : (
               <><Download size={16} /> Stampa QR Google ({formato.toUpperCase()})</>
             )}
+          </button>
+          <button
+            onClick={() => {
+              if (!qrPreview) return;
+              const a = document.createElement('a');
+              a.href = qrPreview;
+              a.download = 'qr-google-recensioni.png';
+              a.click();
+            }}
+            disabled={!qrPreview}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-2xl font-semibold text-sm transition-colors"
+          >
+            <Download size={16} /> Scarica QR Code (PNG)
           </button>
         </div>
       )}
@@ -4306,7 +4323,10 @@ async function buildQrWithLogo(qrImgUrl: string, logo: string | null): Promise<s
 
 function PaginaQRCode({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
-  const defaultRegUrl = user ? `${window.location.origin}/?registrazione=1&uid=${user.id}` : 'https://saloneivenzi.netlify.app/?registrazione=1';
+  const _siteOrigin3 = window.location.protocol === 'file:'
+    ? (localStorage.getItem('infra_netlify_url') || 'https://saloneivenzi.netlify.app')
+    : window.location.origin;
+  const defaultRegUrl = user ? `${_siteOrigin3}/?registrazione=1&uid=${user.id}` : 'https://saloneivenzi.netlify.app/?registrazione=1';
   const [registrazioneUrl, setRegistrazioneUrl] = useState(defaultRegUrl);
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
@@ -4337,7 +4357,7 @@ function PaginaQRCode({ onBack }: { onBack: () => void }) {
         }
       } else if (user?.id) {
         // First time: save the URL with uid
-        const url = `${window.location.origin}/?registrazione=1&uid=${user.id}`;
+        const url = `${_siteOrigin3}/?registrazione=1&uid=${user.id}`;
         setRegistrazioneUrl(url);
         setImpostazione('registrazione_url', url, user.id).catch(() => {});
       }
@@ -9068,6 +9088,7 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 const CARTELLE_GENERALI: Array<{ key: string; label: string; desc: string }> = [
   { key: 'backup',        label: 'Backup',                         desc: 'File JSON backup del database' },
   { key: 'clienti',       label: 'Clienti',                        desc: 'CSV e PDF esportazione clienti' },
+  { key: 'finanze',       label: 'Finanze',                        desc: 'PDF riepilogo incassi per periodo' },
   { key: 'magazzino',     label: 'Magazzino',                      desc: 'CSV, PDF e HTML inventario magazzino' },
   { key: 'rivendita',     label: 'Rivendita',                      desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
   { key: 'statistiche',   label: 'Statistiche',                    desc: 'PDF report statistiche e schede' },

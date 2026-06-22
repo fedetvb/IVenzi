@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { TrendingUp, Calendar, ShieldCheck, ChevronDown, ChevronUp, Trash2, Euro, GitCompare } from 'lucide-react';
+import { TrendingUp, Calendar, ShieldCheck, ChevronDown, ChevronUp, Trash2, Euro, GitCompare, Download } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import { dbSelect, dbUpdate, dbDelete } from '../lib/localDb';
+import { saveFile } from '../lib/fileSaver';
 import { MonthlyBarChart } from './Statistiche';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
 
@@ -412,6 +413,7 @@ export default function Finanze() {
   const [confA2, setConfA2] = useState(todayStr);
   const [confB1, setConfB1] = useState(todayStr);
   const [confB2, setConfB2] = useState(todayStr);
+  const [savingPdf, setSavingPdf] = useState(false);
 
   // Compute actual date range from filtro
   const { start: rangeStart, end: rangeEnd } = filtroToRange(filtro);
@@ -470,6 +472,55 @@ export default function Finanze() {
   }, [rangeStart, rangeEnd]);
 
   useEffect(() => { load(); }, [load]);
+
+  async function handleSavePdf() {
+    if (giorni.length === 0 || savingPdf) return;
+    setSavingPdf(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const periodo = labelFiltro(filtro);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(28, 25, 23);
+      doc.text('Riepilogo Incassi', 14, 16);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(120, 113, 108);
+      doc.text(periodo, 14, 23);
+
+      const totale = giorni.reduce((s, g) => s + g.totale, 0);
+
+      const rows: string[][] = [];
+      for (const g of giorni) {
+        const [y, m, d] = g.data.split('-');
+        const dateLabel = `${d}/${m}/${y}`;
+        for (const v of g.voci) {
+          rows.push([dateLabel, v.cliente_nome || '—', `€${v.importo.toFixed(2)}`, v.note || '']);
+        }
+      }
+
+      autoTable(doc, {
+        startY: 28,
+        head: [['Data', 'Cliente', 'Importo', 'Note']],
+        body: rows,
+        foot: [['', 'Totale', `€${totale.toFixed(2)}`, '']],
+        headStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        footStyles: { fillColor: [240, 253, 250], textColor: [22, 163, 74], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 8, textColor: [28, 25, 23] },
+        alternateRowStyles: { fillColor: [250, 250, 249] },
+        columnStyles: { 2: { halign: 'right' } },
+        margin: { left: 14, right: 14 },
+      });
+
+      const slug = periodo.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      await saveFile('finanze', `incassi-${slug}.pdf`, doc.output('blob'));
+    } finally {
+      setSavingPdf(false);
+    }
+  }
 
   async function handleDelete(id: string, ficheId: string | null) {
     if (!confirm('Eliminare questo incasso?\nVerrà annullata anche la convalidazione della fiche collegata.')) return;
@@ -673,6 +724,15 @@ export default function Finanze() {
             >
               <GitCompare size={14} />
               <span className="hidden sm:inline">Confronta</span>
+            </button>
+            <button
+              onClick={handleSavePdf}
+              disabled={savingPdf || giorni.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-600 text-sm font-medium shadow-sm transition-colors disabled:opacity-40"
+              title="Salva PDF incassi"
+            >
+              {savingPdf ? <div className="w-3.5 h-3.5 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" /> : <Download size={14} />}
+              <span className="hidden sm:inline">Salva</span>
             </button>
             <span className="text-xs text-stone-400">{giorni.length} giorn{giorni.length === 1 ? 'o' : 'i'} con incasso</span>
           </div>

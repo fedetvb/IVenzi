@@ -78,7 +78,7 @@ export interface DbAPI {
   setUserProfile: (userId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
-export type SavePathType = 'backup' | 'fiches' | 'fiches_nero' | 'fiches_tutte' | 'fiches_dichiarate' | 'fiches_non_dichiarate' | 'fiches_xls_tutte' | 'fiches_xls_dichiarate' | 'fiches_xls_non_dichiarate' | 'clienti' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
+export type SavePathType = 'backup' | 'fiches' | 'fiches_nero' | 'fiches_tutte' | 'fiches_dichiarate' | 'fiches_non_dichiarate' | 'fiches_xls_tutte' | 'fiches_xls_dichiarate' | 'fiches_xls_non_dichiarate' | 'clienti' | 'finanze' | 'magazzino' | 'rivendita' | 'statistiche' | 'qrcode' | 'comunicazioni';
 export type SavePaths = Record<SavePathType, string>;
 
 export interface FichesSchedConfig {
