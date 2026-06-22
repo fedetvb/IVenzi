@@ -2,7 +2,7 @@
 --  SCRIPT AGGIORNAMENTO CUMULATIVO — SALONI NON-ADMIN
 --  Da incollare nel SQL Editor di Supabase (una sola volta,
 --  in ordine, dall'alto verso il basso).
---  Aggiornato al: 2026-06-21
+--  Aggiornato al: 2026-06-22
 -- ============================================================
 
 
@@ -303,6 +303,111 @@ END $$;
 
 
 -- ─────────────────────────────────────────────────────────────
--- 21. RELOAD CACHE POSTGREST
+-- 22. RPC — assegna_ambasciatore
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION assegna_ambasciatore(
+  p_user_id uuid,
+  p_telefono text,
+  p_presentata_da_nome text
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_cliente_id uuid;
+  v_ambasciatore_id uuid;
+  v_nome text;
+  v_cognome text;
+  v_tel_norm text;
+  v_amb_count int;
+BEGIN
+  v_tel_norm := RIGHT(REGEXP_REPLACE(p_telefono, '[^0-9]', '', 'g'), 9);
+  IF length(v_tel_norm) < 7 THEN RETURN; END IF;
+  SELECT id INTO v_cliente_id FROM clienti
+  WHERE user_id = p_user_id AND deleted_at IS NULL
+    AND RIGHT(REGEXP_REPLACE(telefono, '[^0-9]', '', 'g'), 9) = v_tel_norm
+  LIMIT 1;
+  IF v_cliente_id IS NULL THEN RETURN; END IF;
+  IF EXISTS (SELECT 1 FROM clienti WHERE id = v_cliente_id AND presentata_da_cliente_id IS NOT NULL) THEN RETURN; END IF;
+  v_nome    := split_part(trim(p_presentata_da_nome), ' ', 1);
+  v_cognome := trim(substring(trim(p_presentata_da_nome) FROM length(v_nome) + 2));
+  IF v_nome = '' THEN RETURN; END IF;
+  IF v_cognome = '' THEN
+    SELECT COUNT(*) INTO v_amb_count FROM clienti
+    WHERE user_id = p_user_id AND deleted_at IS NULL AND id <> v_cliente_id
+      AND (lower(nome) = lower(v_nome) OR lower(cognome) = lower(v_nome));
+    IF v_amb_count <> 1 THEN RETURN; END IF;
+    SELECT id INTO v_ambasciatore_id FROM clienti
+    WHERE user_id = p_user_id AND deleted_at IS NULL AND id <> v_cliente_id
+      AND (lower(nome) = lower(v_nome) OR lower(cognome) = lower(v_nome))
+    LIMIT 1;
+  ELSE
+    SELECT COUNT(*) INTO v_amb_count FROM clienti
+    WHERE user_id = p_user_id AND deleted_at IS NULL AND id <> v_cliente_id
+      AND lower(nome) = lower(v_nome) AND lower(cognome) = lower(v_cognome);
+    IF v_amb_count <> 1 THEN RETURN; END IF;
+    SELECT id INTO v_ambasciatore_id FROM clienti
+    WHERE user_id = p_user_id AND deleted_at IS NULL AND id <> v_cliente_id
+      AND lower(nome) = lower(v_nome) AND lower(cognome) = lower(v_cognome)
+    LIMIT 1;
+  END IF;
+  IF v_ambasciatore_id IS NULL THEN RETURN; END IF;
+  UPDATE clienti SET presentata_da_cliente_id = v_ambasciatore_id, updated_at = now()
+  WHERE id = v_cliente_id;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION assegna_ambasciatore(uuid, text, text) TO anon;
+GRANT EXECUTE ON FUNCTION assegna_ambasciatore(uuid, text, text) TO authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 23. RLS — lettura anon chiavi portale prenotazioni
+-- ─────────────────────────────────────────────────────────────
+DROP POLICY IF EXISTS "anon_read_portale_prenotazioni" ON impostazioni;
+CREATE POLICY "anon_read_portale_prenotazioni" ON impostazioni
+  FOR SELECT TO anon
+  USING (chiave IN (
+    'prenotazioni_online_attive','portale_nascosto','hair_quiz_attivo',
+    'fasce_orarie_online_json','annuncio_attivo','annuncio_sfondo',
+    'annuncio_testo','annuncio_id','annuncio_compleanno_testo',
+    'azienda_telefono','azienda_email','azienda_pec','azienda_indirizzo',
+    'azienda_google_maps','azienda_sito_prenotazioni','azienda_note',
+    'orari_salone_json','orari_salone_nota','ferie_inizio','ferie_fine',
+    'benvenuto_attivo','benvenuto_config_json','icona_pwa_url',
+    'mostra_carta_premium_sbiadita','social_instagram','social_facebook',
+    'social_tiktok','social_youtube','social_whatsapp','social_x',
+    'social_threads','social_google_business','social_tripadvisor','social_altro'
+  ));
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 24. RPC — upsert_impostazione
+-- ─────────────────────────────────────────────────────────────
+DROP FUNCTION IF EXISTS upsert_impostazione(text, text, uuid);
+CREATE OR REPLACE FUNCTION upsert_impostazione(
+  p_chiave text,
+  p_valore text,
+  p_user_id uuid
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM impostazioni WHERE chiave = p_chiave AND user_id = p_user_id) THEN
+    UPDATE impostazioni SET valore = p_valore, updated_at = now()
+    WHERE chiave = p_chiave AND user_id = p_user_id;
+  ELSE
+    INSERT INTO impostazioni (chiave, valore, user_id, updated_at)
+    VALUES (p_chiave, p_valore, p_user_id, now());
+  END IF;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION upsert_impostazione(text, text, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION upsert_impostazione(text, text, uuid) TO anon;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 25. RELOAD CACHE POSTGREST
 -- ─────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';

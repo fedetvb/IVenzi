@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, WifiOff, Monitor, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key, Pencil } from 'lucide-react';
 import { DEFAULT_TESTI, NOME_VARIANTE, getTestoKey } from '../lib/recensioniUtils';
 import { isOwnerBuild, generateLocalOtp, generateCloudOtp } from '../lib/license';
+import UPDATE_SQL_RAW from '../../supabase/update_non_admin.sql?raw';
 import { SFONDO_META, COMPLEANNO_DEFAULT_TESTO } from '../components/AnnuncioModal';
 import { BENVENUTO_DEFAULT, type BenvenutoConfig } from '../components/BenvenutoModal';
 import { DEFAULT_WA_GP_SALONE, DEFAULT_WA_GP_CLIENTE, DEFAULT_WA_CS_DONA } from '../lib/waUtils';
@@ -10237,6 +10238,43 @@ function PaginaInfrastruttura({ onBack }: { onBack: () => void }) {
             <p>2. Inserisci l&apos;ID nel campo sopra e premi Genera per calcolare la chiave.</p>
             <p>3. Comunica la chiave al cliente: la inserirà nel proprio dispositivo per sbloccare l&apos;accesso.</p>
           </div>
+        </div>
+      </div>
+
+      {/* Script SQL aggiornamento non-admin */}
+      <div className="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-stone-100 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
+            <DatabaseBackup size={16} className="text-violet-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-stone-800">Script SQL — Aggiornamento Non-Admin</p>
+            <p className="text-xs text-stone-400">Da incollare nel SQL Editor di Supabase per aggiornare il database del cliente</p>
+          </div>
+          <a
+            href="https://supabase.com/dashboard/project/qfpeffzdszdanebmgafb/sql/new"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors flex-shrink-0"
+          >
+            <ExternalLink size={12} />
+            Apri SQL Editor
+          </a>
+        </div>
+        <div className="p-4 space-y-3">
+          <pre className="bg-stone-950 text-stone-200 rounded-xl p-4 text-[10px] font-mono leading-relaxed overflow-auto max-h-64 whitespace-pre-wrap break-words">
+            {UPDATE_SQL_RAW}
+          </pre>
+          <button
+            onClick={() => copyText(UPDATE_SQL_RAW, 'sql')}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-white text-sm font-semibold transition-colors"
+          >
+            <Copy size={14} />
+            {copyMsg === 'sql' ? 'Copiato!' : 'Copia tutto il codice SQL'}
+          </button>
+          <p className="text-[11px] text-stone-400 text-center">
+            Aggiornato al 2026-06-22 · 25 sezioni · sicuro, usa IF NOT EXISTS
+          </p>
         </div>
       </div>
 
