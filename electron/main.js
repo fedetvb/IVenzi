@@ -856,6 +856,7 @@ function createWindow() {
     },
     autoHideMenuBar: true,
   });
+  mainWindow.setMenu(null);
   if (isDev) { mainWindow.loadURL('http://localhost:5173'); }
   else { mainWindow.loadFile(join(app.getAppPath(), 'dist', 'index.html')); }
   mainWindow.on('close', (e) => {
