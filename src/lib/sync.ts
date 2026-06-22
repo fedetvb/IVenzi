@@ -62,7 +62,7 @@ const SYNC_TABLES: string[] = [
 
 // Colonna di conflitto per tabelle con UNIQUE constraint diversa da `id`
 const TABLE_CONFLICT_COLS: Record<string, string> = {
-  impostazioni: 'user_id,chiave',
+  impostazioni: 'chiave,user_id',
   carte_premium: 'codice',
   carte_sconto: 'codice',
   fiches: 'id',
