@@ -156,6 +156,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     const saved = localStorage.getItem('agenda_servizi_size');
     return saved ? Number(saved) : 1.0;
   });
+  const [mezzeOreGiallo, setMezzeOreGiallo] = useState(() => localStorage.getItem('agenda_mezzeore_giallo') === 'true');
 
   // Drag & drop state
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -179,6 +180,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   useEffect(() => { localStorage.setItem('agenda_servizi_italic', String(serviziItalic)); }, [serviziItalic]);
   useEffect(() => { localStorage.setItem('agenda_cliente_size', String(clienteSizeMul)); }, [clienteSizeMul]);
   useEffect(() => { localStorage.setItem('agenda_servizi_size', String(serviziSizeMul)); }, [serviziSizeMul]);
+  useEffect(() => { localStorage.setItem('agenda_mezzeore_giallo', String(mezzeOreGiallo)); }, [mezzeOreGiallo]);
 
   const slots = getSlots(startHour, endHour);
 
@@ -1127,6 +1129,17 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                 <span className="text-xs font-mono text-stone-400 w-10 text-right">{Math.round(serviziSizeMul * 100)}%</span>
               </div>
             </div>
+
+            {/* Mezze ore giallo */}
+            <div className="flex items-center justify-between py-1">
+              <span className="text-xs font-medium text-stone-600">Evidenzia mezze ore</span>
+              <button
+                onClick={() => setMezzeOreGiallo(b => !b)}
+                className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${mezzeOreGiallo ? 'bg-amber-400' : 'bg-stone-200'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${mezzeOreGiallo ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1238,6 +1251,9 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                       <div key={`gl-${time}`} className="absolute left-0 right-0 pointer-events-none" style={{ top: i * slotHeight, height: slotHeight }}>
                         {time.endsWith(':00') && (
                           <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.07)' }} />
+                        )}
+                        {mezzeOreGiallo && time.endsWith(':30') && (
+                          <div className="absolute inset-0" style={{ backgroundColor: 'rgba(253,224,71,0.18)' }} />
                         )}
                         <div className="absolute left-0 right-0" style={{
                           top: 0,
