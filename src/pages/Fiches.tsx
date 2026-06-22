@@ -374,10 +374,10 @@ function FichesTab() {
 
   useEffect(() => {
     if (!window.electronAPI?.onTriggerAutoFiches) return;
-    const unsub = window.electronAPI.onTriggerAutoFiches(({ dateStr, todayStr }: { dateStr: string; todayStr: string }) => {
-      setSelectedDate(dateStr);
-      setAutoExportDate(dateStr);
-      if (window.electronAPI?.markFichesDone) window.electronAPI.markFichesDone(todayStr);
+    const unsub = window.electronAPI.onTriggerAutoFiches(({ dates, latestDate }: { dates: string[]; latestDate: string }) => {
+      setSelectedDate(latestDate);
+      setAutoExportDate(latestDate);
+      if (window.electronAPI?.markFichesDone) window.electronAPI.markFichesDone(latestDate);
     });
     return unsub;
   }, []);

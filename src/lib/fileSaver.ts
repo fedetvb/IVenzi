@@ -29,7 +29,10 @@ export async function saveFile(
     }
 
     const result = await api.saveFileTo(type, filename, strContent, enc);
-    return result.ok ? { filePath: result.filePath } : null;
+    if (result.ok) return { filePath: result.filePath };
+    // Folder not configured or write failed: fall back to download dialog
+    browserDownload(filename, content);
+    return null;
   }
 
   // Browser fallback
