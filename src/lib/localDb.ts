@@ -748,7 +748,7 @@ export async function setImpostazione(chiave: string, valore: string, userId: st
   }
   const { error } = await supabase.rpc('upsert_impostazione', {
     p_chiave: chiave,
-    p_valore: valore,
+    p_valore: typeof valore === 'string' ? valore : JSON.stringify(valore),
     p_user_id: userId,
   });
   if (error) console.error('[setImpostazione] rpc error:', error.message);
