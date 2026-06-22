@@ -86,12 +86,14 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [showInForseModal, setShowInForseModal] = useState(false);
 
   useEffect(() => {
-    const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
-    const checkAvviso = async () => {
-      const disab = await getImpostazione('whatsapp_avviso_disabilitato');
+    const checkAvviso = () => {
+      const disab = localStorage.getItem('loc_avviso_wa_disabilitato');
       if (disab === 'true') { setAvvisoAppuntamentiVisibile(false); return; }
-      const orario = await getImpostazione('avviso_appuntamenti_orario') ?? '17:00';
-      const nowIt = fmt.format(new Date());
+      const orario = localStorage.getItem('loc_avviso_appuntamenti_orario') ?? '17:00';
+      const now = new Date();
+      const hh = String(now.toLocaleString('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', hour12: false })).padStart(2, '0');
+      const mm = String(now.toLocaleString('en-GB', { timeZone: 'Europe/Rome', minute: '2-digit' })).padStart(2, '0');
+      const nowIt = `${hh}:${mm}`;
       setAvvisoAppuntamentiVisibile(nowIt >= orario);
     };
     checkAvviso();
