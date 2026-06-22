@@ -746,22 +746,12 @@ export async function setImpostazione(chiave: string, valore: string, userId: st
     await dbUpsert({ table: 'impostazioni', data: { chiave, valore, user_id: userId }, onConflict: 'chiave,user_id', userId });
     return;
   }
-  const { data: updated, error: updateError } = await supabase
-    .from('impostazioni')
-    .update({ valore, updated_at: new Date().toISOString() })
-    .eq('chiave', chiave)
-    .eq('user_id', userId)
-    .select('chiave');
-  if (updateError) {
-    console.error('[setImpostazione] update error:', updateError.message);
-    return;
-  }
-  if (!updated || updated.length === 0) {
-    const { error: insertError } = await supabase
-      .from('impostazioni')
-      .insert({ chiave, valore, user_id: userId });
-    if (insertError) console.error('[setImpostazione] insert error:', insertError.message);
-  }
+  const { error } = await supabase.rpc('upsert_impostazione', {
+    p_chiave: chiave,
+    p_valore: valore,
+    p_user_id: userId,
+  });
+  if (error) console.error('[setImpostazione] rpc error:', error.message);
 }
 
 // ─── BACKUP ───────────────────────────────────────────────────────────────────
