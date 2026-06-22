@@ -1640,67 +1640,6 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
-      {/* Fasce orarie online */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Clock size={16} className="text-emerald-600" />
-          </div>
-          <div>
-            <p className="font-semibold text-stone-800">Fasce orarie prenotazioni online</p>
-            <p className="text-xs text-stone-400 mt-0.5">
-              Definisci gli orari in cui le clienti possono prenotare. Puoi usare un orario continuato o aggiungere più fasce con pause.
-            </p>
-          </div>
-          {fasceSaved && (
-            <span className="ml-auto text-xs text-emerald-600 font-medium flex items-center gap-1">
-              <Check size={11} /> Salvato
-            </span>
-          )}
-        </div>
-        <div className="space-y-2">
-          {fasceOrarie.map((fascia, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <span className="text-xs font-medium text-stone-400 w-5 text-right flex-shrink-0">{idx + 1}.</span>
-              <div className="flex items-center gap-2 flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2">
-                <span className="text-xs text-stone-500 font-medium">Dalle</span>
-                <input
-                  type="time"
-                  value={fascia.da}
-                  onChange={e => setFasceOrarie(prev => prev.map((f, i) => i === idx ? { ...f, da: e.target.value } : f))}
-                  className="text-sm font-semibold text-stone-800 bg-transparent border-none outline-none w-20"
-                />
-                <span className="text-xs text-stone-500 font-medium">alle</span>
-                <input
-                  type="time"
-                  value={fascia.a}
-                  onChange={e => setFasceOrarie(prev => prev.map((f, i) => i === idx ? { ...f, a: e.target.value } : f))}
-                  className="text-sm font-semibold text-stone-800 bg-transparent border-none outline-none w-20"
-                />
-              </div>
-              {fasceOrarie.length > 1 && (
-                <button
-                  onClick={() => setFasceOrarie(prev => prev.filter((_, i) => i !== idx))}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors flex-shrink-0"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        <button
-          onClick={() => setFasceOrarie(prev => [...prev, { da: '14:00', a: '18:00' }])}
-          className="flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
-        >
-          <Plus size={14} />
-          Aggiungi fascia oraria
-        </button>
-        <p className="text-xs text-stone-400 bg-stone-50 rounded-xl px-3 py-2 border border-stone-100">
-          Es. orario spezzato: <strong>09:00 – 13:00</strong> e <strong>15:00 – 19:00</strong>. Le pause tra le fasce vengono escluse automaticamente.
-        </p>
-      </div>
-
       <button
         onClick={handleSave}
         disabled={saving}
