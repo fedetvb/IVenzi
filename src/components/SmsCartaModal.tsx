@@ -2,7 +2,7 @@ import { Copy, Check, X, MessageSquare, Send, ChevronDown, Loader, Save, Pencil,
 import { useState, useEffect } from 'react';
 import { dbSelect, getImpostazione } from '../lib/localDb';
 import { supabase } from '../lib/supabase';
-import { apriWhatsApp } from '../lib/waUtils';
+import { apriWhatsAppMode, type WaMode } from '../lib/waUtils';
 
 export type AzioneCarta =
   | { tipo: 'creazione'; credito: number }
@@ -417,12 +417,14 @@ export default function SmsCartaModal({ nominativo, codice, telefono, azione, on
   const [ready, setReady] = useState(false);
   const [editingBubble, setEditingBubble] = useState(false);
   const [messaggioEdit, setMessaggioEdit] = useState('');
+  const [waMode, setWaMode] = useState<WaMode>('desktop');
   const hasPhone = telefono.trim().length > 0;
 
   useEffect(() => {
     getImpostazione('whatsapp_avviso_disabilitato').then(v => {
       if (v === 'true') { onClose(); } else { setReady(true); }
     });
+    getImpostazione('wa_modalita').then(v => { if (v === 'web') setWaMode('web'); });
   }, []);
 
   if (!ready) return null;
@@ -436,7 +438,7 @@ export default function SmsCartaModal({ nominativo, codice, telefono, azione, on
     azione.tipo === 'sconto_utilizzo' ? 'Sconto applicato' : 'Utilizzo registrato';
 
   function openWhatsapp(messaggio: string) {
-    apriWhatsApp(telefono, messaggio);
+    apriWhatsAppMode(telefono, messaggio, waMode);
     onClose();
   }
 
