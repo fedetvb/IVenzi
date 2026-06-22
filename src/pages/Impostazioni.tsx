@@ -1085,6 +1085,8 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   // Fasce orarie online
   interface FasciaUI { da: string; a: string; }
   const [fasceOrarie, setFasceOrarie] = useState<FasciaUI[]>([{ da: '09:00', a: '18:00' }]);
+  const [fasceSaved, setFasceSaved] = useState(false);
+  const fasceLoadedRef = useRef(false);
 
   const bookingUrl = user
     ? `${window.location.origin}/prenota?uid=${user.id}`
@@ -1123,6 +1125,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           if (Array.isArray(arr) && arr.length > 0) setFasceOrarie(arr);
         } catch { /* usa default */ }
       }
+      fasceLoadedRef.current = true;
       setLoading(false);
     });
   }, [user]);
@@ -1146,13 +1149,26 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
         if (row.chiave === 'fasce_orarie_online_json') {
           try {
             const arr = JSON.parse(row.valore);
-            if (Array.isArray(arr) && arr.length > 0) setFasceOrarie(arr);
+            if (Array.isArray(arr) && arr.length > 0) {
+              setFasceOrarie(prev => JSON.stringify(prev) === JSON.stringify(arr) ? prev : arr);
+            }
           } catch { /* ignora payload malformato */ }
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
+
+  // Auto-save fasce orarie con debounce 800ms (sincronizza su tutti i dispositivi via realtime)
+  useEffect(() => {
+    if (!user?.id || !fasceLoadedRef.current) return;
+    const t = setTimeout(async () => {
+      await setImpostazione('fasce_orarie_online_json', JSON.stringify(fasceOrarie), user.id);
+      setFasceSaved(true);
+      setTimeout(() => setFasceSaved(false), 1800);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [fasceOrarie, user?.id]);
 
   // Regenerate QR preview whenever URL or logo changes
   useEffect(() => {
@@ -1628,6 +1644,11 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
               Definisci gli orari in cui le clienti possono prenotare. Puoi usare un orario continuato o aggiungere più fasce con pause.
             </p>
           </div>
+          {fasceSaved && (
+            <span className="ml-auto text-xs text-emerald-600 font-medium flex items-center gap-1">
+              <Check size={11} /> Salvato
+            </span>
+          )}
         </div>
         <div className="space-y-2">
           {fasceOrarie.map((fascia, idx) => (

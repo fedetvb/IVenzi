@@ -23,7 +23,9 @@
     "build:owner": "cross-env BUILD_MODE=owner vite build",
     "build:user": "cross-env BUILD_MODE=user vite build",
     "electron:build:owner": "cross-env ELECTRON=true BUILD_MODE=owner vite build && npm install better-sqlite3 --ignore-scripts --no-save && electron-rebuild -f -w better-sqlite3 && electron-builder --win --config electron-builder.owner.json",
-    "electron:build:user": "cross-env ELECTRON=true BUILD_MODE=user vite build && npm install better-sqlite3 --ignore-scripts --no-save && electron-rebuild -f -w better-sqlite3 && electron-builder --win --config electron-builder.user.json"
+    "electron:build:user": "cross-env ELECTRON=true BUILD_MODE=user vite build && npm install better-sqlite3 --ignore-scripts --no-save && electron-rebuild -f -w better-sqlite3 && electron-builder --win --config electron-builder.user.json",
+    "electron:build:owner:cmd": "set ELECTRON=true&& set BUILD_MODE=owner&& npx vite build && npm install better-sqlite3 --ignore-scripts --no-save && npx electron-rebuild -f -w better-sqlite3 && npx electron-builder --win --config electron-builder.owner.json",
+    "electron:build:user:cmd": "set ELECTRON=true&& set BUILD_MODE=user&& npx vite build && npm install better-sqlite3 --ignore-scripts --no-save && npx electron-rebuild -f -w better-sqlite3 && npx electron-builder --win --config electron-builder.user.json"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
