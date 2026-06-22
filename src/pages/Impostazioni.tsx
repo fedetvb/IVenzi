@@ -20,12 +20,11 @@ import { generateCartaInfinityPdfStampa } from '../lib/carteInfinityPdfGenerator
 import StatisticheGate from '../components/StatisticheGate';
 import RecensioniMappingPanel from '../components/RecensioniMappingPanel';
 
-type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'testi_recensioni' | 'mappatura_recensioni' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura';
+type SubPage = null | 'password' | 'promemoria' | 'messaggio_avviso' | 'template_carta' | 'template_comunicazioni' | 'qrcode' | 'qr_gestionale' | 'qr_google' | 'testi_recensioni' | 'mappatura_recensioni' | 'backup' | 'connessione' | 'account' | 'keepalive' | 'cartelle' | 'tema' | 'prenotazioni_online' | 'notifiche_push' | 'messaggi_clienti' | 'dati_azienda' | 'avvisi_banner' | 'canali_social' | 'orari_salone' | 'scarica_documenti' | 'wa_carte' | 'benvenuto' | 'icone' | 'infrastruttura' | 'messaggi_comunicazioni';
 
 export default function Impostazioni({ onTestReminder, onTestInForse, onTestPromApp, onTestCompleanno, onTestRecensioni }: { onTestReminder?: () => void; onTestInForse?: () => void; onTestPromApp?: () => void; onTestCompleanno?: () => void; onTestRecensioni?: () => void }) {
   const { user } = useAuth();
   const [sub, setSub] = useState<SubPage>(null);
-  const [msgOpen, setMsgOpen] = useState(false);
   const [whatsappDisabilitato, setWhatsappDisabilitato] = useState(false);
   const [waModalita, setWaModalita] = useState<'desktop' | 'web'>('desktop');
   const [hairQuizAttivo, setHairQuizAttivo] = useState(false);
@@ -67,9 +66,9 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'password') return <PaginaPassword onBack={() => setSub(null)} />;
   if (sub === 'avvisi_banner') return <PaginaAvvisiBanner onBack={() => setSub(null)} onTestReminder={onTestReminder} onTestInForse={onTestInForse} onTestPromApp={onTestPromApp} onTestCompleanno={onTestCompleanno} onTestRecensioni={onTestRecensioni} />;
   if (sub === 'promemoria') return <PaginaPromemoria onBack={() => setSub(null)} onTestReminder={onTestReminder} />;
-  if (sub === 'messaggio_avviso') return <PaginaMessaggioAvviso onBack={() => setSub(null)} />;
-  if (sub === 'template_carta') return <PaginaTemplateCarta onBack={() => setSub(null)} />;
-  if (sub === 'template_comunicazioni') return <PaginaTemplateComunicazioni onBack={() => setSub(null)} />;
+  if (sub === 'messaggio_avviso') return <PaginaMessaggioAvviso onBack={() => setSub('messaggi_comunicazioni')} />;
+  if (sub === 'template_carta') return <PaginaTemplateCarta onBack={() => setSub('messaggi_comunicazioni')} />;
+  if (sub === 'template_comunicazioni') return <PaginaTemplateComunicazioni onBack={() => setSub('messaggi_comunicazioni')} />;
   if (sub === 'qrcode') return <PaginaQRCode onBack={() => setSub(null)} />;
   if (sub === 'qr_gestionale') return <PaginaQrGestionale onBack={() => setSub(null)} setSub={setSub} />;
   if (sub === 'qr_google') return <PaginaQrGoogle onBack={() => setSub('qr_gestionale')} setSub={setSub} />;
@@ -85,8 +84,9 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
   if (sub === 'dati_azienda') return <PaginaDatiAzienda onBack={() => setSub(null)} />;
   if (sub === 'canali_social') return <PaginaCanaleSocial onBack={() => setSub(null)} />;
   if (sub === 'orari_salone') return <PaginaOrariSalone onBack={() => setSub(null)} />;
-  if (sub === 'wa_carte') return <PaginaWACarte onBack={() => setSub(null)} />;
-  if (sub === 'benvenuto') return <PaginaBenvenuto onBack={() => setSub(null)} />;
+  if (sub === 'wa_carte') return <PaginaWACarte onBack={() => setSub('messaggi_comunicazioni')} />;
+  if (sub === 'benvenuto') return <PaginaBenvenuto onBack={() => setSub('messaggi_comunicazioni')} />;
+  if (sub === 'messaggi_comunicazioni') return <PaginaMessaggieComunicazioni onBack={() => setSub(null)} setSub={setSub} whatsappDisabilitato={whatsappDisabilitato} toggleWhatsapp={toggleWhatsapp} waModalita={waModalita} toggleWaModalita={toggleWaModalita} />;
   if (sub === 'icone') return <PaginaIcone onBack={() => setSub(null)} />;
   if (sub === 'infrastruttura' && isOwnerBuild()) return <PaginaInfrastruttura onBack={() => setSub(null)} />;
   if (sub === 'scarica_documenti') return (
@@ -108,9 +108,9 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     'Template Messaggi Carta Sconto', 'Modelli per carte sconto',
     'Template Messaggi Comunicazioni', 'Messaggi predefiniti per comunicazioni',
     'Messaggi WA Carte da Donare', 'Gift Pass Carta Sconto donazione mappa posizione',
+    'Benvenuto Nuove Clienti', 'Modifica il testo del messaggio di benvenuto per le nuove clienti',
   );
-  const anyVisible = show('Benvenuto Nuove Clienti', 'Modifica il testo del messaggio di benvenuto per le nuove clienti') ||
-    show('Account e Credenziali', 'Modifica email e password') ||
+  const anyVisible = show('Account e Credenziali', 'Modifica email e password') ||
     show('Avvisi e Banner', 'Orari e attivazione di tutti gli avvisi') ||
     show('Backup e Ripristino', 'Esporta tutti i dati') ||
     show('Canali Social', 'Instagram Facebook TikTok YouTube') ||
@@ -124,8 +124,6 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     show('Orari Salone', 'Giorni di apertura e orari di lavoro') ||
     show('Password', 'Gestisci le password di accesso') ||
     show('Prenotazioni Online', 'Attiva disattiva pagina pubblica prenotazione') ||
-    show('Hair Quiz Clienti', 'Quiz capelli portale clienti routine personalizzata prodotti') ||
-    show('Promemoria Convalida Fiches', 'Configura giorni e orario promemoria') ||
     show('QR Code Registrazione Clienti', 'Stampa il QR code nuove clienti') ||
     show('Tema e Personalizzazione', 'Colori sidebar icona logo') ||
     show('Scarica File e Documenti', 'Esporta e scarica file PDF CSV backup dal gestionale') ||
@@ -182,21 +180,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
 
-        {/* Benvenuto Nuove Clienti */}
-        <button
-          onClick={() => setSub('benvenuto')}
-          style={show('Benvenuto Nuove Clienti', 'Modifica il testo del messaggio di benvenuto per le nuove clienti') ? {} : {display:'none'}}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-rose-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <Sparkles size={18} className="text-stone-500 group-hover:text-rose-500 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Benvenuto Nuove Clienti</p>
-            <p className="text-xs text-stone-400 mt-0.5">Modifica il testo del messaggio di benvenuto per le nuove clienti</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
+        {/* Benvenuto Nuove Clienti — SPOSTATO in Messaggi e Comunicazioni */}
 
         {/* Avvisi e Banner */}
         <button
@@ -349,141 +333,19 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
 
         {/* Messaggi e Comunicazioni */}
         {msgGroupVisible && (
-        <div>
           <button
-            onClick={() => setMsgOpen(o => !o)}
+            onClick={() => setSub('messaggi_comunicazioni')}
             className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
           >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${msgOpen ? 'bg-emerald-100' : 'bg-stone-100 group-hover:bg-emerald-100'}`}>
-              <MessageSquare size={18} className={`transition-colors ${msgOpen ? 'text-emerald-600' : 'text-stone-500 group-hover:text-emerald-600'}`} />
+            <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
+              <MessageSquare size={18} className="text-stone-500 group-hover:text-emerald-600 transition-colors" />
             </div>
             <div className="flex-1 text-left">
               <p className="text-sm font-semibold text-stone-800">Messaggi e Comunicazioni</p>
-              <p className="text-xs text-stone-400 mt-0.5">Avvisi appuntamento, template carta sconto e messaggi comunicazioni</p>
+              <p className="text-xs text-stone-400 mt-0.5">WhatsApp, avvisi, template carte e benvenuto clienti</p>
             </div>
-            <ChevronDown size={16} className={`text-stone-400 transition-transform duration-200 ${msgOpen || sq ? 'rotate-180' : ''}`} />
+            <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
           </button>
-
-          {(msgOpen || !!sq) && (
-            <div className="border-t border-stone-100 divide-y divide-stone-50 bg-stone-50/60">
-              {/* Messaggio Avviso Appuntamento */}
-              <button
-                onClick={() => setSub('messaggio_avviso')}
-                style={show('Messaggio Avviso Appuntamento', 'Personalizza il testo WhatsApp per il promemoria appuntamento') ? {} : {display:'none'}}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-emerald-300 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <MessageCircle size={15} className="text-stone-400 group-hover:text-emerald-600 transition-colors" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Messaggio Avviso Appuntamento</p>
-                  <p className="text-xs text-stone-400 mt-0.5">Personalizza il testo WhatsApp per il promemoria appuntamento</p>
-                </div>
-                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
-              </button>
-
-              {/* Messaggi WhatsApp automatici */}
-              <div
-                style={show('Messaggi WhatsApp automatici', 'Pulsante avviso clienti') ? {} : {display:'none'}}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5"
-              >
-                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${whatsappDisabilitato ? 'bg-white border-stone-200' : 'bg-white border-emerald-200'}`}>
-                  <MessageCircle size={15} className={whatsappDisabilitato ? 'text-stone-300' : 'text-emerald-500'} />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Messaggi WhatsApp automatici</p>
-                  <p className="text-xs text-stone-400 mt-0.5">
-                    {whatsappDisabilitato ? 'Pulsante avviso clienti nascosto nell\'agenda' : 'Pulsante avviso clienti visibile nell\'agenda'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => toggleWhatsapp(!whatsappDisabilitato)}
-                  className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${whatsappDisabilitato ? 'bg-stone-200' : 'bg-emerald-500'}`}
-                >
-                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${whatsappDisabilitato ? 'translate-x-0.5' : 'translate-x-5'}`} />
-                </button>
-              </div>
-
-              {/* Modalità apertura WhatsApp */}
-              <div
-                style={show('Modalità WhatsApp', 'Apri WhatsApp Desktop Web browser') ? {} : {display:'none'}}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-emerald-500"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Apri WhatsApp</p>
-                  <p className="text-xs text-stone-400 mt-0.5">
-                    {waModalita === 'web' ? 'WhatsApp Web (browser) — abilita "Invia a tutti"' : "WhatsApp Desktop (app nativa)"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 bg-stone-100 rounded-lg p-0.5 flex-shrink-0">
-                  <button
-                    onClick={() => toggleWaModalita('desktop')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${waModalita === 'desktop' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}
-                  >
-                    Desktop
-                  </button>
-                  <button
-                    onClick={() => toggleWaModalita('web')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${waModalita === 'web' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}
-                  >
-                    Web
-                  </button>
-                </div>
-              </div>
-
-              {/* Template Messaggi Carta Sconto */}
-              <button
-                onClick={() => setSub('template_carta')}
-                style={show('Template Messaggi Carta Sconto', 'Modelli per carte sconto Natale compleanno regalo') ? {} : {display:'none'}}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-rose-300 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <Tag size={15} className="text-stone-400 group-hover:text-rose-500 transition-colors" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Template Messaggi Carta Sconto</p>
-                  <p className="text-xs text-stone-400 mt-0.5">Modelli per carte sconto (Natale, compleanno, regalo...)</p>
-                </div>
-                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
-              </button>
-
-              {/* Template Messaggi Comunicazioni */}
-              <button
-                onClick={() => setSub('template_comunicazioni')}
-                style={show('Template Messaggi Comunicazioni', 'Messaggi predefiniti per comunicazioni compleanno feste promo') ? {} : {display:'none'}}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-sky-300 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <Send size={15} className="text-stone-400 group-hover:text-sky-500 transition-colors" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Template Messaggi Comunicazioni</p>
-                  <p className="text-xs text-stone-400 mt-0.5">Messaggi predefiniti per comunicazioni (compleanno, feste, promo...)</p>
-                </div>
-                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
-              </button>
-
-              {/* Messaggi WA Carte da Donare */}
-              <button
-                onClick={() => setSub('wa_carte')}
-                style={show('Messaggi WA Carte da Donare', 'Gift Pass Carta Sconto donazione mappa posizione') ? {} : {display:'none'}}
-                className="w-full flex items-center gap-4 pl-10 pr-6 py-3.5 hover:bg-stone-100/60 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 group-hover:border-emerald-300 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <Gift size={15} className="text-stone-400 group-hover:text-emerald-600 transition-colors" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-stone-700">Messaggi WA Carte da Donare</p>
-                  <p className="text-xs text-stone-400 mt-0.5">Testi WhatsApp per Gift Pass e Carta Sconto monouso, con toggle mappa</p>
-                </div>
-                <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 transition-colors" />
-              </button>
-            </div>
-          )}
-        </div>
         )}
 
         {/* Notifiche Push */}
@@ -550,43 +412,9 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
         </button>
 
-        {/* Hair Quiz Clienti — toggle inline */}
-        <div
-          style={show('Hair Quiz Clienti', 'Quiz capelli portale clienti routine personalizzata prodotti') ? {} : {display:'none'}}
-          className="w-full flex items-center gap-4 px-6 py-4"
-        >
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${hairQuizAttivo ? 'bg-amber-100' : 'bg-stone-100'}`}>
-            <Star size={18} className={hairQuizAttivo ? 'text-amber-500' : 'text-stone-400'} />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Hair Quiz Clienti</p>
-            <p className="text-xs text-stone-400 mt-0.5">
-              {hairQuizAttivo ? 'Quiz capelli attivo nel portale clienti' : 'Quiz capelli non attivo nel portale clienti'}
-            </p>
-          </div>
-          <button
-            onClick={() => toggleHairQuiz(!hairQuizAttivo)}
-            className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${hairQuizAttivo ? 'bg-amber-500' : 'bg-stone-200'}`}
-          >
-            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${hairQuizAttivo ? 'translate-x-5' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
+        {/* Hair Quiz Clienti — SPOSTATO in Prenotazioni Online */}
 
-        {/* Promemoria Convalida Fiches */}
-        <button
-          onClick={() => setSub('promemoria')}
-          style={show('Promemoria Convalida Fiches', 'Configura giorni e orario per il promemoria di convalida giornaliero') ? {} : {display:'none'}}
-          className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
-            <Bell size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Promemoria Convalida Fiches</p>
-            <p className="text-xs text-stone-400 mt-0.5">Configura giorni e orario per il promemoria di convalida giornaliero</p>
-          </div>
-          <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
-        </button>
+        {/* Promemoria Convalida Fiches — SPOSTATO in Avvisi e Banner */}
 
         {/* Cartelletta QR del Gestionale */}
         <button
@@ -1474,8 +1302,9 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
         <ChevronRight size={18} className="text-stone-300 group-hover:text-violet-500 transition-colors flex-shrink-0" />
       </button>
 
-      {/* Toggle attiva/disattiva */}
+      {/* Toggle flags raggruppati */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-4">
+        {/* Prenotazioni online on/off */}
         <div className="flex items-center justify-between">
           <div>
             <p className="font-semibold text-stone-800">Prenotazioni online</p>
@@ -1491,7 +1320,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           </button>
         </div>
 
-        {/* Toggle mostra carta premium sbiadita */}
+        {/* Mostra anteprima Carta Premium */}
         <div className="flex items-center justify-between pt-1 border-t border-stone-100">
           <div>
             <p className="font-semibold text-stone-800 text-sm">Mostra anteprima Carta Premium</p>
@@ -1509,8 +1338,53 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           </button>
         </div>
 
+        {/* Nascondi portale pubblico */}
+        <div className="border-t border-stone-100 pt-1">
+          <div className="flex items-center justify-between">
+            <div className="flex-1 pr-4">
+              <p className="font-semibold text-stone-800 text-sm">Nascondi portale pubblico</p>
+              <p className="text-xs text-stone-400 mt-0.5">
+                {portaleNascosto
+                  ? 'Il portale mostra un messaggio di scuse e rassicura le clienti sui loro dati'
+                  : 'Il portale è accessibile normalmente'}
+              </p>
+            </div>
+            <button
+              onClick={() => setPortaleNascosto(v => !v)}
+              className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${portaleNascosto ? 'bg-red-400' : 'bg-stone-200'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${portaleNascosto ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          {portaleNascosto && (
+            <div className="mt-3 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-700 leading-relaxed">
+              Le clienti vedranno: <em>"Portale temporaneamente non disponibile — non preoccuparti, le tue carte e promozioni sono al sicuro e registrate nel nostro sistema."</em>
+            </div>
+          )}
+        </div>
+
+        {/* Hair Quiz */}
+        <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+          <div className="flex items-center gap-2 flex-1 pr-4">
+            <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <Star size={13} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-stone-800 text-sm">Hair Quiz Clienti</p>
+              <p className="text-xs text-stone-400 mt-0.5">Quiz personalizzato nel portale prenotazioni</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setHairQuizAttivoLocal(v => !v)}
+            className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${hairQuizAttivoLocal ? 'bg-amber-500' : 'bg-stone-200'}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${hairQuizAttivoLocal ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+
         {/* Link e QR */}
-        <div className="space-y-2">
+        <div className="space-y-2 border-t border-stone-100 pt-4">
           <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Link pagina prenotazioni</p>
           <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5">
             <Globe size={14} className="text-stone-400 flex-shrink-0" />
@@ -1588,31 +1462,6 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Nascondi portale pubblico */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 pr-4">
-            <p className="font-semibold text-stone-800">Nascondi portale pubblico</p>
-            <p className="text-xs text-stone-400 mt-0.5">
-              {portaleNascosto
-                ? 'Il portale mostra un messaggio di scuse e rassicura le clienti sui loro dati'
-                : 'Il portale è accessibile normalmente'}
-            </p>
-          </div>
-          <button
-            onClick={() => setPortaleNascosto(v => !v)}
-            className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${portaleNascosto ? 'bg-red-400' : 'bg-stone-200'}`}
-          >
-            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${portaleNascosto ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
-        {portaleNascosto && (
-          <div className="mt-4 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-700 leading-relaxed">
-            Le clienti vedranno: <em>"Portale temporaneamente non disponibile — non preoccuparti, le tue carte e promozioni sono al sicuro e registrate nel nostro sistema."</em>
-          </div>
-        )}
       </div>
 
       {/* Indirizzo salone */}
@@ -1823,34 +1672,6 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
         </p>
       </div>
 
-      {/* Hair Quiz Clienti */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center">
-            <Star size={15} className="text-amber-600" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-stone-800">Hair Quiz Clienti</p>
-            <p className="text-xs text-stone-400">Quiz personalizzato nel portale prenotazioni</p>
-          </div>
-        </div>
-        <p className="text-xs text-stone-500 leading-relaxed">
-          Permetti alle clienti di rispondere a un breve quiz per ricevere una routine di bellezza personalizzata con i tuoi prodotti. I risultati vengono salvati nel loro profilo e visibili nella scheda cliente.
-        </p>
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-sm font-medium text-stone-700">
-            {hairQuizAttivoLocal ? 'Attivo' : 'Non attivo'}
-          </span>
-          <button
-            type="button"
-            onClick={() => setHairQuizAttivoLocal(v => !v)}
-            className={`w-12 h-6 rounded-full transition-colors flex items-center px-1 ${hairQuizAttivoLocal ? 'bg-amber-500' : 'bg-stone-300'}`}
-          >
-            <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${hairQuizAttivoLocal ? 'translate-x-6' : ''}`} />
-          </button>
-        </div>
-      </div>
-
       <button
         onClick={handleSave}
         disabled={saving}
@@ -1864,6 +1685,161 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           'Salva impostazioni'
         )}
       </button>
+    </div>
+  );
+}
+
+// ─── Messaggi e Comunicazioni ─────────────────────────────────────────────────
+
+function PaginaMessaggieComunicazioni({
+  onBack, setSub, whatsappDisabilitato, toggleWhatsapp, waModalita, toggleWaModalita,
+}: {
+  onBack: () => void;
+  setSub: (s: SubPage) => void;
+  whatsappDisabilitato: boolean;
+  toggleWhatsapp: (val: boolean) => void;
+  waModalita: string;
+  toggleWaModalita: (v: 'desktop' | 'web') => void;
+}) {
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-stone-800">Messaggi e Comunicazioni</h2>
+          <p className="text-sm text-stone-400 mt-0.5">WhatsApp, avvisi, template e benvenuto clienti</p>
+        </div>
+      </div>
+
+      {/* WhatsApp */}
+      <div className="space-y-3">
+        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">WhatsApp</p>
+
+        {/* Toggle WA on/off */}
+        <div className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${!whatsappDisabilitato ? 'bg-emerald-50' : 'bg-stone-100'}`}>
+            <svg viewBox="0 0 24 24" className={`w-6 h-6 ${!whatsappDisabilitato ? 'fill-emerald-500' : 'fill-stone-300'}`}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Messaggi WhatsApp automatici</p>
+            <p className="text-xs text-stone-400 mt-0.5">{whatsappDisabilitato ? 'Pulsante avviso nascosto nell\'agenda' : 'Pulsante avviso visibile nell\'agenda'}</p>
+          </div>
+          <button
+            onClick={() => toggleWhatsapp(!whatsappDisabilitato)}
+            className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${whatsappDisabilitato ? 'bg-stone-200' : 'bg-emerald-500'}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${whatsappDisabilitato ? 'translate-x-0.5' : 'translate-x-6'}`} />
+          </button>
+        </div>
+
+        {/* Desktop/Web selector */}
+        <div className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-center flex-shrink-0">
+            <Monitor size={22} className="text-stone-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Apri WhatsApp</p>
+            <p className="text-xs text-stone-400 mt-0.5">{waModalita === 'web' ? 'WhatsApp Web (browser) — abilita "Invia a tutti"' : 'WhatsApp Desktop (app nativa)'}</p>
+          </div>
+          <div className="flex items-center gap-1 bg-stone-100 rounded-lg p-0.5 flex-shrink-0">
+            <button
+              onClick={() => toggleWaModalita('desktop')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${waModalita === 'desktop' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}
+            >Desktop</button>
+            <button
+              onClick={() => toggleWaModalita('web')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${waModalita === 'web' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}
+            >Web</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Appuntamenti */}
+      <div className="space-y-3">
+        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Appuntamenti</p>
+        <button
+          onClick={() => setSub('messaggio_avviso')}
+          className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left group shadow-sm"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+            <MessageCircle size={22} className="text-emerald-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Messaggio Avviso Appuntamento</p>
+            <p className="text-xs text-stone-400 mt-0.5">Personalizza il testo WhatsApp per il promemoria appuntamento</p>
+          </div>
+          <ChevronRight size={18} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+        </button>
+      </div>
+
+      {/* Clienti */}
+      <div className="space-y-3">
+        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Clienti</p>
+        <button
+          onClick={() => setSub('benvenuto')}
+          className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-rose-50 hover:border-rose-200 transition-all text-left group shadow-sm"
+        >
+          <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+            <Sparkles size={22} className="text-rose-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Benvenuto Nuove Clienti</p>
+            <p className="text-xs text-stone-400 mt-0.5">Modifica il testo del messaggio di benvenuto per le nuove clienti</p>
+          </div>
+          <ChevronRight size={18} className="text-stone-300 group-hover:text-rose-400 transition-colors flex-shrink-0" />
+        </button>
+      </div>
+
+      {/* Carte */}
+      <div className="space-y-3">
+        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Carte</p>
+        <button
+          onClick={() => setSub('template_carta')}
+          className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-rose-50 hover:border-rose-200 transition-all text-left group shadow-sm"
+        >
+          <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+            <Tag size={22} className="text-rose-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Template Messaggi Carta Sconto</p>
+            <p className="text-xs text-stone-400 mt-0.5">Modelli per carte sconto (Natale, compleanno, regalo...)</p>
+          </div>
+          <ChevronRight size={18} className="text-stone-300 group-hover:text-rose-400 transition-colors flex-shrink-0" />
+        </button>
+        <button
+          onClick={() => setSub('wa_carte')}
+          className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left group shadow-sm"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+            <Gift size={22} className="text-emerald-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Messaggi WA Carte da Donare</p>
+            <p className="text-xs text-stone-400 mt-0.5">Testi WhatsApp per Gift Pass e Carta Sconto monouso, con toggle mappa</p>
+          </div>
+          <ChevronRight size={18} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+        </button>
+      </div>
+
+      {/* Comunicazioni */}
+      <div className="space-y-3">
+        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Comunicazioni</p>
+        <button
+          onClick={() => setSub('template_comunicazioni')}
+          className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-sky-50 hover:border-sky-200 transition-all text-left group shadow-sm"
+        >
+          <div className="w-12 h-12 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+            <Send size={22} className="text-sky-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Template Messaggi Comunicazioni</p>
+            <p className="text-xs text-stone-400 mt-0.5">Messaggi predefiniti per comunicazioni (compleanno, feste, promo...)</p>
+          </div>
+          <ChevronRight size={18} className="text-stone-300 group-hover:text-sky-500 transition-colors flex-shrink-0" />
+        </button>
+      </div>
     </div>
   );
 }
