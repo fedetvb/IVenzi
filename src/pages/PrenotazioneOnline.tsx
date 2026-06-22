@@ -5160,7 +5160,7 @@ function GiftPassInfoModal({ onClose }: { onClose: () => void }) {
               <span className="mt-0.5 flex-shrink-0 text-lg leading-none" style={{ color: '#e8b4a0' }}>•</span>
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
                 <span className="font-semibold text-white">Eleganza nel Dettaglio:</span>{' '}
-                Massima comodità e libertà: la gift pass viene assegnata al ricevente al momento dell'acquisto o potrai darla direttamente tu dal tuo telefono tramite un cordiale messaggio whatsapp (preparato da noi, che potrai modificare a tuo piacimento) in cui c'è il codice della carta. Il ricevente potrà scegliere se usare il nostro portale per registrarla oppure potrà comunicarci il codice in salone. Massima comodità e libertà di scelta :)
+                Massima comodità e libertà: la gift pass viene assegnata al ricevente al momento dell'acquisto o potrai darla direttamente tu dal tuo telefono tramite un cordiale messaggio whatsapp (preparato da noi, che potrai modificare a tuo piacimento) in cui c'è il codice della carta. Il ricevente potrà scegliere se usare il nostro portale per registrarla oppure potrà comunicarci il codice in salone.
               </p>
             </div>
           </div>
