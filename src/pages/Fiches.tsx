@@ -2523,80 +2523,9 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           </div>
 
           {/* Dialogo saldo insufficiente */}
-          {showRicaricaAlert && cartaPremium && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <AlertCircle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-amber-800">Saldo carta insufficiente</p>
-                  <p className="text-xs text-amber-700 mt-1">
-                    La carta <span className="font-mono font-bold">{cartaPremium.codice}</span> ha un saldo di{' '}
-                    <strong>€{cartaPremium.saldo.toFixed(2)}</strong>, non sufficiente a coprire{' '}
-                    <strong>€{totaleDopoSconto.toFixed(2)}</strong>.
-                  </p>
-                  <p className="text-xs text-amber-600 mt-1">
-                    Vuoi ricaricarla adesso? Se scegli No, verrà usato il saldo residuo (€{cartaPremium.saldo.toFixed(2)}) e il resto (€{(totaleDopoSconto - cartaPremium.saldo).toFixed(2)}) sarà addebitato al cliente.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => {
-                    // No ricarica: usa saldo disponibile e vai a convalida
-                    setShowRicaricaAlert(false);
-                    handleConvalida();
-                  }}
-                  className="px-4 py-1.5 text-xs font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50"
-                >
-                  No, usa saldo disponibile
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRicaricaAlert(false);
-                    setShowPasswordGate(true);
-                  }}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                >
-                  <Plus size={11} />
-                  Sì, ricarica ora
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Seleziona tipo pagamento (obbligatorio prima della convalida) */}
-          {showPagamentoModal && (
-            <div className="bg-white border-2 border-amber-300 rounded-xl px-4 py-4 space-y-3 shadow-sm">
-              <div className="flex items-start gap-3">
-                <AlertCircle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-stone-800">Seleziona il metodo di pagamento</p>
-                  <p className="text-xs text-stone-500 mt-0.5">Necessario prima di convalidare la fiche.</p>
-                </div>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {([
-                  { val: 'cc_bancomat' as TipoPagamento, label: 'CC / Bancomat', dot: null },
-                  { val: 'contanti_verde' as TipoPagamento, label: 'Contanti', dot: '#22c55e' },
-                  { val: 'contanti_nero' as TipoPagamento, label: 'Contanti', dot: '#1c1917' },
-                ] as { val: TipoPagamento; label: string; dot: string | null }[]).map(opt => (
-                  <button key={opt.val!} type="button"
-                    onClick={() => {
-                      setTipoPagamento(opt.val);
-                      setShowPagamentoModal(false);
-                      if (saldoInsufficient) setShowRicaricaAlert(true);
-                      else handleConvalida(opt.val);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-stone-200 hover:border-amber-400 hover:bg-amber-50 text-sm font-medium text-stone-700 transition-all"
-                  >
-                    {opt.dot ? <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: opt.dot }} /> : <span className="text-xs">💳</span>}
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => setShowPagamentoModal(false)} className="text-xs text-stone-400 hover:text-stone-600 transition-colors">Annulla</button>
-            </div>
-          )}
+
 
           {/* Dialogo conferma eliminazione */}
           {showEliminaConfirm && (
@@ -2807,6 +2736,87 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
           />
         );
       })()}
+
+      {/* Overlay: seleziona metodo di pagamento */}
+      {showPagamentoModal && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setShowPagamentoModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-stone-100" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-5 pb-4 space-y-4">
+              <p className="text-sm font-semibold text-stone-800">Seleziona metodo di pagamento</p>
+              <p className="text-xs text-stone-500">Scegli come viene pagata questa fiche.</p>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { val: 'cc_bancomat' as TipoPagamento, label: 'CC / Bancomat', dot: null },
+                  { val: 'contanti_verde' as TipoPagamento, label: 'Contanti', dot: '#22c55e' },
+                  { val: 'contanti_nero' as TipoPagamento, label: 'Contanti (non reg.)', dot: '#1c1917' },
+                ] as { val: TipoPagamento; label: string; dot: string | null }[]).map(opt => (
+                  <button key={opt.val!} type="button"
+                    onClick={() => {
+                      setTipoPagamento(opt.val);
+                      setShowPagamentoModal(false);
+                      if (saldoInsufficient) setShowRicaricaAlert(true);
+                      else handleConvalida(opt.val);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-stone-200 hover:border-amber-400 hover:bg-amber-50 text-sm font-medium text-stone-700 transition-all"
+                  >
+                    {opt.dot
+                      ? <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: opt.dot }} />
+                      : <CreditCard size={14} className="text-blue-500" />}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowPagamentoModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+                  Annulla
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Overlay: saldo carta premium insufficiente */}
+      {showRicaricaAlert && cartaPremium && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setShowRicaricaAlert(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-amber-200" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-5 pb-4 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle size={18} className="text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">Saldo carta insufficiente</p>
+                  <p className="text-xs text-stone-600 mt-1">
+                    La carta <span className="font-mono font-bold text-amber-700">{cartaPremium.codice}</span> ha un saldo di{' '}
+                    <strong>€{cartaPremium.saldo.toFixed(2)}</strong>, non sufficiente a coprire{' '}
+                    <strong>€{totaleDopoSconto.toFixed(2)}</strong>.
+                  </p>
+                  <p className="text-xs text-stone-500 mt-1">
+                    Se scegli "No", verrà usato il saldo residuo (€{cartaPremium.saldo.toFixed(2)}) e il resto (€{(totaleDopoSconto - cartaPremium.saldo).toFixed(2)}) sarà addebitato al cliente.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button"
+                  onClick={() => { setShowRicaricaAlert(false); handleConvalida(); }}
+                  className="flex-1 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+                  No, usa saldo disponibile
+                </button>
+                <button type="button"
+                  onClick={() => { setShowRicaricaAlert(false); setShowPasswordGate(true); }}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5">
+                  <Plus size={13} />
+                  Sì, ricarica ora
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
