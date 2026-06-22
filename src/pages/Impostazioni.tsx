@@ -1094,19 +1094,20 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     if (!user) return;
+    const uid = user.id;
     Promise.all([
-      getImpostazione('prenotazioni_online_attive'),
-      getImpostazione('portale_nascosto'),
-      getImpostazione('mostra_carta_premium_sbiadita'),
-      getImpostazione('msg_conferma_appuntamento_online'),
-      getImpostazione('msg_rifiuto_appuntamento_online'),
-      getImpostazione('qr_prenotazioni_logo_url'),
-      getImpostazione('indirizzo_salone'),
-      getImpostazione('suono_richiesta_appuntamento'),
-      getImpostazione('volume_notifiche'),
-      getImpostazione('nome_pwa_prenotazione'),
-      getImpostazione('hair_quiz_attivo'),
-      getImpostazione('fasce_orarie_online_json'),
+      getImpostazione('prenotazioni_online_attive', uid),
+      getImpostazione('portale_nascosto', uid),
+      getImpostazione('mostra_carta_premium_sbiadita', uid),
+      getImpostazione('msg_conferma_appuntamento_online', uid),
+      getImpostazione('msg_rifiuto_appuntamento_online', uid),
+      getImpostazione('qr_prenotazioni_logo_url', uid),
+      getImpostazione('indirizzo_salone', uid),
+      getImpostazione('suono_richiesta_appuntamento', uid),
+      getImpostazione('volume_notifiche', uid),
+      getImpostazione('nome_pwa_prenotazione', uid),
+      getImpostazione('hair_quiz_attivo', uid),
+      getImpostazione('fasce_orarie_online_json', uid),
     ]).then(([a, pn, sbiadita, mc, mr, logo, ind, suono, vol, nomePwaVal, hq, fasceJson]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (pn !== null) setPortaleNascosto(pn === 'true');
@@ -1125,6 +1126,9 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
           if (Array.isArray(arr) && arr.length > 0) setFasceOrarie(arr);
         } catch { /* usa default */ }
       }
+      fasceLoadedRef.current = true;
+      setLoading(false);
+    }).catch(() => {
       fasceLoadedRef.current = true;
       setLoading(false);
     });
