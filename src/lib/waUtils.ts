@@ -52,6 +52,12 @@ function openNativeOrWeb(nativeUrl: string, _webUrl: string): void {
   window.location.href = nativeUrl;
 }
 
+export function getWhatsAppWebUrl(telefono: string, testo: string): string {
+  const tel = normalizeWaPhone(telefono);
+  const txt = encodeURIComponent(testo);
+  return `https://web.whatsapp.com/send?phone=${tel}&text=${txt}`;
+}
+
 export function apriWhatsApp(telefono: string, testo: string): void {
   const tel = normalizeWaPhone(telefono);
   const txt = encodeURIComponent(testo);
@@ -59,6 +65,20 @@ export function apriWhatsApp(telefono: string, testo: string): void {
     `whatsapp://send?phone=${tel}&text=${txt}`,
     `https://wa.me/${tel}?text=${txt}`,
   );
+}
+
+export function apriWhatsAppWeb(telefono: string, testo: string): void {
+  window.open(getWhatsAppWebUrl(telefono, testo), '_blank', 'noopener,noreferrer');
+}
+
+export type WaMode = 'desktop' | 'web';
+
+export function apriWhatsAppMode(telefono: string, testo: string, mode: WaMode = 'desktop'): void {
+  if (mode === 'web') {
+    apriWhatsAppWeb(telefono, testo);
+  } else {
+    apriWhatsApp(telefono, testo);
+  }
 }
 
 export function apriWhatsAppSenzaNumero(testo: string): void {

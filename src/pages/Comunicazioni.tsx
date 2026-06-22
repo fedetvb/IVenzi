@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { Search, Send, CheckSquare, Square, MessageSquare, Users, Phone, List, X, BookOpen, ChevronDown, Save, Check } from 'lucide-react';
-import { dbSelect } from '../lib/localDb';
+import { Search, Send, CheckSquare, Square, MessageSquare, Users, Phone, List, X, BookOpen, ChevronDown, Save, Check, MapPin } from 'lucide-react';
+import { dbSelect, getImpostazione, setImpostazione } from '../lib/localDb';
 import { supabase } from '../lib/supabase';
-import { apriWhatsApp } from '../lib/waUtils';
+import { apriWhatsApp, apriWhatsAppWeb, type WaMode } from '../lib/waUtils';
 
 interface Cliente {
   id: string;
@@ -39,6 +39,8 @@ export default function Comunicazioni() {
   const [lastAppliedTemplateId, setLastAppliedTemplateId] = useState<string | null>(null);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [savedTemplate, setSavedTemplate] = useState(false);
+  const [waMode, setWaMode] = useState<WaMode>('desktop');
+  const [includiPosizione, setIncludiPosizione] = useState(false);
   const templatesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,6 +64,18 @@ export default function Comunicazioni() {
       setTemplates((t || []) as TemplateComunicazione[]);
       setLoading(false);
     });
+  }, []);
+
+  useEffect(() => {
+    async function loadWaSettings() {
+      const [mod, pos] = await Promise.all([
+        getImpostazione('wa_modalita'),
+        getImpostazione('wa_pos_comunicazioni'),
+      ]);
+      setWaMode(mod === 'web' ? 'web' : 'desktop');
+      if (pos !== null) setIncludiPosizione(pos === 'true');
+    }
+    loadWaSettings();
   }, []);
 
   useEffect(() => {
@@ -107,7 +121,8 @@ export default function Comunicazioni() {
 
   function sendAll() {
     for (const c of targets) {
-      apriWhatsApp(c.telefono, messaggio);
+      if (waMode === 'web') apriWhatsAppWeb(c.telefono, messaggio);
+      else apriWhatsApp(c.telefono, messaggio);
     }
   }
 
@@ -118,7 +133,8 @@ export default function Comunicazioni() {
 
   function openCurrentAndAdvance() {
     const c = targets[queueIndex];
-    apriWhatsApp(c.telefono, messaggio);
+    if (waMode === 'web') apriWhatsAppWeb(c.telefono, messaggio);
+    else apriWhatsApp(c.telefono, messaggio);
     if (queueIndex < targets.length - 1) {
       setQueueIndex(prev => prev + 1);
     } else {
@@ -157,7 +173,8 @@ export default function Comunicazioni() {
 
     // più clienti: apre WhatsApp per ognuna con nome personalizzato
     for (const c of selectedClients) {
-      apriWhatsApp(c.telefono, t.testo.replace(/\{nome\}/g, c.nome));
+      if (waMode === 'web') apriWhatsAppWeb(c.telefono, t.testo.replace(/\{nome\}/g, c.nome));
+      else apriWhatsApp(c.telefono, t.testo.replace(/\{nome\}/g, c.nome));
     }
   }
 
@@ -330,6 +347,25 @@ export default function Comunicazioni() {
                 {savingTemplate ? 'Salvataggio...' : savedTemplate ? 'Salvato!' : `Salva come "${templates.find(t => t.id === lastAppliedTemplateId)?.nome ?? 'template'}"`}
               </button>
             )}
+
+            {/* Flag posizione */}
+            <button type="button"
+              onClick={async () => {
+                const next = !includiPosizione;
+                setIncludiPosizione(next);
+                await setImpostazione('wa_pos_comunicazioni', String(next));
+              }}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl border transition-colors text-left ${
+                includiPosizione
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                  : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300'
+              }`}>
+              <MapPin size={14} className={includiPosizione ? 'text-emerald-500' : 'text-stone-400'} />
+              <span className="text-xs font-medium flex-1">Condividi posizione</span>
+              <div className={`w-8 h-4 rounded-full transition-colors flex items-center ${includiPosizione ? 'bg-emerald-500' : 'bg-stone-200'}`}>
+                <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform mx-0.5 ${includiPosizione ? 'translate-x-4' : 'translate-x-0'}`} />
+              </div>
+            </button>
 
             {/* Opzione 1: apri tutto in una volta */}
             <div className="space-y-2">
