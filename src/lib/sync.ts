@@ -45,7 +45,6 @@ const SYNC_TABLES: string[] = [
   'prodotti_rivendita_catalogo',
   'rivendita_prodotti',
   'trattamenti_eseguiti',
-  'impostazioni',
   'impostazioni_tasse',
   'template_messaggi_carta_sconto',
   'template_messaggi_comunicazioni',
@@ -62,7 +61,6 @@ const SYNC_TABLES: string[] = [
 
 // Colonna di conflitto per tabelle con UNIQUE constraint diversa da `id`
 const TABLE_CONFLICT_COLS: Record<string, string> = {
-  impostazioni: 'chiave,user_id',
   carte_premium: 'codice',
   carte_sconto: 'codice',
   fiches: 'id',
