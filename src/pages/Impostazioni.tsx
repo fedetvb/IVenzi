@@ -1161,9 +1161,11 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
 
   // Auto-save fasce orarie con debounce 800ms (sincronizza su tutti i dispositivi via realtime)
   useEffect(() => {
-    if (!user?.id || !fasceLoadedRef.current) return;
+    const uid = user?.id;
+    if (!uid || !fasceLoadedRef.current) return;
+    const snapshot = JSON.stringify(fasceOrarie);
     const t = setTimeout(async () => {
-      await setImpostazione('fasce_orarie_online_json', JSON.stringify(fasceOrarie), user.id);
+      await setImpostazione('fasce_orarie_online_json', snapshot, uid);
       setFasceSaved(true);
       setTimeout(() => setFasceSaved(false), 1800);
     }, 800);
@@ -1242,19 +1244,21 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   }
 
   async function handleSave() {
+    const uid = user?.id;
+    if (!uid) return;
     setSaving(true);
     await Promise.all([
-      setImpostazione('prenotazioni_online_attive', attiva ? 'true' : 'false', user?.id),
-      setImpostazione('portale_nascosto', portaleNascosto ? 'true' : 'false', user?.id),
-      setImpostazione('mostra_carta_premium_sbiadita', mostraCartaPremiumSbiadita ? 'true' : 'false', user?.id),
-      setImpostazione('msg_conferma_appuntamento_online', msgConferma, user?.id),
-      setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, user?.id),
-      setImpostazione('indirizzo_salone', indirizzo, user?.id),
-      setImpostazione('suono_richiesta_appuntamento', suonoRichiesta, user?.id),
-      setImpostazione('volume_notifiche', String(volumeNotifiche), user?.id),
-      setImpostazione('nome_pwa_prenotazione', nomePwa.trim(), user?.id),
-      setImpostazione('hair_quiz_attivo', hairQuizAttivoLocal ? 'true' : 'false', user?.id),
-      setImpostazione('fasce_orarie_online_json', JSON.stringify(fasceOrarie), user?.id),
+      setImpostazione('prenotazioni_online_attive', attiva ? 'true' : 'false', uid),
+      setImpostazione('portale_nascosto', portaleNascosto ? 'true' : 'false', uid),
+      setImpostazione('mostra_carta_premium_sbiadita', mostraCartaPremiumSbiadita ? 'true' : 'false', uid),
+      setImpostazione('msg_conferma_appuntamento_online', msgConferma, uid),
+      setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, uid),
+      setImpostazione('indirizzo_salone', indirizzo, uid),
+      setImpostazione('suono_richiesta_appuntamento', suonoRichiesta, uid),
+      setImpostazione('volume_notifiche', String(volumeNotifiche), uid),
+      setImpostazione('nome_pwa_prenotazione', nomePwa.trim(), uid),
+      setImpostazione('hair_quiz_attivo', hairQuizAttivoLocal ? 'true' : 'false', uid),
+      setImpostazione('fasce_orarie_online_json', JSON.stringify(fasceOrarie), uid),
     ]);
     setSaving(false);
     setSaved(true);

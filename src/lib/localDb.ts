@@ -746,12 +746,22 @@ export async function setImpostazione(chiave: string, valore: string, userId: st
     await dbUpsert({ table: 'impostazioni', data: { chiave, valore, user_id: userId }, onConflict: 'chiave,user_id', userId });
     return;
   }
-  await supabase
+  const { data: updated, error: updateError } = await supabase
     .from('impostazioni')
-    .upsert(
-      { chiave, valore, user_id: userId, updated_at: new Date().toISOString() },
-      { onConflict: 'chiave,user_id' },
-    );
+    .update({ valore, updated_at: new Date().toISOString() })
+    .eq('chiave', chiave)
+    .eq('user_id', userId)
+    .select('id');
+  if (updateError) {
+    console.error('[setImpostazione] update error:', updateError.message);
+    return;
+  }
+  if (!updated || updated.length === 0) {
+    const { error: insertError } = await supabase
+      .from('impostazioni')
+      .insert({ chiave, valore, user_id: userId });
+    if (insertError) console.error('[setImpostazione] insert error:', insertError.message);
+  }
 }
 
 // ─── BACKUP ───────────────────────────────────────────────────────────────────
