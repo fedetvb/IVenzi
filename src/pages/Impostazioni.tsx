@@ -124,7 +124,7 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
     show('Orari Salone', 'Giorni di apertura e orari di lavoro') ||
     show('Password', 'Gestisci le password di accesso') ||
     show('Prenotazioni Online', 'Attiva disattiva pagina pubblica prenotazione') ||
-    show('QR Code Registrazione Clienti', 'Stampa il QR code nuove clienti') ||
+    show('QR del Gestionale', 'QR Code Registrazione Clienti Stampa il QR code nuove clienti') ||
     show('Tema e Personalizzazione', 'Colori sidebar icona logo') ||
     show('Scarica File e Documenti', 'Esporta e scarica file PDF CSV backup dal gestionale') ||
     show('Icone e Immagini', 'Logo salone icona PWA portale clienti gestionale') ||
@@ -416,17 +416,17 @@ export default function Impostazioni({ onTestReminder, onTestInForse, onTestProm
 
         {/* Promemoria Convalida Fiches — SPOSTATO in Avvisi e Banner */}
 
-        {/* Cartelletta QR del Gestionale */}
+        {/* QR del Gestionale */}
         <button
           onClick={() => setSub('qr_gestionale')}
-          style={show('Cartelletta QR del Gestionale', 'QR Registrazione Clienti e QR Google Recensioni da stampare') ? {} : {display:'none'}}
+          style={show('QR del Gestionale', 'QR Registrazione Clienti e QR Google Recensioni da stampare') ? {} : {display:'none'}}
           className="w-full flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-amber-100 flex items-center justify-center flex-shrink-0 transition-colors">
             <QrCode size={18} className="text-stone-500 group-hover:text-amber-600 transition-colors" />
           </div>
           <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-stone-800">Cartelletta QR del Gestionale</p>
+            <p className="text-sm font-semibold text-stone-800">QR del Gestionale</p>
             <p className="text-xs text-stone-400 mt-0.5">QR Registrazione Clienti · QR Google Recensioni</p>
           </div>
           <ChevronRight size={16} className="text-stone-400 group-hover:text-stone-600 transition-colors" />
@@ -1713,9 +1713,8 @@ function PaginaMessaggieComunicazioni({
         </div>
       </div>
 
-      {/* WhatsApp */}
+      {/* Lista piatta card — stile QR */}
       <div className="space-y-3">
-        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">WhatsApp</p>
 
         {/* Toggle WA on/off */}
         <div className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
@@ -1736,7 +1735,7 @@ function PaginaMessaggieComunicazioni({
 
         {/* Desktop/Web selector */}
         <div className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
-          <div className="w-12 h-12 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-center flex-shrink-0">
+          <div className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center flex-shrink-0">
             <Monitor size={22} className="text-stone-400" />
           </div>
           <div className="flex-1 min-w-0">
@@ -1744,26 +1743,17 @@ function PaginaMessaggieComunicazioni({
             <p className="text-xs text-stone-400 mt-0.5">{waModalita === 'web' ? 'WhatsApp Web (browser) — abilita "Invia a tutti"' : 'WhatsApp Desktop (app nativa)'}</p>
           </div>
           <div className="flex items-center gap-1 bg-stone-100 rounded-lg p-0.5 flex-shrink-0">
-            <button
-              onClick={() => toggleWaModalita('desktop')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${waModalita === 'desktop' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}
-            >Desktop</button>
-            <button
-              onClick={() => toggleWaModalita('web')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${waModalita === 'web' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}
-            >Web</button>
+            <button onClick={() => toggleWaModalita('desktop')} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${waModalita === 'desktop' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}>Desktop</button>
+            <button onClick={() => toggleWaModalita('web')} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${waModalita === 'web' ? 'bg-white shadow text-stone-800' : 'text-stone-400 hover:text-stone-600'}`}>Web</button>
           </div>
         </div>
-      </div>
 
-      {/* Appuntamenti */}
-      <div className="space-y-3">
-        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Appuntamenti</p>
+        {/* Messaggio Avviso Appuntamento */}
         <button
           onClick={() => setSub('messaggio_avviso')}
           className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left group shadow-sm"
         >
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
             <MessageCircle size={22} className="text-emerald-600" />
           </div>
           <div className="flex-1 min-w-0">
@@ -1772,16 +1762,13 @@ function PaginaMessaggieComunicazioni({
           </div>
           <ChevronRight size={18} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
         </button>
-      </div>
 
-      {/* Clienti */}
-      <div className="space-y-3">
-        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Clienti</p>
+        {/* Benvenuto Nuove Clienti */}
         <button
           onClick={() => setSub('benvenuto')}
           className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-rose-50 hover:border-rose-200 transition-all text-left group shadow-sm"
         >
-          <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
             <Sparkles size={22} className="text-rose-500" />
           </div>
           <div className="flex-1 min-w-0">
@@ -1790,16 +1777,13 @@ function PaginaMessaggieComunicazioni({
           </div>
           <ChevronRight size={18} className="text-stone-300 group-hover:text-rose-400 transition-colors flex-shrink-0" />
         </button>
-      </div>
 
-      {/* Carte */}
-      <div className="space-y-3">
-        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Carte</p>
+        {/* Template Messaggi Carta Sconto */}
         <button
           onClick={() => setSub('template_carta')}
           className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-rose-50 hover:border-rose-200 transition-all text-left group shadow-sm"
         >
-          <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
             <Tag size={22} className="text-rose-500" />
           </div>
           <div className="flex-1 min-w-0">
@@ -1808,29 +1792,13 @@ function PaginaMessaggieComunicazioni({
           </div>
           <ChevronRight size={18} className="text-stone-300 group-hover:text-rose-400 transition-colors flex-shrink-0" />
         </button>
-        <button
-          onClick={() => setSub('wa_carte')}
-          className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left group shadow-sm"
-        >
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-            <Gift size={22} className="text-emerald-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-stone-800">Messaggi WA Carte da Donare</p>
-            <p className="text-xs text-stone-400 mt-0.5">Testi WhatsApp per Gift Pass e Carta Sconto monouso, con toggle mappa</p>
-          </div>
-          <ChevronRight size={18} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
-        </button>
-      </div>
 
-      {/* Comunicazioni */}
-      <div className="space-y-3">
-        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Comunicazioni</p>
+        {/* Template Messaggi Comunicazioni */}
         <button
           onClick={() => setSub('template_comunicazioni')}
           className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-sky-50 hover:border-sky-200 transition-all text-left group shadow-sm"
         >
-          <div className="w-12 h-12 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
             <Send size={22} className="text-sky-500" />
           </div>
           <div className="flex-1 min-w-0">
@@ -1839,12 +1807,28 @@ function PaginaMessaggieComunicazioni({
           </div>
           <ChevronRight size={18} className="text-stone-300 group-hover:text-sky-500 transition-colors flex-shrink-0" />
         </button>
+
+        {/* Messaggi WA Carte da Donare */}
+        <button
+          onClick={() => setSub('wa_carte')}
+          className="w-full flex items-center gap-4 bg-white border border-stone-200 rounded-2xl p-5 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left group shadow-sm"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+            <Gift size={22} className="text-emerald-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-stone-800">Messaggi WA Carte da Donare</p>
+            <p className="text-xs text-stone-400 mt-0.5">Testi WhatsApp per Gift Pass e Carta Sconto monouso, con toggle mappa</p>
+          </div>
+          <ChevronRight size={18} className="text-stone-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+        </button>
+
       </div>
     </div>
   );
 }
 
-// ─── Cartelletta QR del Gestionale ───────────────────────────────────────────
+// ─── QR del Gestionale ───────────────────────────────────────────────────────
 
 function PaginaQrGestionale({ onBack, setSub }: { onBack: () => void; setSub: (s: SubPage) => void }) {
   return (
@@ -1854,7 +1838,7 @@ function PaginaQrGestionale({ onBack, setSub }: { onBack: () => void; setSub: (s
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h2 className="text-xl font-bold text-stone-800">Cartelletta QR del Gestionale</h2>
+          <h2 className="text-xl font-bold text-stone-800">QR del Gestionale</h2>
           <p className="text-sm text-stone-400 mt-0.5">Stampa e mostra i QR code alle clienti</p>
         </div>
       </div>
