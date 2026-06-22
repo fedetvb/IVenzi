@@ -377,7 +377,7 @@ function FichesTab() {
     const unsub = window.electronAPI.onTriggerAutoFiches(({ dates, latestDate }: { dates: string[]; latestDate: string }) => {
       setSelectedDate(latestDate);
       setAutoExportDate(latestDate);
-      if (window.electronAPI?.markFichesDone) window.electronAPI.markFichesDone(latestDate);
+      // markFichesDone is called AFTER the PDF is actually saved (inside PrintModal)
     });
     return unsub;
   }, []);
@@ -676,6 +676,9 @@ function FichesTab() {
           gruppi={gruppi.filter(g => g.ficheConvalidata)}
           onClose={() => { setShowPrint(false); setAutoExportDate(null); }}
           autoExportDate={autoExportDate}
+          onAutoExportDone={(dateStr) => {
+            if (window.electronAPI?.markFichesDone) window.electronAPI.markFichesDone(dateStr);
+          }}
         />,
         document.body
       )}
@@ -3327,11 +3330,12 @@ interface PrintModalProps {
   gruppi: ClienteGruppo[];
   onClose: () => void;
   autoExportDate?: string | null;
+  onAutoExportDone?: (dateStr: string) => void;
 }
 
 type PrintFilter = 'tutte' | 'normali' | 'nero';
 
-function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
+function PrintModal({ gruppi, onClose, autoExportDate, onAutoExportDone }: PrintModalProps) {
   const printPagesRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<LayoutOption>(() => {
     const saved = localStorage.getItem('fiches_print_layout');
@@ -3425,6 +3429,7 @@ function PrintModal({ gruppi, onClose, autoExportDate }: PrintModalProps) {
         }
       } finally {
         setGeneratingPdf(false);
+        if (autoExportDate) onAutoExportDone?.(autoExportDate);
         onClose();
       }
     }, 800);
