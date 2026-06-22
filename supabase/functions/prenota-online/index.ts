@@ -47,6 +47,39 @@ function italianDayUtcBounds(data: string): { dayStart: string; dayEnd: string }
   };
 }
 
+interface FasciaOraria { da: string; a: string; }
+
+function parseFasceOrarie(json: string | null | undefined): FasciaOraria[] {
+  if (!json) return [{ da: "09:00", a: "18:00" }];
+  try {
+    const arr = JSON.parse(json);
+    if (Array.isArray(arr) && arr.length > 0) return arr as FasciaOraria[];
+  } catch { /* ignore */ }
+  return [{ da: "09:00", a: "18:00" }];
+}
+
+function buildSlotsFromFasce(
+  fasce: FasciaOraria[],
+  durata: number,
+  isBusy: (m: number) => boolean,
+): string[] {
+  const slots: string[] = [];
+  for (const fascia of fasce) {
+    const [dh, dm] = fascia.da.split(":").map(Number);
+    const [ah, am] = fascia.a.split(":").map(Number);
+    const fStart = dh * 60 + dm;
+    const fEnd = ah * 60 + am;
+    for (let m = fStart; m + durata <= fEnd; m += 15) {
+      if (!isBusy(m)) {
+        const hh = String(Math.floor(m / 60)).padStart(2, "0");
+        const mm = String(m % 60).padStart(2, "0");
+        slots.push(`${hh}:${mm}`);
+      }
+    }
+  }
+  return slots;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
@@ -159,7 +192,7 @@ Deno.serve(async (req: Request) => {
 
     const { dayStart, dayEnd } = italianDayUtcBounds(data);
 
-    const [appRes, assenzeRes, richiesteRes] = await Promise.all([
+    const [appRes, assenzeRes, richiesteRes, fasceRes] = await Promise.all([
       sb.from("appuntamenti")
         .select("data_ora,durata_minuti")
         .eq("parrucchiere_id", parrId)
@@ -177,6 +210,11 @@ Deno.serve(async (req: Request) => {
         .eq("stato", "in_attesa")
         .gte("data_ora", dayStart)
         .lte("data_ora", dayEnd),
+      sb.from("impostazioni")
+        .select("valore")
+        .eq("user_id", userId)
+        .eq("chiave", "fasce_orarie_online_json")
+        .maybeSingle(),
     ]);
 
     // Collect busy intervals in Italian local minutes from midnight
@@ -212,16 +250,11 @@ Deno.serve(async (req: Request) => {
     const fullDayAbsent = (assenzeRes.data ?? []).some((a) => !a.ora_inizio);
     if (fullDayAbsent) return json({ slot_disponibili: [] });
 
-    // Build available 15-min slots 9:00–18:00 Italian local time
-    const slots: string[] = [];
-    for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
-      const overlaps = busy.some((b) => m < b.end && m + durata > b.start);
-      if (!overlaps) {
-        const hh = String(Math.floor(m / 60)).padStart(2, "0");
-        const mm = String(m % 60).padStart(2, "0");
-        slots.push(`${hh}:${mm}`);
-      }
-    }
+    // Build available 15-min slots respecting fasce orarie
+    const fasce = parseFasceOrarie((fasceRes as any)?.data?.valore ?? null);
+    const slots = buildSlotsFromFasce(fasce, durata, (m) =>
+      busy.some((b) => m < b.end && m + durata > b.start)
+    );
 
     return json({ slot_disponibili: slots });
     } catch (err: unknown) {
@@ -332,7 +365,7 @@ Deno.serve(async (req: Request) => {
 
       const { dayStart, dayEnd } = italianDayUtcBounds(data);
 
-      const [parrRes, appRes, assenzeRes, richiesteRes] = await Promise.all([
+      const [parrRes, appRes, assenzeRes, richiesteRes, fasceRes2] = await Promise.all([
         sb.from("parrucchieri").select("id,nome,colore").eq("user_id", userId).eq("attivo", true).order("nome"),
         sb.from("appuntamenti")
           .select("parrucchiere_id,data_ora,durata_minuti")
@@ -350,6 +383,11 @@ Deno.serve(async (req: Request) => {
           .eq("stato", "in_attesa")
           .gte("data_ora", dayStart)
           .lte("data_ora", dayEnd),
+        sb.from("impostazioni")
+          .select("valore")
+          .eq("user_id", userId)
+          .eq("chiave", "fasce_orarie_online_json")
+          .maybeSingle(),
       ]);
 
       const allParr: { id: string; nome: string; colore: string }[] = parrRes.data ?? [];
@@ -411,23 +449,29 @@ Deno.serve(async (req: Request) => {
 
       const availableParr = allParr.filter(p => !fullDayAbsent.has(p.id));
 
-      // For each 15-min slot, find which parrucchieri are free
+      // For each 15-min slot (within fasce orarie), find which parrucchieri are free
       const parrucchieriPerSlot: Record<string, string[]> = {};
       const slotDisponibili: string[] = [];
+      const fasce2 = parseFasceOrarie((fasceRes2 as any)?.data?.valore ?? null);
 
-      for (let m = 9 * 60; m + durata <= 18 * 60; m += 15) {
-        const freeParr = availableParr.filter(p => {
-          // Check partial absence
-          if (partialAbsences[p.id] !== undefined && m >= partialAbsences[p.id]) return false;
-          const busy = busyByParr[p.id] ?? [];
-          return !busy.some((b) => m < b.end && m + durata > b.start);
-        });
-        if (freeParr.length > 0) {
-          const hh = String(Math.floor(m / 60)).padStart(2, "0");
-          const mm2 = String(m % 60).padStart(2, "0");
-          const slotKey = `${hh}:${mm2}`;
-          slotDisponibili.push(slotKey);
-          parrucchieriPerSlot[slotKey] = freeParr.map(p => p.id);
+      for (const fascia of fasce2) {
+        const [dh, dm] = fascia.da.split(":").map(Number);
+        const [ah, am] = fascia.a.split(":").map(Number);
+        const fStart = dh * 60 + dm;
+        const fEnd = ah * 60 + am;
+        for (let m = fStart; m + durata <= fEnd; m += 15) {
+          const freeParr = availableParr.filter(p => {
+            if (partialAbsences[p.id] !== undefined && m >= partialAbsences[p.id]) return false;
+            const busy = busyByParr[p.id] ?? [];
+            return !busy.some((b) => m < b.end && m + durata > b.start);
+          });
+          if (freeParr.length > 0) {
+            const hh = String(Math.floor(m / 60)).padStart(2, "0");
+            const mm2 = String(m % 60).padStart(2, "0");
+            const slotKey = `${hh}:${mm2}`;
+            slotDisponibili.push(slotKey);
+            parrucchieriPerSlot[slotKey] = freeParr.map(p => p.id);
+          }
         }
       }
 
