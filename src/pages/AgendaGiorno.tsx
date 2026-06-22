@@ -1256,7 +1256,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                           <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.07)' }} />
                         )}
                         {mezzeOreGiallo && time.endsWith(':30') && (
-                          <div className="absolute inset-0" style={{ backgroundColor: 'rgba(253,224,71,0.18)' }} />
+                          <div className="absolute inset-0" style={{ backgroundColor: 'rgba(253,224,71,0.09)' }} />
                         )}
                         <div className="absolute left-0 right-0" style={{
                           top: 0,

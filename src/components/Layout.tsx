@@ -31,6 +31,7 @@ import {
   Sparkles,
   Wifi,
   MessageCircle,
+  Clock,
 } from 'lucide-react';
 import { CombIcon, RazorIcon, NailsIcon, WomanFaceIcon } from '../lib/salonIcons';
 import { useAuth } from '../lib/AuthContext';
@@ -175,6 +176,16 @@ function daysSinceLastShown(): number {
   return (Date.now() - new Date(last).getTime()) / (1000 * 60 * 60 * 24);
 }
 
+function useItalianTime() {
+  const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const [time, setTime] = useState(() => fmt.format(new Date()));
+  useEffect(() => {
+    const id = setInterval(() => setTime(fmt.format(new Date())), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return time;
+}
+
 export default function Layout({ currentPage, onNavigate, children, user, messaggiBadge = 0, onMessaggioBadgeClick }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -184,6 +195,7 @@ export default function Layout({ currentPage, onNavigate, children, user, messag
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const oraItaliana = useItalianTime();
   const mainRef = useRef<HTMLElement>(null);
   const [pingBanner, setPingBanner] = useState<PingLogRow[] | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -469,6 +481,12 @@ export default function Layout({ currentPage, onNavigate, children, user, messag
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Orologio */}
+            <div className="hidden sm:flex items-center gap-1.5 text-stone-500">
+              <Clock size={13} />
+              <span className="text-xs font-semibold tabular-nums">{oraItaliana}</span>
+            </div>
+
             {/* Badge messaggi clienti non letti */}
             {messaggiBadge > 0 && (
               <button
