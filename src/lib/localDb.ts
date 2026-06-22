@@ -732,12 +732,13 @@ export async function getImpostazione(chiave: string, userId?: string): Promise<
     const res = await dbSelect<{ valore: string }>({ table: 'impostazioni', columns: 'valore', filters });
     return res.data?.[0]?.valore ?? null;
   }
-  const { data } = await supabase
+  const uid = userId ?? (await supabase.auth.getUser()).data.user?.id;
+  let query = supabase
     .from('impostazioni')
     .select('valore')
-    .eq('chiave', chiave)
-    .order('updated_at', { ascending: false })
-    .limit(1);
+    .eq('chiave', chiave);
+  if (uid) query = query.eq('user_id', uid);
+  const { data } = await query.order('updated_at', { ascending: false }).limit(1);
   return (data as { valore: string }[] | null)?.[0]?.valore ?? null;
 }
 
