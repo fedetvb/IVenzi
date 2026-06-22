@@ -1237,6 +1237,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
   const [localPage, setLocalPage] = useState<null | 'annuncio'>(null);
   const [attiva, setAttiva] = useState(true);
   const [portaleNascosto, setPortaleNascosto] = useState(false);
+  const [mostraCartaPremiumSbiadita, setMostraCartaPremiumSbiadita] = useState(true);
   const [hairQuizAttivoLocal, setHairQuizAttivoLocal] = useState(false);
   const [nomePwa, setNomePwa] = useState('');
   const [msgConferma, setMsgConferma] = useState('Ciao {nome}! La tua prenotazione per {servizio} il {data} alle {ora} è confermata. Ti aspettiamo!');
@@ -1266,6 +1267,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     Promise.all([
       getImpostazione('prenotazioni_online_attive'),
       getImpostazione('portale_nascosto'),
+      getImpostazione('mostra_carta_premium_sbiadita'),
       getImpostazione('msg_conferma_appuntamento_online'),
       getImpostazione('msg_rifiuto_appuntamento_online'),
       getImpostazione('qr_prenotazioni_logo_url'),
@@ -1275,9 +1277,10 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
       getImpostazione('nome_pwa_prenotazione'),
       getImpostazione('hair_quiz_attivo'),
       getImpostazione('fasce_orarie_online_json'),
-    ]).then(([a, pn, mc, mr, logo, ind, suono, vol, nomePwaVal, hq, fasceJson]) => {
+    ]).then(([a, pn, sbiadita, mc, mr, logo, ind, suono, vol, nomePwaVal, hq, fasceJson]) => {
       if (a !== null) setAttiva(a !== 'false');
       if (pn !== null) setPortaleNascosto(pn === 'true');
+      if (sbiadita !== null) setMostraCartaPremiumSbiadita(sbiadita !== 'false');
       if (hq !== null) setHairQuizAttivoLocal(hq === 'true');
       if (mc) setMsgConferma(mc);
       if (mr) setMsgRifiuto(mr);
@@ -1310,6 +1313,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
         if (!row) return;
         if (row.chiave === 'prenotazioni_online_attive') setAttiva(row.valore !== 'false');
         if (row.chiave === 'portale_nascosto') setPortaleNascosto(row.valore === 'true');
+        if (row.chiave === 'mostra_carta_premium_sbiadita') setMostraCartaPremiumSbiadita(row.valore !== 'false');
         if (row.chiave === 'hair_quiz_attivo') setHairQuizAttivoLocal(row.valore === 'true');
         if (row.chiave === 'fasce_orarie_online_json') {
           try {
@@ -1398,6 +1402,7 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
     await Promise.all([
       setImpostazione('prenotazioni_online_attive', attiva ? 'true' : 'false', user?.id),
       setImpostazione('portale_nascosto', portaleNascosto ? 'true' : 'false', user?.id),
+      setImpostazione('mostra_carta_premium_sbiadita', mostraCartaPremiumSbiadita ? 'true' : 'false', user?.id),
       setImpostazione('msg_conferma_appuntamento_online', msgConferma, user?.id),
       setImpostazione('msg_rifiuto_appuntamento_online', msgRifiuto, user?.id),
       setImpostazione('indirizzo_salone', indirizzo, user?.id),
@@ -1483,6 +1488,24 @@ function PaginaPrenotazioniOnline({ onBack }: { onBack: () => void }) {
             className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${attiva ? 'bg-emerald-500' : 'bg-stone-200'}`}
           >
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${attiva ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+
+        {/* Toggle mostra carta premium sbiadita */}
+        <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+          <div>
+            <p className="font-semibold text-stone-800 text-sm">Mostra anteprima Carta Premium</p>
+            <p className="text-xs text-stone-400 mt-0.5">
+              {mostraCartaPremiumSbiadita
+                ? 'Visibile nella sezione "Le mie carte" (sbiadita) per chi non ce l\'ha'
+                : 'Nascosta — solo chi ha già la carta la vede'}
+            </p>
+          </div>
+          <button
+            onClick={() => setMostraCartaPremiumSbiadita(v => !v)}
+            className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${mostraCartaPremiumSbiadita ? 'bg-emerald-500' : 'bg-stone-200'}`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${mostraCartaPremiumSbiadita ? 'translate-x-6' : 'translate-x-0.5'}`} />
           </button>
         </div>
 

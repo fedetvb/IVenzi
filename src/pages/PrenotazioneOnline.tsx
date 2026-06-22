@@ -158,6 +158,7 @@ interface SalonInfo {
   prenotazioniAttive: boolean;
   portaleNascosto: boolean;
   hairQuizAttivo: boolean;
+  mostraCartaPremiumSbiadita: boolean;
   nomeSalone: string;
   logoUrl: string | null;
   parrucchieri: Parrucchiere[];
@@ -925,7 +926,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           'azienda_telefono','azienda_email','azienda_pec','azienda_indirizzo','azienda_google_maps',
           'azienda_sito_prenotazioni','azienda_note','orari_salone_json','orari_salone_nota',
           'ferie_inizio','ferie_fine','benvenuto_attivo','benvenuto_config_json',
-          'icona_pwa_url','fasce_orarie_online_json','link_recensioni_google',
+          'icona_pwa_url','fasce_orarie_online_json','link_recensioni_google','mostra_carta_premium_sbiadita',
           ...SOCIAL_KEYS,
         ];
 
@@ -972,6 +973,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
           prenotazioniAttive,
           portaleNascosto,
           hairQuizAttivo,
+          mostraCartaPremiumSbiadita: imp['mostra_carta_premium_sbiadita'] !== 'false',
           nomeSalone: imp['nome_salone'] ?? '',
           logoUrl: imp['logo_salone_url'] ?? null,
           parrucchieri: (parrRes.data ?? []) as Parrucchiere[],
@@ -3055,6 +3057,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
             onRegala={handleRegalaCartaSconto}
             onSegnaGiftPassDonata={handleSegnaGiftPassDonata}
             nomeSalone={info?.nomeSalone ?? ''}
+            mostraCartaPremiumSbiadita={info?.mostraCartaPremiumSbiadita ?? true}
           />
         )}
 
@@ -4423,7 +4426,7 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
 // ─── Le mie carte ─────────────────────────────────────────────────────────────
 
 function MieCarteStep({
-  data, loading, error, onBack, onRetry, onRegala, onSegnaGiftPassDonata, nomeSalone,
+  data, loading, error, onBack, onRetry, onRegala, onSegnaGiftPassDonata, nomeSalone, mostraCartaPremiumSbiadita,
 }: {
   data: MieCarteData | null;
   loading: boolean;
@@ -4433,6 +4436,7 @@ function MieCarteStep({
   onRegala: (cartaId: string) => Promise<boolean>;
   onSegnaGiftPassDonata: (giftPassId: string) => Promise<boolean>;
   nomeSalone: string;
+  mostraCartaPremiumSbiadita: boolean;
 }) {
   if (loading) return (
     <div className="space-y-4">
@@ -4471,7 +4475,7 @@ function MieCarteStep({
         <p className="text-xl font-bold text-stone-800">Le mie carte</p>
       </div>
 
-      {(data?.cartePremium ?? []).length === 0 && <CartaPremiumPromo />}
+      {(data?.cartePremium ?? []).length === 0 && mostraCartaPremiumSbiadita && <CartaPremiumPromo />}
       {(data?.cartePremium ?? []).map(carta => (
         <CartaPremiumCard key={carta.id} carta={carta} cliente={data?.cliente} />
       ))}
