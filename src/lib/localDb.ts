@@ -751,7 +751,7 @@ export async function setImpostazione(chiave: string, valore: string, userId: st
     .update({ valore, updated_at: new Date().toISOString() })
     .eq('chiave', chiave)
     .eq('user_id', userId)
-    .select('id');
+    .select('chiave');
   if (updateError) {
     console.error('[setImpostazione] update error:', updateError.message);
     return;
