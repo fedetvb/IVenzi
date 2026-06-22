@@ -2596,41 +2596,6 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
             </div>
           )}
 
-          {/* Convalida confirm inline */}
-          {showConvalidaConfirm && (
-            <div className={`border rounded-xl px-4 py-4 space-y-3 ${tipoPagamento === 'contanti_nero' ? 'bg-stone-50 border-stone-300' : 'bg-amber-50 border-amber-200'}`}>
-              <div className="flex items-start gap-3">
-                <AlertCircle size={18} className={`flex-shrink-0 mt-0.5 ${tipoPagamento === 'contanti_nero' ? 'text-stone-500' : 'text-amber-600'}`} />
-                <div>
-                  <p className={`text-sm font-semibold ${tipoPagamento === 'contanti_nero' ? 'text-stone-700' : 'text-amber-800'}`}>Convalidare la fiche?</p>
-                  {tipoPagamento === 'contanti_nero' ? (
-                    <p className="text-xs text-stone-600 mt-0.5">
-                      <strong>Contanti (non registrati):</strong> l'incasso di €{totale.toFixed(2)} <strong>NON</strong> verrà registrato in Finanze.
-                      I prodotti rivendita verranno scalati dal magazzino e i dati inviati alle statistiche normalmente.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      Verrà registrato un incasso di <strong>€{totale.toFixed(2)}</strong> nella sezione Finanze per la data {selectedDate}.
-                      {scontoAmt > 0 && <span className="block mt-0.5">Sconto carta applicato: -€{scontoAmt.toFixed(2)}</span>}
-                      {creditoPremium > 0 && <span className="block mt-0.5">Credito premium scalato: -€{creditoPremium.toFixed(2)}</span>}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowConvalidaConfirm(false)}
-                  className="px-4 py-1.5 text-xs font-medium text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50">
-                  Annulla
-                </button>
-                <button onClick={handleConvalida} disabled={convalidando}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
-                  <ShieldCheck size={12} />
-                  {convalidando ? 'Convalida…' : 'Conferma e registra'}
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Dialogo conferma eliminazione */}
           {showEliminaConfirm && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-4 space-y-3">
@@ -2705,14 +2670,14 @@ function FicheCard({ gruppo, selectedDate, voceExtraCatalogo, serviziCatalogo, t
                         } else if (saldoInsufficient) {
                           setShowRicaricaAlert(true);
                         } else {
-                          setShowConvalidaConfirm(true);
+                          handleConvalida();
                         }
                       }}
-                      disabled={voci.length === 0}
+                      disabled={voci.length === 0 || convalidando}
                       className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40"
                     >
                       <ShieldCheck size={14} />
-                      Convalida fiche
+                      {convalidando ? 'Convalida…' : 'Convalida fiche'}
                     </button>
                   )}
                 </>
