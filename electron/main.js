@@ -196,6 +196,28 @@ function readFichesSched() {
 }
 function writeFichesSched(cfg) { writeFileSync(FICHES_SCHED_PATH, JSON.stringify(cfg, null, 2), 'utf8'); }
 
+// ─── Config report finanze ────────────────────────────────────────────────────
+const FINANZE_SCHED_PATH = join(USER_DATA, 'finanze-report-sched.json');
+const FINANZE_PERIODO_DEFAULT = { enabled: false, folder: '', last: '' };
+
+function readFinanzeSched() {
+  const defaults = {
+    settimana: { ...FINANZE_PERIODO_DEFAULT },
+    mese: { ...FINANZE_PERIODO_DEFAULT },
+    '3mesi': { ...FINANZE_PERIODO_DEFAULT },
+    '6mesi': { ...FINANZE_PERIODO_DEFAULT },
+    anno: { ...FINANZE_PERIODO_DEFAULT },
+  };
+  try {
+    if (existsSync(FINANZE_SCHED_PATH)) {
+      const saved = JSON.parse(readFileSync(FINANZE_SCHED_PATH, 'utf8'));
+      return { ...defaults, ...saved };
+    }
+  } catch { /* ignore */ }
+  return defaults;
+}
+function writeFinanzeSched(cfg) { writeFileSync(FINANZE_SCHED_PATH, JSON.stringify(cfg, null, 2), 'utf8'); }
+
 // ─── Database SQLite ──────────────────────────────────────────────────────────
 let db = null;
 let dbReady = false;
@@ -907,6 +929,7 @@ app.whenReady().then(() => {
   createTray();
   startBackupScheduler();
   startFichesScheduler();
+  startFinanzeScheduler();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
@@ -1060,6 +1083,108 @@ ipcMain.handle('files:save-auto', async (_e, { type, filename, content, encoding
 ipcMain.handle('fiches:get-sched', () => readFichesSched());
 ipcMain.handle('fiches:set-sched', (_e, cfg) => { writeFichesSched(cfg); startFichesScheduler(); return { ok: true }; });
 ipcMain.handle('fiches:mark-done', (_e, { todayStr }) => { fichesSchedPending = false; const cfg = readFichesSched(); cfg.last = todayStr; writeFichesSched(cfg); return { ok: true }; });
+
+// ─── Scheduler report finanze ─────────────────────────────────────────────────
+let finanzeSchedInterval = null;
+let finanzeSchedPending = false;
+
+function startFinanzeScheduler() {
+  if (finanzeSchedInterval) clearInterval(finanzeSchedInterval);
+  checkAndRunFinanze();
+  finanzeSchedInterval = setInterval(checkAndRunFinanze, 60_000);
+}
+
+function checkAndRunFinanze() {
+  if (finanzeSchedPending) return;
+  const cfg = readFinanzeSched();
+  const now = new Date();
+  const todayStr = toLocalDateStr(now);
+  const pad = n => String(n).padStart(2, '0');
+
+  const periods = [];
+
+  // Settimana: ogni lunedi, report della settimana precedente (lun-dom)
+  if (cfg.settimana?.enabled && cfg.settimana.folder) {
+    const isMonday = now.getDay() === 1;
+    if (isMonday && (cfg.settimana.last || '') < todayStr) {
+      const prevMon = new Date(now); prevMon.setDate(now.getDate() - 7);
+      const prevSun = new Date(now); prevSun.setDate(now.getDate() - 1);
+      periods.push({ tipo: 'settimana', startDate: toLocalDateStr(prevMon), endDate: toLocalDateStr(prevSun), folder: cfg.settimana.folder });
+    }
+  }
+
+  // Mese: il 1 di ogni mese, report del mese precedente
+  if (cfg.mese?.enabled && cfg.mese.folder) {
+    const isFirst = now.getDate() === 1;
+    if (isFirst && (cfg.mese.last || '') < todayStr) {
+      const y = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      const m = now.getMonth() === 0 ? 12 : now.getMonth();
+      const lastDay = new Date(y, m, 0).getDate();
+      periods.push({ tipo: 'mese', startDate: `${y}-${pad(m)}-01`, endDate: `${y}-${pad(m)}-${pad(lastDay)}`, folder: cfg.mese.folder });
+    }
+  }
+
+  // 3 mesi: il 1 gen, apr, lug, ott — report del trimestre precedente
+  if (cfg['3mesi']?.enabled && cfg['3mesi'].folder) {
+    const isQStart = now.getDate() === 1 && [0, 3, 6, 9].includes(now.getMonth());
+    if (isQStart && (cfg['3mesi'].last || '') < todayStr) {
+      const em0 = now.getMonth() - 1; // 0-indexed fine trimestre prec
+      const sm0 = em0 - 2;
+      const ey = em0 < 0 ? now.getFullYear() - 1 : now.getFullYear();
+      const sy = sm0 < 0 ? now.getFullYear() - 1 : now.getFullYear();
+      const em = ((em0 % 12) + 12) % 12;
+      const sm = ((sm0 % 12) + 12) % 12;
+      const lastDay = new Date(ey, em + 1, 0).getDate();
+      periods.push({ tipo: '3mesi', startDate: `${sy}-${pad(sm + 1)}-01`, endDate: `${ey}-${pad(em + 1)}-${pad(lastDay)}`, folder: cfg['3mesi'].folder });
+    }
+  }
+
+  // 6 mesi: il 1 gen (→ report lug-dic anno prec) e il 1 lug (→ report gen-giu anno corr)
+  if (cfg['6mesi']?.enabled && cfg['6mesi'].folder) {
+    const isSemiStart = now.getDate() === 1 && [0, 6].includes(now.getMonth());
+    if (isSemiStart && (cfg['6mesi'].last || '') < todayStr) {
+      let sy, sm, ey, em;
+      if (now.getMonth() === 0) { sy = ey = now.getFullYear() - 1; sm = 6; em = 11; }
+      else                      { sy = ey = now.getFullYear();      sm = 0; em = 5;  }
+      const lastDay = new Date(ey, em + 1, 0).getDate();
+      periods.push({ tipo: '6mesi', startDate: `${sy}-${pad(sm + 1)}-01`, endDate: `${ey}-${pad(em + 1)}-${pad(lastDay)}`, folder: cfg['6mesi'].folder });
+    }
+  }
+
+  // Anno: il 1 gennaio — report dell'anno precedente
+  if (cfg.anno?.enabled && cfg.anno.folder) {
+    const isNewYear = now.getDate() === 1 && now.getMonth() === 0;
+    if (isNewYear && (cfg.anno.last || '') < todayStr) {
+      const prevY = now.getFullYear() - 1;
+      periods.push({ tipo: 'anno', startDate: `${prevY}-01-01`, endDate: `${prevY}-12-31`, folder: cfg.anno.folder });
+    }
+  }
+
+  if (periods.length === 0) return;
+  finanzeSchedPending = true;
+  if (mainWindow) mainWindow.webContents.send('trigger-auto-finanze', { periods });
+}
+
+// ─── IPC: scheduler finanze ───────────────────────────────────────────────────
+ipcMain.handle('finanze:get-sched', () => readFinanzeSched());
+ipcMain.handle('finanze:set-sched', (_e, cfg) => { writeFinanzeSched(cfg); startFinanzeScheduler(); return { ok: true }; });
+ipcMain.handle('finanze:mark-done', (_e, { tipo, dateStr }) => {
+  finanzeSchedPending = false;
+  const cfg = readFinanzeSched();
+  if (cfg[tipo]) { cfg[tipo].last = dateStr; writeFinanzeSched(cfg); }
+  return { ok: true };
+});
+ipcMain.handle('finanze:save-report', async (_e, { tipo, filename, content }) => {
+  const cfg = readFinanzeSched();
+  const folder = cfg[tipo]?.folder;
+  if (!folder) return { ok: false, reason: 'no-folder' };
+  try {
+    if (!existsSync(folder)) mkdirSync(folder, { recursive: true });
+    const fullPath = join(folder, filename);
+    writeFileSync(fullPath, Buffer.from(content, 'base64'));
+    return { ok: true, filePath: fullPath };
+  } catch (err) { return { ok: false, reason: String(err) }; }
+});
 
 // ─── IPC: database locale ─────────────────────────────────────────────────────
 ipcMain.handle('db:is-ready', () => dbReady);

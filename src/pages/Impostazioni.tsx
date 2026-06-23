@@ -9153,6 +9153,25 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
   const [fsXls,  setFsXls]    = useState(false);
   const [fsLast, setFsLast]   = useState('');
 
+  // Finanze report scheduler
+  type FPeriodo = 'settimana' | 'mese' | '3mesi' | '6mesi' | 'anno';
+  const FINANZE_PERIODI: Array<{ tipo: FPeriodo; label: string; desc: string }> = [
+    { tipo: 'settimana', label: 'Ogni settimana',   desc: 'Ogni lunedì, report della settimana precedente (lun–dom)' },
+    { tipo: 'mese',      label: 'Ogni mese',        desc: 'Il 1° di ogni mese, report del mese precedente' },
+    { tipo: '3mesi',     label: 'Ogni 3 mesi',      desc: 'Il 1° di gen/apr/lug/ott, report del trimestre precedente' },
+    { tipo: '6mesi',     label: 'Ogni 6 mesi',      desc: 'Il 1° gen e 1° lug, report del semestre precedente' },
+    { tipo: 'anno',      label: 'Una volta l\'anno', desc: 'Il 1° gennaio, report dell\'anno precedente' },
+  ];
+  const defaultPeriodoConfig = { enabled: false, folder: '', last: '' };
+  const [finSched, setFinSched] = useState<Record<FPeriodo, { enabled: boolean; folder: string; last: string }>>({
+    settimana: { ...defaultPeriodoConfig },
+    mese: { ...defaultPeriodoConfig },
+    '3mesi': { ...defaultPeriodoConfig },
+    '6mesi': { ...defaultPeriodoConfig },
+    anno: { ...defaultPeriodoConfig },
+  });
+  const [savingFin, setSavingFin] = useState(false);
+
   useEffect(() => {
     (async () => {
       if (isElectronApp) {
@@ -9187,6 +9206,13 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
         setFsLast(localStorage.getItem(FS_LAST_KEY) ?? '');
       }
       setFsXls(localStorage.getItem(FS_XLS_KEY) === '1');
+      // Carica finanze scheduler
+      if (isElectronApp) {
+        try {
+          const fs = await (window as any).electronAPI.getFinanzeSched();
+          if (fs) setFinSched(fs);
+        } catch { /* ignore */ }
+      }
       setLoading(false);
     })();
   }, [isElectronApp]);
@@ -9239,6 +9265,30 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
   }
 
   function showFlash(msg: string) { setFlash(msg); setTimeout(() => setFlash(null), 3000); }
+
+  async function pickFinanzeFolder(tipo: FPeriodo, label: string) {
+    if (!isElectronApp) return;
+    const res = await (window as any).electronAPI.pickFolder(`Scegli cartella: ${label}`);
+    if (res.ok && res.folder) {
+      setFinSched(prev => ({ ...prev, [tipo]: { ...prev[tipo], folder: res.folder } }));
+    }
+  }
+
+  function toggleFinanzePeriodo(tipo: FPeriodo) {
+    setFinSched(prev => ({ ...prev, [tipo]: { ...prev[tipo], enabled: !prev[tipo].enabled } }));
+  }
+
+  async function saveFinanzeSched() {
+    if (!isElectronApp) return;
+    setSavingFin(true);
+    try {
+      await (window as any).electronAPI.setFinanzeSched(finSched);
+      showFlash('Impostazioni report finanze salvate');
+    } catch (err) {
+      console.error('[saveFinanzeSched]', err);
+    }
+    setSavingFin(false);
+  }
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -9387,6 +9437,67 @@ function PaginaCartelleSalvataggio({ onBack }: { onBack: () => void }) {
               {flash && <p className="text-sm text-emerald-600 font-medium flex items-center gap-1.5"><Check size={14} /> {flash}</p>}
             </div>
           </div>
+
+          {/* Report finanze automatico */}
+          {isElectronApp && (
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-stone-100">
+                <h3 className="font-semibold text-stone-800 text-sm">Report finanze automatico</h3>
+                <p className="text-xs text-stone-400 mt-0.5">Genera automaticamente un PDF con i servizi incassati (solo contanti e bancomat dichiarati). Ogni periodo ha la sua cartella di destinazione.</p>
+              </div>
+              <div className="divide-y divide-stone-100">
+                {FINANZE_PERIODI.map(({ tipo, label, desc }) => {
+                  const cfg = finSched[tipo];
+                  return (
+                    <div key={tipo} className="px-6 py-4 space-y-3">
+                      {/* Toggle + label */}
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                            <CalendarDays size={14} className="text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-stone-800">{label}</p>
+                            <p className="text-xs text-stone-400 mt-0.5">{desc}</p>
+                          </div>
+                        </div>
+                        <Toggle on={cfg.enabled} onToggle={() => toggleFinanzePeriodo(tipo)} />
+                      </div>
+
+                      {/* Cartella */}
+                      <div className="flex items-center gap-3 pl-11">
+                        <div className="flex-1 min-w-0">
+                          {cfg.folder
+                            ? <p className="text-xs text-emerald-600 font-mono truncate" title={cfg.folder}>{cfg.folder}</p>
+                            : <p className="text-xs text-stone-300 italic">Nessuna cartella selezionata</p>
+                          }
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {cfg.folder && <button onClick={() => (window as any).electronAPI.showFolder(cfg.folder)} title="Apri cartella" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"><FolderOpen size={13} /></button>}
+                          <button onClick={() => pickFinanzeFolder(tipo, label)} className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-emerald-100 text-stone-600 hover:text-emerald-700 rounded-lg transition-colors">Scegli</button>
+                          {cfg.folder && <button onClick={() => setFinSched(prev => ({ ...prev, [tipo]: { ...prev[tipo], folder: '' } }))} title="Rimuovi" className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-500 transition-colors"><X size={12} /></button>}
+                        </div>
+                      </div>
+
+                      {/* Ultimo salvataggio */}
+                      {cfg.last && (
+                        <p className="text-xs text-emerald-600 flex items-center gap-1.5 pl-11">
+                          <Check size={12} /> Ultimo report: {cfg.last}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="px-6 py-4 border-t border-stone-100">
+                <button onClick={saveFinanzeSched} disabled={savingFin}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors">
+                  {savingFin ? <RefreshCw size={14} className="animate-spin" /> : <Settings size={14} />}
+                  {savingFin ? 'Salvataggio...' : 'Salva impostazioni report'}
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

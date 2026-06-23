@@ -23,6 +23,8 @@ import StatisticheGate from './components/StatisticheGate';
 import BirthdayModal from './components/BirthdayModal';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
+import { fetchFinanzeReportData, generateFinanzeReportPdf } from './lib/finanzeReportPdfGenerator';
+import type { FinanzePeriodo } from './electron.d';
 import { supabase } from './lib/supabase';
 import { useAuth } from './lib/AuthContext';
 import { Bell, X, MessageSquare, Scissors, Wifi, ClipboardList, CalendarClock, BellRing, Star, Gift, HelpCircle } from 'lucide-react';
@@ -181,6 +183,27 @@ export default function App() {
     const unsub = window.electronAPI.onTriggerAutoFiches(({ latestDate }: { dates: string[]; latestDate: string }) => {
       setPage('fiches');
       setPendingAutoDate(latestDate);
+    });
+    return unsub;
+  }, []);
+
+  // Report finanze automatico da Electron scheduler
+  useEffect(() => {
+    if (!window.electronAPI?.onTriggerAutoFinanze) return;
+    const unsub = window.electronAPI.onTriggerAutoFinanze(async ({ periods }) => {
+      for (const p of periods) {
+        try {
+          const rows = await fetchFinanzeReportData(p.startDate, p.endDate);
+          const base64 = generateFinanzeReportPdf(rows, p.tipo as FinanzePeriodo, p.startDate, p.endDate);
+          const s = (d: string) => d.replace(/-/g, '');
+          const filename = `report-finanze-${p.tipo}-${s(p.startDate)}-${s(p.endDate)}.pdf`;
+          await window.electronAPI!.saveFinanzeReport(p.tipo as FinanzePeriodo, filename, base64);
+          await window.electronAPI!.markFinanzeDone(p.tipo as FinanzePeriodo, p.endDate);
+        } catch (err) {
+          console.error('[auto-finanze]', p.tipo, err);
+          await window.electronAPI!.markFinanzeDone(p.tipo as FinanzePeriodo, p.endDate).catch(() => {});
+        }
+      }
     });
     return unsub;
   }, []);

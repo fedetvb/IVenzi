@@ -88,6 +88,22 @@ export interface FichesSchedConfig {
   last: string;     // "YYYY-MM-DD"
 }
 
+export type FinanzePeriodo = 'settimana' | 'mese' | '3mesi' | '6mesi' | 'anno';
+
+export interface FinanzePeriodoConfig {
+  enabled: boolean;
+  folder: string;
+  last: string;     // "YYYY-MM-DD"
+}
+
+export interface FinanzeSchedConfig {
+  settimana: FinanzePeriodoConfig;
+  mese: FinanzePeriodoConfig;
+  '3mesi': FinanzePeriodoConfig;
+  '6mesi': FinanzePeriodoConfig;
+  anno: FinanzePeriodoConfig;
+}
+
 export interface LocalProfile {
   userId: string;
   email: string;
@@ -129,6 +145,12 @@ export interface ElectronAPI {
   setFichesSched: (cfg: FichesSchedConfig) => Promise<{ ok: boolean }>;
   markFichesDone: (todayStr: string) => Promise<{ ok: boolean }>;
   onTriggerAutoFiches: (cb: (data: { dates: string[]; latestDate: string }) => void) => () => void;
+  // Report finanze automatico
+  getFinanzeSched: () => Promise<FinanzeSchedConfig>;
+  setFinanzeSched: (cfg: FinanzeSchedConfig) => Promise<{ ok: boolean }>;
+  markFinanzeDone: (tipo: FinanzePeriodo, dateStr: string) => Promise<{ ok: boolean }>;
+  saveFinanzeReport: (tipo: FinanzePeriodo, filename: string, content: string) => Promise<{ ok: boolean; filePath?: string; reason?: string }>;
+  onTriggerAutoFinanze: (cb: (data: { periods: Array<{ tipo: FinanzePeriodo; startDate: string; endDate: string; folder: string }> }) => void) => () => void;
   db?: DbAPI;
   auth?: AuthAPI;
   license?: LicenseAPI;

@@ -32,6 +32,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeAllListeners('trigger-auto-fiches');
   },
 
+  // ── Scheduler report finanze ───────────────────────────────────────────────
+  getFinanzeSched: () => ipcRenderer.invoke('finanze:get-sched'),
+  setFinanzeSched: (cfg) => ipcRenderer.invoke('finanze:set-sched', cfg),
+  markFinanzeDone: (tipo, dateStr) => ipcRenderer.invoke('finanze:mark-done', { tipo, dateStr }),
+  saveFinanzeReport: (tipo, filename, content) => ipcRenderer.invoke('finanze:save-report', { tipo, filename, content }),
+  onTriggerAutoFinanze: (callback) => {
+    const handler = (_e, data) => callback(data);
+    ipcRenderer.on('trigger-auto-finanze', handler);
+    return () => ipcRenderer.removeListener('trigger-auto-finanze', handler);
+  },
+
   // ── Deep link ──────────────────────────────────────────────────────────────
   onDeepLink: (callback) => {
     ipcRenderer.on('deep-link', (_e, url) => callback(url));
