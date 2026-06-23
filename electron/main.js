@@ -879,9 +879,10 @@ function createWindow() {
       preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: false,
     },
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
   });
   mainWindow.setMenu(null);
+  mainWindow.setMenuBarVisibility(false);
   if (isDev) { mainWindow.loadURL('http://localhost:5173'); }
   else { mainWindow.loadFile(join(app.getAppPath(), 'dist', 'index.html')); }
   mainWindow.on('close', (e) => {
