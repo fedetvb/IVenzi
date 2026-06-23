@@ -18,6 +18,7 @@
     "electron:build": "cross-env ELECTRON=true vite build && npm install better-sqlite3 --ignore-scripts --no-save && electron-rebuild -f -w better-sqlite3 && electron-builder",
     "electron:build:win": "cross-env ELECTRON=true vite build && npm install better-sqlite3 --ignore-scripts --no-save && electron-rebuild -f -w better-sqlite3 && electron-builder --win",
     "electron:build:win:cmd": "set ELECTRON=true && npx vite build && npm install better-sqlite3 --ignore-scripts --no-save && npx electron-rebuild -f -w better-sqlite3 && npx electron-builder --win",
+    "electron:package:win:cmd": "npm install better-sqlite3 --ignore-scripts --no-save && npx electron-rebuild -f -w better-sqlite3 && npx electron-builder --win",
     "electron:build:mac": "cross-env ELECTRON=true vite build && npm install better-sqlite3 --ignore-scripts --no-save && electron-rebuild -f -w better-sqlite3 && electron-builder --mac",
     "electron:build:linux": "cross-env ELECTRON=true vite build && npm install better-sqlite3 --ignore-scripts --no-save && electron-rebuild -f -w better-sqlite3 && electron-builder --linux",
     "build:owner": "cross-env BUILD_MODE=owner vite build",

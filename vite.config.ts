@@ -105,7 +105,7 @@ export default defineConfig(({ mode }) => {
       customPwaIconsPlugin(),
     ],
     optimizeDeps: { exclude: ['lucide-react'] },
-    base: isElectron ? './' : '/',
+    base: './',
     define: {
       'import.meta.env.VITE_BUILD_MODE': JSON.stringify(buildMode),
       // Hard-override: always inject the correct Supabase project into the bundle
