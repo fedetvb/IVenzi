@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { TrendingUp, Calendar, ShieldCheck, ChevronDown, ChevronUp, Trash2, Euro, GitCompare, Download } from 'lucide-react';
+import { TrendingUp, Calendar, ShieldCheck, ChevronDown, ChevronUp, Trash2, Euro, GitCompare, Download, BarChart2, List } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import { dbSelect, dbUpdate, dbDelete } from '../lib/localDb';
 import { saveFile } from '../lib/fileSaver';
 import { MonthlyBarChart } from './Statistiche';
 import SmsCartaModal, { type AzioneCarta } from '../components/SmsCartaModal';
+import ReportServizi from '../components/ReportServizi';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -405,6 +406,7 @@ export default function Finanze() {
   const todayStr = localDateStr(new Date());
   const [giorni, setGiorni] = useState<GiornoIncasso[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewTab, setViewTab] = useState<'per_giorno' | 'per_servizio'>('per_giorno');
   const [openGiorno, setOpenGiorno] = useState<string | null>(todayStr);
   const [filtro, setFiltro] = useState<FiltroStato>({ tipo: 'mese_corrente' });
   const [showConfronto, setShowConfronto] = useState(false);
@@ -739,6 +741,31 @@ export default function Finanze() {
         </div>
       </div>
 
+      {/* Tab switcher */}
+      <div className="flex bg-stone-100 rounded-xl p-1 gap-0.5 w-fit">
+        <button
+          onClick={() => setViewTab('per_giorno')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            viewTab === 'per_giorno' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-400 hover:text-stone-600'
+          }`}
+        >
+          <List size={14} />
+          Per giorno
+        </button>
+        <button
+          onClick={() => setViewTab('per_servizio')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            viewTab === 'per_servizio' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-400 hover:text-stone-600'
+          }`}
+        >
+          <BarChart2 size={14} />
+          Per servizio
+        </button>
+      </div>
+
+      {viewTab === 'per_servizio' && <ReportServizi />}
+
+      {viewTab === 'per_giorno' && (<>
       {/* Grafico andamento mensile */}
       {incassiMensili.length > 0 && (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
@@ -806,6 +833,8 @@ export default function Finanze() {
           </div>
         )}
       </div>
+
+      </>)}
 
     </div>
 

@@ -2847,6 +2847,7 @@ function FicheRicaricaModal({ carta, selectedDate, onClose, onSaved }: {
     const nuovoSaldo = carta.saldo + importo;
     await dbInsert({ table: 'ricariche_carta_premium', data: {
       carta_premium_id: carta.id, importo, note: noteR, tipo_ricarica: tipo, user_id: user?.id,
+      tipo_pagamento: tipoPagamento, importo_pagato: tipo === 'standard' ? prezzoCliente : 0,
     } });
     await dbUpdate({ table: 'carte_premium', id: carta.id, data: { saldo: nuovoSaldo, attiva: true } });
     if (tipo === 'standard' && tipoPagamento !== 'contanti_nero') {
