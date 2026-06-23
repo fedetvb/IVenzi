@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Trash2, Check, ChevronDown, Pencil } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { dbSelect, dbUpdate } from '../lib/localDb';
 import { useAuth } from '../lib/AuthContext';
 
 interface Trattamento {
@@ -53,21 +54,36 @@ export default function RecensioniMappingPanel({ onBack }: { onBack: () => void 
   }, [user]);
 
   async function loadData() {
-    const [{ data: t }, { data: c }] = await Promise.all([
-      supabase
+    const isElectron = !!(window as any).electronAPI?.db;
+
+    let trattamentiData: Trattamento[] = [];
+
+    if (isElectron) {
+      const res = await dbSelect({
+        table: 'trattamenti_catalogo',
+        columns: 'id,nome,categoria_recensione',
+        filters: [{ col: 'attivo', op: 'eq', val: 1 }],
+        orderBy: [{ col: 'nome' }],
+      });
+      trattamentiData = ((res.data ?? []) as Array<{ id: string; nome: string; categoria_recensione: string | null }>)
+        .map(r => ({ id: r.id, nome: r.nome, categoria_recensione: r.categoria_recensione ?? null }));
+    } else {
+      const { data: t } = await supabase
         .from('trattamenti_catalogo')
         .select('id,nome,categoria_recensione')
         .eq('user_id', user!.id)
         .eq('attivo', true)
-        .is('deleted_at', null)
-        .order('nome'),
-      supabase
-        .from('recensioni_categorie')
-        .select('id,slug,nome_display,testo_con_taglio,testo_senza_taglio')
-        .eq('user_id', user!.id)
-        .order('nome_display'),
-    ]);
-    setTrattamenti((t ?? []) as Trattamento[]);
+        .order('nome');
+      trattamentiData = (t ?? []) as Trattamento[];
+    }
+
+    const { data: c } = await supabase
+      .from('recensioni_categorie')
+      .select('id,slug,nome_display,testo_con_taglio,testo_senza_taglio')
+      .eq('user_id', user!.id)
+      .order('nome_display');
+
+    setTrattamenti(trattamentiData);
     setCategorie((c ?? []) as CategoriaCustom[]);
   }
 
@@ -78,7 +94,12 @@ export default function RecensioniMappingPanel({ onBack }: { onBack: () => void 
 
   async function handleChangeCategory(id: string, cat: string) {
     setSavingId(id);
-    await supabase.from('trattamenti_catalogo').update({ categoria_recensione: cat }).eq('id', id);
+    const isElectron = !!(window as any).electronAPI?.db;
+    if (isElectron) {
+      await dbUpdate({ table: 'trattamenti_catalogo', id, data: { categoria_recensione: cat } });
+    } else {
+      await supabase.from('trattamenti_catalogo').update({ categoria_recensione: cat }).eq('id', id);
+    }
     setTrattamenti(prev => prev.map(t => t.id === id ? { ...t, categoria_recensione: cat } : t));
     setSavingId(null);
     showFeedback('Salvato');
