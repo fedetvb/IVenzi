@@ -2,7 +2,7 @@
 --  SCRIPT AGGIORNAMENTO CUMULATIVO — SALONI NON-ADMIN
 --  Da incollare nel SQL Editor di Supabase (una sola volta,
 --  in ordine, dall'alto verso il basso).
---  Aggiornato al: 2026-06-22
+--  Aggiornato al: 2026-06-23
 -- ============================================================
 
 
@@ -81,9 +81,22 @@ ALTER TABLE fiches ADD COLUMN IF NOT EXISTS tipo_pagamento   TEXT DEFAULT 'conta
 
 
 -- ─────────────────────────────────────────────────────────────
---  8. COLONNE AGGIUNTIVE — RICARICHE PREMIUM
+--  8. COLONNE AGGIUNTIVE — RICARICHE CARTA PREMIUM
 -- ─────────────────────────────────────────────────────────────
-ALTER TABLE ricariche_premium ADD COLUMN IF NOT EXISTS importo_pagato numeric DEFAULT NULL;
+ALTER TABLE ricariche_carta_premium ADD COLUMN IF NOT EXISTS importo_pagato numeric DEFAULT NULL;
+ALTER TABLE ricariche_carta_premium
+  ADD COLUMN IF NOT EXISTS tipo_pagamento TEXT
+  CHECK (tipo_pagamento IN ('cc_bancomat', 'contanti_verde', 'contanti_nero'))
+  DEFAULT NULL;
+
+
+-- ─────────────────────────────────────────────────────────────
+--  8b. COLONNE AGGIUNTIVE — CARTE PREMIUM
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE carte_premium
+  ADD COLUMN IF NOT EXISTS tipo_pagamento_creazione TEXT
+  CHECK (tipo_pagamento_creazione IN ('cc_bancomat', 'contanti_verde', 'contanti_nero'))
+  DEFAULT NULL;
 
 
 -- ─────────────────────────────────────────────────────────────

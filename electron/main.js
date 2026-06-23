@@ -428,6 +428,28 @@ function runMigrations() {
       console.log('[DB] Migrazione: creata tabella incassi_giornalieri');
     }
   } catch(e) { console.warn('[DB] migrazione incassi_giornalieri:', e.message); }
+
+  // Add tipo_pagamento and importo_pagato to ricariche_carta_premium if missing
+  try {
+    const ricCols = db.prepare("PRAGMA table_info(ricariche_carta_premium)").all().map(c => c.name);
+    if (!ricCols.includes('tipo_pagamento')) {
+      db.exec("ALTER TABLE ricariche_carta_premium ADD COLUMN tipo_pagamento TEXT DEFAULT NULL");
+      console.log('[DB] Migrazione: aggiunta colonna tipo_pagamento a ricariche_carta_premium');
+    }
+    if (!ricCols.includes('importo_pagato')) {
+      db.exec("ALTER TABLE ricariche_carta_premium ADD COLUMN importo_pagato REAL DEFAULT NULL");
+      console.log('[DB] Migrazione: aggiunta colonna importo_pagato a ricariche_carta_premium');
+    }
+  } catch(e) { console.warn('[DB] migrazione ricariche_carta_premium colonne:', e.message); }
+
+  // Add tipo_pagamento_creazione to carte_premium if missing
+  try {
+    const carteCols = db.prepare("PRAGMA table_info(carte_premium)").all().map(c => c.name);
+    if (!carteCols.includes('tipo_pagamento_creazione')) {
+      db.exec("ALTER TABLE carte_premium ADD COLUMN tipo_pagamento_creazione TEXT DEFAULT NULL");
+      console.log('[DB] Migrazione: aggiunta colonna tipo_pagamento_creazione a carte_premium');
+    }
+  } catch(e) { console.warn('[DB] migrazione carte_premium tipo_pagamento_creazione:', e.message); }
 }
 
 function createSchema() {
@@ -521,13 +543,16 @@ function createSchema() {
     );
     CREATE TABLE IF NOT EXISTS carte_premium (
       id TEXT PRIMARY KEY, cliente_id TEXT NOT NULL, saldo REAL NOT NULL DEFAULT 0,
-      attiva INTEGER NOT NULL DEFAULT 1, user_id TEXT, deleted_at TEXT,
+      attiva INTEGER NOT NULL DEFAULT 1, tipo_pagamento_creazione TEXT DEFAULT NULL,
+      user_id TEXT, deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS ricariche_carta_premium (
       id TEXT PRIMARY KEY, carta_premium_id TEXT NOT NULL, importo REAL NOT NULL DEFAULT 0,
-      note TEXT DEFAULT '', tipo_ricarica TEXT DEFAULT 'manuale', user_id TEXT,
+      note TEXT DEFAULT '', tipo_ricarica TEXT DEFAULT 'manuale',
+      tipo_pagamento TEXT DEFAULT NULL, importo_pagato REAL DEFAULT NULL,
+      user_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), synced_at TEXT, _dirty INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS utilizzi_carta_premium (
