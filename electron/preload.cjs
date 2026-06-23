@@ -29,8 +29,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setFichesSched: (cfg) => ipcRenderer.invoke('fiches:set-sched', cfg),
   markFichesDone: (todayStr) => ipcRenderer.invoke('fiches:mark-done', { todayStr }),
   onTriggerAutoFiches: (callback) => {
-    ipcRenderer.on('trigger-auto-fiches', (_e, data) => callback(data));
-    return () => ipcRenderer.removeAllListeners('trigger-auto-fiches');
+    const handler = (_e, data) => callback(data);
+    ipcRenderer.on('trigger-auto-fiches', handler);
+    return () => ipcRenderer.removeListener('trigger-auto-fiches', handler);
   },
 
   // ── Deep link ──────────────────────────────────────────────────────────────

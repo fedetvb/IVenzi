@@ -149,6 +149,7 @@ function FichesTab({ pendingAutoDate, onPendingAutoDateConsumed }: { pendingAuto
   const [serviziCatalogo, setServiziCatalogo] = useState<ServizioSemplice[]>([]);
   const [trattamentiCatalogo, setTrattamentiCatalogo] = useState<ServizioSemplice[]>([]);
   const [parrucchieri, setParrucchieri] = useState<ParrucchiereSimple[]>([]);
+  const autoDateAfterLoadRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [openCard, setOpenCard] = useState<string | null>(null);
   const [clientiCarte, setClientiCarte] = useState<Map<string, { hasPremium: boolean; hasSconto: boolean }>>(new Map());
@@ -375,9 +376,17 @@ function FichesTab({ pendingAutoDate, onPendingAutoDateConsumed }: { pendingAuto
   useEffect(() => {
     if (!pendingAutoDate) return;
     setSelectedDate(pendingAutoDate);
-    setAutoExportDate(pendingAutoDate);
+    autoDateAfterLoadRef.current = pendingAutoDate;
     onPendingAutoDateConsumed?.();
   }, [pendingAutoDate]);
+
+  // Apre il PrintModal solo DOPO che i dati del giorno sono stati caricati
+  useEffect(() => {
+    if (!loading && autoDateAfterLoadRef.current) {
+      setAutoExportDate(autoDateAfterLoadRef.current);
+      autoDateAfterLoadRef.current = null;
+    }
+  }, [loading]);
 
   // Riepilogo incasso del giorno (solo convalidate)
   const incassoConvalidato = gruppi
