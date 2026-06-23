@@ -131,7 +131,7 @@ async function buildPdf(righe: RigaReport[], totale: number, label: string): Pro
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(120, 113, 108);
-  doc.text(`${label} · escluso nero`, 14, 23);
+  doc.text(label, 14, 23);
 
   autoTable(doc, {
     startY: 28,
@@ -366,7 +366,7 @@ export default function ReportServizi() {
           </div>
 
           <div className="ml-auto text-right">
-            <p className="text-xs text-stone-400">{labelPeriodo(periodo)} · escluso nero</p>
+            <p className="text-xs text-stone-400">{labelPeriodo(periodo)}</p>
             {!loading && (
               <p className="text-xl font-bold text-stone-800">€{totaleGenerale.toFixed(2)}</p>
             )}
@@ -384,7 +384,7 @@ export default function ReportServizi() {
           <BarChart2 size={28} className="text-stone-200 mx-auto mb-3" />
           <p className="text-sm text-stone-400">Nessun dato per {labelPeriodo(periodo)}</p>
           <p className="text-xs text-stone-300 mt-1">
-            Solo incassi con metodo di pagamento registrato (non in nero)
+            Nessun dato per il periodo selezionato
           </p>
         </div>
       ) : (
@@ -392,7 +392,7 @@ export default function ReportServizi() {
           <div className="px-5 py-3.5 border-b border-stone-100">
             <p className="text-sm font-semibold text-stone-700">Dettaglio per servizio</p>
             <p className="text-xs text-stone-400 mt-0.5">
-              Incassi non in nero · {labelPeriodo(periodo)}
+              {labelPeriodo(periodo)}
             </p>
           </div>
 
