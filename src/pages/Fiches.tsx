@@ -111,7 +111,7 @@ const PRESET_COLORS = ['#EC4899', '#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#
 
 type TabView = 'fiches' | 'voci_extra' | 'prodotti_rivendita';
 
-export default function Fiches() {
+export default function Fiches({ pendingAutoDate, onPendingAutoDateConsumed }: { pendingAutoDate?: string | null; onPendingAutoDateConsumed?: () => void }) {
   const [tab, setTab] = useState<TabView>('fiches');
 
   return (
@@ -133,7 +133,7 @@ export default function Fiches() {
         </button>
       </div>
 
-      {tab === 'fiches' && <FichesTab />}
+      {tab === 'fiches' && <FichesTab pendingAutoDate={pendingAutoDate} onPendingAutoDateConsumed={onPendingAutoDateConsumed} />}
       {tab === 'voci_extra' && <VociExtraTab />}
     </div>
   );
@@ -141,7 +141,7 @@ export default function Fiches() {
 
 // ─── FichesTab ────────────────────────────────────────────────────────────────
 
-function FichesTab() {
+function FichesTab({ pendingAutoDate, onPendingAutoDateConsumed }: { pendingAutoDate?: string | null; onPendingAutoDateConsumed?: () => void }) {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(() => localDateStr());
   const [gruppi, setGruppi] = useState<ClienteGruppo[]>([]);
@@ -373,14 +373,11 @@ function FichesTab() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!window.electronAPI?.onTriggerAutoFiches) return;
-    const unsub = window.electronAPI.onTriggerAutoFiches(({ dates, latestDate }: { dates: string[]; latestDate: string }) => {
-      setSelectedDate(latestDate);
-      setAutoExportDate(latestDate);
-      // markFichesDone is called AFTER the PDF is actually saved (inside PrintModal)
-    });
-    return unsub;
-  }, []);
+    if (!pendingAutoDate) return;
+    setSelectedDate(pendingAutoDate);
+    setAutoExportDate(pendingAutoDate);
+    onPendingAutoDateConsumed?.();
+  }, [pendingAutoDate]);
 
   // Riepilogo incasso del giorno (solo convalidate)
   const incassoConvalidato = gruppi
