@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Star, AlertCircle, MapPin, Save, Check, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getImpostazione, setImpostazione } from '../lib/localDb';
-import { analizzaVociWithMap, getTestoKey, getDefaultTesto } from '../lib/recensioniUtils';
+import { analizzaVociWithMap, getTestoKey, getDefaultTesto, applicaNome } from '../lib/recensioniUtils';
 import { apriWhatsApp, apriWhatsAppWeb, type WaMode } from '../lib/waUtils';
 
 interface ClienteRecensione {
@@ -159,6 +159,7 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
           testo = hasTaglio ? (entry.con || entry.senza) : (entry.senza || entry.con);
         }
         if (!testo) testo = getDefaultTesto(categoria as any, hasTaglio);
+        testo = applicaNome(testo, clienteRaw.nome ?? '');
 
         result.push({ clienteId: clienteRaw.id, nome: clienteRaw.nome, cognome: clienteRaw.cognome, telefono: clienteRaw.telefono, testo, categoria, hasTaglio, recensioneLasciata: recLasciata, bloccataFino });
       }

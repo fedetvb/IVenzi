@@ -24,7 +24,7 @@ Un abbraccio,
 Stefano e Federico`;
 
 function testo(apertura: string): string {
-  return `Ciao! Grazie mille per averci fatto visita ieri, siamo Federico e Stefano. Ci tenevamo a dirti che abbiamo adorato prenderci cura di te! A proposito: ${apertura}
+  return `Ciao {nome}! Grazie mille per averci fatto visita ieri, siamo Federico e Stefano. Ci tenevamo a dirti che abbiamo adorato prenderci cura di te! A proposito: ${apertura}
 ${CORPO_COMUNE}`;
 }
 
@@ -134,6 +134,10 @@ export function analizzaVoci(voci: { nome_voce: string; tipo?: string }[]): Cate
 export function getTestoKey(categoria: CategoriaRecensione, hasTaglio: boolean): string {
   if (categoria === 'taglio_solo') return 'taglio_solo|false';
   return `${categoria}|${hasTaglio}`;
+}
+
+export function applicaNome(testo: string, nome: string): string {
+  return testo.replace(/\{nome\}/g, nome);
 }
 
 export function getDefaultTesto(categoria: CategoriaRecensione, hasTaglio: boolean): string {
