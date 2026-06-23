@@ -10587,6 +10587,9 @@ function PaginaTestiRecensioni({ onBack, onNavigateMappatura }: { onBack: () => 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [feedbackRec, setFeedbackRec] = useState<string | null>(null);
+  const [trattamenti, setTrattamenti] = useState<{ id: string; nome: string; categoria_recensione: string | null }[]>([]);
+  const [expandedServizi, setExpandedServizi] = useState<string | null>(null);
+  const [savingServizioId, setSavingServizioId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -10601,7 +10604,21 @@ function PaginaTestiRecensioni({ onBack, onNavigateMappatura }: { onBack: () => 
         }
         setTesti(map);
       });
+    supabase
+      .from('trattamenti_catalogo')
+      .select('id,nome,categoria_recensione')
+      .eq('user_id', user.id)
+      .eq('attivo', true)
+      .order('nome')
+      .then(({ data }) => setTrattamenti((data ?? []) as { id: string; nome: string; categoria_recensione: string | null }[]));
   }, [user]);
+
+  async function handleAssignServizio(trattamentoId: string, slug: string | null) {
+    setSavingServizioId(trattamentoId);
+    await supabase.from('trattamenti_catalogo').update({ categoria_recensione: slug }).eq('id', trattamentoId);
+    setTrattamenti(prev => prev.map(t => t.id === trattamentoId ? { ...t, categoria_recensione: slug } : t));
+    setSavingServizioId(null);
+  }
 
   async function handleSaveRec(key: string) {
     if (!user) return;
@@ -10672,6 +10689,9 @@ function PaginaTestiRecensioni({ onBack, onNavigateMappatura }: { onBack: () => 
         const testoAttuale = testi[key] ?? DEFAULT_TESTI[key] ?? '';
         const isPersonalizzato = !!testi[key];
         const isEdit = editingKey === key;
+        const serviziAssegnati = trattamenti.filter(t => t.categoria_recensione === categoria);
+        const serviziLiberi = trattamenti.filter(t => !t.categoria_recensione || t.categoria_recensione === 'default');
+        const isExpandedServizi = expandedServizi === key;
 
         return (
           <div key={key} className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
@@ -10737,6 +10757,58 @@ function PaginaTestiRecensioni({ onBack, onNavigateMappatura }: { onBack: () => 
                 <p className="text-xs text-stone-600 leading-relaxed whitespace-pre-line line-clamp-4">{testoAttuale}</p>
               )}
             </div>
+
+            {trattamenti.length > 0 && (
+              <div className="border-t border-stone-100">
+                <button
+                  onClick={() => setExpandedServizi(isExpandedServizi ? null : key)}
+                  className="w-full flex items-center justify-between px-5 py-2.5 text-xs text-stone-500 hover:bg-stone-50 transition-colors"
+                >
+                  <span className="font-medium">
+                    {serviziAssegnati.length > 0
+                      ? `Servizi abbinati: ${serviziAssegnati.map(s => s.nome).join(', ')}`
+                      : 'Abbina servizi del listino'}
+                  </span>
+                  <ChevronDown size={13} className={`transition-transform flex-shrink-0 ${isExpandedServizi ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isExpandedServizi && (
+                  <div className="px-5 pb-4 space-y-1.5">
+                    {serviziAssegnati.map(t => (
+                      <div key={t.id} className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+                        <span className="text-xs font-medium text-blue-800">{t.nome}</span>
+                        <button
+                          disabled={savingServizioId === t.id}
+                          onClick={() => handleAssignServizio(t.id, null)}
+                          className="text-blue-400 hover:text-red-500 transition-colors disabled:opacity-50 ml-3 flex-shrink-0"
+                          title="Rimuovi abbinamento"
+                        >
+                          {savingServizioId === t.id
+                            ? <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                            : <X size={13} />}
+                        </button>
+                      </div>
+                    ))}
+                    {serviziLiberi.map(t => (
+                      <button
+                        key={t.id}
+                        disabled={savingServizioId === t.id}
+                        onClick={() => handleAssignServizio(t.id, categoria)}
+                        className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-stone-300 rounded-xl text-xs text-stone-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                      >
+                        {savingServizioId === t.id
+                          ? <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                          : <Plus size={12} />}
+                        {t.nome}
+                      </button>
+                    ))}
+                    {serviziAssegnati.length === 0 && serviziLiberi.length === 0 && (
+                      <p className="text-xs text-stone-400 italic text-center py-1">Tutti i servizi sono gia abbinati ad altre categorie</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
