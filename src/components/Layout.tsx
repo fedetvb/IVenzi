@@ -457,7 +457,7 @@ export default function Layout({ currentPage, onNavigate, children, user, messag
             className={`fixed top-0 left-0 h-full w-64 text-stone-100 flex flex-col z-50 transition-transform duration-300 min-h-0 ${
               mobileOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
-            style={{ backgroundColor: theme.sidebarBg }}
+            style={{ backgroundColor: theme.sidebarBg, paddingTop: 'env(safe-area-inset-top)' }}
           >
             {sidebarContent(true, true)}
           </aside>
@@ -467,7 +467,7 @@ export default function Layout({ currentPage, onNavigate, children, user, messag
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Topbar */}
-        <header className="bg-white border-b border-stone-200 px-4 sm:px-6 py-2 md:py-4 flex items-center justify-between flex-shrink-0">
+        <header className="bg-white border-b border-stone-200 px-4 sm:px-6 flex items-center justify-between flex-shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)', paddingBottom: '0.5rem' }}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => mobile ? setMobileOpen(true) : setCollapsed(!collapsed)}
