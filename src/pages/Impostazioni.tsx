@@ -9088,7 +9088,9 @@ function PaginaKeepAlive({ onBack }: { onBack: () => void }) {
 const CARTELLE_GENERALI: Array<{ key: string; label: string; desc: string }> = [
   { key: 'backup',        label: 'Backup',                         desc: 'File JSON backup del database' },
   { key: 'clienti',       label: 'Clienti',                        desc: 'CSV e PDF esportazione clienti' },
-  { key: 'finanze',       label: 'Finanze',                        desc: 'PDF riepilogo incassi per periodo' },
+  { key: 'finanze',       label: 'Finanze — PDF',                  desc: 'PDF riepilogo incassi per periodo' },
+  { key: 'finanze_xls',   label: 'Finanze — Excel',                desc: 'File Excel (.xlsx) report per servizio' },
+  { key: 'finanze_csv',   label: 'Finanze — CSV',                  desc: 'File CSV report per servizio' },
   { key: 'magazzino',     label: 'Magazzino',                      desc: 'CSV, PDF e HTML inventario magazzino' },
   { key: 'rivendita',     label: 'Rivendita',                      desc: 'PDF e CSV (Excel) rivendita e trattamenti' },
   { key: 'statistiche',   label: 'Statistiche',                    desc: 'PDF report statistiche e schede' },

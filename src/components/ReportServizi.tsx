@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
-import { BarChart2, CreditCard, Gift, Scissors } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BarChart2, ChevronDown, CreditCard, Download, Gift, Scissors } from 'lucide-react';
 import { localDateStr } from '../lib/supabase';
 import { dbSelect } from '../lib/localDb';
+import { saveFile } from '../lib/fileSaver';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,15 +65,112 @@ function labelPeriodo(p: Periodo): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+type FormatoExport = 'pdf' | 'xls' | 'csv';
+
+function buildCsv(righe: RigaReport[], totale: number, label: string): string {
+  const sep = ';';
+  const lines: string[] = [
+    `Report per servizio${sep}${label}`,
+    '',
+    `Servizio${sep}N. eseguiti${sep}Totale (€)`,
+    ...righe.map(r => `${r.nome}${sep}${r.conteggio}${sep}${r.totale.toFixed(2).replace('.', ',')}`),
+    '',
+    `TOTALE${sep}${righe.reduce((s, r) => s + r.conteggio, 0)}${sep}${totale.toFixed(2).replace('.', ',')}`,
+  ];
+  return lines.join('\r\n');
+}
+
+async function buildXls(righe: RigaReport[], totale: number, label: string): Promise<Blob> {
+  // Minimal BIFF8-compatible XLS via XML SpreadsheetML (works in Excel italiano)
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const numFmt = (n: number) => n.toFixed(2).replace('.', ',');
+
+  const dataRows = righe.map(r => `
+    <Row>
+      <Cell><Data ss:Type="String">${esc(r.nome)}</Data></Cell>
+      <Cell><Data ss:Type="Number">${r.conteggio}</Data></Cell>
+      <Cell><Data ss:Type="String">${numFmt(r.totale)}</Data></Cell>
+    </Row>`).join('');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Report">
+    <Table>
+      <Row><Cell ss:MergeAcross="2"><Data ss:Type="String">Report per servizio — ${esc(label)}</Data></Cell></Row>
+      <Row></Row>
+      <Row>
+        <Cell><Data ss:Type="String">Servizio</Data></Cell>
+        <Cell><Data ss:Type="String">N. eseguiti</Data></Cell>
+        <Cell><Data ss:Type="String">Totale (€)</Data></Cell>
+      </Row>
+      ${dataRows}
+      <Row></Row>
+      <Row>
+        <Cell><Data ss:Type="String">TOTALE</Data></Cell>
+        <Cell><Data ss:Type="Number">${righe.reduce((s, r) => s + r.conteggio, 0)}</Data></Cell>
+        <Cell><Data ss:Type="String">${numFmt(totale)}</Data></Cell>
+      </Row>
+    </Table>
+  </Worksheet>
+</Workbook>`;
+
+  return new Blob([xml], { type: 'application/vnd.ms-excel;charset=UTF-8' });
+}
+
+async function buildPdf(righe: RigaReport[], totale: number, label: string): Promise<Blob> {
+  const { jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(28, 25, 23);
+  doc.text('Report per Servizio', 14, 16);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(120, 113, 108);
+  doc.text(`${label} · escluso nero`, 14, 23);
+
+  autoTable(doc, {
+    startY: 28,
+    head: [['Servizio / Prodotto', 'N. eseguiti', 'Totale']],
+    body: righe.map(r => [r.nome, String(r.conteggio), `€${r.totale.toFixed(2).replace('.', ',')}`]),
+    foot: [['TOTALE', String(righe.reduce((s, r) => s + r.conteggio, 0)), `€${totale.toFixed(2).replace('.', ',')}`]],
+    headStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    footStyles: { fillColor: [240, 253, 250], textColor: [22, 163, 74], fontStyle: 'bold', fontSize: 9 },
+    bodyStyles: { fontSize: 8, textColor: [28, 25, 23] },
+    alternateRowStyles: { fillColor: [250, 250, 249] },
+    columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' } },
+    margin: { left: 14, right: 14 },
+  });
+
+  return doc.output('blob');
+}
+
 export default function ReportServizi() {
   const [periodo, setPeriodo] = useState<Periodo>('mese');
   const [loading, setLoading] = useState(true);
   const [servizi, setServizi] = useState<RigaReport[]>([]);
   const [giftPass, setGiftPass] = useState<RigaReport[]>([]);
   const [ricariche, setRicariche] = useState<RigaReport[]>([]);
+  const [formato, setFormato] = useState<FormatoExport>('pdf');
+  const [showFormato, setShowFormato] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowFormato(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const load = useCallback(async () => {    setLoading(true);
     const { start, end } = getPeriodRange(periodo);
 
     const [ficheRes, appRes, ricaricheRes] = await Promise.all([
@@ -167,6 +265,34 @@ export default function ReportServizi() {
 
   const hasData = servizi.length + giftPass.length + ricariche.length > 0;
 
+  async function handleSave() {
+    if (saving || !hasData) return;
+    setSaving(true);
+    const righe: RigaReport[] = [...servizi, ...giftPass, ...ricariche];
+    const label = labelPeriodo(periodo);
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    try {
+      if (formato === 'pdf') {
+        const blob = await buildPdf(righe, totaleGenerale, label);
+        await saveFile('finanze', `report-servizi-${slug}.pdf`, blob);
+      } else if (formato === 'xls') {
+        const blob = await buildXls(righe, totaleGenerale, label);
+        await saveFile('finanze_xls', `report-servizi-${slug}.xls`, blob);
+      } else {
+        const csv = buildCsv(righe, totaleGenerale, label);
+        await saveFile('finanze_csv', `report-servizi-${slug}.csv`, csv, 'utf8');
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const FORMATI: { value: FormatoExport; label: string }[] = [
+    { value: 'pdf', label: 'PDF' },
+    { value: 'xls', label: 'Excel (italiano)' },
+    { value: 'csv', label: 'CSV' },
+  ];
+
   const PERIODI: { value: Periodo; label: string }[] = [
     { value: 'settimana', label: 'Settimana' },
     { value: 'mese', label: 'Mese' },
@@ -195,6 +321,50 @@ export default function ReportServizi() {
               </button>
             ))}
           </div>
+
+          {/* Save button with format selector */}
+          <div className="flex items-center gap-1 ml-2" ref={dropdownRef}>
+            <button
+              onClick={handleSave}
+              disabled={saving || !hasData || loading}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-l-xl text-xs font-semibold transition-colors"
+              title={`Salva ${FORMATI.find(f => f.value === formato)?.label}`}
+            >
+              {saving
+                ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <Download size={13} />}
+              Salva
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowFormato(s => !s)}
+                disabled={saving}
+                className="flex items-center px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-r-xl text-xs transition-colors border-l border-emerald-400"
+                title="Scegli formato"
+              >
+                <span className="text-[10px] font-medium mr-0.5 opacity-80">{formato.toUpperCase()}</span>
+                <ChevronDown size={11} className={`transition-transform ${showFormato ? 'rotate-180' : ''}`} />
+              </button>
+              {showFormato && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-50 overflow-hidden min-w-[140px]">
+                  {FORMATI.map(f => (
+                    <button
+                      key={f.value}
+                      onClick={() => { setFormato(f.value); setShowFormato(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors ${
+                        formato === f.value
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'text-stone-700 hover:bg-stone-50'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="ml-auto text-right">
             <p className="text-xs text-stone-400">{labelPeriodo(periodo)} · escluso nero</p>
             {!loading && (
