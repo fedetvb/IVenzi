@@ -1578,10 +1578,12 @@ export default function App() {
 
   return (
     <>
-      {/* Banner riconnessione: sessione offline attiva ma internet disponibile */}
-      {showReconnectBanner && isOfflineSession && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[102] w-full max-w-md px-4">
-          <div className="bg-blue-50 border border-blue-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
+      {/* Container unico per tutti i banner/popup top-center — si impilano automaticamente */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[105] w-full max-w-md px-4 flex flex-col gap-2 pointer-events-none">
+
+        {/* Banner riconnessione: sessione offline attiva ma internet disponibile */}
+        {showReconnectBanner && isOfflineSession && (
+          <div className="pointer-events-auto bg-blue-50 border border-blue-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
               <Wifi size={16} className="text-blue-600" />
             </div>
@@ -1598,13 +1600,11 @@ export default function App() {
               <X size={15} />
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Banner promemoria convalida fiches (orario configurato) */}
-      {showReminderBanner && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">
-          <div className="bg-amber-50 border border-amber-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
+        {/* Banner promemoria convalida fiches */}
+        {showReminderBanner && (
+          <div className="pointer-events-auto bg-amber-50 border border-amber-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
               <Bell size={16} className="text-amber-600" />
             </div>
@@ -1619,16 +1619,11 @@ export default function App() {
               <X size={15} />
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Banner sottile promemoria recensioni Google */}
-      {showRecensioniBannerSottile && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[99] w-full max-w-md px-4 transition-all duration-300"
-          style={{ top: showReminderBanner ? '6rem' : '1rem' }}
-        >
-          <div className="bg-blue-50 border border-blue-300 rounded-2xl shadow-xl px-5 py-4 flex items-center gap-3">
+        {/* Banner sottile promemoria recensioni Google */}
+        {showRecensioniBannerSottile && (
+          <div className="pointer-events-auto bg-blue-50 border border-blue-300 rounded-2xl shadow-xl px-5 py-4 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
               <Star size={16} className="text-blue-600" />
             </div>
@@ -1646,17 +1641,11 @@ export default function App() {
               <X size={15} />
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Banner nuova scheda cliente da confermare */}
-      {showNuovaSchedaBanner && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[101] w-full max-w-md px-4 transition-all duration-300"
-          style={{ top: showReminderBanner || showRecensioniBannerSottile ? '6rem' : '1rem' }}
-        >
-          <div className="bg-pink-50 border border-pink-300 rounded-2xl shadow-xl px-4 py-3.5 flex items-center gap-3 animate-bounce-once">
-            {/* Avatar con foto o iniziali */}
+        {/* Banner nuova scheda cliente da confermare */}
+        {showNuovaSchedaBanner && (
+          <div className="pointer-events-auto bg-pink-50 border border-pink-300 rounded-2xl shadow-xl px-4 py-3.5 flex items-center gap-3 animate-bounce-once">
             <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-pink-200 flex-shrink-0">
               {nuovaSchedaFoto
                 ? <img src={nuovaSchedaFoto} alt={nuovaSchedaNome} className="w-full h-full object-cover" />
@@ -1678,13 +1667,11 @@ export default function App() {
               <X size={15} />
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Banner richiesta permesso notifiche push */}
-      {showPushBanner && (
-        <div className="fixed left-1/2 -translate-x-1/2 z-[104] w-full max-w-md px-4 top-4 transition-all duration-300">
-          <div className="bg-white border border-stone-200 rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
+        {/* Banner richiesta permesso notifiche push */}
+        {showPushBanner && (
+          <div className="pointer-events-auto bg-white border border-stone-200 rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 animate-bounce-once">
             <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
               <BellRing size={16} className="text-emerald-600" />
             </div>
@@ -1718,16 +1705,11 @@ export default function App() {
               <X size={14} />
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Banner nuova richiesta prenotazione online */}
-      {showRichiestaPrenotaBanner && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[103] w-full max-w-md px-4 transition-all duration-300"
-          style={{ top: showNuovaSchedaBanner || showReminderBanner ? '8rem' : '1rem' }}
-        >
-          <button className="w-full bg-emerald-50 border border-emerald-300 rounded-2xl shadow-xl px-5 py-4 flex items-center gap-3 animate-bounce-once text-left" onClick={apriRichiestaDalBanner}>
+        {/* Banner nuova richiesta prenotazione online */}
+        {showRichiestaPrenotaBanner && (
+          <button className="pointer-events-auto w-full bg-emerald-50 border border-emerald-300 rounded-2xl shadow-xl px-5 py-4 flex items-center gap-3 animate-bounce-once text-left" onClick={apriRichiestaDalBanner}>
             {richiestaPrenotaFoto ? (
               <img src={richiestaPrenotaFoto} alt="" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
             ) : (
@@ -1743,22 +1725,18 @@ export default function App() {
               </p>
             </div>
           </button>
-        </div>
-      )}
+        )}
 
-
-      {/* Popup notifica nuovo messaggio cliente */}
-      {messaggioPopup && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[105] w-full max-w-md px-4"
-          style={{
-            top: showNuovaSchedaBanner || showRichiestaPrenotaBanner ? '12rem' : '1rem',
-            opacity: messaggioPopupFading ? 0 : 1,
-            transition: 'opacity 2000ms ease',
-            pointerEvents: messaggioPopupFading ? 'none' : 'auto',
-          }}
-        >
-          <div className="bg-red-600 rounded-2xl shadow-2xl px-5 py-4 flex items-center gap-3">
+        {/* Popup notifica nuovo messaggio cliente */}
+        {messaggioPopup && (
+          <div
+            className="pointer-events-auto bg-red-600 rounded-2xl shadow-2xl px-5 py-4 flex items-center gap-3"
+            style={{
+              opacity: messaggioPopupFading ? 0 : 1,
+              transition: 'opacity 2000ms ease',
+              pointerEvents: messaggioPopupFading ? 'none' : 'auto',
+            }}
+          >
             {messaggioPopup.fotoUrl ? (
               <img src={messaggioPopup.fotoUrl} alt="" className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border-2 border-red-400" />
             ) : (
@@ -1793,8 +1771,59 @@ export default function App() {
               <X size={15} />
             </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Banner promemoria invio messaggi appuntamento (all'avvio) */}
+        {showAppBanner && (
+          <div className="pointer-events-auto bg-sky-50 border border-sky-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <MessageSquare size={16} className="text-sky-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-sky-900">Ricorda di inviare i messaggi</p>
+              <p className="text-xs text-sky-700 mt-0.5">Hai inviato i promemoria appuntamento alle clienti di oggi?</p>
+            </div>
+            <button
+              onClick={() => setShowAppBanner(false)}
+              className="p-1 hover:bg-sky-100 rounded-lg transition-colors text-sky-500 hover:text-sky-700 flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+
+        {/* Banner appuntamenti in forse */}
+        {showInForseBanner && (
+          <div className="pointer-events-auto bg-orange-50 border border-orange-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <HelpCircle size={16} className="text-orange-600" />
+            </div>
+            <button
+              className="flex-1 text-left"
+              onClick={async () => {
+                setShowInForseBanner(false);
+                const entries = await loadAvvisoInForse();
+                setInForseModalClienti(entries);
+                setShowInForseModal(true);
+              }}
+            >
+              <p className="text-sm font-bold text-orange-900">Appuntamenti "in forse" tra 2 giorni</p>
+              <p className="text-xs text-orange-700 mt-0.5">
+                {inForseCount === 1
+                  ? `Chiedi conferma a ${inForseNome} per l'appuntamento di dopodomani`
+                  : `${inForseCount} clienti con appuntamento incerto — chiedi conferma`}
+              </p>
+            </button>
+            <button
+              onClick={() => setShowInForseBanner(false)}
+              className="p-1 hover:bg-orange-100 rounded-lg transition-colors text-orange-500 hover:text-orange-700 flex-shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+
+      </div>
 
       {/* Popup referral: ha presentato */}
       {referralPopups.length > 0 && (
@@ -1948,63 +1977,6 @@ export default function App() {
               </button>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Banner promemoria invio messaggi appuntamento (all'avvio) */}
-      {showAppBanner && (
-        <div className={`fixed left-1/2 -translate-x-1/2 z-[99] w-full max-w-md px-4 transition-all duration-300 ${showReminderBanner ? 'top-24' : 'top-4'}`}>
-          <div className="bg-sky-50 border border-sky-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <MessageSquare size={16} className="text-sky-600" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-sky-900">Ricorda di inviare i messaggi</p>
-              <p className="text-xs text-sky-700 mt-0.5">Hai inviato i promemoria appuntamento alle clienti di oggi?</p>
-            </div>
-            <button
-              onClick={() => setShowAppBanner(false)}
-              className="p-1 hover:bg-sky-100 rounded-lg transition-colors text-sky-500 hover:text-sky-700 flex-shrink-0"
-            >
-              <X size={15} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Banner appuntamenti in forse */}
-      {showInForseBanner && (
-        <div className={`fixed left-1/2 -translate-x-1/2 z-[98] w-full max-w-md px-4 transition-all duration-300 ${
-          showReminderBanner && showAppBanner ? 'top-44' :
-          showReminderBanner || showAppBanner ? 'top-24' : 'top-4'
-        }`}>
-          <div className="bg-orange-50 border border-orange-300 rounded-2xl shadow-xl px-5 py-4 flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <HelpCircle size={16} className="text-orange-600" />
-            </div>
-            <button
-              className="flex-1 text-left"
-              onClick={async () => {
-                setShowInForseBanner(false);
-                const entries = await loadAvvisoInForse();
-                setInForseModalClienti(entries);
-                setShowInForseModal(true);
-              }}
-            >
-              <p className="text-sm font-bold text-orange-900">Appuntamenti "in forse" tra 2 giorni</p>
-              <p className="text-xs text-orange-700 mt-0.5">
-                {inForseCount === 1
-                  ? `Chiedi conferma a ${inForseNome} per l'appuntamento di dopodomani`
-                  : `${inForseCount} clienti con appuntamento incerto — chiedi conferma`}
-              </p>
-            </button>
-            <button
-              onClick={() => setShowInForseBanner(false)}
-              className="p-1 hover:bg-orange-100 rounded-lg transition-colors text-orange-500 hover:text-orange-700 flex-shrink-0"
-            >
-              <X size={15} />
-            </button>
-          </div>
         </div>
       )}
 
