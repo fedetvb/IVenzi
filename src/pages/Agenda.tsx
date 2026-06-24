@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, AlertCircle, Gift, HelpCircle, Check, MapPin, Save, Pencil } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
 import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
@@ -84,6 +84,8 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   const [inForseClienti, setInForseClienti] = useState<ClienteInForseEntry[]>([]);
   const [showInForseBanner, setShowInForseBanner] = useState(false);
   const [showInForseModal, setShowInForseModal] = useState(false);
+  const gridScrollRef = useRef<HTMLDivElement>(null);
+  const todayColRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const checkAvviso = () => {
@@ -227,6 +229,18 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   }, [weekStart]);
 
   useEffect(() => { loadAppuntamenti(); }, [loadAppuntamenti]);
+
+  // Scroll al giorno corrente dopo il caricamento
+  useEffect(() => {
+    if (loading) return;
+    const container = gridScrollRef.current;
+    const todayCol = todayColRef.current;
+    if (!container || !todayCol) return;
+    const containerWidth = container.clientWidth;
+    const colLeft = todayCol.offsetLeft;
+    const colWidth = todayCol.offsetWidth;
+    container.scrollLeft = colLeft - containerWidth / 2 + colWidth / 2;
+  }, [loading, weekStart]);
 
   useEffect(() => {
     const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
@@ -393,7 +407,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
       )}
 
       {/* Calendar grid */}
-      <div className="flex-1 overflow-auto">
+      <div ref={gridScrollRef} className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="w-7 h-7 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -408,6 +422,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
                 return (
                   <button
                     key={i}
+                    ref={isToday ? todayColRef : undefined}
                     onClick={() => setSelectedDay(day)}
                     className={`text-center py-3 border-l border-stone-100 hover:bg-stone-50 transition-colors cursor-pointer group ${isToday ? 'bg-amber-50' : ''}`}
                   >
