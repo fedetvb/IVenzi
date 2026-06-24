@@ -4,6 +4,7 @@ import { type Cliente } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { dbSelect, dbInsert, dbUpdate, isElectron, compressImage } from '../lib/localDb';
+import PasswordGateModal from './PasswordGateModal';
 
 interface Props {
   clienteId?: string | null;
@@ -33,6 +34,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   const [fotoFile, setFotoFile] = useState<File | null>(null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [vipGateOpen, setVipGateOpen] = useState(false);
 
   useEffect(() => {
     if (clienteId) loadCliente();
@@ -158,6 +160,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   }
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
@@ -245,7 +248,13 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
             />
             <button
               type="button"
-              onClick={() => setField('telefono_nascosto', !form.telefono_nascosto)}
+              onClick={() => {
+                if (form.telefono_nascosto) {
+                  setVipGateOpen(true);
+                } else {
+                  setField('telefono_nascosto', true);
+                }
+              }}
               className={`mt-2 flex items-center gap-2 text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
                 form.telefono_nascosto
                   ? 'border-amber-300 bg-amber-50 text-amber-700'
@@ -341,5 +350,16 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
         </div>
       </div>
     </div>
+
+    {vipGateOpen && (
+      <PasswordGateModal
+        titolo="Rimuovi protezione VIP"
+        descrizione="Inserisci la password per rimuovere la protezione dal numero di telefono."
+        chiavePassword="password_vip"
+        onSuccess={() => { setVipGateOpen(false); setField('telefono_nascosto', false); }}
+        onClose={() => setVipGateOpen(false)}
+      />
+    )}
+    </>
   );
 }
