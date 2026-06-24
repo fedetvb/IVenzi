@@ -1,0 +1,1 @@
+ALTER TABLE clienti ADD COLUMN IF NOT EXISTS telefono_nascosto BOOLEAN DEFAULT false;

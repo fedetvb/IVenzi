@@ -5129,6 +5129,7 @@ const PASSWORD_VOCI = [
   { chiave: 'password_stampa_fiches', titolo: 'Stampa Fiches', descrizione: "Accesso alla stampa/esportazione PDF delle fiches giornaliere", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima stampa delle fiches.", onSaved: () => {} },
   { chiave: 'password_messaggi_clienti', titolo: 'Elimina Messaggi Clienti', descrizione: "Eliminazione di messaggi singoli o di tutti i messaggi nella scheda cliente", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima eliminazione di messaggi.", onSaved: () => {} },
   { chiave: 'password_documenti', titolo: 'Scarica File e Documenti', descrizione: "Accesso alla sezione per esportare e scaricare PDF, CSV e backup da tutte le sezioni", feedbackMsg: "Password aggiornata. Sarà richiesta al prossimo accesso alla sezione documenti.", onSaved: () => sessionStorage.removeItem('documenti_unlocked') },
+  { chiave: 'password_vip', titolo: 'Telefoni VIP (numeri nascosti)', descrizione: "Password per rivelare il numero di telefono delle clienti con numero protetto", feedbackMsg: "Password aggiornata. Sarà richiesta alla prossima visualizzazione di un numero VIP.", onSaved: () => {} },
 ];
 
 // ─── PaginaAccount ────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Camera, Image as ImageIcon, Trash2, ShieldOff, ShieldCheck } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, Trash2, ShieldOff, ShieldCheck, EyeOff } from 'lucide-react';
 import { type Cliente } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -20,11 +20,12 @@ interface ClienteForm {
   note: string;
   in_blacklist: boolean;
   motivo_blacklist: string;
+  telefono_nascosto: boolean;
 }
 
 export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   const { user } = useAuth();
-  const [form, setForm] = useState<ClienteForm>({ nome: '', cognome: '', telefono: '', email: '', data_nascita: '', note: '', in_blacklist: false, motivo_blacklist: '' });
+  const [form, setForm] = useState<ClienteForm>({ nome: '', cognome: '', telefono: '', email: '', data_nascita: '', note: '', in_blacklist: false, motivo_blacklist: '', telefono_nascosto: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
@@ -50,6 +51,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       note: c.note ?? '',
       in_blacklist: !!c.in_blacklist,
       motivo_blacklist: c.motivo_blacklist ?? '',
+      telefono_nascosto: !!(c as unknown as { telefono_nascosto?: boolean }).telefono_nascosto,
     });
     // Prefer local base64 for preview (works offline)
     setFotoUrl(c.foto_base64 || c.foto_url || '');
@@ -108,6 +110,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
           foto_url: '', user_id: user?.id,
           in_blacklist: form.in_blacklist,
           motivo_blacklist: form.motivo_blacklist.trim(),
+          telefono_nascosto: form.telefono_nascosto,
           updated_at: new Date().toISOString(),
         }
       });
@@ -136,6 +139,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       foto_url: newFotoUrl,
       in_blacklist: form.in_blacklist,
       motivo_blacklist: form.in_blacklist ? form.motivo_blacklist.trim() : '',
+      telefono_nascosto: form.telefono_nascosto,
       updated_at: new Date().toISOString(),
     };
     if (isElectron() && fotoBase64) {
@@ -239,6 +243,21 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
               className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               placeholder="+39 333 1234567"
             />
+            <button
+              type="button"
+              onClick={() => setField('telefono_nascosto', !form.telefono_nascosto)}
+              className={`mt-2 flex items-center gap-2 text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
+                form.telefono_nascosto
+                  ? 'border-amber-300 bg-amber-50 text-amber-700'
+                  : 'border-stone-200 text-stone-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50'
+              }`}
+            >
+              <EyeOff size={12} />
+              {form.telefono_nascosto ? 'Numero protetto (VIP)' : 'Nascondi numero (VIP)'}
+              <span className={`ml-1 w-7 h-4 rounded-full transition-colors flex items-center ${form.telefono_nascosto ? 'bg-amber-500' : 'bg-stone-200'}`}>
+                <span className={`w-3 h-3 rounded-full bg-white shadow transition-transform mx-0.5 ${form.telefono_nascosto ? 'translate-x-3' : 'translate-x-0'}`} />
+              </span>
+            </button>
           </div>
 
           <div>

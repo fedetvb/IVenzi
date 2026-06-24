@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image, Send, ChevronUp, Gift } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, CreditCard as Edit2, Plus, Trash2, Calendar, Palette, TrendingUp, X, ChevronDown, CreditCard, Star, Tag, Wallet, History, BarChart2, Lock, ZoomIn, MessageCircle, Image, Send, ChevronUp, Gift, EyeOff, Eye } from 'lucide-react';
 import { localDateStr, type Cliente, type SchedaColore, type Appuntamento, supabase } from '../lib/supabase';
 import { dbSelect, dbInsert, dbUpdate, dbSelectWithRelated, getImpostazione } from '../lib/localDb';
 import { apriWhatsApp as apriWA } from '../lib/waUtils';
@@ -487,6 +487,8 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [editingHaPortato, setEditingHaPortato] = useState(false);
   const [haPortatoQuery, setHaPortatoQuery] = useState('');
   const [haPortatoResults, setHaPortatoResults] = useState<{id: string; nome: string; cognome: string}[]>([]);
+  const [telVisible, setTelVisible] = useState(false);
+  const [telGateOpen, setTelGateOpen] = useState(false);
 
   interface MappaBellezzaRecord {
     id: string;
@@ -506,6 +508,7 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
   const [loadingMappa, setLoadingMappa] = useState(false);
 
   const load = useCallback(async () => {
+    setTelVisible(false);
     const [clRes, scRes, appRes, cscRes, cprRes] = await Promise.all([
       dbSelect<Cliente>({
         table: 'clienti',
@@ -945,10 +948,33 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
               </button>
             </div>
             <div className="flex flex-wrap gap-4 mt-3">
-              {cliente.telefono && (
+              {cliente.telefono && !(cliente as unknown as { telefono_nascosto?: boolean }).telefono_nascosto && (
                 <a href={`tel:${cliente.telefono}`} className="flex items-center gap-1.5 text-sm text-stone-600 hover:text-amber-600 transition-colors">
                   <Phone size={14} /> {cliente.telefono}
                 </a>
+              )}
+              {cliente.telefono && (cliente as unknown as { telefono_nascosto?: boolean }).telefono_nascosto && (
+                telVisible ? (
+                  <span className="flex items-center gap-1.5 text-sm text-stone-600">
+                    <Phone size={14} />
+                    <a href={`tel:${cliente.telefono}`} className="hover:text-amber-600 transition-colors">{cliente.telefono}</a>
+                    <button
+                      onClick={() => setTelVisible(false)}
+                      title="Nascondi numero"
+                      className="ml-1 text-stone-400 hover:text-stone-700 transition-colors"
+                    >
+                      <Eye size={14} />
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setTelGateOpen(true)}
+                    className="flex items-center gap-1.5 text-sm text-amber-600 border border-amber-200 rounded-lg px-2.5 py-1 hover:bg-amber-50 transition-colors font-medium"
+                    title="Rivela numero protetto"
+                  >
+                    <EyeOff size={14} /> Numero protetto
+                  </button>
+                )
               )}
               {cliente.email && (
                 <a href={`mailto:${cliente.email}`} className="flex items-center gap-1.5 text-sm text-stone-600 hover:text-amber-600 transition-colors">
@@ -1467,6 +1493,17 @@ export default function SchedaCliente({ clienteId, onBack, initialTab }: Props) 
           chiavePassword="password_grafico_servizi"
           onSuccess={() => { setShowGraficoGate(false); setShowGrafico(true); }}
           onClose={() => setShowGraficoGate(false)}
+        />
+      )}
+
+      {/* Password gate per numero VIP */}
+      {telGateOpen && (
+        <PasswordGateModal
+          titolo="Numero protetto"
+          descrizione="Inserisci la password per visualizzare il numero di telefono di questa cliente VIP."
+          chiavePassword="password_vip"
+          onSuccess={() => { setTelGateOpen(false); setTelVisible(true); }}
+          onClose={() => setTelGateOpen(false)}
         />
       )}
 
