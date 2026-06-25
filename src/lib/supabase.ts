@@ -41,6 +41,7 @@ export interface Cliente {
   foto_url: string;
   in_blacklist: boolean;
   motivo_blacklist: string | null;
+  telefono_nascosto: boolean;
   recensione_lasciata: boolean;
   data_blocco_recensione: string | null;
   created_at: string;

@@ -911,9 +911,14 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
                             })()}
                           </div>
                           <div className="flex items-center gap-4 mt-0.5">
-                            {c.telefono && (
+                            {c.telefono && !c.telefono_nascosto && (
                               <span className="flex items-center gap-1 text-xs text-stone-400">
                                 <Phone size={10} /> {c.telefono}
+                              </span>
+                            )}
+                            {c.telefono && c.telefono_nascosto && (
+                              <span className="flex items-center gap-1 text-xs text-amber-500">
+                                <Phone size={10} /> •••••••••••
                               </span>
                             )}
                             {c.email && (
@@ -1066,9 +1071,14 @@ export default function Clienti({ onSelectCliente, openSchedaId, onSchedaOpened 
                         <p className="text-xs text-red-500 mt-0.5 truncate">{c.motivo_blacklist}</p>
                       )}
                       <div className="flex items-center gap-4 mt-0.5">
-                        {c.telefono && (
+                        {c.telefono && !c.telefono_nascosto && (
                           <span className="flex items-center gap-1 text-xs text-stone-400">
                             <Phone size={10} /> {c.telefono}
+                          </span>
+                        )}
+                        {c.telefono && c.telefono_nascosto && (
+                          <span className="flex items-center gap-1 text-xs text-amber-500">
+                            <Phone size={10} /> •••••••••••
                           </span>
                         )}
                       </div>
