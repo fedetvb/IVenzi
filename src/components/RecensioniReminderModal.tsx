@@ -41,6 +41,7 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
   const [savedTemplate, setSavedTemplate] = useState('');
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [intervalloMesi, setIntervalloMesi] = useState<number>(0);
   const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -48,14 +49,16 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
     async function loadSettings() {
       const { data: { user } } = await supabase.auth.getUser();
       userIdRef.current = user?.id ?? null;
-      const [mod, pos, tpl] = await Promise.all([
+      const [mod, pos, tpl, intv] = await Promise.all([
         getImpostazione('wa_modalita'),
         getImpostazione('wa_pos_recensioni'),
         getImpostazione('messaggio_recensione'),
+        getImpostazione('intervallo_mesi_recensione'),
       ]);
       setWaMode(mod === 'web' ? 'web' : 'desktop');
       setIncludiPosizione(pos === 'true');
       if (tpl) { setTemplateGlobale(tpl); setSavedTemplate(tpl); }
+      setIntervalloMesi(intv ? (parseInt(intv) || 0) : 0);
     }
     loadSettings();
   }, []);
@@ -87,7 +90,7 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
 
       const { data: fiches } = await supabase
         .from('fiches')
-        .select('id, cliente_id, clienti(id, nome, cognome, telefono, recensione_lasciata, data_blocco_recensione)')
+        .select('id, cliente_id, clienti(id, nome, cognome, telefono, recensione_lasciata, data_blocco_recensione, data_ultimo_invio_recensione)')
         .eq('user_id', userId)
         .eq('convalidata', true)
         .gte('convalidata_at', yesterdayStart)
@@ -136,12 +139,18 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
         const clienteRaw = (f as any).clienti as {
           id: string; nome: string; cognome: string; telefono: string | null;
           recensione_lasciata: boolean; data_blocco_recensione: string | null;
+          data_ultimo_invio_recensione: string | null;
         } | null;
         if (!clienteRaw) continue;
         const recLasciata = clienteRaw.recensione_lasciata ?? false;
         const bloccataFino = clienteRaw.data_blocco_recensione ? new Date(clienteRaw.data_blocco_recensione) : null;
         if (recLasciata) continue;
         if (bloccataFino && bloccataFino > new Date()) continue;
+        if (intervalloMesi > 0 && clienteRaw.data_ultimo_invio_recensione) {
+          const cutoff = new Date();
+          cutoff.setMonth(cutoff.getMonth() - intervalloMesi);
+          if (new Date(clienteRaw.data_ultimo_invio_recensione) > cutoff) continue;
+        }
 
         const { data: voci } = await supabase
           .from('fiche_voci')
@@ -235,7 +244,7 @@ export default function RecensioniReminderModal({ userId, onClose }: Props) {
           </div>
           <div className="flex-1">
             <h3 className="font-bold text-stone-800">Promemoria Recensioni</h3>
-            <p className="text-xs text-stone-400">Clienti di ieri — invia il link Google</p>
+            <p className="text-xs text-stone-400">Clienti di ieri{intervalloMesi > 0 ? ` · escluse contattate negli ultimi ${intervalloMesi === 1 ? 'mese' : `${intervalloMesi} mesi`}` : ''}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-xl transition-colors text-stone-400">
             <X size={18} />

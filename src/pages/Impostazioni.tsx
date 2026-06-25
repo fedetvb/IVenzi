@@ -6252,9 +6252,14 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
   // Promemoria Recensioni
   const [recensioniAttivo, setRecensioniAttivo] = useState(() => localStorage.getItem('loc_banner_recensioni_attivo') === 'true');
   const [recensioniOrario, setRecensioniOrario] = useState(() => localStorage.getItem('loc_orario_recensioni') ?? '19:00');
+  const [intervalloMesiRecensioni, setIntervalloMesiRecensioni] = useState<number>(1);
+  const { user: userAvvisi } = useAuth();
 
   useEffect(() => {
     setLoading(false);
+    getImpostazione('intervallo_mesi_recensione').then(v => {
+      if (v) setIntervalloMesiRecensioni(parseInt(v) || 1);
+    });
   }, []);
 
   function toggleFicheGiorno(v: number) {
@@ -6280,6 +6285,7 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
       localStorage.setItem('loc_banner_compleanno_orario', compleannoOrario);
       localStorage.setItem('loc_banner_recensioni_attivo', String(recensioniAttivo));
       localStorage.setItem('loc_orario_recensioni', recensioniOrario);
+      if (userAvvisi?.id) await setImpostazione('intervallo_mesi_recensione', String(intervalloMesiRecensioni), userAvvisi.id);
       // Reset banner localStorage so changed settings take effect immediately today
       const bannerPrefixes = ['avviso_in_forse_shown_', 'recensioni_banner_shown_', 'recensioni_banner_dismissed_', 'promemoria_shown_', 'compleanno_shown_'];
       Object.keys(localStorage).forEach(k => {
@@ -6577,6 +6583,20 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
                   className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
                 />
                 <p className="text-xs text-stone-400 mt-2">Il banner compare ogni sera a quest'ora — clicca per inviare via WhatsApp</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Intervallo tra i promemoria</label>
+                <select
+                  value={intervalloMesiRecensioni}
+                  onChange={e => { setIntervalloMesiRecensioni(parseInt(e.target.value)); setFeedback(null); }}
+                  className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
+                >
+                  {[1, 2, 3, 5, 7, 10, 12].map(m => (
+                    <option key={m} value={m}>{m === 1 ? '1 mese' : `${m} mesi`}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-stone-400 mt-2">Le clienti di ieri già contattate da meno di {intervalloMesiRecensioni === 1 ? '1 mese' : `${intervalloMesiRecensioni} mesi`} non compaiono nel promemoria. Chi ha già recensito non viene mai mostrato.</p>
               </div>
 
               <div>
