@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, WifiOff, Monitor, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key, Pencil } from 'lucide-react';
+import { Settings, Lock, Eye, EyeOff, Check, AlertCircle, ChevronRight, ArrowLeft, KeyRound, Bell, BellOff, MessageCircle, MapPin, Tag, Plus, Trash2, Star, CreditCard as Edit3, X, Send, MessageSquare, ChevronDown, QrCode, ExternalLink, Download, DatabaseBackup, UploadCloud, AlertTriangle, Cloud, RefreshCw, Clock, CalendarDays, FolderOpen, UserCog, Mail, Activity, Wifi, WifiOff, Monitor, Scissors, Droplets, Wind, Sparkles, Palette, ImagePlus, RotateCcw, Globe, Copy, CalendarClock, Volume2, Volume1, VolumeX, Play, Gift, HelpCircle, Megaphone, Smartphone, Share2, Link, Search, Shield, Key, Pencil, Save } from 'lucide-react';
 import { DEFAULT_TESTI, NOME_VARIANTE, getTestoKey } from '../lib/recensioniUtils';
 import { isOwnerBuild, generateLocalOtp, generateCloudOtp } from '../lib/license';
 import UPDATE_SQL_RAW from '../../supabase/update_non_admin.sql?raw';
@@ -1899,12 +1899,16 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
   const [savingTesto, setSavingTesto] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [intervalloMesiRecensioni, setIntervalloMesiRecensioni] = useState<number>(1);
+  const [savingIntervallo, setSavingIntervallo] = useState(false);
+  const [intervalloFeedback, setIntervalloFeedback] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getImpostazione('link_recensioni_google').then(v => { if (v) setGoogleLink(v); });
     getImpostazione('testo_recensioni_google').then(v => { if (v) setTestoCustom(v); });
     getImpostazione('logo_recensioni_google_url').then(v => { if (v) setLogoUrl(v); });
+    getImpostazione('intervallo_mesi_recensione').then(v => { if (v) setIntervalloMesiRecensioni(parseInt(v) || 1); });
   }, []);
 
   useEffect(() => {
@@ -2275,6 +2279,40 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
           </button>
         </div>
       )}
+
+      {/* Intervallo promemoria recensioni */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-3">
+        <div>
+          <p className="font-semibold text-stone-800">Intervallo tra i promemoria</p>
+          <p className="text-xs text-stone-400 mt-0.5">Nascondi dal modal le clienti già contattate di recente — chi ha già recensito non viene mai mostrato</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={intervalloMesiRecensioni}
+            onChange={e => { setIntervalloMesiRecensioni(parseInt(e.target.value)); setIntervalloFeedback(false); }}
+            className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
+          >
+            {[1, 2, 3, 5, 7, 10, 12].map(m => (
+              <option key={m} value={m}>{m === 1 ? '1 mese' : `${m} mesi`}</option>
+            ))}
+          </select>
+          <button
+            onClick={async () => {
+              if (!user?.id) return;
+              setSavingIntervallo(true);
+              await setImpostazione('intervallo_mesi_recensione', String(intervalloMesiRecensioni), user.id);
+              setSavingIntervallo(false);
+              setIntervalloFeedback(true);
+              setTimeout(() => setIntervalloFeedback(false), 2000);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            {intervalloFeedback ? <Check size={14} /> : <Save size={14} />}
+            {savingIntervallo ? 'Salvataggio...' : intervalloFeedback ? 'Salvato!' : 'Salva'}
+          </button>
+        </div>
+        <p className="text-xs text-stone-400">Le clienti di ieri già contattate negli ultimi {intervalloMesiRecensioni === 1 ? 'mese' : `${intervalloMesiRecensioni} mesi`} non compaiono nel promemoria serale.</p>
+      </div>
 
       {/* Varianti testi per categoria */}
       <button
@@ -6252,14 +6290,9 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
   // Promemoria Recensioni
   const [recensioniAttivo, setRecensioniAttivo] = useState(() => localStorage.getItem('loc_banner_recensioni_attivo') === 'true');
   const [recensioniOrario, setRecensioniOrario] = useState(() => localStorage.getItem('loc_orario_recensioni') ?? '19:00');
-  const [intervalloMesiRecensioni, setIntervalloMesiRecensioni] = useState<number>(1);
-  const { user: userAvvisi } = useAuth();
 
   useEffect(() => {
     setLoading(false);
-    getImpostazione('intervallo_mesi_recensione').then(v => {
-      if (v) setIntervalloMesiRecensioni(parseInt(v) || 1);
-    });
   }, []);
 
   function toggleFicheGiorno(v: number) {
@@ -6285,7 +6318,6 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
       localStorage.setItem('loc_banner_compleanno_orario', compleannoOrario);
       localStorage.setItem('loc_banner_recensioni_attivo', String(recensioniAttivo));
       localStorage.setItem('loc_orario_recensioni', recensioniOrario);
-      if (userAvvisi?.id) await setImpostazione('intervallo_mesi_recensione', String(intervalloMesiRecensioni), userAvvisi.id);
       // Reset banner localStorage so changed settings take effect immediately today
       const bannerPrefixes = ['avviso_in_forse_shown_', 'recensioni_banner_shown_', 'recensioni_banner_dismissed_', 'promemoria_shown_', 'compleanno_shown_'];
       Object.keys(localStorage).forEach(k => {
@@ -6583,20 +6615,6 @@ function PaginaAvvisiBanner({ onBack, onTestReminder, onTestInForse, onTestPromA
                   className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
                 />
                 <p className="text-xs text-stone-400 mt-2">Il banner compare ogni sera a quest'ora — clicca per inviare via WhatsApp</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Intervallo tra i promemoria</label>
-                <select
-                  value={intervalloMesiRecensioni}
-                  onChange={e => { setIntervalloMesiRecensioni(parseInt(e.target.value)); setFeedback(null); }}
-                  className="border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors"
-                >
-                  {[1, 2, 3, 5, 7, 10, 12].map(m => (
-                    <option key={m} value={m}>{m === 1 ? '1 mese' : `${m} mesi`}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-stone-400 mt-2">Le clienti di ieri già contattate da meno di {intervalloMesiRecensioni === 1 ? '1 mese' : `${intervalloMesiRecensioni} mesi`} non compaiono nel promemoria. Chi ha già recensito non viene mai mostrato.</p>
               </div>
 
               <div>
