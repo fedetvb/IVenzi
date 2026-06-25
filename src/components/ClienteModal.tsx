@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Camera, Image as ImageIcon, Trash2, ShieldOff, ShieldCheck, EyeOff } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, Trash2, ShieldOff, ShieldCheck, EyeOff, Eye } from 'lucide-react';
 import { type Cliente } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -35,6 +35,8 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [vipGateOpen, setVipGateOpen] = useState(false);
+  const [showTelefono, setShowTelefono] = useState(false);
+  const [telRevealGateOpen, setTelRevealGateOpen] = useState(false);
 
   useEffect(() => {
     if (clienteId) loadCliente();
@@ -55,6 +57,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
       motivo_blacklist: c.motivo_blacklist ?? '',
       telefono_nascosto: !!(c as unknown as { telefono_nascosto?: boolean }).telefono_nascosto,
     });
+    setShowTelefono(false);
     // Prefer local base64 for preview (works offline)
     setFotoUrl(c.foto_base64 || c.foto_url || '');
   }
@@ -239,13 +242,39 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
 
           <div>
             <label className="block text-xs font-semibold text-stone-600 mb-1.5 uppercase tracking-wide">Telefono</label>
-            <input
-              value={form.telefono}
-              onChange={e => setField('telefono', e.target.value)}
-              type="tel"
-              className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="+39 333 1234567"
-            />
+            {form.telefono_nascosto && !showTelefono ? (
+              <div className="flex items-center gap-2 w-full border border-amber-300 bg-amber-50 rounded-lg px-3 py-2">
+                <span className="flex-1 text-sm text-amber-700 font-mono tracking-widest select-none">•••••••••••</span>
+                <button
+                  type="button"
+                  onClick={() => setTelRevealGateOpen(true)}
+                  className="text-amber-500 hover:text-amber-700 transition-colors"
+                  title="Mostra numero"
+                >
+                  <Eye size={15} />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  value={form.telefono}
+                  onChange={e => setField('telefono', e.target.value)}
+                  type="tel"
+                  className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 pr-9"
+                  placeholder="+39 333 1234567"
+                />
+                {form.telefono_nascosto && showTelefono && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTelefono(false)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 transition-colors"
+                    title="Nascondi numero"
+                  >
+                    <EyeOff size={15} />
+                  </button>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -253,6 +282,7 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
                   setVipGateOpen(true);
                 } else {
                   setField('telefono_nascosto', true);
+                  setShowTelefono(false);
                 }
               }}
               className={`mt-2 flex items-center gap-2 text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
@@ -356,8 +386,17 @@ export default function ClienteModal({ clienteId, onClose, onSaved }: Props) {
         titolo="Rimuovi protezione VIP"
         descrizione="Inserisci la password per rimuovere la protezione dal numero di telefono."
         chiavePassword="password_vip"
-        onSuccess={() => { setVipGateOpen(false); setField('telefono_nascosto', false); }}
+        onSuccess={() => { setVipGateOpen(false); setField('telefono_nascosto', false); setShowTelefono(true); }}
         onClose={() => setVipGateOpen(false)}
+      />
+    )}
+    {telRevealGateOpen && (
+      <PasswordGateModal
+        titolo="Numero protetto"
+        descrizione="Inserisci la password per visualizzare il numero di telefono di questa cliente VIP."
+        chiavePassword="password_vip"
+        onSuccess={() => { setTelRevealGateOpen(false); setShowTelefono(true); }}
+        onClose={() => setTelRevealGateOpen(false)}
       />
     )}
     </>
