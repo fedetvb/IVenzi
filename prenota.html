@@ -3,32 +3,137 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#2C3E2B" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Prenota Online" />
+    <meta name="apple-mobile-web-app-title" content="MyVenzi" />
+    <link rel="manifest" href="/prenota-manifest.json" />
+    <link rel="icon" type="image/png" href="/icons/myvenzi-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/myvenzi-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/myvenzi-512.png" />
+    <title>MyVenzi</title>
+
     <script>
-      // Inject dynamic PWA manifest before Chrome evaluates installability
-      (function() {
-        var params = new URLSearchParams(window.location.search);
-        var uid = params.get('uid');
-        var supabaseUrl = 'https://qfpeffzdszdanebmgafb.supabase.co';
-        var manifestUrl = supabaseUrl + '/functions/v1/pwa-manifest' + (uid ? '?uid=' + encodeURIComponent(uid) : '');
-        var link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = manifestUrl;
-        document.head.appendChild(link);
-        // Capture beforeinstallprompt before React mounts
-        window.__pwaInstallPrompt = null;
-        window.addEventListener('beforeinstallprompt', function(e) {
-          e.preventDefault();
-          window.__pwaInstallPrompt = e;
-        });
+      // ── Android TWA Password Wall ─────────────────────────────────────────────
+      (function () {
+        // 1. Solo se l'app è aperta dall'app Android (TWA / Play Store)
+        if (document.referrer.indexOf('android-app://') === -1) return;
+
+        // 2. Scheda cliente già registrata su questo dispositivo?
+        try {
+          var raw = localStorage.getItem('prenota_online_cliente_v1');
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && (parsed.id || parsed.nome)) return;
+          }
+        } catch (e) {}
+
+        // 3. App già sbloccata in una sessione precedente?
+        if (localStorage.getItem('app_sbloccata') === 'true') return;
+
+        // 4. Blocco: nascondi il rendering React e mostra la schermata di sblocco
+        document.documentElement.style.overflow = 'hidden';
+        var style = document.createElement('style');
+        style.textContent = '#root { visibility: hidden !important; }';
+        document.head.appendChild(style);
+
+        window.__showPasswordWall = function () {
+          var wall = document.createElement('div');
+          wall.id = 'password-wall';
+          wall.innerHTML = [
+            '<div style="',
+              'position:fixed;inset:0;',
+              'background:#E2F4E5;',
+              'display:flex;flex-direction:column;align-items:center;justify-content:center;',
+              'z-index:99999;padding:32px 24px;font-family:system-ui,sans-serif;">',
+
+              '<img src="/icons/myvenzi-192.png" alt="MyVenzi"',
+              ' style="width:96px;height:96px;border-radius:24px;',
+              'box-shadow:0 4px 24px rgba(44,62,43,.18);margin-bottom:28px;" />',
+
+              '<h1 style="margin:0 0 6px;font-size:26px;font-weight:700;color:#2C3E2B;">MyVenzi</h1>',
+              '<p style="margin:0 0 36px;font-size:14px;color:#4a6b49;text-align:center;">',
+                'Inserisci il codice di accesso per continuare',
+              '</p>',
+
+              '<div id="pw-error" style="',
+                'display:none;margin-bottom:16px;padding:10px 18px;',
+                'background:#fde8e8;color:#b91c1c;border-radius:12px;',
+                'font-size:13px;text-align:center;">',
+                'Codice errato. Riprova.',
+              '</div>',
+
+              '<input id="pw-input" type="password" placeholder="Codice di accesso"',
+              ' style="',
+                'width:100%;max-width:320px;padding:14px 18px;',
+                'border:2px solid #b8d9ba;border-radius:14px;',
+                'font-size:16px;outline:none;background:#fff;color:#2C3E2B;',
+                'box-sizing:border-box;margin-bottom:14px;',
+                'transition:border-color .2s;" />',
+
+              '<button id="pw-btn" style="',
+                'width:100%;max-width:320px;padding:15px;',
+                'background:#2C3E2B;color:#fff;',
+                'border:none;border-radius:14px;',
+                'font-size:16px;font-weight:600;cursor:pointer;',
+                'transition:background .2s;">',
+                'Sblocca',
+              '</button>',
+            '</div>'
+          ].join('');
+
+          document.body.appendChild(wall);
+
+          var input = document.getElementById('pw-input');
+          var btn   = document.getElementById('pw-btn');
+          var errEl = document.getElementById('pw-error');
+
+          input.addEventListener('focus', function () {
+            input.style.borderColor = '#2C3E2B';
+          });
+          input.addEventListener('blur', function () {
+            input.style.borderColor = '#b8d9ba';
+          });
+
+          function tryUnlock() {
+            if (input.value === 'Venzi2026') {
+              localStorage.setItem('app_sbloccata', 'true');
+              wall.remove();
+              document.documentElement.style.overflow = '';
+              style.remove();
+            } else {
+              errEl.style.display = 'block';
+              input.value = '';
+              input.focus();
+              btn.style.background = '#4a6b49';
+              setTimeout(function () { btn.style.background = '#2C3E2B'; }, 600);
+            }
+          }
+
+          btn.addEventListener('click', tryUnlock);
+          input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') tryUnlock();
+          });
+          input.focus();
+        };
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function () {
+            window.__showPasswordWall();
+          });
+        } else {
+          window.__showPasswordWall();
+        }
       })();
+
+      // ── Cattura beforeinstallprompt prima che React monta ────────────────────
+      window.__pwaInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__pwaInstallPrompt = e;
+      });
     </script>
-    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
-    <title>Prenota Online</title>
   </head>
   <body>
     <div id="root"></div>
