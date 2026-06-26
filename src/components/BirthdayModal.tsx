@@ -382,12 +382,12 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
                 <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1.5">
                   Anteprima
                 </label>
-                <div className="bg-[#ece5dd] rounded-xl p-3">
-                  <div className="bg-[#e7ffd4] rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm max-w-[95%]">
-                    <p className="text-[11px] text-stone-800 whitespace-pre-wrap leading-relaxed">{previewTesto}</p>
-                    <p className="text-[9px] text-stone-400 text-right mt-1">
-                      {new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                <div className="rounded-2xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(180deg, #e5ddd5 0%, #d4c5b5 100%)' }}>
+                  <div className="px-3 py-3">
+                    <div className="bg-[#e7ffd4] rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                      <p className="text-xs text-stone-800 whitespace-pre-wrap leading-relaxed">{previewTesto}</p>
+                      <p className="text-[10px] text-stone-400 text-right mt-1">anteprima</p>
+                    </div>
                   </div>
                 </div>
               </div>
