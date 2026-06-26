@@ -3,6 +3,7 @@ import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check,
 import { supabase, type Appuntamento, type Parrucchiere } from '../lib/supabase';
 import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete, dbUpsert, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
+import BirthdayModal from '../components/BirthdayModal';
 import { apriWhatsApp, apriWhatsAppWeb, apriWhatsAppMode, type WaMode } from '../lib/waUtils';
 
 interface RichiestaAppuntamento {
@@ -99,7 +100,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [parrucchieri, setParrucchieri] = useState<Parrucchiere[]>([]);
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
   const [clientiCarte, setClientiCarte] = useState<Map<string, Set<string>>>(new Map());
-  const [compleanni, setCompleanni] = useState<{ nome: string; cognome: string; telefono?: string }[]>([]);
+  const [compleanni, setCompleanni] = useState<{ id: string; nome: string; cognome: string; telefono?: string }[]>([]);
   const [messaggioAuguri, setMessaggioAuguri] = useState('Ciao {nome}! Ti auguriamo un felice compleanno! Tanti auguri da tutto il team!');
   const [editingMsg, setEditingMsg] = useState(false);
   const [msgDraft, setMsgDraft] = useState('');
@@ -121,6 +122,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   const [wpLoadingPos, setWpLoadingPos] = useState(false);
   const [waMode, setWaMode] = useState<WaMode>('desktop');
 
+  const [showBirthdayModal, setShowBirthdayModal] = useState(false);
   const [appModal, setAppModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [inForsePanel, setInForsePanel] = useState<{ open: boolean; appId: string | null }>({ open: false, appId: null });
   const [altriInForsePanel, setAltriInForsePanel] = useState<{ open: boolean; clienteNome: string; apps: Appuntamento[] }>({ open: false, clienteNome: '', apps: [] });
@@ -263,10 +265,10 @@ export default function AgendaGiorno({ date, onBack }: Props) {
       columns: 'id, nome, cognome, telefono, data_nascita',
       filters: [{ col: 'data_nascita', op: 'not_null' }]
     });
-    const uniciBirthday = new Map<string, { nome: string; cognome: string; telefono?: string }>();
+    const uniciBirthday = new Map<string, { id: string; nome: string; cognome: string; telefono?: string }>();
     for (const c of (tuttiClientiRes.data || []) as { id: string; nome: string; cognome: string; telefono?: string; data_nascita: string }[]) {
       const [, mm, dd] = c.data_nascita.split('-');
-      if (mm === dayMM && dd === dayDD) uniciBirthday.set(c.id, { nome: c.nome, cognome: c.cognome, telefono: c.telefono || undefined });
+      if (mm === dayMM && dd === dayDD) uniciBirthday.set(c.id, { id: c.id, nome: c.nome, cognome: c.cognome, telefono: c.telefono || undefined });
     }
     setCompleanni(Array.from(uniciBirthday.values()));
 
@@ -877,7 +879,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     <span className="text-sm font-medium text-rose-800">{c.nome} {c.cognome}</span>
                     {hasTel ? (
                       <button
-                        onClick={() => apriWhatsAppMode(c.telefono!, testo, waMode)}
+                        onClick={() => setShowBirthdayModal(true)}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-semibold transition-colors"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -2078,6 +2080,12 @@ export default function AgendaGiorno({ date, onBack }: Props) {
             </div>
           </div>
         </div>
+      )}
+      {showBirthdayModal && compleanni.length > 0 && (
+        <BirthdayModal
+          clienti={compleanni.map(c => ({ id: c.id, nome: c.nome, cognome: c.cognome, telefono: c.telefono ?? null }))}
+          onClose={() => setShowBirthdayModal(false)}
+        />
       )}
     </div>
   );
