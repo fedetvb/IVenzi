@@ -43,14 +43,14 @@
         var SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
 
         function fetchAppPassword() {
-          return fetch(SB_URL + '/rest/v1/system_settings?select=value&key=eq.app_password&limit=1', {
+          return fetch(SB_URL + '/rest/v1/system_settings?select=setting_value&setting_key=eq.app_unlock_password&limit=1', {
             headers: {
               'apikey': SB_KEY,
               'Authorization': 'Bearer ' + SB_KEY,
             }
           })
           .then(function (r) { return r.ok ? r.json() : []; })
-          .then(function (rows) { return (rows && rows.length) ? rows[0].value : null; })
+          .then(function (rows) { return (rows && rows.length) ? rows[0].setting_value : null; })
           .catch(function () { return null; });
         }
 
