@@ -34,17 +34,32 @@
 
         // 4. Blocco: nascondi il rendering React e mostra la schermata di sblocco
         document.documentElement.style.overflow = 'hidden';
-        var style = document.createElement('style');
-        style.textContent = '#root { visibility: hidden !important; }';
-        document.head.appendChild(style);
+        var blockStyle = document.createElement('style');
+        blockStyle.textContent = '#root { visibility: hidden !important; }';
+        document.head.appendChild(blockStyle);
+
+        // ── Query standard Supabase REST: SELECT value FROM system_settings WHERE key = 'app_password'
+        var SB_URL  = 'https://qfpeffzdszdanebmgafb.supabase.co';
+        var SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+
+        function fetchAppPassword() {
+          return fetch(SB_URL + '/rest/v1/system_settings?select=value&key=eq.app_password&limit=1', {
+            headers: {
+              'apikey': SB_KEY,
+              'Authorization': 'Bearer ' + SB_KEY,
+            }
+          })
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .then(function (rows) { return (rows && rows.length) ? rows[0].value : null; })
+          .catch(function () { return null; });
+        }
 
         window.__showPasswordWall = function () {
           var wall = document.createElement('div');
           wall.id = 'password-wall';
           wall.innerHTML = [
             '<div style="',
-              'position:fixed;inset:0;',
-              'background:#E2F4E5;',
+              'position:fixed;inset:0;background:#E2F4E5;',
               'display:flex;flex-direction:column;align-items:center;justify-content:center;',
               'z-index:99999;padding:32px 24px;font-family:system-ui,sans-serif;">',
 
@@ -64,21 +79,21 @@
                 'Codice errato. Riprova.',
               '</div>',
 
-              '<input id="pw-input" type="password" placeholder="Codice di accesso"',
+              '<input id="pw-input" type="password" placeholder="Codice di accesso" disabled',
               ' style="',
                 'width:100%;max-width:320px;padding:14px 18px;',
                 'border:2px solid #b8d9ba;border-radius:14px;',
                 'font-size:16px;outline:none;background:#fff;color:#2C3E2B;',
                 'box-sizing:border-box;margin-bottom:14px;',
-                'transition:border-color .2s;" />',
+                'transition:border-color .2s,opacity .2s;opacity:.5;" />',
 
-              '<button id="pw-btn" style="',
+              '<button id="pw-btn" disabled style="',
                 'width:100%;max-width:320px;padding:15px;',
-                'background:#2C3E2B;color:#fff;',
+                'background:#2C3E2B;color:#fff;opacity:.5;',
                 'border:none;border-radius:14px;',
-                'font-size:16px;font-weight:600;cursor:pointer;',
-                'transition:background .2s;">',
-                'Sblocca',
+                'font-size:16px;font-weight:600;cursor:not-allowed;',
+                'transition:background .2s,opacity .2s;">',
+                'Verifica in corso…',
               '</button>',
             '</div>'
           ].join('');
@@ -88,20 +103,30 @@
           var input = document.getElementById('pw-input');
           var btn   = document.getElementById('pw-btn');
           var errEl = document.getElementById('pw-error');
+          var correctPwd = null;
 
-          input.addEventListener('focus', function () {
-            input.style.borderColor = '#2C3E2B';
+          // Fetch della password dalla tabella system_settings
+          fetchAppPassword().then(function (pwd) {
+            correctPwd = pwd;
+            input.disabled = false;
+            input.style.opacity = '1';
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.textContent = 'Sblocca';
+            input.focus();
           });
-          input.addEventListener('blur', function () {
-            input.style.borderColor = '#b8d9ba';
-          });
+
+          input.addEventListener('focus', function () { input.style.borderColor = '#2C3E2B'; });
+          input.addEventListener('blur',  function () { input.style.borderColor = '#b8d9ba'; });
 
           function tryUnlock() {
-            if (input.value === 'Venzi2026') {
+            if (!correctPwd) return;
+            if (input.value === correctPwd) {
               localStorage.setItem('app_sbloccata', 'true');
               wall.remove();
               document.documentElement.style.overflow = '';
-              style.remove();
+              blockStyle.remove();
             } else {
               errEl.style.display = 'block';
               input.value = '';
@@ -112,16 +137,11 @@
           }
 
           btn.addEventListener('click', tryUnlock);
-          input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') tryUnlock();
-          });
-          input.focus();
+          input.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
         };
 
         if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', function () {
-            window.__showPasswordWall();
-          });
+          document.addEventListener('DOMContentLoaded', function () { window.__showPasswordWall(); });
         } else {
           window.__showPasswordWall();
         }
