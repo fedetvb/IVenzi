@@ -6267,13 +6267,22 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
     e.preventDefault();
     setVerifyErr('');
     setVerifyLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('system_settings')
       .select('setting_value')
       .eq('setting_key', 'app_unlock_password')
       .maybeSingle();
     setVerifyLoading(false);
-    const stored = data?.setting_value ?? '';
+    if (error) {
+      setVerifyErr('Errore DB: ' + error.message);
+      return;
+    }
+    if (!data) {
+      // Nessuna riga trovata: nessuna password impostata, accesso diretto
+      setStep('change');
+      return;
+    }
+    const stored = data.setting_value ?? '';
     if (vecchioCode === stored) {
       setStep('change');
     } else {
