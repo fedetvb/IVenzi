@@ -6221,8 +6221,15 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
 function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle: () => void }) {
   const { user } = useAuth();
 
-  const [step, setStep] = useState<'change' | 'otp-send' | 'otp-verify' | 'done'>('change');
+  const [step, setStep] = useState<'verify' | 'change' | 'otp-send' | 'otp-verify' | 'done'>('verify');
 
+  // step: verify (inserisci vecchio codice)
+  const [vecchioCode, setVecchioCode] = useState('');
+  const [showVecchio, setShowVecchio] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyErr, setVerifyErr] = useState('');
+
+  // step: change (nuovo codice)
   const [nuovaPassword, setNuovaPassword] = useState('');
   const [confermaPassword, setConfermaPassword] = useState('');
   const [showNuova, setShowNuova] = useState(false);
@@ -6230,6 +6237,7 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'err'; msg: string } | null>(null);
 
+  // step: otp
   const [otpCode, setOtpCode] = useState('');
   const [otpNuova, setOtpNuova] = useState('');
   const [otpConferma, setOtpConferma] = useState('');
@@ -6243,7 +6251,8 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
   const AK = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
   function resetAll() {
-    setStep('change');
+    setStep('verify');
+    setVecchioCode(''); setShowVecchio(false); setVerifyLoading(false); setVerifyErr('');
     setNuovaPassword(''); setConfermaPassword(''); setShowNuova(false); setShowConferma(false);
     setLoading(false); setFeedback(null);
     setOtpCode(''); setOtpNuova(''); setOtpConferma(''); setShowOtpPwd(false);
@@ -6252,6 +6261,24 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
   }
 
   function handleToggle() { resetAll(); onToggle(); }
+
+  async function handleVerifica(e: React.FormEvent) {
+    e.preventDefault();
+    setVerifyErr('');
+    setVerifyLoading(true);
+    const { data } = await supabase
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'app_unlock_password')
+      .maybeSingle();
+    setVerifyLoading(false);
+    const stored = data?.setting_value ?? '';
+    if (vecchioCode === stored) {
+      setStep('change');
+    } else {
+      setVerifyErr('Codice non corretto.');
+    }
+  }
 
   async function handleSalva(e: React.FormEvent) {
     e.preventDefault();
@@ -6324,10 +6351,102 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
 
       {aperta && (
         <div className="border-t border-stone-100 bg-stone-50/60">
+
           {step === 'done' && (
             <div className="px-5 py-4 flex items-center gap-3 text-teal-700">
               <Check size={16} />
               <span className="text-sm font-medium">Codice di sblocco aggiornato con successo.</span>
+            </div>
+          )}
+
+          {step === 'verify' && (
+            <form onSubmit={handleVerifica} className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-stone-600 mb-1.5">Codice attuale</label>
+                <div className="relative">
+                  <input
+                    type={showVecchio ? 'text' : 'password'} value={vecchioCode}
+                    onChange={e => { setVecchioCode(e.target.value); setVerifyErr(''); }}
+                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
+                    placeholder="Inserisci il codice attuale"
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowVecchio(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                    <Eye size={14} />
+                  </button>
+                </div>
+              </div>
+              {verifyErr && <p className="text-xs text-red-500">{verifyErr}</p>}
+              <button type="submit" disabled={verifyLoading || !vecchioCode} className="w-full bg-teal-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 transition-colors">
+                {verifyLoading ? 'Verifica...' : 'Continua'}
+              </button>
+              <button type="button" onClick={() => setStep('otp-send')} className="w-full text-xs text-amber-600 hover:text-amber-700 underline text-center pt-1 transition-colors">
+                Ho dimenticato il codice — Invia codice di recupero via email
+              </button>
+            </form>
+          )}
+
+          {step === 'change' && (
+            <form onSubmit={handleSalva} className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-stone-600 mb-1.5">Nuovo codice di sblocco</label>
+                <div className="relative">
+                  <input
+                    type={showNuova ? 'text' : 'password'} value={nuovaPassword}
+                    onChange={e => setNuovaPassword(e.target.value)}
+                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
+                    placeholder="Nuovo codice"
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowNuova(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                    <Eye size={14} />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-stone-600 mb-1.5">Conferma codice</label>
+                <div className="relative">
+                  <input
+                    type={showConferma ? 'text' : 'password'} value={confermaPassword}
+                    onChange={e => setConfermaPassword(e.target.value)}
+                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
+                    placeholder="Conferma codice"
+                  />
+                  <button type="button" onClick={() => setShowConferma(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                    <Eye size={14} />
+                  </button>
+                </div>
+              </div>
+              {feedback && (
+                <p className={`text-xs ${feedback.tipo === 'ok' ? 'text-teal-600' : 'text-red-500'}`}>{feedback.msg}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={loading} className="flex-1 bg-teal-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 transition-colors">
+                  {loading ? 'Salvataggio...' : 'Salva codice'}
+                </button>
+                <button type="button" onClick={() => setStep('verify')} className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm text-stone-600 hover:bg-stone-100 transition-colors">
+                  Indietro
+                </button>
+              </div>
+            </form>
+          )}
+
+          {step === 'otp-send' && (
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs text-stone-500">
+                Ricevi un codice OTP a <strong>{user?.email}</strong> per reimpostare il codice senza conoscere quello attuale.
+              </p>
+              {otpSendMsg && (
+                <p className={`text-xs ${otpSendMsg.tipo === 'ok' ? 'text-teal-600' : 'text-red-500'}`}>{otpSendMsg.msg}</p>
+              )}
+              <div className="flex gap-2">
+                <button onClick={handleSendOtp} disabled={otpSendLoading} className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors">
+                  {otpSendLoading ? 'Invio in corso...' : `Invia codice a ${user?.email}`}
+                </button>
+                <button type="button" onClick={() => setStep('verify')} className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm text-stone-600 hover:bg-stone-100 transition-colors">
+                  Annulla
+                </button>
+              </div>
             </div>
           )}
 
@@ -6374,75 +6493,13 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
                 <button type="submit" disabled={otpVerifyLoading} className="flex-1 bg-teal-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 transition-colors">
                   {otpVerifyLoading ? 'Verifica...' : 'Verifica e salva'}
                 </button>
-                <button type="button" onClick={() => setStep('change')} className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm text-stone-600 hover:bg-stone-100 transition-colors">
+                <button type="button" onClick={() => setStep('verify')} className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm text-stone-600 hover:bg-stone-100 transition-colors">
                   Annulla
                 </button>
               </div>
             </form>
           )}
 
-          {step === 'otp-send' && (
-            <div className="px-5 py-4 space-y-3">
-              <p className="text-xs text-stone-500">
-                Ricevi un codice OTP a <strong>{user?.email}</strong> per reimpostare il codice senza conoscere quello attuale.
-              </p>
-              {otpSendMsg && (
-                <p className={`text-xs ${otpSendMsg.tipo === 'ok' ? 'text-teal-600' : 'text-red-500'}`}>{otpSendMsg.msg}</p>
-              )}
-              <div className="flex gap-2">
-                <button onClick={handleSendOtp} disabled={otpSendLoading} className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors">
-                  {otpSendLoading ? 'Invio in corso...' : `Invia codice a ${user?.email}`}
-                </button>
-                <button type="button" onClick={() => setStep('change')} className="px-4 py-2.5 rounded-xl border border-stone-200 text-sm text-stone-600 hover:bg-stone-100 transition-colors">
-                  Annulla
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 'change' && (
-            <form onSubmit={handleSalva} className="px-5 py-4 space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-stone-600 mb-1.5">Nuovo codice di sblocco</label>
-                <div className="relative">
-                  <input
-                    type={showNuova ? 'text' : 'password'} value={nuovaPassword}
-                    onChange={e => setNuovaPassword(e.target.value)}
-                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
-                    placeholder="Nuovo codice"
-                  />
-                  <button type="button" onClick={() => setShowNuova(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
-                    <Eye size={14} />
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-600 mb-1.5">Conferma codice</label>
-                <div className="relative">
-                  <input
-                    type={showConferma ? 'text' : 'password'} value={confermaPassword}
-                    onChange={e => setConfermaPassword(e.target.value)}
-                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
-                    placeholder="Conferma codice"
-                  />
-                  <button type="button" onClick={() => setShowConferma(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
-                    <Eye size={14} />
-                  </button>
-                </div>
-              </div>
-              {feedback && (
-                <p className={`text-xs ${feedback.tipo === 'ok' ? 'text-teal-600' : 'text-red-500'}`}>{feedback.msg}</p>
-              )}
-              <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={loading} className="flex-1 bg-teal-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 transition-colors">
-                  {loading ? 'Salvataggio...' : 'Salva codice'}
-                </button>
-              </div>
-              <button type="button" onClick={() => setStep('otp-send')} className="w-full text-xs text-amber-600 hover:text-amber-700 underline text-center pt-1 transition-colors">
-                Ho dimenticato il codice — Invia codice di recupero via email
-              </button>
-            </form>
-          )}
         </div>
       )}
     </div>
