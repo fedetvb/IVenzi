@@ -6221,7 +6221,8 @@ function PaginaScaricaDocumenti({ onBack }: { onBack: () => void }) {
 function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle: () => void }) {
   const { user } = useAuth();
 
-  const [step, setStep] = useState<'verify' | 'change' | 'otp-send' | 'otp-verify' | 'done'>('verify');
+  const [step, setStep] = useState<'verify' | 'change' | 'reset-choice' | 'otp-send' | 'otp-verify' | 'done'>('verify');
+  const [nuovaPasswordPending, setNuovaPasswordPending] = useState('');
 
   // step: verify (inserisci vecchio codice)
   const [vecchioCode, setVecchioCode] = useState('');
@@ -6285,19 +6286,31 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
     setFeedback(null);
     if (!nuovaPassword.trim()) { setFeedback({ tipo: 'err', msg: 'Il codice non può essere vuoto.' }); return; }
     if (nuovaPassword !== confermaPassword) { setFeedback({ tipo: 'err', msg: 'I codici non coincidono.' }); return; }
+    setNuovaPasswordPending(nuovaPassword);
+    setStep('reset-choice');
+  }
+
+  async function eseguiSalvataggio(nuovaCodice: string, resetTutti: boolean) {
     setLoading(true);
+    setFeedback(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token ?? AK;
-      const res = await fetch(`${SU}/functions/v1/update-unlock-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ newPassword: nuovaPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) setFeedback({ tipo: 'err', msg: data.error ?? 'Errore durante il salvataggio.' });
-      else setStep('done');
-    } catch { setFeedback({ tipo: 'err', msg: 'Errore di rete.' }); }
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ setting_value: nuovaCodice.trim() })
+        .eq('setting_key', 'app_unlock_password');
+      if (error) throw error;
+      if (resetTutti) {
+        // Salva un timestamp: i client confronteranno questo con quando hanno sbloccato
+        await supabase
+          .from('system_settings')
+          .upsert({ setting_key: 'app_password_reset_at', setting_value: new Date().toISOString() });
+      }
+      setStep('done');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Errore durante il salvataggio.';
+      setFeedback({ tipo: 'err', msg });
+      setStep('change');
+    }
     setLoading(false);
   }
 
@@ -6324,15 +6337,28 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
     if (otpNuova !== otpConferma) { setOtpVerifyMsg({ tipo: 'err', msg: 'I codici non coincidono.' }); return; }
     setOtpVerifyLoading(true);
     try {
-      const res = await fetch(`${SU}/functions/v1/update-unlock-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AK}` },
-        body: JSON.stringify({ email: user?.email, code: otpCode, newPassword: otpNuova }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) setOtpVerifyMsg({ tipo: 'err', msg: data.error ?? 'Codice non valido o scaduto.' });
-      else setStep('done');
-    } catch { setOtpVerifyMsg({ tipo: 'err', msg: 'Errore di rete.' }); }
+      // Verify OTP against password_reset_otp table
+      const { data: otpRow, error: fetchErr } = await supabase
+        .from('password_reset_otp')
+        .select('id')
+        .eq('email', (user?.email ?? '').toLowerCase())
+        .eq('code', otpCode)
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!otpRow) { setOtpVerifyMsg({ tipo: 'err', msg: 'Codice OTP non valido o scaduto.' }); setOtpVerifyLoading(false); return; }
+      await supabase.from('password_reset_otp').update({ used: true }).eq('id', otpRow.id);
+      const { error: updateErr } = await supabase
+        .from('system_settings')
+        .update({ setting_value: otpNuova.trim() })
+        .eq('setting_key', 'app_unlock_password');
+      if (updateErr) throw updateErr;
+      setStep('done');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Errore durante il salvataggio.';
+      setOtpVerifyMsg({ tipo: 'err', msg });
+    }
     setOtpVerifyLoading(false);
   }
 
@@ -6429,6 +6455,35 @@ function AppUnlockPasswordRow({ aperta, onToggle }: { aperta: boolean; onToggle:
                 </button>
               </div>
             </form>
+          )}
+
+          {step === 'reset-choice' && (
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm font-semibold text-stone-700">Come applicare il nuovo codice?</p>
+              <p className="text-xs text-stone-500">Scegli chi dovrà inserire il nuovo codice la prossima volta che apre l'app.</p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => eseguiSalvataggio(nuovaPasswordPending, true)}
+                className="w-full flex flex-col gap-0.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left hover:bg-amber-100 transition-colors disabled:opacity-50"
+              >
+                <span className="text-sm font-semibold text-amber-800">Richiedi a tutti</span>
+                <span className="text-xs text-amber-600">Anche chi aveva già inserito la vecchia password dovrà inserire quella nuova</span>
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => eseguiSalvataggio(nuovaPasswordPending, false)}
+                className="w-full flex flex-col gap-0.5 bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 text-left hover:bg-teal-100 transition-colors disabled:opacity-50"
+              >
+                <span className="text-sm font-semibold text-teal-800">Solo a chi non l'ha mai inserita</span>
+                <span className="text-xs text-teal-600">Chi aveva già sbloccato l'app non verrà disturbato</span>
+              </button>
+              {feedback && <p className="text-xs text-red-500">{feedback.msg}</p>}
+              <button type="button" onClick={() => setStep('change')} className="w-full text-xs text-stone-400 hover:text-stone-600 text-center pt-1 transition-colors">
+                Annulla
+              </button>
+            </div>
           )}
 
           {step === 'otp-send' && (

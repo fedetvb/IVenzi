@@ -20,6 +20,9 @@
         // 1. Solo se l'app è aperta dall'app Android (TWA / Play Store)
         if (document.referrer.indexOf('android-app://') === -1) return;
 
+        var SB_URL = 'https://qfpeffzdszdanebmgafb.supabase.co';
+        var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+
         // 2. Scheda cliente già registrata su questo dispositivo?
         try {
           var raw = localStorage.getItem('prenota_online_cliente_v1');
@@ -30,7 +33,29 @@
         } catch (e) {}
 
         // 3. App già sbloccata in una sessione precedente?
-        if (localStorage.getItem('app_sbloccata') === 'true') return;
+        //    Ma controlla anche se l'admin ha richiesto reset a tutti (app_password_reset_at)
+        if (localStorage.getItem('app_sbloccata') === 'true') {
+          var sbloccataAt = localStorage.getItem('app_sbloccata_at');
+          // Verifica se la password è stata resettata dopo l'ultimo sblocco
+          fetch(SB_URL + '/rest/v1/system_settings?select=setting_value&setting_key=eq.app_password_reset_at&limit=1', {
+            headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+          })
+          .then(function(r) { return r.ok ? r.json() : []; })
+          .then(function(rows) {
+            var resetAt = rows && rows.length ? rows[0].setting_value : null;
+            if (resetAt && sbloccataAt && resetAt > sbloccataAt) {
+              // Admin ha resettato per tutti dopo l'ultimo sblocco: richiedi password
+              localStorage.removeItem('app_sbloccata');
+              localStorage.removeItem('app_sbloccata_at');
+              avviaPasswordWall();
+            }
+            // altrimenti niente da fare, l'app è già sbloccata
+          })
+          .catch(function() {
+            // In caso di errore di rete lascia passare (app già sbloccata)
+          });
+          return;
+        }
 
         // 4. Blocco: nascondi il rendering React e mostra la schermata di sblocco
         document.documentElement.style.overflow = 'hidden';
@@ -38,9 +63,74 @@
         blockStyle.textContent = '#root { visibility: hidden !important; }';
         document.head.appendChild(blockStyle);
 
-        // ── Query standard Supabase REST: SELECT value FROM system_settings WHERE key = 'app_password'
-        var SB_URL  = 'https://qfpeffzdszdanebmgafb.supabase.co';
-        var SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmcGVmZnpkc3pkYW5lYm1nYWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjI4MDUsImV4cCI6MjA5NTAzODgwNX0.RQ77EhEJxVN02WQWUH9XiBUvRMysxgBVFQSi1UlqhKM';
+        function sblocca() {
+          localStorage.setItem('app_sbloccata', 'true');
+          localStorage.setItem('app_sbloccata_at', new Date().toISOString());
+          var wall = document.getElementById('password-wall');
+          if (wall) wall.remove();
+          document.documentElement.style.overflow = '';
+          blockStyle.remove();
+        }
+
+        function avviaPasswordWall() {
+          document.documentElement.style.overflow = 'hidden';
+          var bs = document.createElement('style');
+          bs.textContent = '#root { visibility: hidden !important; }';
+          document.head.appendChild(bs);
+          window.__showPasswordWall(bs);
+        }
+
+        // 5. Controlla se il numero di telefono salvato esiste già nella rubrica clienti
+        //    (cliente esistente = no password richiesta)
+        try {
+          var clienteRaw = localStorage.getItem('prenota_online_telefono_v1') ||
+                           localStorage.getItem('prenota_telefono') ||
+                           null;
+          // Prova anche a estrarre da altri formati salvati
+          if (!clienteRaw) {
+            var altri = ['myvenzi_cliente', 'cliente_myvenzi', 'prenota_cliente'];
+            for (var i = 0; i < altri.length; i++) {
+              var tmp = localStorage.getItem(altri[i]);
+              if (tmp) { clienteRaw = tmp; break; }
+            }
+          }
+        } catch(e) { clienteRaw = null; }
+
+        if (clienteRaw) {
+          // Prova a estrarre il telefono
+          var telefono = null;
+          try {
+            var cp = JSON.parse(clienteRaw);
+            telefono = cp.telefono || cp.phone || cp.tel || null;
+          } catch(e) { telefono = clienteRaw; }
+
+          if (telefono) {
+            fetch(SB_URL + '/rest/v1/rpc/cliente_esiste_in_rubrica', {
+              method: 'POST',
+              headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ p_telefono: String(telefono) })
+            })
+            .then(function(r) { return r.ok ? r.json() : false; })
+            .then(function(esiste) {
+              if (esiste === true) {
+                sblocca(); // cliente in rubrica: nessuna password
+              } else {
+                window.__showPasswordWall(blockStyle);
+              }
+            })
+            .catch(function() {
+              window.__showPasswordWall(blockStyle);
+            });
+            return;
+          }
+        }
+
+        // 6. Nessun dato: mostra la schermata password
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function () { window.__showPasswordWall(blockStyle); });
+        } else {
+          window.__showPasswordWall(blockStyle);
+        }
 
         function fetchAppPassword() {
           return fetch(SB_URL + '/rest/v1/system_settings?select=setting_value&setting_key=eq.app_unlock_password&limit=1', {
@@ -54,7 +144,7 @@
           .catch(function () { return null; });
         }
 
-        window.__showPasswordWall = function () {
+        window.__showPasswordWall = function (bStyle) {
           var wall = document.createElement('div');
           wall.id = 'password-wall';
           wall.innerHTML = [
@@ -123,10 +213,7 @@
           function tryUnlock() {
             if (!correctPwd) return;
             if (input.value === correctPwd) {
-              localStorage.setItem('app_sbloccata', 'true');
-              wall.remove();
-              document.documentElement.style.overflow = '';
-              blockStyle.remove();
+              sblocca();
             } else {
               errEl.style.display = 'block';
               input.value = '';
@@ -140,11 +227,6 @@
           input.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
         };
 
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', function () { window.__showPasswordWall(); });
-        } else {
-          window.__showPasswordWall();
-        }
       })();
 
       // ── Cattura beforeinstallprompt prima che React monta ────────────────────
