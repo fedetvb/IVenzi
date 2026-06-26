@@ -3,7 +3,7 @@ import { ChevronLeft, Plus, CreditCard as Edit2, Trash2, X, Cake, Pencil, Check,
 import { supabase, type Appuntamento, type Parrucchiere } from '../lib/supabase';
 import { dbSelect, dbSelectWithRelated, dbInsert, dbUpdate, dbDelete, dbUpsert, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
-import { apriWhatsApp, apriWhatsAppWeb, type WaMode } from '../lib/waUtils';
+import { apriWhatsApp, apriWhatsAppWeb, apriWhatsAppMode, type WaMode } from '../lib/waUtils';
 
 interface RichiestaAppuntamento {
   id: string;
@@ -877,7 +877,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
                     <span className="text-sm font-medium text-rose-800">{c.nome} {c.cognome}</span>
                     {hasTel ? (
                       <button
-                        onClick={() => apriWhatsApp(c.telefono!, testo)}
+                        onClick={() => apriWhatsAppMode(c.telefono!, testo, waMode)}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-semibold transition-colors"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">

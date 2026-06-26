@@ -42,14 +42,16 @@ export function normalizeWaPhone(tel: string): string {
   return `39${cleaned}`;
 }
 
-function openNativeOrWeb(nativeUrl: string, _webUrl: string): void {
+function openNativeOrWeb(nativeUrl: string, webUrl: string): void {
   if (typeof window !== 'undefined' && window.electronAPI?.openExternal) {
     window.electronAPI.openExternal(nativeUrl).catch(() => {
-      window.electronAPI!.openExternal!(_webUrl).catch(() => {});
+      window.electronAPI!.openExternal!(webUrl).catch(() => {});
     });
     return;
   }
-  window.location.href = nativeUrl;
+  // In web browsers the whatsapp:// scheme may not be registered.
+  // Open wa.me in a new tab — works regardless of whether WhatsApp Desktop is installed.
+  window.open(webUrl, '_blank', 'noopener,noreferrer');
 }
 
 export function getWhatsAppWebUrl(telefono: string, testo: string): string {
