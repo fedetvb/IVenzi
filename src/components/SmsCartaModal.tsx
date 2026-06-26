@@ -414,17 +414,17 @@ function ScontoCreazionePart({
 
 export default function SmsCartaModal({ nominativo, codice, telefono, azione, onClose, messaggioOverride }: Props) {
   const [copied, setCopied] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(true);
   const [editingBubble, setEditingBubble] = useState(false);
   const [messaggioEdit, setMessaggioEdit] = useState('');
   const [waMode, setWaMode] = useState<WaMode>('desktop');
   const hasPhone = telefono.trim().length > 0;
 
   useEffect(() => {
-    getImpostazione('whatsapp_avviso_disabilitato').then(v => {
-      if (v === 'true') { onClose(); } else { setReady(true); }
-    });
-    getImpostazione('wa_modalita').then(v => { if (v === 'web') setWaMode('web'); });
+    getImpostazione('whatsapp_avviso_disabilitato')
+      .then(v => { if (v === 'true') onClose(); })
+      .catch(() => {});
+    getImpostazione('wa_modalita').then(v => { if (v === 'web') setWaMode('web'); }).catch(() => {});
   }, []);
 
   if (!ready) return null;

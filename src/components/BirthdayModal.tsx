@@ -128,6 +128,8 @@ function SceltaScontoPanel({
   );
 }
 
+const FALLBACK_TESTO = 'Cara/Caro {nome},\ntanti auguri per il tuo compleanno! 🎂\n\nTutto il team ti augura una giornata davvero speciale!';
+
 export default function BirthdayModal({ clienti, onClose }: Props) {
   const { user } = useAuth();
   const [templates, setTemplates] = useState<TemplateCom[]>([]);
@@ -146,17 +148,29 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
   const [queueIdx, setQueueIdx] = useState<number | null>(null);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setTemplateRaw(t => t || FALLBACK_TESTO);
+      setLoadingTemplates(false);
+    }, 3000);
     supabase
       .from('template_messaggi_comunicazioni')
       .select('id, nome, testo, is_default, ordine')
       .order('ordine')
       .then(({ data }) => {
+        clearTimeout(timer);
         const list = (data || []) as TemplateCom[];
         setTemplates(list);
         const def = list.find(t => t.is_default) ?? list[0];
         if (def) { setSelectedTemplateId(def.id); setTemplateRaw(def.testo); }
+        else { setTemplateRaw(FALLBACK_TESTO); }
+        setLoadingTemplates(false);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        setTemplateRaw(FALLBACK_TESTO);
         setLoadingTemplates(false);
       });
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -182,7 +196,7 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
   }
 
   function buildMessaggio(c: ClienteCompleanno): string {
-    if (!templateRaw) return '';
+    const raw = templateRaw || FALLBACK_TESTO;
     const saluto = genderSaluto(c.nome);
     return templateRaw
       .replace(/\{nome\}/g, c.nome)
@@ -486,7 +500,7 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
                   {!showingScelta && !sent && (
                     <div className="flex gap-1.5">
                       <button onClick={() => sendAuguri(c)}
-                        disabled={!c.telefono || !selectedTemplate}
+                        disabled={!c.telefono}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors bg-[#25D366] hover:bg-[#1ebe5d] text-white disabled:opacity-40 disabled:cursor-not-allowed">
                         <WaIcon /> Invia auguri
                       </button>
@@ -505,8 +519,7 @@ export default function BirthdayModal({ clienti, onClose }: Props) {
             {/* Invia a tutti — only when wa=web and queue not active */}
             {waMode === 'web' && daInviare.length > 1 && queueIdx === null && (
               <button onClick={startQueue}
-                disabled={!selectedTemplate}
-                className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors">
+                className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] text-white text-sm font-semibold transition-colors">
                 <WaIcon />
                 Invia a tutti ({daInviare.length})
               </button>
