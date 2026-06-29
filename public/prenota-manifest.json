@@ -13,25 +13,25 @@
   "dir": "ltr",
   "icons": [
     {
-      "src": "/icons/myvenzi-192.png",
+      "src": "/icons/pwa-portale.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/myvenzi-192.png",
+      "src": "/icons/pwa-portale.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/myvenzi-512.png",
+      "src": "/icons/pwa-portale.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/myvenzi-512.png",
+      "src": "/icons/pwa-portale.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
