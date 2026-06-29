@@ -893,24 +893,69 @@ export default function PrenotazioneOnline({ userId }: { userId: string }) {
   }, [telefono, userId]);
 
 
-  // Update apple-touch-icon when salon has a custom icon
+  // Update apple-touch-icon AND manifest when salon has a custom icon
   useEffect(() => {
     if (!userId) return;
     supabase.from('impostazioni')
-      .select('valore')
-      .eq('chiave', 'icona_pwa_url')
+      .select('chiave,valore')
       .eq('user_id', userId)
-      .maybeSingle()
+      .in('chiave', ['icona_pwa_url', 'nome_salone', 'nome_pwa_prenotazione'])
       .then(({ data }) => {
-        const iconUrl = data?.valore;
-        if (!iconUrl) return;
-        document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove());
-        const atLink = document.createElement('link');
-        atLink.rel = 'apple-touch-icon';
-        atLink.href = iconUrl;
-        document.head.appendChild(atLink);
-        const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-        if (favicon) favicon.href = iconUrl;
+        const rows = (data ?? []) as { chiave: string; valore: string }[];
+        const iconUrl = rows.find(r => r.chiave === 'icona_pwa_url')?.valore;
+        const nomePwa = rows.find(r => r.chiave === 'nome_pwa_prenotazione')?.valore;
+        const nomeSalone = rows.find(r => r.chiave === 'nome_salone')?.valore;
+        const nome = nomePwa || nomeSalone || 'Prenota';
+
+        // Inject dynamic manifest with custom icon
+        const icons = iconUrl
+          ? [
+              { src: iconUrl, sizes: '192x192', type: 'image/jpeg', purpose: 'any' },
+              { src: iconUrl, sizes: '512x512', type: 'image/jpeg', purpose: 'any' },
+              { src: iconUrl, sizes: '192x192', type: 'image/jpeg', purpose: 'maskable' },
+            ]
+          : [
+              { src: '/icons/myvenzi-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+              { src: '/icons/myvenzi-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+              { src: '/icons/myvenzi-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+            ];
+        const manifest = {
+          name: nome,
+          short_name: nome,
+          description: 'Prenota il tuo appuntamento',
+          start_url: `/prenota?uid=${userId}`,
+          id: `/prenota?uid=${userId}`,
+          scope: '/prenota',
+          display: 'standalone',
+          orientation: 'portrait',
+          background_color: '#E2F4E5',
+          theme_color: '#2C3E2B',
+          lang: 'it',
+          icons,
+          prefer_related_applications: false,
+        };
+        try {
+          const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+          const blobUrl = URL.createObjectURL(blob);
+          let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'manifest';
+            document.head.appendChild(link);
+          }
+          link.href = blobUrl;
+        } catch { /* non-blocking */ }
+
+        // Update apple-touch-icon and favicon if custom icon
+        if (iconUrl) {
+          document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.remove());
+          const atLink = document.createElement('link');
+          atLink.rel = 'apple-touch-icon';
+          atLink.href = iconUrl;
+          document.head.appendChild(atLink);
+          const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+          if (favicon) favicon.href = iconUrl;
+        }
       })
       .catch(() => {});
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps

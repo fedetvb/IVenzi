@@ -490,6 +490,60 @@ export default function App() {
     checkStartupAlerts();
   }, []);
 
+  // Inject dynamic PWA manifest with custom gestionale icon
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('impostazioni')
+      .select('chiave,valore')
+      .eq('user_id', user.id)
+      .in('chiave', ['icona_pwa_gestionale_url', 'nome_salone'])
+      .then(({ data }) => {
+        const rows = (data ?? []) as { chiave: string; valore: string }[];
+        const iconUrl = rows.find(r => r.chiave === 'icona_pwa_gestionale_url')?.valore;
+        const nomeSalone = rows.find(r => r.chiave === 'nome_salone')?.valore;
+        const nome = nomeSalone || 'Gestionale';
+        const icons = iconUrl
+          ? [
+              { src: iconUrl, sizes: '192x192', type: 'image/jpeg', purpose: 'any' },
+              { src: iconUrl, sizes: '512x512', type: 'image/jpeg', purpose: 'any' },
+              { src: iconUrl, sizes: '192x192', type: 'image/jpeg', purpose: 'maskable' },
+            ]
+          : [
+              { src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+              { src: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+              { src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+            ];
+        const manifest = {
+          name: nome,
+          short_name: nome,
+          description: 'Gestionale completo per salone di parrucchieri',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          display_override: ['window-controls-overlay', 'standalone'],
+          background_color: '#0f172a',
+          theme_color: '#0f172a',
+          orientation: 'any',
+          lang: 'it',
+          icons,
+          categories: ['business', 'productivity'],
+          prefer_related_applications: false,
+        };
+        try {
+          const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+          const blobUrl = URL.createObjectURL(blob);
+          let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'manifest';
+            document.head.appendChild(link);
+          }
+          link.href = blobUrl;
+        } catch { /* non-blocking */ }
+      })
+      .catch(() => {});
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Banner appuntamenti in forse — check ogni 20 secondi, spara una volta per minuto configurato
   useEffect(() => {
     const fmt = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
