@@ -981,11 +981,25 @@ function toLocalDateStr(d) {
 // ─── Scheduler auto-salvataggio fiches ───────────────────────────────────────
 let fichesSchedInterval = null;
 let fichesSchedPending = false;
+let fichesSchedPendingTimer = null;
 
 function startFichesScheduler() {
   if (fichesSchedInterval) clearInterval(fichesSchedInterval);
-  checkAndRunFiches();
+  // Primo controllo ritardato di 60s: da' tempo all'interfaccia di caricarsi e
+  // mettersi in ascolto prima di inviare il comando di recupero fiches.
+  setTimeout(checkAndRunFiches, 60_000);
   fichesSchedInterval = setInterval(checkAndRunFiches, 60_000);
+}
+
+// Rete di sicurezza: se entro 3 minuti non arriva la conferma (fiches:mark-done),
+// sblocca il "pending" cosi' il prossimo controllo puo' riprovare invece di
+// restare bloccato fino al riavvio dell'app.
+function armFichesPendingWatchdog() {
+  if (fichesSchedPendingTimer) clearTimeout(fichesSchedPendingTimer);
+  fichesSchedPendingTimer = setTimeout(() => {
+    fichesSchedPending = false;
+    fichesSchedPendingTimer = null;
+  }, 180_000);
 }
 
 function checkAndRunFiches() {
@@ -1025,6 +1039,7 @@ function checkAndRunFiches() {
   if (dates.length === 0) return;
   const latestDate = dates[dates.length - 1];
   fichesSchedPending = true;
+  armFichesPendingWatchdog();
   if (mainWindow) mainWindow.webContents.send('trigger-auto-fiches', { dates, latestDate });
 }
 
@@ -1082,7 +1097,7 @@ ipcMain.handle('files:save-auto', async (_e, { type, filename, content, encoding
 // ─── IPC: scheduler fiches ───────────────────────────────────────────────────
 ipcMain.handle('fiches:get-sched', () => readFichesSched());
 ipcMain.handle('fiches:set-sched', (_e, cfg) => { writeFichesSched(cfg); startFichesScheduler(); return { ok: true }; });
-ipcMain.handle('fiches:mark-done', (_e, { todayStr }) => { fichesSchedPending = false; const cfg = readFichesSched(); cfg.last = todayStr; writeFichesSched(cfg); return { ok: true }; });
+ipcMain.handle('fiches:mark-done', (_e, { todayStr }) => { fichesSchedPending = false; if (fichesSchedPendingTimer) { clearTimeout(fichesSchedPendingTimer); fichesSchedPendingTimer = null; } const cfg = readFichesSched(); cfg.last = todayStr; writeFichesSched(cfg); return { ok: true }; });
 
 // ─── Scheduler report finanze ─────────────────────────────────────────────────
 let finanzeSchedInterval = null;

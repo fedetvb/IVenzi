@@ -175,18 +175,6 @@ export default function App() {
   interface DonazionePopup { donatrice: string }
   const [donazionePopups, setDonazionePopups] = useState<DonazionePopup[]>([]);
 
-  // Auto-salvataggio fiches da Electron scheduler
-  const [pendingAutoDate, setPendingAutoDate] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!window.electronAPI?.onTriggerAutoFiches) return;
-    const unsub = window.electronAPI.onTriggerAutoFiches(({ latestDate }: { dates: string[]; latestDate: string }) => {
-      setPage('fiches');
-      setPendingAutoDate(latestDate);
-    });
-    return unsub;
-  }, []);
-
   // Report finanze automatico da Electron scheduler
   useEffect(() => {
     if (!window.electronAPI?.onTriggerAutoFinanze) return;
@@ -2080,7 +2068,7 @@ export default function App() {
           />
         )}
         {page === 'servizi' && <Servizi />}
-        {page === 'fiches' && <Fiches pendingAutoDate={pendingAutoDate} onPendingAutoDateConsumed={() => setPendingAutoDate(null)} />}
+        {page === 'fiches' && <Fiches />}
         {page === 'carte' && <Carte />}
         {page === 'rivendita' && <Rivendita />}
         {page === 'finanze' && (
