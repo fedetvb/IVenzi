@@ -625,7 +625,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   }
 
   async function deleteAppuntamento(id: string) {
-    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
+    await dbUpdate({ table: 'appuntamenti', id, data: { deleted_at: new Date().toISOString() } });
     setConfirmDelete(null);
     load();
   }
@@ -663,7 +663,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
     const clienteId = app?.cliente_id;
     const cliente = app?.clienti;
     const clienteNome = cliente ? `${cliente.nome} ${cliente.cognome}` : '';
-    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
+    await dbUpdate({ table: 'appuntamenti', id, data: { deleted_at: new Date().toISOString() } });
     setInForsePanel({ open: false, appId: null });
     load();
     if (clienteId) await checkAltriInForse(clienteId, clienteNome, id);
@@ -676,7 +676,7 @@ export default function AgendaGiorno({ date, onBack }: Props) {
   }
 
   async function cancellaInForseFromPanel(appId: string) {
-    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: appId }] });
+    await dbUpdate({ table: 'appuntamenti', id: appId, data: { deleted_at: new Date().toISOString() } });
     setAltriInForsePanel(prev => ({ ...prev, apps: prev.apps.filter(a => a.id !== appId) }));
     load();
   }

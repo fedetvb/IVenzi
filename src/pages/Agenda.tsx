@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, CreditCard as Edit2, Trash2, CreditCard, Clock, Bell, MessageCircle, X, AlertCircle, Gift, HelpCircle, Check, MapPin, Save, Pencil } from 'lucide-react';
 import { supabase, type Appuntamento } from '../lib/supabase';
-import { dbSelect, dbSelectWithRelated, dbDelete, getImpostazione, setImpostazione } from '../lib/localDb';
+import { dbSelect, dbSelectWithRelated, dbUpdate, getImpostazione, setImpostazione } from '../lib/localDb';
 import MultiBookModal from '../components/MultiBookModal';
 import AgendaGiorno from './AgendaGiorno';
 import BirthdayModal from '../components/BirthdayModal';
@@ -273,7 +273,7 @@ export default function Agenda({ selectedDay, setSelectedDay }: AgendaProps) {
   }, []);
 
   async function deleteAppuntamento(id: string) {
-    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: id }] });
+    await dbUpdate({ table: 'appuntamenti', id, data: { deleted_at: new Date().toISOString() } });
     setConfirmDelete(null);
     loadAppuntamenti();
   }

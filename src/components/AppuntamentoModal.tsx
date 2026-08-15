@@ -294,8 +294,7 @@ export default function AppuntamentoModal({ appuntamentoId, dataIniziale, parruc
   async function handleDelete() {
     if (!appuntamentoId) return;
     setDeleting(true);
-    await dbDelete({ table: 'appuntamento_trattamenti', filters: [{ col: 'appuntamento_id', op: 'eq', val: appuntamentoId }] });
-    await dbDelete({ table: 'appuntamenti', filters: [{ col: 'id', op: 'eq', val: appuntamentoId }] });
+    await dbUpdate({ table: 'appuntamenti', id: appuntamentoId, data: { deleted_at: new Date().toISOString() } });
     setDeleting(false);
     onSaved();
   }
