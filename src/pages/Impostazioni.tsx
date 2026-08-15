@@ -1890,6 +1890,7 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
   const [linkDraft, setLinkDraft] = useState('');
   const [editingLink, setEditingLink] = useState(false);
   const [savingLink, setSavingLink] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [formato, setFormato] = useState<string>('a4');
   const [generando, setGenerando] = useState(false);
   const [qrPreview, setQrPreview] = useState<string | null>(null);
@@ -1926,11 +1927,26 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
   async function handleSaveLink() {
     const trimmed = linkDraft.trim();
     if (!trimmed) return;
+    if (!user?.id) {
+      setSaveError('Account non ancora pronto. Attendi qualche secondo e riprova.');
+      return;
+    }
+    setSaveError(null);
     setSavingLink(true);
-    await setImpostazione('link_recensioni_google', trimmed, user?.id ?? '');
-    setGoogleLink(trimmed);
-    setEditingLink(false);
-    setSavingLink(false);
+    try {
+      await setImpostazione('link_recensioni_google', trimmed, user.id);
+      const verifica = await getImpostazione('link_recensioni_google', user.id);
+      if (verifica !== trimmed) {
+        setSaveError('Il link non è stato salvato. Controlla la connessione e riprova.');
+        return;
+      }
+      setGoogleLink(trimmed);
+      setEditingLink(false);
+    } catch {
+      setSaveError('Il link non è stato salvato. Controlla la connessione e riprova.');
+    } finally {
+      setSavingLink(false);
+    }
   }
 
   async function handleSaveTesto() {
@@ -2105,10 +2121,13 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
                 {savingLink ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={14} />}
                 Salva
               </button>
-              <button onClick={() => setEditingLink(false)} className="px-4 py-2 text-stone-500 hover:text-stone-800 rounded-xl text-sm font-medium transition-colors">
+              <button onClick={() => { setEditingLink(false); setSaveError(null); }} className="px-4 py-2 text-stone-500 hover:text-stone-800 rounded-xl text-sm font-medium transition-colors">
                 Annulla
               </button>
             </div>
+            {saveError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5">
