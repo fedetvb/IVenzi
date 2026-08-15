@@ -742,17 +742,27 @@ export async function getImpostazione(chiave: string, userId?: string): Promise<
   return (data as { valore: string }[] | null)?.[0]?.valore ?? null;
 }
 
-export async function setImpostazione(chiave: string, valore: string, userId: string): Promise<void> {
+export async function setImpostazione(chiave: string, valore: string, userId?: string): Promise<void> {
+  const val = typeof valore === 'string' ? valore : JSON.stringify(valore);
   if (isElectron()) {
-    await dbUpsert({ table: 'impostazioni', data: { chiave, valore, user_id: userId }, onConflict: 'chiave,user_id', userId });
+    const uid = userId || _currentUserId || undefined;
+    await dbUpsert({ table: 'impostazioni', data: { chiave, valore: val, user_id: uid }, onConflict: 'chiave,user_id', userId: uid });
     return;
+  }
+  const uid = userId || _currentUserId || (await supabase.auth.getUser()).data.user?.id;
+  if (!uid) {
+    console.error('[setImpostazione] nessun user id disponibile per', chiave);
+    throw new Error('Sessione non disponibile');
   }
   const { error } = await supabase.rpc('upsert_impostazione', {
     p_chiave: chiave,
-    p_valore: typeof valore === 'string' ? valore : JSON.stringify(valore),
-    p_user_id: userId,
+    p_valore: val,
+    p_user_id: uid,
   });
-  if (error) console.error('[setImpostazione] rpc error:', error.message);
+  if (error) {
+    console.error('[setImpostazione] rpc error:', error.message);
+    throw new Error(error.message);
+  }
 }
 
 // ─── BACKUP ───────────────────────────────────────────────────────────────────

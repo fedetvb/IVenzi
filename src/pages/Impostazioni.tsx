@@ -1927,15 +1927,11 @@ function PaginaQrGoogle({ onBack, setSub }: { onBack: () => void; setSub: (s: Su
   async function handleSaveLink() {
     const trimmed = linkDraft.trim();
     if (!trimmed) return;
-    if (!user?.id) {
-      setSaveError('Account non ancora pronto. Attendi qualche secondo e riprova.');
-      return;
-    }
     setSaveError(null);
     setSavingLink(true);
     try {
-      await setImpostazione('link_recensioni_google', trimmed, user.id);
-      const verifica = await getImpostazione('link_recensioni_google', user.id);
+      await setImpostazione('link_recensioni_google', trimmed, user?.id);
+      const verifica = await getImpostazione('link_recensioni_google');
       if (verifica !== trimmed) {
         setSaveError('Il link non è stato salvato. Controlla la connessione e riprova.');
         return;
